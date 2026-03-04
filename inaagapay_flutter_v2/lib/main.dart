@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'services/supabase_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,14 +20,58 @@ class InaagapayApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        body: Center(
-          child: Text(
-            'Inaagapay Connected to Supabase',
-            style: TextStyle(fontSize: 20),
-          ),
-        ),
+      home: HomePage(),
+    );
+  }
+}
+
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+
+  List bhcList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchBHC();
+  }
+
+  Future<void> fetchBHC() async {
+    final data = await SupabaseService.client
+        .from('bhc')
+        .select();
+
+    setState(() {
+      bhcList = data;
+    });
+
+    print(data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Inaagapay"),
       ),
+      body: bhcList.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: bhcList.length,
+              itemBuilder: (context, index) {
+                final bhc = bhcList[index];
+
+                return ListTile(
+                  title: Text(bhc['bhc_name'] ?? 'No Name'),
+                );
+              },
+            ),
     );
   }
 }

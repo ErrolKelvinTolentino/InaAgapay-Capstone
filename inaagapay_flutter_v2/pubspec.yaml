@@ -1,5 +1,5 @@
 name: inaagapay_flutter_v2
-description: "A new Flutter project."
+description: "Inaagapay Maternal and Child Health Information System"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -15,22 +15,21 @@ dependencies:
   # Supabase
   supabase_flutter: ^2.5.6
 
-  # Environment variables (for hiding keys)
+  # Environment variables
   flutter_dotenv: ^5.1.0
 
   # Date formatting
   intl: ^0.19.0
 
-  # State management (recommended)
+  # State management
   provider: ^6.1.2
 
-  # HTTP utilities (sometimes useful)
+  # HTTP requests
   http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   flutter_lints: ^6.0.0
 
 flutter:
