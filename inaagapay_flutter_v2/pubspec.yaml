@@ -1,6 +1,6 @@
 name: inaagapay_flutter_v2
 description: "Inaagapay Maternal and Child Health Information System"
-publish_to: 'none'
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
@@ -26,6 +26,9 @@ dependencies:
 
   # HTTP requests
   http: ^1.2.2
+
+  # Image picker
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
