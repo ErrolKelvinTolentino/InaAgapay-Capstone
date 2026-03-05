@@ -27,6 +27,12 @@ dependencies:
   # HTTP requests
   http: ^1.2.2
 
+  # For persistent storage across platforms
+  shared_preferences: ^2.2.2
+
+  # For AI analysis
+  google_generative_ai: ^0.4.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
