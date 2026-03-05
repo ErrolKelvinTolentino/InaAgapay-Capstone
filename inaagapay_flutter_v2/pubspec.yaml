@@ -1,6 +1,7 @@
 name: inaagapay_flutter_v2
-description: "Inaagapay Maternal and Child Health Information System"
+description: "Inaagapay AI Image Analyzer"
 publish_to: 'none'
+
 version: 1.0.0+1
 
 environment:
@@ -11,21 +12,9 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-
-  # Supabase
-  supabase_flutter: ^2.5.6
-
-  # Environment variables
-  flutter_dotenv: ^5.1.0
-
-  # Date formatting
-  intl: ^0.19.0
-
-  # State management
-  provider: ^6.1.2
-
-  # HTTP requests
   http: ^1.2.2
+  image_picker: ^1.1.2
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -34,3 +23,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+  - .env
