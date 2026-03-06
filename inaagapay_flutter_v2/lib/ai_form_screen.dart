@@ -579,10 +579,8 @@ class _AiFormScreenState extends State<AiFormScreen> {
           ),
           items: _bloodTypeOptions
               .map(
-                (String type) => DropdownMenuItem<String>(
-                  value: type,
-                  child: Text(type),
-                ),
+                (String type) =>
+                    DropdownMenuItem<String>(value: type, child: Text(type)),
               )
               .toList(),
           onChanged: (String? value) {
