@@ -1,5 +1,515 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:math';
 
 class SupabaseService {
+  // This ensures we always get the current client
   static SupabaseClient get client => Supabase.instance.client;
+  
+  // Generate 6-digit OTP code
+  static String _generateOTP() {
+    final random = Random();
+    return (100000 + random.nextInt(900000)).toString();
+  }
+
+  // Hash password (simple for demo - use proper hashing in production)
+  static String _hashPassword(String password) {
+    // In production, use bcrypt or similar
+    return password; // TEMPORARY - REPLACE WITH PROPER HASHING
+  }
+
+  // Test connection
+  static Future<bool> testConnection() async {
+    try {
+      print('Testing Supabase connection...');
+      // Try a simple query to test connection
+      final result = await client.from('accounts').select('count').limit(1);
+      print('Connection test result: $result');
+      return true;
+    } catch (e) {
+      print('Connection test failed: $e');
+      return false;
+    }
+  }
+
+  // Login - Works with your database schema
+  static Future<Map<String, dynamic>> login(String email, String password) async {
+    try {
+      print('Attempting login for: $email');
+      
+      // Test connection first
+      final isConnected = await testConnection();
+      if (!isConnected) {
+        return {
+          'success': false,
+          'message': 'Cannot connect to server. Please check your internet connection.'
+        };
+      }
+      
+      // First get the account with personal info
+      final accountResponse = await client
+          .from('accounts')
+          .select('''
+            account_id,
+            email_address,
+            password_hash,
+            account_type,
+            is_verified,
+            status,
+            first_name,
+            middle_name,
+            last_name,
+            extension_name,
+            phone_number
+          ''')
+          .eq('email_address', email)
+          .maybeSingle();
+
+      print('Account query response: $accountResponse');
+
+      if (accountResponse == null) {
+        return {'success': false, 'message': 'Invalid credentials'};
+      }
+
+      // Check password (use proper hash comparison in production)
+      if (accountResponse['password_hash'] != _hashPassword(password)) {
+        return {'success': false, 'message': 'Invalid credentials'};
+      }
+
+      if (!accountResponse['is_verified']) {
+        return {'success': false, 'message': 'Account not verified'};
+      }
+
+      if (accountResponse['status'] != 'active') {
+        return {'success': false, 'message': 'Account inactive'};
+      }
+
+      // If mother, check if mother record exists
+      Map<String, dynamic>? motherData;
+      bool profileComplete = false;
+      
+      if (accountResponse['account_type'] == 'mother') {
+        try {
+          // Get mother data - only query columns that exist in mothers table
+          motherData = await client
+              .from('mothers')
+              .select('''
+                mother_id,
+                birthdate,
+                house_number,
+                street,
+                barangay,
+                city_municipality,
+                province,
+                height,
+                weight,
+                blood_type
+              ''')
+              .eq('account_id', accountResponse['account_id'])
+              .maybeSingle();
+          
+          print('Mother data: $motherData');
+          
+          // Determine if profile is complete
+          // Check if account has personal info AND mother has birthdate
+          if (motherData != null) {
+            profileComplete = 
+                accountResponse['first_name'] != null && 
+                accountResponse['last_name'] != null && 
+                motherData['birthdate'] != null;
+          }
+        } catch (e) {
+          print('Error fetching mother data: $e');
+          // Continue even if mother data fetch fails
+        }
+      }
+
+      // Generate token
+      final token = _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
+      
+      // Update last login token
+      try {
+        await client
+            .from('accounts')
+            .update({
+              'last_login_token': token,
+              'last_login_at': DateTime.now().toIso8601String(),
+            })
+            .eq('account_id', accountResponse['account_id']);
+      } catch (e) {
+        print('Error updating last login token: $e');
+        // Continue even if token update fails
+      }
+
+      // Prepare user response
+      final userData = {
+        'id': accountResponse['account_id'],
+        'role': accountResponse['account_type'],
+      };
+
+      if (accountResponse['account_type'] == 'mother') {
+        userData['profile_complete'] = profileComplete;
+        userData['mother_id'] = motherData?['mother_id'];
+      }
+
+      return {
+        'success': true,
+        'message': 'Login successful',
+        'token': token,
+        'user': userData,
+      };
+    } catch (e) {
+      print('Login error details: $e');
+      
+      // Check for specific error types
+      if (e.toString().contains('SocketException') || 
+          e.toString().contains('ClientException') ||
+          e.toString().contains('Connection refused')) {
+        return {
+          'success': false,
+          'message': 'Network error. Please check your internet connection.'
+        };
+      }
+      
+      if (e.toString().contains('timeout')) {
+        return {
+          'success': false,
+          'message': 'Connection timeout. Server may be down.'
+        };
+      }
+      
+      if (e.toString().contains('apikey')) {
+        return {
+          'success': false,
+          'message': 'API key error. Please restart the app.'
+        };
+      }
+      
+      return {
+        'success': false,
+        'message': 'Login failed. Please try again.'
+      };
+    }
+  }
+
+  // Send OTP email via Edge Function
+  static Future<bool> sendOTPEmail(String email, String code) async {
+    try {
+      print('Sending OTP email to: $email with code: $code');
+      
+      final response = await client.functions.invoke(
+        'send-otp',
+        body: {
+          'email': email,
+          'code': code,
+          'type': 'verification',
+        },
+      );
+      
+      print('Email send response: $response');
+      return true;
+    } catch (e) {
+      print('Error sending OTP email: $e');
+      return false;
+    }
+  }
+
+  // Register
+  static Future<Map<String, dynamic>> register(String email, String password) async {
+    try {
+      // Check if account exists
+      final existing = await client
+          .from('accounts')
+          .select('account_id, is_verified')
+          .eq('email_address', email)
+          .maybeSingle();
+
+      final code = _generateOTP();
+      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+
+      if (existing != null) {
+        if (existing['is_verified']) {
+          return {
+            'success': false,
+            'message': 'Account already verified. Please log in.',
+          };
+        }
+
+        // Update existing unverified account
+        await client
+            .from('accounts')
+            .update({
+              'password_hash': _hashPassword(password),
+              'verification_code': code,
+              'verification_expires': expires,
+            })
+            .eq('email_address', email);
+      } else {
+        // Create new account
+        await client.from('accounts').insert({
+          'email_address': email,
+          'password_hash': _hashPassword(password),
+          'account_type': 'mother',
+          'verification_code': code,
+          'verification_expires': expires,
+          'is_verified': false,
+          'status': 'active',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
+
+      // Send email with OTP using Edge Function
+      final emailSent = await sendOTPEmail(email, code);
+      
+      if (!emailSent) {
+        print('Failed to send email, but account was created');
+        return {
+          'success': true,
+          'message': 'Account created but email failed to send. Please use "Resend Code" on the next screen.',
+          'email_failed': true,
+        };
+      }
+
+      return {
+        'success': true,
+        'message': 'Verification code sent to your email.',
+        'email_sent': true,
+      };
+    } catch (e) {
+      print('Registration error: $e');
+      return {
+        'success': false,
+        'message': 'Registration failed: ${e.toString()}',
+      };
+    }
+  }
+
+  // Resend verification code
+  static Future<Map<String, dynamic>> resendVerificationCode(String email) async {
+    try {
+      final code = _generateOTP();
+      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+
+      // Update the code in database
+      await client
+          .from('accounts')
+          .update({
+            'verification_code': code,
+            'verification_expires': expires,
+          })
+          .eq('email_address', email)
+          .eq('is_verified', false);
+
+      // Send email
+      final emailSent = await sendOTPEmail(email, code);
+
+      return {
+        'success': emailSent,
+        'message': emailSent 
+            ? 'New verification code sent to your email.'
+            : 'Failed to send email. Please try again.',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Failed to resend code: ${e.toString()}',
+      };
+    }
+  }
+
+  // Verify OTP code
+  static Future<bool> verifyCode(String email, String code) async {
+    try {
+      final account = await client
+          .from('accounts')
+          .select('verification_code, verification_expires')
+          .eq('email_address', email)
+          .maybeSingle();
+
+      if (account == null) return false;
+
+      // Check if code matches
+      if (account['verification_code'] != code) return false;
+
+      // Check if code is expired
+      final expires = DateTime.parse(account['verification_expires']);
+      if (expires.isBefore(DateTime.now())) return false;
+
+      // Mark as verified
+      await client
+          .from('accounts')
+          .update({
+            'is_verified': true,
+            'verification_code': null,
+            'verification_expires': null,
+          })
+          .eq('email_address', email);
+
+      return true;
+    } catch (e) {
+      print('Verification error: $e');
+      return false;
+    }
+  }
+
+  // Complete mother profile - Updated with correct column names
+  static Future<Map<String, dynamic>> completeMotherProfile(
+    int accountId,
+    Map<String, dynamic> profileData,
+  ) async {
+    try {
+      // Update accounts table with personal info
+      await client
+          .from('accounts')
+          .update({
+            'first_name': profileData['first_name'],
+            'middle_name': profileData['middle_name'],
+            'last_name': profileData['last_name'],
+            'extension_name': profileData['extension_name'],
+            'phone_number': profileData['contact_number'],
+          })
+          .eq('account_id', accountId);
+
+      // Check if mother record exists
+      final existingMother = await client
+          .from('mothers')
+          .select('mother_id')
+          .eq('account_id', accountId)
+          .maybeSingle();
+
+      // Parse birth date
+      String? birthDateStr;
+      if (profileData['birth_date'] != null && profileData['birth_date'].isNotEmpty) {
+        try {
+          // Handle MM/DD/YYYY format from date picker
+          if (profileData['birth_date'].contains('/')) {
+            final parts = profileData['birth_date'].split('/');
+            if (parts.length == 3) {
+              // Assuming format is MM/DD/YYYY
+              final month = int.parse(parts[0]);
+              final day = int.parse(parts[1]);
+              final year = int.parse(parts[2]);
+              birthDateStr = '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+            }
+          } else {
+            // Handle YYYY-MM-DD format
+            birthDateStr = profileData['birth_date'];
+          }
+        } catch (e) {
+          print('Date parsing error: $e');
+          birthDateStr = profileData['birth_date'];
+        }
+      }
+
+      if (existingMother == null) {
+        // Insert mother record with correct column names
+        await client.from('mothers').insert({
+          'account_id': accountId,
+          'birthdate': birthDateStr,
+          'house_number': profileData['house_no'],
+          'street': profileData['street'],
+          'barangay': profileData['barangay'],
+          'city_municipality': profileData['city'],
+          'province': profileData['province'],
+        });
+      } else {
+        // Update mother record with correct column names
+        await client
+            .from('mothers')
+            .update({
+              'birthdate': birthDateStr,
+              'house_number': profileData['house_no'],
+              'street': profileData['street'],
+              'barangay': profileData['barangay'],
+              'city_municipality': profileData['city'],
+              'province': profileData['province'],
+            })
+            .eq('account_id', accountId);
+      }
+
+      return {'success': true, 'message': 'Profile completed successfully'};
+    } catch (e) {
+      print('Profile completion error: $e');
+      return {'success': false, 'message': 'Failed to complete profile: ${e.toString()}'};
+    }
+  }
+
+  // Get greeting data - Updated with correct column names
+  static Future<Map<String, dynamic>> getGreeting(int accountId, String role) async {
+    try {
+      // Get account info first
+      final accountResponse = await client
+          .from('accounts')
+          .select('''
+            first_name,
+            middle_name,
+            last_name,
+            extension_name
+          ''')
+          .eq('account_id', accountId)
+          .maybeSingle();
+
+      if (role == 'mother') {
+        // Get mother's BHC info
+        final motherResponse = await client
+            .from('mothers')
+            .select('''
+              assigned_bhc_id,
+              bhc!inner (
+                bhc_name
+              )
+            ''')
+            .eq('account_id', accountId)
+            .maybeSingle();
+
+        final bhc = motherResponse?['bhc'] as Map?;
+
+        return {
+          'success': true,
+          'first_name': accountResponse?['first_name'],
+          'middle_name': accountResponse?['middle_name'],
+          'last_name': accountResponse?['last_name'],
+          'extension_name': accountResponse?['extension_name'],
+          'bhc_name': bhc?['bhc_name'] ?? 'No Barangay Assigned',
+        };
+      }
+      
+      if (role == 'midwife') {
+        // Get midwife's BHC info
+        final midwifeResponse = await client
+            .from('midwives')
+            .select('''
+              assigned_bhc_id,
+              bhc!inner (
+                bhc_name
+              )
+            ''')
+            .eq('account_id', accountId)
+            .maybeSingle();
+
+        final bhc = midwifeResponse?['bhc'] as Map?;
+
+        return {
+          'success': true,
+          'first_name': accountResponse?['first_name'],
+          'middle_name': accountResponse?['middle_name'],
+          'last_name': accountResponse?['last_name'],
+          'extension_name': accountResponse?['extension_name'],
+          'bhc_name': bhc?['bhc_name'],
+        };
+      }
+
+      // Admin
+      return {
+        'success': true,
+        'first_name': accountResponse?['first_name'],
+        'middle_name': accountResponse?['middle_name'],
+        'last_name': accountResponse?['last_name'],
+        'extension_name': accountResponse?['extension_name'],
+        'bhc_name': null,
+      };
+    } catch (e) {
+      print('Greeting error: $e');
+      return {'success': false, 'message': 'Failed to fetch greeting'};
+    }
+  }
 }
