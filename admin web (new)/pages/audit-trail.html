@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Audit Trail — InaAgapay Admin</title>
+    <link rel="icon" type="image/png" href="../images/logo_icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../styles/main.css" />
+  </head>
+  <body>
+    <div class="app-layout">
+      <!-- ── Header ── -->
+      <header class="app-header">
+        <div class="header-brand">
+          <button class="header-sidebar-toggle" id="sidebar-toggle">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <img
+            src="../images/logo_icon.png"
+            alt="InaAgapay"
+            class="header-logo"
+          />
+          <img
+            src="../images/logo_with_label.png"
+            alt="InaAgapay"
+            class="header-logo-label"
+          />
+        </div>
+        <div class="header-right">
+          <span class="header-badge">Admin Portal</span>
+          <div class="header-user">
+            <div class="header-avatar" id="header-avatar">A</div>
+            <span class="header-user-name" id="header-user-name">Admin</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- ── Sidebar ── -->
+      <aside class="app-sidebar">
+        <span class="sidebar-section-label">Main Menu</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="dashboard.html"
+              ><i class="fa-solid fa-gauge-high"></i> Dashboard</a
+            >
+          </li>
+          <li>
+            <a href="accounts.html"
+              ><i class="fa-solid fa-users"></i> Account Management</a
+            >
+          </li>
+          <li>
+            <a href="account-create.html"
+              ><i class="fa-solid fa-user-plus"></i> Account Creation</a
+            >
+          </li>
+          <li>
+            <a href="midwife-assignment.html"
+              ><i class="fa-solid fa-user-nurse"></i> Midwife Assignment</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">System</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="audit-trail.html" class="active"
+              ><i class="fa-solid fa-clipboard-list"></i> Audit Trail</a
+            >
+          </li>
+          <li>
+            <a href="backup.html"
+              ><i class="fa-solid fa-database"></i> Backup &amp; Restore</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-footer-nav">
+          <button class="sidebar-logout" id="logout-btn">
+            <i class="fa-solid fa-right-from-bracket"></i> Logout
+          </button>
+        </div>
+      </aside>
+
+      <!-- ── Main ── -->
+      <main class="app-main">
+        <div class="page-header">
+          <div class="page-title-block">
+            <h1 class="page-title">Audit Trail</h1>
+            <p class="page-subtitle">
+              Complete log of all admin actions in the system
+            </p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-secondary" id="export-btn">
+              <i class="fa-solid fa-file-csv"></i> Export CSV
+            </button>
+            <button class="btn btn-outline-pink" id="refresh-btn">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats row -->
+        <div
+          style="
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+          "
+          id="audit-stats"
+        ></div>
+
+        <!-- Main Card -->
+        <div class="card">
+          <div class="toolbar">
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input
+                class="form-control"
+                type="search"
+                id="search-input"
+                placeholder="Search action or description…"
+              />
+            </div>
+            <div class="filter-group">
+              <select
+                class="form-select"
+                id="filter-action"
+                style="width: auto"
+              >
+                <option value="">All Actions</option>
+                <option value="login">Login</option>
+                <option value="logout">Logout</option>
+                <option value="create_account">Create Account</option>
+                <option value="update_account">Update Account</option>
+                <option value="delete_account">Delete Account</option>
+                <option value="assign_midwife">Assign Midwife</option>
+                <option value="database_backup">DB Backup</option>
+                <option value="database_restore">DB Restore</option>
+              </select>
+              <input
+                type="date"
+                class="form-control"
+                id="filter-date-from"
+                style="width: auto"
+                title="From date"
+              />
+              <input
+                type="date"
+                class="form-control"
+                id="filter-date-to"
+                style="width: auto"
+                title="To date"
+              />
+            </div>
+          </div>
+
+          <div class="table-wrap" style="border: none; border-radius: 0">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Table</th>
+                  <th>Description</th>
+                  <th style="text-align: center">Details</th>
+                </tr>
+              </thead>
+              <tbody id="audit-tbody">
+                <tr>
+                  <td
+                    colspan="6"
+                    style="
+                      text-align: center;
+                      padding: 48px;
+                      color: var(--gray-400);
+                    "
+                  >
+                    <div class="spinner" style="margin: 0 auto 12px"></div>
+                    Loading audit trail…
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div
+            class="card-footer"
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              flex-wrap: wrap;
+              gap: 12px;
+            "
+          >
+            <span class="pagination-info" id="page-info">Showing 0 of 0</span>
+            <div class="pagination" id="pagination"></div>
+          </div>
+        </div>
+      </main>
+
+      <footer class="app-footer">
+        <span
+          >&copy; 2026 InaAgapay — Maternal &amp; Child Health Information
+          System</span
+        >
+        <span style="color: var(--pink-light)">|</span>
+        <span>Admin Portal v2.0</span>
+      </footer>
+    </div>
+
+    <!-- Detail Modal -->
+    <div class="modal-overlay" id="detail-modal">
+      <div class="modal" style="max-width: 580px">
+        <div class="modal-header">
+          <h2 class="modal-title">Audit Entry Details</h2>
+          <button class="modal-close" id="detail-modal-close">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="modal-body" id="detail-body"></div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="detail-close-btn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script>
+      (function () {
+        const SUPABASE_URL = "https://buvseyqcdacctlupznya.supabase.co";
+        const SUPABASE_ANON =
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw";
+        const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+        const SESSION_KEY = "inaagapay_admin_session";
+        const session = (() => {
+          try {
+            return JSON.parse(localStorage.getItem(SESSION_KEY));
+          } catch {
+            return null;
+          }
+        })();
+        if (!session || session.account_type !== "admin") {
+          window.location.href = "../index.html";
+          return;
+        }
+
+        document.getElementById("header-user-name").textContent =
+          [session.first_name, session.last_name].filter(Boolean).join(" ") ||
+          "Admin";
+        document.getElementById("header-avatar").textContent =
+          (
+            (session.first_name?.[0] ?? "") + (session.last_name?.[0] ?? "")
+          ).toUpperCase() || "A";
+        document.getElementById("logout-btn").addEventListener("click", () => {
+          if (confirm("Logout?")) {
+            localStorage.removeItem(SESSION_KEY);
+            window.location.href = "../index.html";
+          }
+        });
+        document
+          .getElementById("sidebar-toggle")
+          .addEventListener("click", () =>
+            document.querySelector(".app-sidebar").classList.toggle("open"),
+          );
+
+        function esc(s) {
+          const d = document.createElement("div");
+          d.textContent = s ?? "";
+          return d.innerHTML;
+        }
+        function toUTC(ts) {
+          // Supabase TIMESTAMP (no tz) returns without Z — force UTC parsing
+          if (!ts) return null;
+          return new Date(/Z|[+-]\d{2}:?\d{2}$/.test(ts) ? ts : ts + "Z");
+        }
+        function fmtDT(ts) {
+          if (!ts) return "—";
+          return toUTC(ts).toLocaleString("en-PH", {
+            timeZone: "Asia/Manila",
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+        }
+
+        /* ── State ── */
+        let allLogs = [],
+          filtered = [],
+          page = 1;
+        const PAGE_SIZE = 20;
+
+        /* ── Load ── */
+        async function loadAudit() {
+          try {
+            const { data, error } = await db
+              .from("audit_trail")
+              .select(
+                "*, accounts(first_name, last_name, email_address, account_type)",
+              )
+              .order("action_timestamp", { ascending: false })
+              .limit(2000);
+            if (error) throw error;
+            allLogs = data || [];
+            renderStats();
+            applyFilters();
+          } catch (e) {
+            document.getElementById("audit-tbody").innerHTML =
+              `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger);">Error loading audit trail: ${esc(e.message)}</td></tr>`;
+          }
+        }
+
+        /* ── Stats ── */
+        function renderStats() {
+          const counts = {};
+          allLogs.forEach(
+            (l) => (counts[l.action] = (counts[l.action] || 0) + 1),
+          );
+          const topActions = Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+          const actionLabels = {
+            login: "Login",
+            logout: "Logout",
+            create_account: "Create Acct",
+            update_account: "Update Acct",
+            delete_account: "Delete Acct",
+            assign_midwife: "Assign Midwife",
+            database_backup: "DB Backup",
+            database_restore: "DB Restore",
+          };
+          const colors = [
+            "var(--pink)",
+            "#3B82F6",
+            "#10B981",
+            "#F59E0B",
+            "#7C3AED",
+          ];
+          document.getElementById("audit-stats").innerHTML = topActions
+            .map(
+              ([action, cnt], i) => `
+      <div style="background:var(--white);border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px 18px;box-shadow:var(--shadow);">
+        <div style="font-size:22px;font-weight:800;color:${colors[i]};margin-bottom:4px;">${cnt}</div>
+        <div style="font-size:12px;color:var(--gray-500);font-weight:600;">${actionLabels[action] || action}</div>
+      </div>`,
+            )
+            .join("");
+        }
+
+        /* ── Filters ── */
+        function applyFilters() {
+          const q = document
+            .getElementById("search-input")
+            .value.trim()
+            .toLowerCase();
+          const action = document.getElementById("filter-action").value;
+          const from = document.getElementById("filter-date-from").value;
+          const to = document.getElementById("filter-date-to").value;
+          filtered = allLogs.filter((l) => {
+            if (action && l.action !== action) return false;
+            if (q) {
+              const text = [
+                l.action,
+                l.description,
+                l.table_name,
+                l.accounts?.first_name,
+                l.accounts?.last_name,
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+              if (!text.includes(q)) return false;
+            }
+            if (from && new Date(l.action_timestamp) < new Date(from))
+              return false;
+            if (to && new Date(l.action_timestamp) > new Date(to + "T23:59:59"))
+              return false;
+            return true;
+          });
+          page = 1;
+          renderTable();
+        }
+
+        let searchTimer;
+        [
+          "search-input",
+          "filter-action",
+          "filter-date-from",
+          "filter-date-to",
+        ].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el.type === "search" || el.tagName === "INPUT") {
+            el.addEventListener("input", () => {
+              clearTimeout(searchTimer);
+              searchTimer = setTimeout(applyFilters, 280);
+            });
+          } else {
+            el.addEventListener("change", applyFilters);
+          }
+        });
+        document
+          .getElementById("refresh-btn")
+          .addEventListener("click", loadAudit);
+
+        /* ── Render ── */
+        const ACTION_BADGES = {
+          login: ["badge-admin", "Login"],
+          logout: ["badge-inactive", "Logout"],
+          create_account: ["badge-midwife", "Create Account"],
+          update_account: ["badge-mother", "Update Account"],
+          delete_account: ["badge-suspended", "Delete Account"],
+          assign_midwife: ["badge-midwife", "Assign Midwife"],
+          database_backup: ["badge-low", "DB Backup"],
+          database_restore: ["badge-medium", "DB Restore"],
+        };
+
+        function renderTable() {
+          const start = (page - 1) * PAGE_SIZE;
+          const slice = filtered.slice(start, start + PAGE_SIZE);
+          const tbody = document.getElementById("audit-tbody");
+          if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--gray-400);"><i class="fa-solid fa-clipboard-list" style="font-size:32px;margin-bottom:12px;display:block;opacity:.4;"></i>No audit entries found.</td></tr>`;
+            document.getElementById("page-info").textContent = "Showing 0 of 0";
+            document.getElementById("pagination").innerHTML = "";
+            return;
+          }
+          tbody.innerHTML = slice
+            .map((l, idx) => {
+              const who = l.accounts
+                ? [l.accounts.first_name, l.accounts.last_name]
+                    .filter(Boolean)
+                    .join(" ")
+                : "System";
+              const [badgeCls, badgeLabel] = ACTION_BADGES[l.action] || [
+                "badge-inactive",
+                l.action,
+              ];
+              return `<tr>
+        <td style="white-space:nowrap;font-size:12px;color:var(--gray-500);">${fmtDT(l.action_timestamp)}</td>
+        <td>
+          <div style="font-weight:600;font-size:13px;">${esc(who)}</div>
+          ${l.accounts ? `<div style="font-size:11px;color:var(--gray-400);">${esc(l.accounts.account_type || "")}</div>` : ""}
+        </td>
+        <td><span class="badge ${badgeCls}">${badgeLabel}</span></td>
+        <td style="font-size:12.5px;color:var(--gray-500);">${l.table_name ? `<code style="background:var(--gray-100);padding:2px 7px;border-radius:5px;color:var(--pink-dark);font-size:12px;">${esc(l.table_name)}</code>` : "—"}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${esc(l.description || "—")}</td>
+        <td style="text-align:center;">
+          ${l.old_data || l.new_data ? `<button class="btn btn-sm btn-outline-pink btn-icon" onclick="showDetail(${start + idx})" title="View change details"><i class="fa-solid fa-eye"></i></button>` : "—"}
+        </td>
+      </tr>`;
+            })
+            .join("");
+          document.getElementById("page-info").textContent =
+            `Showing ${start + 1}–${Math.min(start + PAGE_SIZE, filtered.length)} of ${filtered.length}`;
+          renderPagination();
+        }
+
+        function renderPagination() {
+          const total = Math.ceil(filtered.length / PAGE_SIZE);
+          const pg = document.getElementById("pagination");
+          if (total <= 1) {
+            pg.innerHTML = "";
+            return;
+          }
+          let html = `<button class="page-btn" onclick="gotoPage(${page - 1})" ${page === 1 ? "disabled" : ""}><i class="fa-solid fa-chevron-left" style="font-size:11px;"></i></button>`;
+          for (let i = 1; i <= total; i++) {
+            if (total > 7 && i > 2 && i < page - 1) {
+              html +=
+                '<span style="padding:0 4px;color:var(--gray-400);">…</span>';
+              i = page - 1;
+              continue;
+            }
+            if (total > 7 && i > page + 1 && i < total - 1) {
+              html +=
+                '<span style="padding:0 4px;color:var(--gray-400);">…</span>';
+              i = total - 1;
+              continue;
+            }
+            html += `<button class="page-btn${i === page ? " active" : ""}" onclick="gotoPage(${i})">${i}</button>`;
+          }
+          html += `<button class="page-btn" onclick="gotoPage(${page + 1})" ${page === total ? "disabled" : ""}><i class="fa-solid fa-chevron-right" style="font-size:11px;"></i></button>`;
+          pg.innerHTML = html;
+        }
+        window.gotoPage = (p) => {
+          page = p;
+          renderTable();
+        };
+
+        /* ── Detail Modal ── */
+        window.showDetail = (idx) => {
+          const log = filtered[idx];
+          if (!log) return;
+          const fmt = (obj) =>
+            obj
+              ? `<pre style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;font-size:12px;overflow:auto;max-height:200px;white-space:pre-wrap;">${esc(JSON.stringify(obj, null, 2))}</pre>`
+              : '<span style="color:var(--gray-400);">—</span>';
+          document.getElementById("detail-body").innerHTML = `
+      <div style="display:grid;gap:14px;">
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">Timestamp</div><div style="font-size:13.5px;font-weight:600;">${fmtDT(log.action_timestamp)}</div></div>
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">Action</div><div>${(ACTION_BADGES[log.action] || ["badge-inactive", log.action])[1]}</div></div>
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">Description</div><div style="font-size:13.5px;">${esc(log.description || "—")}</div></div>
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">Before (old_data)</div>${fmt(log.old_data)}</div>
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">After (new_data)</div>${fmt(log.new_data)}</div>
+      </div>`;
+          document.getElementById("detail-modal").classList.add("show");
+        };
+        ["detail-modal-close", "detail-close-btn"].forEach((id) =>
+          document
+            .getElementById(id)
+            .addEventListener("click", () =>
+              document.getElementById("detail-modal").classList.remove("show"),
+            ),
+        );
+        document
+          .getElementById("detail-modal")
+          .addEventListener("click", (e) => {
+            if (e.target === e.currentTarget)
+              e.currentTarget.classList.remove("show");
+          });
+
+        /* ── Export CSV ── */
+        document.getElementById("export-btn").addEventListener("click", () => {
+          if (filtered.length === 0) return;
+          const headers = [
+            "Timestamp",
+            "User",
+            "Email",
+            "Action",
+            "Table",
+            "Description",
+          ];
+          const rows = filtered.map((l) =>
+            [
+              fmtDT(l.action_timestamp),
+              l.accounts
+                ? [l.accounts.first_name, l.accounts.last_name]
+                    .filter(Boolean)
+                    .join(" ")
+                : "System",
+              l.accounts?.email_address || "",
+              l.action || "",
+              l.table_name || "",
+              (l.description || "").replace(/"/g, '""'),
+            ]
+              .map((v) => `"${v}"`)
+              .join(","),
+          );
+          const csv = [headers.join(","), ...rows].join("\n");
+          const blob = new Blob([csv], { type: "text/csv" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `audit_trail_${new Date().toISOString().slice(0, 10)}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+
+        loadAudit();
+      })();
+    </script>
+  </body>
+</html>
