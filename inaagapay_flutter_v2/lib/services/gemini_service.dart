@@ -7,14 +7,19 @@ import 'package:image_picker/image_picker.dart';
 import '../models/gemini_response.dart';
 
 class GeminiService {
+  // Start with base models, will be updated after checking available models
   final List<String> _modelsToTry = [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-001',
-    'gemini-2.5-flash',
+    'gemini-pro-vision',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-001',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-pro',
+    'gemini-1.0-pro-vision',
   ];
   
   String? _workingModel;
   String? _workingApiVersion;
+  List<String> _availableModels = [];
 
   // For debugging - set to false in production
   final bool _debugMode = true;
@@ -22,6 +27,48 @@ class GeminiService {
   void _log(String message) {
     if (_debugMode) {
       debugPrint(message);
+    }
+  }
+
+  // NEW: Method to check available models from the API
+  Future<void> checkAvailableModels() async {
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty) {
+      _log('No API key found for checking models');
+      return;
+    }
+    
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1/models?key=$apiKey'
+    );
+    
+    try {
+      _log('Checking available Gemini models...');
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final models = data['models'] as List? ?? [];
+        
+        _availableModels = models
+            .map<String>((model) => model['name'].toString().replaceFirst('models/', ''))
+            .where((name) => name.contains('vision') || name.contains('flash') || name.contains('pro'))
+            .toList();
+        
+        _log('Available vision-capable models: ${_availableModels.join(', ')}');
+        
+        // Update _modelsToTry with actually available models, prioritizing vision models
+        if (_availableModels.isNotEmpty) {
+          _modelsToTry.clear();
+          _modelsToTry.addAll(_availableModels);
+          _log('Updated models to try: ${_modelsToTry.join(', ')}');
+        }
+      } else {
+        _log('Failed to get models: HTTP ${response.statusCode}');
+        _log('Response: ${response.body}');
+      }
+    } catch (e) {
+      _log('Error checking available models: $e');
     }
   }
 
@@ -34,6 +81,11 @@ class GeminiService {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Gemini API Key not found in .env');
+    }
+
+    // Check available models first if we haven't already
+    if (_availableModels.isEmpty) {
+      await checkAvailableModels();
     }
 
     _log('Analyzing ${imageFiles.length} ultrasound images together...');
@@ -150,15 +202,18 @@ This ultrasound shows a normally developing fetus at 32 weeks gestation with all
           // Save working model
           _workingModel = model;
           _workingApiVersion = apiVersion;
+          _log('✅ SUCCESS! Using model: $model with API version: $apiVersion');
           return result;
         } catch (e) {
-          _log('$apiVersion/$model failed');
+          _log('❌ $apiVersion/$model failed: ${e.toString()}');
           lastError = e is Exception ? e : Exception(e.toString());
         }
       }
     }
     
-    throw lastError ?? Exception('All models failed');
+    // If all models failed, show helpful error message
+    _log('❌ All models failed. Available models on your account: ${_availableModels.join(', ')}');
+    throw lastError ?? Exception('All models failed. Please check your API key permissions.');
   }
 
   Future<GeminiResponse> _sendMultiImageRequest(
@@ -211,7 +266,7 @@ This ultrasound shows a normally developing fetus at 32 weeks gestation with all
         "temperature": 0.2,
         "topK": 32,
         "topP": 1,
-        "maxOutputTokens": 4096, // Increased for comprehensive health assessment
+        "maxOutputTokens": 8192,
       }
     };
 
@@ -225,10 +280,10 @@ This ultrasound shows a normally developing fetus at 32 weeks gestation with all
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      _log('Health assessment successful!');
+      _log('✅ Health assessment successful!');
       return GeminiResponse.fromJson(data);
     } else {
-      _log('HTTP ${response.statusCode}: ${response.body}');
+      _log('❌ HTTP ${response.statusCode}: ${response.body}');
       throw Exception('API Error (${response.statusCode})');
     }
   }
@@ -244,5 +299,18 @@ This ultrasound shows a normally developing fetus at 32 weeks gestation with all
     
     return _sendMultiImageRequest([imageFile], apiKey, _workingModel ?? _modelsToTry.first, 
         _workingApiVersion ?? 'v1', singlePrompt);
+  }
+  
+  // Method to get model information
+  String getCurrentModelInfo() {
+    if (_workingModel != null) {
+      return "✅ Using model: $_workingModel (API: $_workingApiVersion)";
+    }
+    return "⏳ No active model yet. Available models: ${_availableModels.join(', ')}";
+  }
+  
+  // Method to get available models
+  List<String> getAvailableModels() {
+    return List.from(_availableModels);
   }
 }
