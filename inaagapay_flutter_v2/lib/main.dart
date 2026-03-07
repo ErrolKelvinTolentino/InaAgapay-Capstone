@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'services/supabase_service.dart';
+
+import 'admin/admin_router.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,39 +14,23 @@ Future<void> main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw',
   );
 
-  runApp(const InaagapayApp());
+  runApp(const InaAgapayAdminApp());
 }
 
-class InaagapayApp extends StatelessWidget {
-  const InaagapayApp({super.key});
+class InaAgapayAdminApp extends StatelessWidget {
+  const InaAgapayAdminApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp.router(
+      title: 'InaAgapay Admin Portal',
       debugShowCheckedModeBanner: false,
-      home: HomePage(),
-    );
-  }
-}
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("InaAgapay")),
-      body: const Center(
-        child: Text(
-          "InaAgapay",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      theme: AppTheme.materialTheme.copyWith(
+        textTheme: GoogleFonts.poppinsTextTheme(
+          AppTheme.materialTheme.textTheme,
         ),
       ),
+      routerConfig: adminRouter,
     );
   }
 }

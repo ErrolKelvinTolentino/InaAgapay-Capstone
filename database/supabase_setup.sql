@@ -55,6 +55,10 @@ CREATE TABLE bhc (
     bhc_id BIGSERIAL PRIMARY KEY,
     bhc_name VARCHAR(255) NOT NULL
 );
+-- Allow the anon key (Flutter app) to read BHC lookup data
+ALTER TABLE bhc ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read on bhc" ON bhc FOR
+SELECT USING (true);
 CREATE TABLE midwives (
     midwife_id BIGSERIAL PRIMARY KEY,
     account_id BIGINT NOT NULL UNIQUE REFERENCES accounts(account_id) ON DELETE CASCADE,
@@ -527,3 +531,33 @@ UPDATE ON ai_responses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS update_pregnancy_risk_assessments_updated_at ON pregnancy_risk_assessments;
 CREATE TRIGGER update_pregnancy_risk_assessments_updated_at BEFORE
 UPDATE ON pregnancy_risk_assessments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- SEED DATA
+-- BHC (Barangay Health Centers)
+INSERT INTO bhc (bhc_name)
+VALUES ('San Jose'),
+    ('Tarcan'),
+    ('Sta. Barbara'),
+    ('Tiaong'),
+    ('Pinagbarilan'),
+    ('No Assigned BHC');
+-- =========================
+-- RLS POLICIES (Admin Portal – anon key)
+-- Run these in Supabase SQL Editor if RLS is enabled on any of these tables.
+-- The admin portal uses the anon key and needs full access to manage data.
+-- =========================
+-- accounts
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admin portal full access on accounts" ON accounts;
+CREATE POLICY "Admin portal full access on accounts" ON accounts FOR ALL USING (true) WITH CHECK (true);
+-- midwives
+ALTER TABLE midwives ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admin portal full access on midwives" ON midwives;
+CREATE POLICY "Admin portal full access on midwives" ON midwives FOR ALL USING (true) WITH CHECK (true);
+-- audit_trail
+ALTER TABLE audit_trail ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admin portal full access on audit_trail" ON audit_trail;
+CREATE POLICY "Admin portal full access on audit_trail" ON audit_trail FOR ALL USING (true) WITH CHECK (true);
+-- bhc (already has SELECT policy, extend to ALL)
+DROP POLICY IF EXISTS "Allow public read on bhc" ON bhc;
+DROP POLICY IF EXISTS "Admin portal full access on bhc" ON bhc;
+CREATE POLICY "Admin portal full access on bhc" ON bhc FOR ALL USING (true) WITH CHECK (true);

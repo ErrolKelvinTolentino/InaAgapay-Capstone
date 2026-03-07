@@ -1,6 +1,6 @@
 name: inaagapay_flutter_v2
 description: "Inaagapay Maternal and Child Health Information System"
-publish_to: 'none'
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
@@ -26,6 +26,18 @@ dependencies:
 
   # HTTP requests
   http: ^1.2.2
+
+  # Web routing
+  go_router: ^14.0.0
+
+  # Charts for dashboard
+  fl_chart: ^0.68.0
+
+  # Google Fonts (Poppins)
+  google_fonts: ^6.2.1
+
+  # BCrypt password hashing
+  bcrypt: ^1.1.3
 
 dev_dependencies:
   flutter_test:
