@@ -84,16 +84,12 @@ class _LoginScreenState extends State<LoginScreen> {
             '/midwife-dashboard',
             (route) => false,
           );
-        } else if (role == 'admin') {
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/admin-dashboard',
-            (route) => false,
-          );
         } else {
           setState(() {
             _hasError = true;
-            _errorMessage = 'Unknown user role';
+            _errorMessage = role == 'admin'
+                ? 'Admin accounts must use the administrative web portal.'
+                : 'Unknown user role';
           });
         }
       } else {
@@ -184,8 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Text(
                   _errorMessage,
                   textAlign: TextAlign.center,
-                  style:
-                      const TextStyle(fontSize: 13, color: AppColors.error),
+                  style: const TextStyle(fontSize: 13, color: AppColors.error),
                 ),
               ],
 
@@ -196,8 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 alignment: Alignment.centerRight,
                 child: ClickableText(
                   text: 'Forgot Password?',
-                  onTap: () =>
-                      Navigator.pushNamed(context, '/forgot-password'),
+                  onTap: () => Navigator.pushNamed(context, '/forgot-password'),
                 ),
               ),
 

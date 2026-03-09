@@ -12,8 +12,10 @@ import 'screens/change_forgot_password.dart';
 import 'screens/complete_profile.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/congrats_page.dart';
+import 'screens/mother_dashboard.dart';
 import 'screens/mother_dashboard_shell.dart';
 import 'screens/admin_dashboard.dart';
+import 'screens/midwife_dashboard.dart';
 import 'screens/midwife_shell.dart';
 import 'screens/ultrasound_analyzer_screen.dart';
 import 'screens/lab_test_analyzer_screen.dart';
@@ -57,9 +59,9 @@ class InaagapayApp extends StatelessWidget {
 
     switch (role) {
       case 'mother':
-        return const MotherDashboardShell();
+        return const MotherDashboard();
       case 'midwife':
-        return const MidwifeShell();
+        return const MidwifeDashboard();
       case 'admin':
         return const AdminDashboard();
       default:
@@ -119,8 +121,8 @@ class InaagapayApp extends StatelessWidget {
                 const ChangeForgotPasswordScreen(),
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
-            '/mother-dashboard': (context) => const MotherDashboardShell(),
-            '/midwife-dashboard': (context) => const MidwifeShell(),
+            '/mother-dashboard': (context) => const MotherDashboard(),
+            '/midwife-dashboard': (context) => const MidwifeDashboard(),
             '/admin-dashboard': (context) => const AdminDashboard(),
             '/ultrasound-analyzer': (context) =>
                 const UltrasoundAnalyzerScreen(),

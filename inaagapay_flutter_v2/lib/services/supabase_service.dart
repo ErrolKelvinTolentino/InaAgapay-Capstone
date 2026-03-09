@@ -1,20 +1,30 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:bcrypt/bcrypt.dart';
 import 'dart:math';
 
 class SupabaseService {
   // This ensures we always get the current client
   static SupabaseClient get client => Supabase.instance.client;
-  
+
   // Generate 6-digit OTP code
   static String _generateOTP() {
     final random = Random();
     return (100000 + random.nextInt(900000)).toString();
   }
 
-  // Hash password (simple for demo - use proper hashing in production)
+  // Hash password using bcrypt
   static String _hashPassword(String password) {
-    // In production, use bcrypt or similar
-    return password; // TEMPORARY - REPLACE WITH PROPER HASHING
+    return BCrypt.hashpw(password, BCrypt.gensalt());
+  }
+
+  // Verify password against bcrypt hash
+  static bool _verifyPassword(String password, String hash) {
+    try {
+      return BCrypt.checkpw(password, hash);
+    } catch (e) {
+      // Fallback: plain text comparison for legacy plain-text passwords
+      return password == hash;
+    }
   }
 
   // Test connection
@@ -32,23 +42,23 @@ class SupabaseService {
   }
 
   // Login - Works with your database schema
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  static Future<Map<String, dynamic>> login(
+      String email, String password) async {
     try {
       print('Attempting login for: $email');
-      
+
       // Test connection first
       final isConnected = await testConnection();
       if (!isConnected) {
         return {
           'success': false,
-          'message': 'Cannot connect to server. Please check your internet connection.'
+          'message':
+              'Cannot connect to server. Please check your internet connection.'
         };
       }
-      
+
       // First get the account with personal info
-      final accountResponse = await client
-          .from('accounts')
-          .select('''
+      final accountResponse = await client.from('accounts').select('''
             account_id,
             email_address,
             password_hash,
@@ -60,9 +70,7 @@ class SupabaseService {
             last_name,
             extension_name,
             phone_number
-          ''')
-          .eq('email_address', email)
-          .maybeSingle();
+          ''').eq('email_address', email).maybeSingle();
 
       print('Account query response: $accountResponse');
 
@@ -70,8 +78,16 @@ class SupabaseService {
         return {'success': false, 'message': 'Invalid credentials'};
       }
 
-      // Check password (use proper hash comparison in production)
-      if (accountResponse['password_hash'] != _hashPassword(password)) {
+      // Block admin accounts from mobile login
+      if (accountResponse['account_type'] == 'admin') {
+        return {
+          'success': false,
+          'message': 'Admin accounts must use the administrative web portal.'
+        };
+      }
+
+      // Check password using bcrypt
+      if (!_verifyPassword(password, accountResponse['password_hash'] ?? '')) {
         return {'success': false, 'message': 'Invalid credentials'};
       }
 
@@ -86,7 +102,7 @@ class SupabaseService {
       // If mother, check if mother record exists
       Map<String, dynamic>? motherData;
       bool profileComplete = false;
-      
+
       if (accountResponse['account_type'] == 'mother') {
         try {
           // Get mother data - only query columns that exist in mothers table
@@ -106,15 +122,14 @@ class SupabaseService {
               ''')
               .eq('account_id', accountResponse['account_id'])
               .maybeSingle();
-          
+
           print('Mother data: $motherData');
-          
+
           // Determine if profile is complete
           // Check if account has personal info AND mother has birthdate
           if (motherData != null) {
-            profileComplete = 
-                accountResponse['first_name'] != null && 
-                accountResponse['last_name'] != null && 
+            profileComplete = accountResponse['first_name'] != null &&
+                accountResponse['last_name'] != null &&
                 motherData['birthdate'] != null;
           }
         } catch (e) {
@@ -124,17 +139,15 @@ class SupabaseService {
       }
 
       // Generate token
-      final token = _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
-      
+      final token =
+          _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
+
       // Update last login token
       try {
-        await client
-            .from('accounts')
-            .update({
-              'last_login_token': token,
-              'last_login_at': DateTime.now().toIso8601String(),
-            })
-            .eq('account_id', accountResponse['account_id']);
+        await client.from('accounts').update({
+          'last_login_token': token,
+          'last_login_at': DateTime.now().toIso8601String(),
+        }).eq('account_id', accountResponse['account_id']);
       } catch (e) {
         print('Error updating last login token: $e');
         // Continue even if token update fails
@@ -159,9 +172,9 @@ class SupabaseService {
       };
     } catch (e) {
       print('Login error details: $e');
-      
+
       // Check for specific error types
-      if (e.toString().contains('SocketException') || 
+      if (e.toString().contains('SocketException') ||
           e.toString().contains('ClientException') ||
           e.toString().contains('Connection refused')) {
         return {
@@ -169,25 +182,22 @@ class SupabaseService {
           'message': 'Network error. Please check your internet connection.'
         };
       }
-      
+
       if (e.toString().contains('timeout')) {
         return {
           'success': false,
           'message': 'Connection timeout. Server may be down.'
         };
       }
-      
+
       if (e.toString().contains('apikey')) {
         return {
           'success': false,
           'message': 'API key error. Please restart the app.'
         };
       }
-      
-      return {
-        'success': false,
-        'message': 'Login failed. Please try again.'
-      };
+
+      return {'success': false, 'message': 'Login failed. Please try again.'};
     }
   }
 
@@ -195,7 +205,7 @@ class SupabaseService {
   static Future<bool> sendOTPEmail(String email, String code) async {
     try {
       print('Sending OTP email to: $email with code: $code');
-      
+
       final response = await client.functions.invoke(
         'send-otp',
         body: {
@@ -204,7 +214,7 @@ class SupabaseService {
           'type': 'verification',
         },
       );
-      
+
       print('Email send response: $response');
       return true;
     } catch (e) {
@@ -214,7 +224,8 @@ class SupabaseService {
   }
 
   // Register
-  static Future<Map<String, dynamic>> register(String email, String password) async {
+  static Future<Map<String, dynamic>> register(
+      String email, String password) async {
     try {
       // Check if account exists
       final existing = await client
@@ -224,7 +235,8 @@ class SupabaseService {
           .maybeSingle();
 
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       if (existing != null) {
         if (existing['is_verified']) {
@@ -235,14 +247,11 @@ class SupabaseService {
         }
 
         // Update existing unverified account
-        await client
-            .from('accounts')
-            .update({
-              'password_hash': _hashPassword(password),
-              'verification_code': code,
-              'verification_expires': expires,
-            })
-            .eq('email_address', email);
+        await client.from('accounts').update({
+          'password_hash': _hashPassword(password),
+          'verification_code': code,
+          'verification_expires': expires,
+        }).eq('email_address', email);
       } else {
         // Create new account
         await client.from('accounts').insert({
@@ -259,12 +268,13 @@ class SupabaseService {
 
       // Send email with OTP using Edge Function
       final emailSent = await sendOTPEmail(email, code);
-      
+
       if (!emailSent) {
         print('Failed to send email, but account was created');
         return {
           'success': true,
-          'message': 'Account created but email failed to send. Please use "Resend Code" on the next screen.',
+          'message':
+              'Account created but email failed to send. Please use "Resend Code" on the next screen.',
           'email_failed': true,
         };
       }
@@ -284,10 +294,12 @@ class SupabaseService {
   }
 
   // Resend verification code
-  static Future<Map<String, dynamic>> resendVerificationCode(String email) async {
+  static Future<Map<String, dynamic>> resendVerificationCode(
+      String email) async {
     try {
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       // Update the code in database
       await client
@@ -304,7 +316,7 @@ class SupabaseService {
 
       return {
         'success': emailSent,
-        'message': emailSent 
+        'message': emailSent
             ? 'New verification code sent to your email.'
             : 'Failed to send email. Please try again.',
       };
@@ -335,14 +347,11 @@ class SupabaseService {
       if (expires.isBefore(DateTime.now())) return false;
 
       // Mark as verified
-      await client
-          .from('accounts')
-          .update({
-            'is_verified': true,
-            'verification_code': null,
-            'verification_expires': null,
-          })
-          .eq('email_address', email);
+      await client.from('accounts').update({
+        'is_verified': true,
+        'verification_code': null,
+        'verification_expires': null,
+      }).eq('email_address', email);
 
       return true;
     } catch (e) {
@@ -358,16 +367,13 @@ class SupabaseService {
   ) async {
     try {
       // Update accounts table with personal info
-      await client
-          .from('accounts')
-          .update({
-            'first_name': profileData['first_name'],
-            'middle_name': profileData['middle_name'],
-            'last_name': profileData['last_name'],
-            'extension_name': profileData['extension_name'],
-            'phone_number': profileData['contact_number'],
-          })
-          .eq('account_id', accountId);
+      await client.from('accounts').update({
+        'first_name': profileData['first_name'],
+        'middle_name': profileData['middle_name'],
+        'last_name': profileData['last_name'],
+        'extension_name': profileData['extension_name'],
+        'phone_number': profileData['contact_number'],
+      }).eq('account_id', accountId);
 
       // Check if mother record exists
       final existingMother = await client
@@ -378,7 +384,8 @@ class SupabaseService {
 
       // Parse birth date
       String? birthDateStr;
-      if (profileData['birth_date'] != null && profileData['birth_date'].isNotEmpty) {
+      if (profileData['birth_date'] != null &&
+          profileData['birth_date'].isNotEmpty) {
         try {
           // Handle MM/DD/YYYY format from date picker
           if (profileData['birth_date'].contains('/')) {
@@ -388,7 +395,8 @@ class SupabaseService {
               final month = int.parse(parts[0]);
               final day = int.parse(parts[1]);
               final year = int.parse(parts[2]);
-              birthDateStr = '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+              birthDateStr =
+                  '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
             }
           } else {
             // Handle YYYY-MM-DD format
@@ -413,53 +421,46 @@ class SupabaseService {
         });
       } else {
         // Update mother record with correct column names
-        await client
-            .from('mothers')
-            .update({
-              'birthdate': birthDateStr,
-              'house_number': profileData['house_no'],
-              'street': profileData['street'],
-              'barangay': profileData['barangay'],
-              'city_municipality': profileData['city'],
-              'province': profileData['province'],
-            })
-            .eq('account_id', accountId);
+        await client.from('mothers').update({
+          'birthdate': birthDateStr,
+          'house_number': profileData['house_no'],
+          'street': profileData['street'],
+          'barangay': profileData['barangay'],
+          'city_municipality': profileData['city'],
+          'province': profileData['province'],
+        }).eq('account_id', accountId);
       }
 
       return {'success': true, 'message': 'Profile completed successfully'};
     } catch (e) {
       print('Profile completion error: $e');
-      return {'success': false, 'message': 'Failed to complete profile: ${e.toString()}'};
+      return {
+        'success': false,
+        'message': 'Failed to complete profile: ${e.toString()}'
+      };
     }
   }
 
   // Get greeting data - Updated with correct column names
-  static Future<Map<String, dynamic>> getGreeting(int accountId, String role) async {
+  static Future<Map<String, dynamic>> getGreeting(
+      int accountId, String role) async {
     try {
       // Get account info first
-      final accountResponse = await client
-          .from('accounts')
-          .select('''
+      final accountResponse = await client.from('accounts').select('''
             first_name,
             middle_name,
             last_name,
             extension_name
-          ''')
-          .eq('account_id', accountId)
-          .maybeSingle();
+          ''').eq('account_id', accountId).maybeSingle();
 
       if (role == 'mother') {
         // Get mother's BHC info
-        final motherResponse = await client
-            .from('mothers')
-            .select('''
+        final motherResponse = await client.from('mothers').select('''
               assigned_bhc_id,
               bhc!inner (
                 bhc_name
               )
-            ''')
-            .eq('account_id', accountId)
-            .maybeSingle();
+            ''').eq('account_id', accountId).maybeSingle();
 
         final bhc = motherResponse?['bhc'] as Map?;
 
@@ -472,19 +473,15 @@ class SupabaseService {
           'bhc_name': bhc?['bhc_name'] ?? 'No Barangay Assigned',
         };
       }
-      
+
       if (role == 'midwife') {
         // Get midwife's BHC info
-        final midwifeResponse = await client
-            .from('midwives')
-            .select('''
+        final midwifeResponse = await client.from('midwives').select('''
               assigned_bhc_id,
               bhc!inner (
                 bhc_name
               )
-            ''')
-            .eq('account_id', accountId)
-            .maybeSingle();
+            ''').eq('account_id', accountId).maybeSingle();
 
         final bhc = midwifeResponse?['bhc'] as Map?;
 
