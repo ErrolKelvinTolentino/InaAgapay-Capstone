@@ -1,22 +1,22 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 enum DialogType { info, success, warning, error }
 
 class DialogBox extends StatelessWidget {
   final String title;
+  final String content;
   final String buttonText;
   final VoidCallback onPressed;
   final DialogType type;
-  final String? subtitle; // ✅ NEW (optional)
 
   const DialogBox({
     super.key,
     required this.title,
+    this.content = '',
     required this.buttonText,
     required this.onPressed,
     this.type = DialogType.info,
-    this.subtitle, // ✅ optional
   });
 
   Color get _accentColor {
@@ -28,7 +28,6 @@ class DialogBox extends StatelessWidget {
       case DialogType.error:
         return AppColors.error;
       case DialogType.info:
-      default:
         return AppColors.brandPrimary;
     }
   }
@@ -40,9 +39,9 @@ class DialogBox extends StatelessWidget {
       case DialogType.error:
         return Icons.close;
       case DialogType.success:
-      case DialogType.info:
-      default:
         return Icons.check;
+      case DialogType.info:
+        return Icons.info_outline;
     }
   }
 
@@ -58,7 +57,7 @@ class DialogBox extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textPrimary.withOpacity(0.12),
+              color: AppColors.textPrimary.withValues(alpha: 0.12),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -72,20 +71,11 @@ class DialogBox extends StatelessWidget {
               height: 64,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: _accentColor,
-                  width: 3,
-                ),
+                border: Border.all(color: _accentColor, width: 3),
               ),
-              child: Icon(
-                _icon,
-                size: 36,
-                color: _accentColor,
-              ),
+              child: Icon(_icon, size: 36, color: _accentColor),
             ),
-
             const SizedBox(height: 20),
-
             Text(
               title,
               textAlign: TextAlign.center,
@@ -95,12 +85,10 @@ class DialogBox extends StatelessWidget {
                 color: _accentColor,
               ),
             ),
-
-            // ✅ SUBTEXT (only if provided)
-            if (subtitle != null) ...[
+            if (content.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                subtitle!,
+                content,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
@@ -109,9 +97,7 @@ class DialogBox extends StatelessWidget {
                 ),
               ),
             ],
-
             const SizedBox(height: 28),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(

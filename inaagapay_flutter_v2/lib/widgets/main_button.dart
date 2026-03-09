@@ -1,22 +1,16 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-
 
 class MainButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
-
-
-  /// Icon control
   final bool showIcons;
   final IconData? leadingIcon;
-
-
-  /// Optional color overrides
+  final IconData? rightIcon;
+  final bool isOutlined;
   final Color? backgroundColor;
   final Color? textColor;
   final Color? iconColor;
-
 
   const MainButton({
     super.key,
@@ -24,21 +18,36 @@ class MainButton extends StatelessWidget {
     this.onPressed,
     this.showIcons = false,
     this.leadingIcon,
+    this.rightIcon,
+    this.isOutlined = false,
     this.backgroundColor,
     this.textColor,
     this.iconColor,
   });
 
-
   @override
   Widget build(BuildContext context) {
-    final Color bgColor =
-        backgroundColor ?? AppColors.brandPrimary;
-    final Color fgColor =
-        textColor ?? AppColors.textOnColor;
-    final Color iconFgColor =
-        iconColor ?? fgColor;
+    final Color bgColor = backgroundColor ?? AppColors.brandPrimary;
+    final Color fgColor = textColor ?? AppColors.textOnColor;
+    final Color iconFgColor = iconColor ?? fgColor;
 
+    if (isOutlined) {
+      return SizedBox(
+        width: double.infinity,
+        height: 56,
+        child: OutlinedButton(
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: textColor ?? AppColors.brandAccent,
+            side: BorderSide(color: textColor ?? AppColors.brandAccent),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(32),
+            ),
+          ),
+          child: _buildChild(fgColor, iconFgColor),
+        ),
+      );
+    }
 
     return SizedBox(
       width: double.infinity,
@@ -46,55 +55,47 @@ class MainButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: onPressed,
         style: ButtonStyle(
-          backgroundColor:
-              MaterialStateProperty.resolveWith<Color>(
-            (states) {
-              if (states.contains(MaterialState.disabled)) {
-                return bgColor.withOpacity(0.6);
-              }
-              return bgColor;
-            },
-          ),
-          elevation:
-              MaterialStateProperty.resolveWith<double>(
-            (states) {
-              if (states.contains(MaterialState.disabled)) {
-                return 0;
-              }
-              return 4;
-            },
-          ),
-          shape: MaterialStateProperty.all(
+          backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return bgColor.withValues(alpha: 0.6);
+            }
+            return bgColor;
+          }),
+          elevation: WidgetStateProperty.resolveWith<double>((states) {
+            return states.contains(WidgetState.disabled) ? 0 : 4;
+          }),
+          shape: WidgetStateProperty.all(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(32),
             ),
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (showIcons && leadingIcon != null) ...[
-              Icon(
-                leadingIcon,
-                size: 20,
-                color: iconFgColor,
-              ),
-              const SizedBox(width: 10),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: fgColor,
-              ),
-            ),
-          ],
-        ),
+        child: _buildChild(fgColor, iconFgColor),
       ),
     );
   }
+
+  Widget _buildChild(Color fgColor, Color iconFgColor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (showIcons && leadingIcon != null) ...[
+          Icon(leadingIcon, size: 20, color: iconFgColor),
+          const SizedBox(width: 10),
+        ],
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: fgColor,
+          ),
+        ),
+        if (showIcons && rightIcon != null) ...[
+          const SizedBox(width: 10),
+          Icon(rightIcon, size: 20, color: iconFgColor),
+        ],
+      ],
+    );
+  }
 }
-
-
-

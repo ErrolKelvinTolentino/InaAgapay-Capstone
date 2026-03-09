@@ -1,16 +1,22 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class ClickableText extends StatefulWidget {
   final String text;
   final VoidCallback onTap;
   final bool underline;
+  final Color? color;
+  final double fontSize;
+  final FontWeight fontWeight;
 
   const ClickableText({
     super.key,
     required this.text,
     required this.onTap,
     this.underline = false,
+    this.color,
+    this.fontSize = 14,
+    this.fontWeight = FontWeight.w500,
   });
 
   @override
@@ -23,10 +29,12 @@ class _ClickableTextState extends State<ClickableText> {
 
   @override
   Widget build(BuildContext context) {
+    final Color baseColor = widget.color ?? AppColors.brandPrimary;
+
     Color textColor() {
-      if (_pressed) return AppColors.brandAccent; // darker on press
-      if (_hovered) return AppColors.brandPrimary.withOpacity(0.85);
-      return AppColors.brandPrimary;
+      if (_pressed) return AppColors.brandAccent;
+      if (_hovered) return baseColor.withValues(alpha: 0.85);
+      return baseColor;
     }
 
     return MouseRegion(
@@ -41,15 +49,15 @@ class _ClickableTextState extends State<ClickableText> {
         },
         onTapCancel: () => setState(() => _pressed = false),
         child: AnimatedScale(
-          scale: _pressed ? 0.97 : 1.0, // subtle press feedback
+          scale: _pressed ? 0.97 : 1.0,
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOut,
           child: AnimatedDefaultTextStyle(
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeOut,
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+              fontSize: widget.fontSize,
+              fontWeight: widget.fontWeight,
               color: textColor(),
               decoration: widget.underline
                   ? TextDecoration.underline

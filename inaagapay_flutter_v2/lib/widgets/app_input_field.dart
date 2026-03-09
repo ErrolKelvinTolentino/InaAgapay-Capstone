@@ -1,32 +1,20 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // ✅ REQUIRED
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 
 class AppInputField extends StatefulWidget {
   final String hintText;
   final TextEditingController controller;
-
-  /// Required indicator
   final bool isRequired;
-
-  /// Optional icons
   final IconData? leadingIcon;
   final IconData? trailingIcon;
-
-  /// Callbacks
   final VoidCallback? onTrailingTap;
   final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
-
-  /// Input behavior
   final bool obscureText;
   final TextInputType keyboardType;
   final bool readOnly;
-
-  /// ✅ NEW (OPTIONAL, NON-BREAKING)
   final List<TextInputFormatter>? inputFormatters;
-
-  /// Error
   final String? errorText;
 
   const AppInputField({
@@ -42,7 +30,7 @@ class AppInputField extends StatefulWidget {
     this.obscureText = false,
     this.keyboardType = TextInputType.text,
     this.readOnly = false,
-    this.inputFormatters, // ✅ added
+    this.inputFormatters,
     this.errorText,
   });
 
@@ -61,7 +49,7 @@ class _AppInputFieldState extends State<AppInputField> {
     Color borderColor() {
       if (hasError) return AppColors.error;
       if (_isFocused) return AppColors.brandPrimary;
-      if (_isHovered) return AppColors.brandPrimary.withOpacity(0.4);
+      if (_isHovered) return AppColors.brandPrimary.withValues(alpha: 0.4);
       return Colors.transparent;
     }
 
@@ -69,8 +57,7 @@ class _AppInputFieldState extends State<AppInputField> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: Focus(
-        onFocusChange: (focused) =>
-            setState(() => _isFocused = focused),
+        onFocusChange: (focused) => setState(() => _isFocused = focused),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -86,7 +73,7 @@ class _AppInputFieldState extends State<AppInputField> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Colors.black.withValues(alpha: 0.06),
                     blurRadius: 16,
                     offset: const Offset(0, 6),
                   ),
@@ -94,34 +81,22 @@ class _AppInputFieldState extends State<AppInputField> {
               ),
               child: Row(
                 children: [
-                  if (widget.leadingIcon != null)
+                  if (widget.leadingIcon != null) ...[
                     Icon(
                       widget.leadingIcon,
-                      color: hasError
-                          ? AppColors.error
-                          : AppColors.brandAccent,
+                      color: hasError ? AppColors.error : AppColors.brandAccent,
                     ),
-
-                  if (widget.leadingIcon != null)
                     const SizedBox(width: 12),
-
+                  ],
                   Expanded(
                     child: TextField(
                       controller: widget.controller,
                       obscureText: widget.obscureText,
                       keyboardType: widget.keyboardType,
                       readOnly: widget.readOnly,
-
-                      // ✅ NEW (SAFE)
                       inputFormatters: widget.inputFormatters,
-
-                      // 🔒 Prevent taps when read-only
-                      onTap:
-                          widget.readOnly ? null : widget.onTap,
-
-                      // 🔑 Needed for validation
+                      onTap: widget.readOnly ? null : widget.onTap,
                       onChanged: widget.onChanged,
-
                       style: TextStyle(
                         color: widget.readOnly
                             ? AppColors.textSecondary
@@ -130,16 +105,15 @@ class _AppInputFieldState extends State<AppInputField> {
                       ),
                       decoration: InputDecoration(
                         border: InputBorder.none,
-                        floatingLabelBehavior:
-                            widget.controller.text.isNotEmpty
-                                ? FloatingLabelBehavior.always
-                                : FloatingLabelBehavior.auto,
+                        floatingLabelBehavior: widget.controller.text.isNotEmpty
+                            ? FloatingLabelBehavior.always
+                            : FloatingLabelBehavior.auto,
                         label: RichText(
                           text: TextSpan(
                             text: widget.hintText,
                             style: TextStyle(
                               color: hasError
-                                  ? AppColors.error.withOpacity(0.7)
+                                  ? AppColors.error.withValues(alpha: 0.7)
                                   : AppColors.textSecondary,
                               fontSize: 14,
                             ),
@@ -159,25 +133,21 @@ class _AppInputFieldState extends State<AppInputField> {
                       ),
                     ),
                   ),
-
                   if (widget.trailingIcon != null)
                     GestureDetector(
                       onTap: widget.onTrailingTap,
                       child: Icon(
                         widget.trailingIcon,
-                        color: hasError
-                            ? AppColors.error
-                            : AppColors.brandAccent,
+                        color:
+                            hasError ? AppColors.error : AppColors.brandAccent,
                       ),
                     ),
                 ],
               ),
             ),
-
             if (hasError)
               Padding(
-                padding:
-                    const EdgeInsets.only(left: 16, top: 6),
+                padding: const EdgeInsets.only(left: 16, top: 6),
                 child: Text(
                   widget.errorText!,
                   style: const TextStyle(
@@ -192,3 +162,4 @@ class _AppInputFieldState extends State<AppInputField> {
     );
   }
 }
+

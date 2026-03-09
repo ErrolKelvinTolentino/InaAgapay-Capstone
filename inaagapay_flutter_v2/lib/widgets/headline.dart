@@ -1,14 +1,16 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class Headline extends StatelessWidget {
   final String text;
-  final TextAlign textAlign; // 👈 ADD
+  final TextAlign textAlign;
+  final double fontSize;
 
   const Headline({
     super.key,
     required this.text,
-    this.textAlign = TextAlign.center, // 👈 DEFAULT
+    this.textAlign = TextAlign.center,
+    this.fontSize = 22,
   });
 
   @override
@@ -16,8 +18,8 @@ class Headline extends StatelessWidget {
     return Text(
       text,
       textAlign: textAlign,
-      style: const TextStyle(
-        fontSize: 22,
+      style: TextStyle(
+        fontSize: fontSize,
         fontWeight: FontWeight.w600,
         color: AppColors.brandPrimary,
         letterSpacing: 0.2,

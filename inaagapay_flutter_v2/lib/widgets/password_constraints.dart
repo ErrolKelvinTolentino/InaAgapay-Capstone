@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class PasswordConstraints extends StatelessWidget {
@@ -19,22 +19,10 @@ class PasswordConstraints extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ConstraintItem(
-          label: 'At least eight characters long',
-          isValid: hasMinLength,
-        ),
-        _ConstraintItem(
-          label: 'At least one number',
-          isValid: hasNumber,
-        ),
-        _ConstraintItem(
-          label: 'At least one uppercase letter',
-          isValid: hasUppercase,
-        ),
-        _ConstraintItem(
-          label: 'At least one lowercase letter',
-          isValid: hasLowercase,
-        ),
+        _ConstraintItem(label: 'At least eight characters long', isValid: hasMinLength),
+        _ConstraintItem(label: 'At least one number', isValid: hasNumber),
+        _ConstraintItem(label: 'At least one uppercase letter', isValid: hasUppercase),
+        _ConstraintItem(label: 'At least one lowercase letter', isValid: hasLowercase),
       ],
     );
   }
@@ -44,24 +32,18 @@ class _ConstraintItem extends StatelessWidget {
   final String label;
   final bool isValid;
 
-  const _ConstraintItem({
-    required this.label,
-    required this.isValid,
-  });
+  const _ConstraintItem({required this.label, required this.isValid});
 
   @override
   Widget build(BuildContext context) {
-    final Color color =
-        isValid ? AppColors.success : AppColors.error;
+    final Color color = isValid ? AppColors.success : AppColors.error;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Icon(
-            isValid
-                ? Icons.circle // filled circle (green)
-                : Icons.radio_button_unchecked, // hollow circle (red)
+            isValid ? Icons.circle : Icons.radio_button_unchecked,
             size: 14,
             color: color,
           ),

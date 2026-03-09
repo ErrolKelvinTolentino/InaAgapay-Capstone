@@ -1,11 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-
 
 class SecondaryHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onBack;
-
 
   const SecondaryHeader({
     super.key,
@@ -13,10 +11,9 @@ class SecondaryHeader extends StatelessWidget {
     this.onBack,
   });
 
-
   @override
   Widget build(BuildContext context) {
-    return SafeArea( // ✅ SAME FIX
+    return SafeArea(
       bottom: false,
       child: SizedBox(
         height: 56,
@@ -30,8 +27,6 @@ class SecondaryHeader extends StatelessWidget {
               )
             else
               const SizedBox(width: 48),
-
-
             Expanded(
               child: Text(
                 title,
@@ -43,8 +38,6 @@ class SecondaryHeader extends StatelessWidget {
                 ),
               ),
             ),
-
-
             const SizedBox(width: 48),
           ],
         ),
@@ -52,6 +45,3 @@ class SecondaryHeader extends StatelessWidget {
     );
   }
 }
-
-
-

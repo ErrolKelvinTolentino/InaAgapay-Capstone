@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_input_field.dart';
 import '../widgets/main_button.dart';
@@ -7,6 +7,8 @@ import '../widgets/page_title.dart';
 import '../widgets/password_constraints.dart';
 import '../widgets/password_strength_indicator.dart';
 import '../widgets/dialog_box.dart';
+import '../services/supabase_service.dart';
+import '../models/password_strength.dart';
 
 class MotherRegistrationScreen extends StatefulWidget {
   const MotherRegistrationScreen({super.key});
@@ -24,8 +26,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-
-  bool _emailExists = false;
+  bool _isLoading = false;
 
   late final AnimationController _shakeController;
   late final Animation<double> _shakeAnimation;
@@ -33,13 +34,6 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
   @override
   void initState() {
     super.initState();
-
-    _emailController.addListener(() {
-      final email = _emailController.text.trim().toLowerCase();
-      setState(() {
-        _emailExists = email == 'existing@gmail.com';
-      });
-    });
 
     _passwordController.addListener(() => setState(() {}));
     _confirmPasswordController.addListener(() => setState(() {}));
@@ -49,15 +43,14 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       duration: const Duration(milliseconds: 400),
     );
 
-    _shakeAnimation =
-        TweenSequence<double>([
-          TweenSequenceItem(tween: Tween(begin: 0, end: -8), weight: 1),
-          TweenSequenceItem(tween: Tween(begin: -8, end: 8), weight: 2),
-          TweenSequenceItem(tween: Tween(begin: 8, end: -8), weight: 2),
-          TweenSequenceItem(tween: Tween(begin: -8, end: 0), weight: 1),
-        ]).animate(
-          CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut),
-        );
+    _shakeAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0, end: -8), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -8, end: 8), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 8, end: -8), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -8, end: 0), weight: 1),
+    ]).animate(
+      CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -69,10 +62,8 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     super.dispose();
   }
 
-  // 🔐 Password strength rules
   PasswordStrength _calculateStrength(String password) {
     int met = 0;
-
     if (password.length >= 8) met++;
     if (RegExp(r'\d').hasMatch(password)) met++;
     if (RegExp(r'[A-Z]').hasMatch(password)) met++;
@@ -97,33 +88,71 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
   bool get _canSubmit =>
       _isEmailValid &&
-      !_emailExists &&
       _calculateStrength(_passwordController.text) == PasswordStrength.strong &&
-      _passwordsMatch;
+      _passwordsMatch &&
+      !_isLoading;
 
-  // ✅ Submit handler
   Future<void> _handleSubmit() async {
     if (!_canSubmit) {
       _shakeController.forward(from: 0);
       return;
     }
 
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => DialogBox(
-        title: 'Verification Code Sent',
-        buttonText: 'Continue',
-        type: DialogType.info,
-        onPressed: () {
-          Navigator.of(context).pop();
-        },
-      ),
+    setState(() => _isLoading = true);
+
+    final res = await SupabaseService.register(
+      _emailController.text.trim(),
+      _passwordController.text,
     );
 
+    setState(() => _isLoading = false);
     if (!mounted) return;
 
-    Navigator.pushNamed(context, '/verify-registration');
+    if (!res['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Registration failed'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if (res['email_failed'] == true) {
+      await showDialog(
+        context: context,
+        builder: (_) => DialogBox(
+          title: 'Warning',
+          content:
+              "Account created but we couldn't send the verification email. "
+              'Please use "Resend Code" on the next screen.',
+          buttonText: 'Continue',
+          type: DialogType.warning,
+          onPressed: () => Navigator.pop(context),
+        ),
+      );
+    } else {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          title: 'Verification Code Sent',
+          content:
+              'A 6-digit verification code has been sent to ${_emailController.text.trim()}',
+          buttonText: 'Continue',
+          type: DialogType.success,
+          onPressed: () => Navigator.pop(context),
+        ),
+      );
+    }
+
+    if (mounted) {
+      Navigator.pushNamed(
+        context,
+        '/verify-registration',
+        arguments: _emailController.text.trim(),
+      );
+    }
   }
 
   @override
@@ -154,12 +183,14 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
               const SizedBox(height: 24),
 
-              // 📧 Email Field
+              // Email
               AppInputField(
-                hintText: 'Enter Email Address*',
+                hintText: 'Enter Email Address',
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 leadingIcon: Icons.email_outlined,
+                isRequired: true,
+                onChanged: (_) => setState(() {}),
               ),
 
               const SizedBox(height: 8),
@@ -171,15 +202,9 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                     if (_emailController.text.isEmpty) {
                       return const SizedBox.shrink();
                     }
-
                     if (!_isEmailValid) {
                       return _errorRow('Enter a valid email address');
                     }
-
-                    if (_emailExists) {
-                      return _errorRow('Email already exists');
-                    }
-
                     return _successRow('Email looks good');
                   },
                 ),
@@ -187,20 +212,19 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
               const SizedBox(height: 16),
 
-              // 🔐 Password
+              // Password
               AppInputField(
                 hintText: 'Create Password',
                 controller: _passwordController,
                 obscureText: _obscurePassword,
                 leadingIcon: Icons.lock_outline,
+                isRequired: true,
                 trailingIcon: _obscurePassword
                     ? Icons.visibility_off
                     : Icons.visibility,
-                onTrailingTap: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
-                },
+                onTrailingTap: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+                onChanged: (_) => setState(() {}),
               ),
 
               const SizedBox(height: 8),
@@ -222,15 +246,13 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
               const SizedBox(height: 20),
 
-              // 🔁 Confirm Password + Shake
+              // Confirm password + shake animation on error
               AnimatedBuilder(
                 animation: _shakeAnimation,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(_shakeAnimation.value, 0),
-                    child: child,
-                  );
-                },
+                builder: (context, child) => Transform.translate(
+                  offset: Offset(_shakeAnimation.value, 0),
+                  child: child,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -239,18 +261,15 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                       controller: _confirmPasswordController,
                       obscureText: _obscureConfirmPassword,
                       leadingIcon: Icons.lock_outline,
+                      isRequired: true,
                       trailingIcon: _obscureConfirmPassword
                           ? Icons.visibility_off
                           : Icons.visibility,
-                      onTrailingTap: () {
-                        setState(() {
-                          _obscureConfirmPassword = !_obscureConfirmPassword;
-                        });
-                      },
+                      onTrailingTap: () => setState(
+                          () => _obscureConfirmPassword = !_obscureConfirmPassword),
+                      onChanged: (_) => setState(() {}),
                     ),
-
                     const SizedBox(height: 8),
-
                     Padding(
                       padding: const EdgeInsets.only(left: 20),
                       child: Builder(
@@ -258,11 +277,9 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                           if (_passwordsDoNotMatch) {
                             return _errorRow('Passwords do not match');
                           }
-
                           if (_passwordsMatch) {
                             return _successRow('Passwords match');
                           }
-
                           return const SizedBox.shrink();
                         },
                       ),
@@ -273,9 +290,8 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
               const SizedBox(height: 32),
 
-              // 🚀 Submit Button
               MainButton(
-                label: 'Send Verification Code',
+                label: _isLoading ? 'Sending...' : 'Send Verification Code',
                 showIcons: false,
                 onPressed: _canSubmit ? _handleSubmit : null,
               ),
@@ -294,13 +310,11 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                   ),
                   ClickableText(
                     text: 'Sign in Here',
-                    onTap: () {
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        '/login',
-                        (route) => false,
-                      );
-                    },
+                    onTap: () => Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/login',
+                      (route) => false,
+                    ),
                   ),
                 ],
               ),
@@ -313,16 +327,12 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     );
   }
 
-  // 🔧 Helper rows
   Widget _errorRow(String text) {
     return Row(
       children: [
         const Icon(Icons.cancel, size: 16, color: AppColors.error),
         const SizedBox(width: 6),
-        Text(
-          text,
-          style: const TextStyle(fontSize: 13, color: AppColors.error),
-        ),
+        Text(text, style: const TextStyle(fontSize: 13, color: AppColors.error)),
       ],
     );
   }
@@ -332,10 +342,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       children: [
         const Icon(Icons.check_circle, size: 16, color: AppColors.success),
         const SizedBox(width: 6),
-        Text(
-          text,
-          style: const TextStyle(fontSize: 13, color: AppColors.success),
-        ),
+        Text(text, style: const TextStyle(fontSize: 13, color: AppColors.success)),
       ],
     );
   }

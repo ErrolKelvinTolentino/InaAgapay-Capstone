@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/main_header.dart';
@@ -14,13 +14,11 @@ import '../widgets/comparison_card.dart';
 import '../widgets/main_button.dart';
 import '../widgets/secondary_button.dart';
 
-// 🆕 MODEL IMPORT
 import '../models/baby_growth_model.dart';
 
 class MotherDashboard extends StatelessWidget {
   const MotherDashboard({super.key});
 
-  // 🧠 Trimester logic
   String _getTrimester(int week) {
     if (week <= 13) return 'First Trimester';
     if (week <= 27) return 'Second Trimester';
@@ -29,17 +27,13 @@ class MotherDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🔧 TEMP HARD-CODED DATA (backend later)
     const int week = 27;
     final String trimester = _getTrimester(week);
-
-    // 🧠 IDEAL BABY DATA (size + weight)
     final babyGrowth = BabyGrowthData.getForWeek(week);
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
 
-      // 🔝 Header
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(72),
         child: MainHeader(
@@ -47,34 +41,29 @@ class MotherDashboard extends StatelessWidget {
           onViewProfile: () => Navigator.pushNamed(context, '/profile'),
           onSettings: () => Navigator.pushNamed(context, '/settings'),
           onHelp: () => Navigator.pushNamed(context, '/help'),
-          onLogout: () {
-            // clear session, navigate to login
-            Navigator.pushReplacementNamed(context, '/login');
-          },
+          onLogout: () =>
+              Navigator.pushReplacementNamed(context, '/login'),
         ),
       ),
 
-      // 🔽 Body
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 👋 Welcome
+              // Welcome
               Center(
                 child: Column(
                   children: [
                     const Headline(
-                      text: 'Welcome, [First Name]! 🌸',
+                      text: 'Welcome, [First Name]! ðŸŒ¸',
                       textAlign: TextAlign.center,
                     ),
-
                     const SizedBox(height: 8),
-
                     SmallDescription(
                       icon: Icons.calendar_today,
-                      text: 'Week $week • $trimester',
+                      text: 'Week $week â€¢ $trimester',
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -83,7 +72,6 @@ class MotherDashboard extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // 🧸 HERO CARD
               HeroCard(
                 image: const AssetImage('assets/images/pregnant1.png'),
                 week: 39,
@@ -93,7 +81,7 @@ class MotherDashboard extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // 📦 Baby stats
+              // Baby stats
               Row(
                 children: [
                   SmallInfoBox(
@@ -112,7 +100,7 @@ class MotherDashboard extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // 📅 Due date
+              // Due date
               const LongInfoBox(
                 icon: Icons.calendar_month,
                 text: [
@@ -147,12 +135,11 @@ class MotherDashboard extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // 🫐 Comparison
               ComparisonCard(week: week),
 
               const SizedBox(height: 20),
 
-              // 🔔 Next check-up
+              // Next check-up
               const LongInfoBox(
                 icon: Icons.notifications,
                 borderColor: AppColors.borderPrimary,
@@ -166,7 +153,7 @@ class MotherDashboard extends StatelessWidget {
                     ),
                   ),
                   TextSpan(
-                    text: 'Month Day, Year – Day',
+                    text: 'Month Day, Year â€“ Day',
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                 ],
@@ -174,14 +161,11 @@ class MotherDashboard extends StatelessWidget {
 
               const SizedBox(height: 24),
 
-              // 🔘 Actions
               MainButton(
                 label: 'More Info',
                 showIcons: true,
                 leadingIcon: Icons.info_outline,
-                onPressed: () {
-                  // TODO
-                },
+                onPressed: () {},
               ),
 
               const SizedBox(height: 12),
@@ -190,9 +174,7 @@ class MotherDashboard extends StatelessWidget {
                 label: 'Conclude Pregnancy',
                 showIcons: true,
                 leadingIcon: Icons.check,
-                onPressed: () {
-                  // TODO
-                },
+                onPressed: () {},
               ),
 
               const SizedBox(height: 10),
@@ -201,7 +183,6 @@ class MotherDashboard extends StatelessWidget {
         ),
       ),
 
-      // 🔻 Bottom Nav
       bottomNavigationBar: MainBottomNavigation(currentIndex: 0),
     );
   }
