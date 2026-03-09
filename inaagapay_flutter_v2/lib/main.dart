@@ -7,7 +7,8 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: 'https://buvseyqcdacctlupznya.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw',
   );
 
   runApp(const InaagapayApp());
@@ -33,45 +34,16 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-
-  List bhcList = [];
-
-  @override
-  void initState() {
-    super.initState();
-    fetchBHC();
-  }
-
-  Future<void> fetchBHC() async {
-    final data = await SupabaseService.client
-        .from('bhc')
-        .select();
-
-    setState(() {
-      bhcList = data;
-    });
-
-    print(data);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Inaagapay"),
+      appBar: AppBar(title: const Text("InaAgapay")),
+      body: const Center(
+        child: Text(
+          "InaAgapay",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
       ),
-      body: bhcList.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              itemCount: bhcList.length,
-              itemBuilder: (context, index) {
-                final bhc = bhcList[index];
-
-                return ListTile(
-                  title: Text(bhc['bhc_name'] ?? 'No Name'),
-                );
-              },
-            ),
     );
   }
 }
