@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../services/auth_storage.dart';
 
 // layout
 import '../widgets/main_header.dart';
-import '../widgets/midwife_bottom_navigation.dart';
 
 // reusable widgets
 import '../widgets/hero_card.dart';
@@ -43,9 +43,6 @@ class MidwifeDashboard extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
 
-      /// 🔻 Bottom Navigation
-      bottomNavigationBar: const MidwifeBottomNavigation(currentIndex: 0),
-
       body: Column(
         children: [
           /// 🔝 HEADER
@@ -54,9 +51,15 @@ class MidwifeDashboard extends StatelessWidget {
             onViewProfile: () => Navigator.pushNamed(context, '/profile'),
             onSettings: () => Navigator.pushNamed(context, '/settings'),
             onHelp: () => Navigator.pushNamed(context, '/help'),
-            onLogout: () {
-              // clear session, navigate to login
-              Navigator.pushReplacementNamed(context, '/login');
+            onLogout: () async {
+              await AuthStorage.clearAll();
+              if (context.mounted) {
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/login',
+                  (route) => false,
+                );
+              }
             },
           ),
 

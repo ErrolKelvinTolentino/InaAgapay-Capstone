@@ -12,13 +12,17 @@ import 'screens/change_forgot_password.dart';
 import 'screens/complete_profile.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/congrats_page.dart';
-import 'screens/mother_dashboard.dart';
 import 'screens/mother_dashboard_shell.dart';
 import 'screens/admin_dashboard.dart';
-import 'screens/midwife_dashboard.dart';
 import 'screens/midwife_shell.dart';
 import 'screens/ultrasound_analyzer_screen.dart';
 import 'screens/lab_test_analyzer_screen.dart';
+import 'screens/records_screen.dart';
+import 'screens/mother_journal_screen.dart';
+import 'screens/mother_children_screen.dart';
+import 'screens/midwife_mothers_screen.dart';
+import 'screens/midwife_children_screen.dart';
+import 'screens/midwife_schedules_screen.dart';
 import 'models/due_date_mode.dart';
 
 void main() async {
@@ -59,9 +63,9 @@ class InaagapayApp extends StatelessWidget {
 
     switch (role) {
       case 'mother':
-        return const MotherDashboard();
+        return const MotherDashboardShell();
       case 'midwife':
-        return const MidwifeDashboard();
+        return const MidwifeShell();
       case 'admin':
         return const AdminDashboard();
       default:
@@ -121,12 +125,18 @@ class InaagapayApp extends StatelessWidget {
                 const ChangeForgotPasswordScreen(),
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
-            '/mother-dashboard': (context) => const MotherDashboard(),
-            '/midwife-dashboard': (context) => const MidwifeDashboard(),
+            '/mother-dashboard': (context) => const MotherDashboardShell(),
+            '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
             '/ultrasound-analyzer': (context) =>
                 const UltrasoundAnalyzerScreen(),
             '/lab-test-analyzer': (context) => const LabTestAnalyzerScreen(),
+            '/mother-records': (context) => const RecordsScreen(),
+            '/mother-journal': (context) => const MotherJournalScreen(),
+            '/mother-children': (context) => const MotherChildrenScreen(),
+            '/midwife-mothers': (context) => const MidwifeMothersScreen(),
+            '/midwife-children': (context) => const MidwifeChildrenScreen(),
+            '/midwife-schedules': (context) => const MidwifeSchedulesScreen(),
           },
           onGenerateRoute: (settings) {
             if (settings.name == '/congrats') {

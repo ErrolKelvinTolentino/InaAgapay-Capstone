@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../services/auth_storage.dart';
+import '../widgets/main_bottom_navigation.dart';
+import 'mother_dashboard.dart';
+import 'mother_journal_screen.dart';
+import 'mother_children_screen.dart';
 import 'records_screen.dart';
 
 class MotherDashboardShell extends StatefulWidget {
@@ -13,11 +15,25 @@ class MotherDashboardShell extends StatefulWidget {
 class _MotherDashboardShellState extends State<MotherDashboardShell> {
   int _currentIndex = 0;
 
-  Future<void> _logout() async {
-    await AuthStorage.clearAll();
-    if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: const [
+          MotherDashboard(),
+          MotherJournalScreen(),
+          MotherChildrenScreen(),
+          RecordsScreen(),
+        ],
+      ),
+      bottomNavigationBar: MainBottomNavigation(
+        currentIndex: _currentIndex,
+        onTabSelected: (index) => setState(() => _currentIndex = index),
+      ),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {

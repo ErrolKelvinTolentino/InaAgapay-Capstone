@@ -1,58 +1,35 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
+import '../widgets/midwife_bottom_navigation.dart';
+import 'midwife_dashboard.dart';
+import 'midwife_mothers_screen.dart';
+import 'midwife_children_screen.dart';
+import 'midwife_schedules_screen.dart';
 
-class MidwifeShell extends StatelessWidget {
+class MidwifeShell extends StatefulWidget {
   const MidwifeShell({super.key});
+
+  @override
+  State<MidwifeShell> createState() => _MidwifeShellState();
+}
+
+class _MidwifeShellState extends State<MidwifeShell> {
+  int _currentIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.medical_services,
-                size: 80,
-                color: AppColors.brandSecondary,
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Midwife Dashboard',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Welcome, Midwife!',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: () {
-                  // TODO: Implement logout
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandSecondary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text('Logout'),
-              ),
-            ],
-          ),
-        ),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: const [
+          MidwifeDashboard(),
+          MidwifeMothersScreen(),
+          MidwifeChildrenScreen(),
+          MidwifeSchedulesScreen(),
+        ],
+      ),
+      bottomNavigationBar: MidwifeBottomNavigation(
+        currentIndex: _currentIndex,
+        onTabSelected: (index) => setState(() => _currentIndex = index),
       ),
     );
   }

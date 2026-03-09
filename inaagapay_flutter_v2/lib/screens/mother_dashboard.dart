@@ -1,8 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../services/auth_storage.dart';
 import '../widgets/main_header.dart';
-import '../widgets/main_bottom_navigation.dart';
 import '../widgets/headline.dart';
 import '../widgets/small_description.dart';
 
@@ -33,7 +33,6 @@ class MotherDashboard extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
-
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(72),
         child: MainHeader(
@@ -41,11 +40,18 @@ class MotherDashboard extends StatelessWidget {
           onViewProfile: () => Navigator.pushNamed(context, '/profile'),
           onSettings: () => Navigator.pushNamed(context, '/settings'),
           onHelp: () => Navigator.pushNamed(context, '/help'),
-          onLogout: () =>
-              Navigator.pushReplacementNamed(context, '/login'),
+          onLogout: () async {
+            await AuthStorage.clearAll();
+            if (context.mounted) {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/login',
+                (route) => false,
+              );
+            }
+          },
         ),
       ),
-
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -182,8 +188,6 @@ class MotherDashboard extends StatelessWidget {
           ),
         ),
       ),
-
-      bottomNavigationBar: MainBottomNavigation(currentIndex: 0),
     );
   }
 }

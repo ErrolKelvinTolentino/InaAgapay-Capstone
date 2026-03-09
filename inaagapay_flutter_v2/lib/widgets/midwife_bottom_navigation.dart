@@ -1,53 +1,15 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-
 class MidwifeBottomNavigation extends StatelessWidget {
   final int currentIndex;
-
+  final ValueChanged<int> onTabSelected;
 
   const MidwifeBottomNavigation({
     super.key,
     required this.currentIndex,
+    required this.onTabSelected,
   });
-
-
-  void _handleNavigation(BuildContext context, int index) {
-    // Prevent reloading the same page
-    if (index == currentIndex) return;
-
-
-    switch (index) {
-      case 0:
-        Navigator.pushReplacementNamed(
-          context,
-          '/midwife-dashboard',
-        );
-        break;
-
-
-      case 1:
-        Navigator.pushReplacementNamed(
-          context,
-          '/midwife-mothers', // ✅ GO TO MOTHERS PAGE
-        );
-        break;
-
-
-      case 2:
-        Navigator.pushReplacementNamed(
-          context,
-          '/midwife-children',
-        );
-        break;
-
-
-      case 3:
-        // TODO: Schedules page
-        break;
-    }
-  }
-
 
   @override
   Widget build(BuildContext context) {
@@ -77,25 +39,25 @@ class MidwifeBottomNavigation extends StatelessWidget {
               icon: Icons.home_filled,
               label: 'Home',
               isActive: currentIndex == 0,
-              onTap: () => _handleNavigation(context, 0),
+              onTap: () => onTabSelected(0),
             ),
             _NavItem(
-              icon: Icons.pregnant_woman_rounded, // ✅ MOTHERS ICON
-              label: 'Mothers',                     // ✅ LABEL CHANGED
+              icon: Icons.pregnant_woman_rounded,
+              label: 'Mothers',
               isActive: currentIndex == 1,
-              onTap: () => _handleNavigation(context, 1),
+              onTap: () => onTabSelected(1),
             ),
             _NavItem(
               icon: Icons.child_care_outlined,
               label: 'Children',
               isActive: currentIndex == 2,
-              onTap: () => _handleNavigation(context, 2),
+              onTap: () => onTabSelected(2),
             ),
             _NavItem(
               icon: Icons.calendar_today_rounded,
               label: 'Schedules',
               isActive: currentIndex == 3,
-              onTap: () => _handleNavigation(context, 3),
+              onTap: () => onTabSelected(3),
             ),
           ],
         ),
@@ -104,13 +66,11 @@ class MidwifeBottomNavigation extends StatelessWidget {
   }
 }
 
-
 class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
   final VoidCallback onTap;
-
 
   const _NavItem({
     required this.icon,
@@ -119,12 +79,10 @@ class _NavItem extends StatelessWidget {
     required this.onTap,
   });
 
-
   @override
   Widget build(BuildContext context) {
     final Color color =
         isActive ? AppColors.brandPrimary : AppColors.textSecondary;
-
 
     return GestureDetector(
       onTap: onTap,
@@ -147,8 +105,6 @@ class _NavItem extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-
-
           if (isActive)
             Container(
               width: 6,
@@ -163,6 +119,3 @@ class _NavItem extends StatelessWidget {
     );
   }
 }
-
-
-
