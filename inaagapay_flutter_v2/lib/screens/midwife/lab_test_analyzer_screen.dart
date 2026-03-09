@@ -1,13 +1,14 @@
+// Update imports at the top of the file
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/gemini_service.dart';
-import '../services/auth_storage.dart';
-import '../models/gemini_response.dart';
-import '../theme/app_colors.dart';
-import '../widgets/dialog_box.dart';
+import '../../services/gemini_service.dart';  // Changed from lib/screens/services/
+import '../../services/auth_storage.dart';    // Changed from lib/screens/services/
+import '../../models/gemini_response.dart';    // Changed from lib/screens/models/
+import '../../theme/app_colors.dart';          // Changed from lib/screens/theme/
+import '../../widgets/dialog_box.dart';        // Changed from lib/screens/widgets/
 
 class LabTestAnalyzerScreen extends StatefulWidget {
   const LabTestAnalyzerScreen({super.key});

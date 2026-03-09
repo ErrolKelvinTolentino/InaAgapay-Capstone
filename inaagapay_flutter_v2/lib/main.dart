@@ -15,8 +15,6 @@ import 'screens/congrats_page.dart';
 import 'screens/mother_dashboard_shell.dart';
 import 'screens/admin_dashboard.dart';
 import 'screens/midwife_shell.dart';
-import 'screens/ultrasound_analyzer_screen.dart';
-import 'screens/lab_test_analyzer_screen.dart';
 import 'models/due_date_mode.dart';
 
 void main() async {
@@ -133,8 +131,6 @@ class InaagapayApp extends StatelessWidget {
             '/mother-dashboard': (context) => const MotherDashboardShell(),
             '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
-            '/ultrasound-analyzer': (context) => const UltrasoundAnalyzerScreen(),
-            '/lab-test-analyzer': (context) => const LabTestAnalyzerScreen(),
           },
           onGenerateRoute: (settings) {
             if (settings.name == '/congrats') {
