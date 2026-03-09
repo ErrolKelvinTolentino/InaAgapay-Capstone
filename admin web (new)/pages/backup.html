@@ -340,7 +340,6 @@
                   padding: 12px 16px;
                   background: var(--success-bg);
                   border-radius: var(--radius);
-                  display: flex;
                   align-items: center;
                   gap: 10px;
                   font-size: 13.5px;
@@ -536,7 +535,7 @@
           const c = document.getElementById("toast-container");
           const t = document.createElement("div");
           t.className = `toast ${type}`;
-          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${msg}</span>`;
+          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span>`;
           c.appendChild(t);
           setTimeout(() => {
             t.style.animation = "fadeOut .3s ease forwards";

@@ -341,11 +341,7 @@
                   <button
                     type="button"
                     class="btn btn-secondary"
-                    onclick="
-                      document.getElementById('create-form').reset();
-                      document.getElementById('form-alert').style.display =
-                        'none';
-                    "
+                    id="reset-btn"
                   >
                     <i class="fa-solid fa-rotate-left"></i> Reset
                   </button>
@@ -608,6 +604,13 @@
             document.querySelector(".app-sidebar").classList.toggle("open"),
           );
 
+        /* ── Helpers ── */
+        function esc(s) {
+          const d = document.createElement("div");
+          d.textContent = s ?? "";
+          return d.innerHTML;
+        }
+
         /* ── Toast ── */
         function showToast(msg, type = "success") {
           const icons = {
@@ -619,13 +622,32 @@
           const c = document.getElementById("toast-container");
           const t = document.createElement("div");
           t.className = `toast ${type}`;
-          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${msg}</span>`;
+          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span>`;
           c.appendChild(t);
           setTimeout(() => {
             t.style.animation = "fadeOut .3s ease forwards";
             t.addEventListener("animationend", () => t.remove());
           }, 4500);
         }
+
+        /* ── Reset button ── */
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          document.getElementById("create-form").reset();
+          document.getElementById("form-alert").style.display = "none";
+          // Restore BHC group (midwife is default after reset)
+          bhcGroup.style.display = "";
+          updatePreviewBadge("midwife");
+          updatePreview();
+          // Reset strength meter
+          document.getElementById("strength-bar").style.width = "0";
+          document.getElementById("strength-bar").style.background =
+            "var(--gray-300)";
+          document.getElementById("strength-text").textContent = "";
+          document.getElementById("confirm-hint").style.display = "none";
+          ["req-len", "req-upper", "req-lower", "req-num"].forEach((id) =>
+            document.getElementById(id).classList.remove("met"),
+          );
+        });
 
         /* ── Load BHC ── */
         async function loadBhc() {
@@ -803,7 +825,6 @@
 
               /* Hash password */
               const bcrypt = dcodeIO.bcrypt;
-
               const hash = await bcrypt.hash(pwd, 10);
 
               /* Insert account */
@@ -870,7 +891,7 @@
         function showAlert(msg) {
           const el = document.getElementById("form-alert");
           el.style.display = "flex";
-          el.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ${msg}`;
+          el.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ${esc(msg)}`;
           el.scrollIntoView({ behavior: "smooth", block: "nearest" });
           const btn = document.getElementById("submit-btn");
           btn.disabled = false;
