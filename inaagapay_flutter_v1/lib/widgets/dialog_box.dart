@@ -1,0 +1,140 @@
+import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
+
+enum DialogType { info, success, warning, error }
+
+class DialogBox extends StatelessWidget {
+  final String title;
+  final String buttonText;
+  final VoidCallback onPressed;
+  final DialogType type;
+  final String? subtitle; // ✅ NEW (optional)
+
+  const DialogBox({
+    super.key,
+    required this.title,
+    required this.buttonText,
+    required this.onPressed,
+    this.type = DialogType.info,
+    this.subtitle, // ✅ optional
+  });
+
+  Color get _accentColor {
+    switch (type) {
+      case DialogType.success:
+        return AppColors.success;
+      case DialogType.warning:
+        return AppColors.warning;
+      case DialogType.error:
+        return AppColors.error;
+      default:
+        return AppColors.brandPrimary;
+    }
+  }
+
+  IconData get _icon {
+    switch (type) {
+      case DialogType.warning:
+        return Icons.warning_amber_rounded;
+      case DialogType.error:
+        return Icons.close;
+      case DialogType.success:
+      case DialogType.info:
+        return Icons.check;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        decoration: BoxDecoration(
+          color: AppColors.faintWhite,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.textPrimary.withOpacity(0.12),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _accentColor,
+                  width: 3,
+                ),
+              ),
+              child: Icon(
+                _icon,
+                size: 36,
+                color: _accentColor,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: _accentColor,
+              ),
+            ),
+
+            // ✅ SUBTEXT (only if provided)
+            if (subtitle != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                subtitle!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 28),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onPressed,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accentColor,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  elevation: 4,
+                ),
+                child: Text(
+                  buttonText,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textOnColor,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

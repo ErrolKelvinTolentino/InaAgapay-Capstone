@@ -1,0 +1,140 @@
+:root {
+  --nav-height: 64px;
+  --pink: #ec407a;
+  --pink-strong: #d81b60;
+  --pink-soft: #ffe9f2;
+  --pink-soft-2: rgba(236, 64, 122, 0.12);
+  --ink: #2f2b3a;
+  --muted: #6b647a;
+  --border: #f0c6d8;
+  --header-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Poppins", "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  background: #ffffff;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 18px;
+  padding: 0 18px;
+  box-shadow: var(--header-shadow);
+  z-index: 1000;
+  color: var(--pink-strong);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--pink-strong);
+}
+
+.logo {
+  height: 38px;
+}
+
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.top-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--pink-strong);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.top-nav a:hover,
+.top-nav a.active {
+  background: var(--pink-soft);
+  color: var(--pink);
+}
+
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--pink-strong);
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--pink-soft-2);
+  color: var(--pink-strong);
+}
+
+.logout-btn {
+  border: 1px solid var(--pink);
+  background: #ffffff;
+  color: var(--pink-strong);
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.logout-btn:hover {
+  border-color: var(--pink-strong);
+  background: var(--pink-soft);
+}
+
+.main-content {
+  margin-top: var(--nav-height);
+  padding: 24px;
+  min-height: calc(100vh - var(--nav-height));
+}
+
+@media (max-width: 768px) {
+  .header {
+    grid-template-columns: 1fr;
+    row-gap: 10px;
+    padding: 10px 14px;
+  }
+
+  .brand,
+  .user-actions {
+    justify-content: space-between;
+  }
+
+  .top-nav {
+    justify-content: flex-start;
+  }
+}
