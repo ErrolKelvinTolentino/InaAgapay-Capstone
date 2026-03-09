@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import '../widgets/main_bottom_navigation.dart';
-import 'mother_dashboard.dart';
-import 'mother_journal_screen.dart';
-import 'mother_children_screen.dart';
+import '../theme/app_colors.dart';
+import '../services/auth_storage.dart';
 import 'records_screen.dart';
 
 class MotherDashboardShell extends StatefulWidget {
@@ -15,25 +13,11 @@ class MotherDashboardShell extends StatefulWidget {
 class _MotherDashboardShellState extends State<MotherDashboardShell> {
   int _currentIndex = 0;
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: const [
-          MotherDashboard(),
-          MotherJournalScreen(),
-          MotherChildrenScreen(),
-          RecordsScreen(),
-        ],
-      ),
-      bottomNavigationBar: MainBottomNavigation(
-        currentIndex: _currentIndex,
-        onTabSelected: (index) => setState(() => _currentIndex = index),
-      ),
-    );
+  Future<void> _logout() async {
+    await AuthStorage.clearAll();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +138,10 @@ class DashboardScreen extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AppColors.brandAccent, AppColors.brandAccent.withValues(alpha: 0.8)],
+                  colors: [
+                    AppColors.brandAccent,
+                    AppColors.brandAccent.withValues(alpha: 0.8)
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -199,7 +186,8 @@ class DashboardScreen extends StatelessWidget {
                   LinearProgressIndicator(
                     value: 0.6,
                     backgroundColor: Colors.white.withValues(alpha: 0.3),
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -370,7 +358,8 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.green.shade50,
                       borderRadius: BorderRadius.circular(20),
@@ -393,7 +382,8 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -438,7 +428,8 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActivityItem(String title, String time, IconData icon, Color bgColor, Color iconColor) {
+  Widget _buildActivityItem(String title, String time, IconData icon,
+      Color bgColor, Color iconColor) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -478,7 +469,8 @@ class DashboardScreen extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textSecondary),
+          const Icon(Icons.arrow_forward_ios,
+              size: 14, color: AppColors.textSecondary),
         ],
       ),
     );
