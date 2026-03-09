@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account Creation — InaAgapay Admin</title>
+    <link rel="icon" type="image/png" href="../images/logo_icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../styles/main.css" />
+  </head>
+  <body>
+    <div class="app-layout">
+      <!-- ── Header ── -->
+      <header class="app-header">
+        <div class="header-brand">
+          <button class="header-sidebar-toggle" id="sidebar-toggle">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <img
+            src="../images/logo_icon.png"
+            alt="InaAgapay"
+            class="header-logo"
+          />
+          <img
+            src="../images/logo_with_label.png"
+            alt="InaAgapay"
+            class="header-logo-label"
+          />
+        </div>
+        <div class="header-right">
+          <span class="header-badge">Admin Portal</span>
+          <div class="header-user">
+            <div class="header-avatar" id="header-avatar">A</div>
+            <span class="header-user-name" id="header-user-name">Admin</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- ── Sidebar ── -->
+      <aside class="app-sidebar">
+        <span class="sidebar-section-label">Main Menu</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="dashboard.html"
+              ><i class="fa-solid fa-gauge-high"></i> Dashboard</a
+            >
+          </li>
+          <li>
+            <a href="accounts.html"
+              ><i class="fa-solid fa-users"></i> Account Management</a
+            >
+          </li>
+          <li>
+            <a href="account-create.html" class="active"
+              ><i class="fa-solid fa-user-plus"></i> Account Creation</a
+            >
+          </li>
+          <li>
+            <a href="midwife-assignment.html"
+              ><i class="fa-solid fa-user-nurse"></i> Midwife Assignment</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">System</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="audit-trail.html"
+              ><i class="fa-solid fa-clipboard-list"></i> Audit Trail</a
+            >
+          </li>
+          <li>
+            <a href="backup.html"
+              ><i class="fa-solid fa-database"></i> Backup &amp; Restore</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-footer-nav">
+          <button class="sidebar-logout" id="logout-btn">
+            <i class="fa-solid fa-right-from-bracket"></i> Logout
+          </button>
+        </div>
+      </aside>
+
+      <!-- ── Main ── -->
+      <main class="app-main">
+        <div class="page-header">
+          <div class="page-title-block">
+            <h1 class="page-title">Create Account</h1>
+            <p class="page-subtitle">Create a new admin or midwife account</p>
+          </div>
+          <a href="accounts.html" class="btn btn-secondary"
+            ><i class="fa-solid fa-arrow-left"></i> Back to Accounts</a
+          >
+        </div>
+
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 24px;
+            align-items: start;
+          "
+        >
+          <!-- Form Card -->
+          <div class="card">
+            <div
+              class="card-header"
+              style="
+                padding-bottom: 16px;
+                border-bottom: 1px solid var(--gray-100);
+              "
+            >
+              <div>
+                <div class="card-title">Account Details</div>
+                <div class="card-subtitle">
+                  All fields marked
+                  <span style="color: var(--pink)">*</span> are required
+                </div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div
+                id="form-alert"
+                class="alert alert-error"
+                style="display: none"
+              ></div>
+
+              <form id="create-form" novalidate>
+                <!-- Account Type -->
+                <div class="form-group">
+                  <label class="form-label"
+                    >Account Type <span class="req">*</span></label
+                  >
+                  <div style="display: flex; gap: 12px">
+                    <label class="type-radio" id="type-midwife-label">
+                      <input
+                        type="radio"
+                        name="account_type"
+                        value="midwife"
+                        checked
+                        id="type-midwife"
+                      />
+                      <span class="type-radio-box">
+                        <i class="fa-solid fa-user-nurse"></i>
+                        <span>Midwife</span>
+                      </span>
+                    </label>
+                    <label class="type-radio" id="type-admin-label">
+                      <input
+                        type="radio"
+                        name="account_type"
+                        value="admin"
+                        id="type-admin"
+                      />
+                      <span class="type-radio-box">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Admin</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Name Row -->
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="first_name"
+                      >First Name <span class="req">*</span></label
+                    >
+                    <input
+                      class="form-control"
+                      type="text"
+                      id="first_name"
+                      placeholder="e.g. Maria"
+                      required
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="middle_name"
+                      >Middle Name</label
+                    >
+                    <input
+                      class="form-control"
+                      type="text"
+                      id="middle_name"
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="last_name"
+                      >Last Name <span class="req">*</span></label
+                    >
+                    <input
+                      class="form-control"
+                      type="text"
+                      id="last_name"
+                      placeholder="e.g. Santos"
+                      required
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="extension_name"
+                      >Extension Name</label
+                    >
+                    <input
+                      class="form-control"
+                      type="text"
+                      id="extension_name"
+                      placeholder="Jr., Sr., III"
+                    />
+                  </div>
+                </div>
+
+                <!-- Contact -->
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="email_address"
+                      >Email Address <span class="req">*</span></label
+                    >
+                    <div class="input-icon-wrap">
+                      <i class="fa-solid fa-envelope"></i>
+                      <input
+                        class="form-control"
+                        type="email"
+                        id="email_address"
+                        placeholder="example@email.com"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="phone_number"
+                      >Phone Number</label
+                    >
+                    <div class="input-icon-wrap">
+                      <i class="fa-solid fa-phone"></i>
+                      <input
+                        class="form-control"
+                        type="tel"
+                        id="phone_number"
+                        placeholder="09XX-XXX-XXXX"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BHC — shown for midwife only -->
+                <div class="form-group" id="bhc-group">
+                  <label class="form-label" for="bhc_id"
+                    >Assigned BHC <span class="req">*</span></label
+                  >
+                  <select class="form-select" id="bhc_id">
+                    <option value="">— Select Barangay Health Center —</option>
+                  </select>
+                  <p class="form-hint">
+                    Select the BHC this midwife will be assigned to.
+                  </p>
+                </div>
+
+                <!-- Password -->
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="password"
+                      >Password <span class="req">*</span></label
+                    >
+                    <div class="input-icon-wrap">
+                      <i class="fa-solid fa-lock"></i>
+                      <input
+                        class="form-control"
+                        type="password"
+                        id="password"
+                        placeholder="Min. 8 characters"
+                        required
+                      />
+                      <button
+                        type="button"
+                        class="pwd-toggle-btn"
+                        id="pwd1-toggle"
+                      >
+                        <i class="fa-solid fa-eye" id="pwd1-eye"></i>
+                      </button>
+                    </div>
+                    <div class="pwd-strength" id="strength-bar-wrap">
+                      <div class="pwd-strength-bar" id="strength-bar"></div>
+                    </div>
+                    <div
+                      class="pwd-strength-text"
+                      id="strength-text"
+                      style="color: var(--gray-400)"
+                    ></div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="confirm_password"
+                      >Confirm Password <span class="req">*</span></label
+                    >
+                    <div class="input-icon-wrap">
+                      <i class="fa-solid fa-lock-open"></i>
+                      <input
+                        class="form-control"
+                        type="password"
+                        id="confirm_password"
+                        placeholder="Re-enter password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        class="pwd-toggle-btn"
+                        id="pwd2-toggle"
+                      >
+                        <i class="fa-solid fa-eye" id="pwd2-eye"></i>
+                      </button>
+                    </div>
+                    <div
+                      class="form-hint"
+                      id="confirm-hint"
+                      style="display: none"
+                    ></div>
+                  </div>
+                </div>
+
+                <div
+                  style="
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 10px;
+                    margin-top: 8px;
+                  "
+                >
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    id="reset-btn"
+                  >
+                    <i class="fa-solid fa-rotate-left"></i> Reset
+                  </button>
+                  <button type="submit" class="btn btn-primary" id="submit-btn">
+                    <i class="fa-solid fa-user-plus"></i> Create Account
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Info Panel -->
+          <div style="display: flex; flex-direction: column; gap: 16px">
+            <!-- Account Preview -->
+            <div class="card">
+              <div
+                class="card-body"
+                style="text-align: center; padding: 28px 22px"
+              >
+                <div
+                  id="preview-avatar"
+                  style="
+                    width: 72px;
+                    height: 72px;
+                    border-radius: 50%;
+                    background: linear-gradient(
+                      135deg,
+                      var(--pink),
+                      var(--pink-dark)
+                    );
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-size: 28px;
+                    font-weight: 700;
+                    margin: 0 auto 14px;
+                  "
+                ></div>
+                <div
+                  id="preview-name"
+                  style="
+                    font-size: 17px;
+                    font-weight: 700;
+                    color: var(--gray-800);
+                    margin-bottom: 4px;
+                  "
+                >
+                  New Account
+                </div>
+                <div
+                  id="preview-email"
+                  style="
+                    font-size: 13px;
+                    color: var(--gray-500);
+                    margin-bottom: 12px;
+                  "
+                >
+                  —
+                </div>
+                <span id="preview-type-badge" class="badge badge-midwife"
+                  >midwife</span
+                >
+              </div>
+            </div>
+
+            <!-- Requirements -->
+            <div class="card">
+              <div class="card-body">
+                <div
+                  style="
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: var(--gray-700);
+                    margin-bottom: 12px;
+                  "
+                >
+                  <i
+                    class="fa-solid fa-circle-info"
+                    style="color: var(--pink); margin-right: 6px"
+                  ></i
+                  >Password Requirements
+                </div>
+                <ul
+                  style="
+                    list-style: none;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 7px;
+                    font-size: 13px;
+                  "
+                >
+                  <li id="req-len" class="req-item">
+                    <i class="fa-solid fa-circle"></i> At least 8 characters
+                  </li>
+                  <li id="req-upper" class="req-item">
+                    <i class="fa-solid fa-circle"></i> One uppercase letter
+                  </li>
+                  <li id="req-lower" class="req-item">
+                    <i class="fa-solid fa-circle"></i> One lowercase letter
+                  </li>
+                  <li id="req-num" class="req-item">
+                    <i class="fa-solid fa-circle"></i> One number
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="card" style="border-left: 3px solid var(--pink)">
+              <div
+                class="card-body"
+                style="
+                  font-size: 13px;
+                  color: var(--gray-600);
+                  line-height: 1.7;
+                "
+              >
+                <strong style="color: var(--pink-dark)">Note:</strong> New
+                accounts are automatically set to <strong>active</strong> and
+                <strong>verified</strong>. Midwife accounts require a BHC
+                assignment which can be updated later in Midwife Assignment.
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer class="app-footer">
+        <span
+          >&copy; 2026 InaAgapay — Maternal &amp; Child Health Information
+          System</span
+        >
+        <span style="color: var(--pink-light)">|</span>
+        <span>Admin Portal v2.0</span>
+      </footer>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <style>
+      .type-radio {
+        cursor: pointer;
+      }
+      .type-radio input {
+        display: none;
+      }
+      .type-radio-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 14px 24px;
+        border-radius: var(--radius);
+        border: 1.5px solid var(--gray-200);
+        background: var(--white);
+        color: var(--gray-600);
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s;
+        cursor: pointer;
+        min-width: 110px;
+      }
+      .type-radio-box i {
+        font-size: 22px;
+      }
+      .type-radio input:checked + .type-radio-box {
+        border-color: var(--pink);
+        background: var(--pink-pale);
+        color: var(--pink-dark);
+        box-shadow: 0 0 0 3px rgba(233, 30, 140, 0.1);
+      }
+      .input-icon-wrap {
+        position: relative;
+      }
+      .input-icon-wrap > i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--gray-400);
+        font-size: 14px;
+        pointer-events: none;
+      }
+      .input-icon-wrap .form-control {
+        padding-left: 36px;
+      }
+      .pwd-toggle-btn {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--gray-400);
+        font-size: 14px;
+        padding: 2px;
+      }
+      .pwd-toggle-btn:hover {
+        color: var(--pink);
+      }
+      .req-item {
+        color: var(--gray-400);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .req-item i {
+        font-size: 8px;
+      }
+      .req-item.met {
+        color: var(--success);
+      }
+      .req-item.met i::before {
+        content: "\f058";
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        font-size: 13px;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+    <script>
+      (function () {
+        const SUPABASE_URL = "https://buvseyqcdacctlupznya.supabase.co";
+        const SUPABASE_ANON =
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw";
+        const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+        const SESSION_KEY = "inaagapay_admin_session";
+        const session = (() => {
+          try {
+            return JSON.parse(localStorage.getItem(SESSION_KEY));
+          } catch {
+            return null;
+          }
+        })();
+        if (!session || session.account_type !== "admin") {
+          window.location.href = "../index.html";
+          return;
+        }
+
+        document.getElementById("header-user-name").textContent =
+          [session.first_name, session.last_name].filter(Boolean).join(" ") ||
+          "Admin";
+        document.getElementById("header-avatar").textContent =
+          (
+            (session.first_name?.[0] ?? "") + (session.last_name?.[0] ?? "")
+          ).toUpperCase() || "A";
+        document.getElementById("logout-btn").addEventListener("click", () => {
+          if (confirm("Logout?")) {
+            localStorage.removeItem(SESSION_KEY);
+            window.location.href = "../index.html";
+          }
+        });
+        document
+          .getElementById("sidebar-toggle")
+          .addEventListener("click", () =>
+            document.querySelector(".app-sidebar").classList.toggle("open"),
+          );
+
+        /* ── Helpers ── */
+        function esc(s) {
+          const d = document.createElement("div");
+          d.textContent = s ?? "";
+          return d.innerHTML;
+        }
+
+        /* ── Toast ── */
+        function showToast(msg, type = "success") {
+          const icons = {
+            success: "fa-circle-check",
+            error: "fa-circle-xmark",
+            warning: "fa-triangle-exclamation",
+            info: "fa-circle-info",
+          };
+          const c = document.getElementById("toast-container");
+          const t = document.createElement("div");
+          t.className = `toast ${type}`;
+          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span>`;
+          c.appendChild(t);
+          setTimeout(() => {
+            t.style.animation = "fadeOut .3s ease forwards";
+            t.addEventListener("animationend", () => t.remove());
+          }, 4500);
+        }
+
+        /* ── Reset button ── */
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          document.getElementById("create-form").reset();
+          document.getElementById("form-alert").style.display = "none";
+          // Restore BHC group (midwife is default after reset)
+          bhcGroup.style.display = "";
+          updatePreviewBadge("midwife");
+          updatePreview();
+          // Reset strength meter
+          document.getElementById("strength-bar").style.width = "0";
+          document.getElementById("strength-bar").style.background =
+            "var(--gray-300)";
+          document.getElementById("strength-text").textContent = "";
+          document.getElementById("confirm-hint").style.display = "none";
+          ["req-len", "req-upper", "req-lower", "req-num"].forEach((id) =>
+            document.getElementById(id).classList.remove("met"),
+          );
+        });
+
+        /* ── Load BHC ── */
+        async function loadBhc() {
+          const { data } = await db
+            .from("bhc")
+            .select("bhc_id, bhc_name")
+            .order("bhc_name");
+          const sel = document.getElementById("bhc_id");
+          (data || []).forEach((b) => {
+            const o = document.createElement("option");
+            o.value = b.bhc_id;
+            o.textContent = b.bhc_name;
+            sel.appendChild(o);
+          });
+        }
+        loadBhc();
+
+        /* ── Account type toggle ── */
+        const bhcGroup = document.getElementById("bhc-group");
+        document.querySelectorAll('input[name="account_type"]').forEach((r) => {
+          r.addEventListener("change", () => {
+            bhcGroup.style.display = r.value === "midwife" ? "" : "none";
+            updatePreviewBadge(r.value);
+          });
+        });
+
+        function updatePreviewBadge(type) {
+          const b = document.getElementById("preview-type-badge");
+          b.textContent = type;
+          b.className = `badge badge-${type}`;
+        }
+
+        /* ── Live preview ── */
+        function updatePreview() {
+          const fn = document.getElementById("first_name").value.trim();
+          const ln = document.getElementById("last_name").value.trim();
+          const em = document.getElementById("email_address").value.trim();
+          const initials = ((fn[0] ?? "") + (ln[0] ?? "")).toUpperCase() || "?";
+          document.getElementById("preview-avatar").textContent = initials;
+          document.getElementById("preview-name").textContent =
+            [fn, ln].filter(Boolean).join(" ") || "New Account";
+          document.getElementById("preview-email").textContent = em || "—";
+        }
+        ["first_name", "last_name", "email_address"].forEach((id) =>
+          document.getElementById(id).addEventListener("input", updatePreview),
+        );
+        updatePreview();
+
+        /* ── Password strength ── */
+        document
+          .getElementById("password")
+          .addEventListener("input", function () {
+            const v = this.value;
+            const len = v.length >= 8;
+            const upper = /[A-Z]/.test(v);
+            const lower = /[a-z]/.test(v);
+            const num = /\d/.test(v);
+            setReq("req-len", len);
+            setReq("req-upper", upper);
+            setReq("req-lower", lower);
+            setReq("req-num", num);
+            const score = [len, upper, lower, num].filter(Boolean).length;
+            const bar = document.getElementById("strength-bar");
+            const txt = document.getElementById("strength-text");
+            const map = [
+              [0, "0%", "var(--gray-300)", ""],
+              [1, "25%", "var(--danger)", "Weak"],
+              [2, "50%", "var(--warning)", "Fair"],
+              [3, "75%", "var(--info)", "Good"],
+              [4, "100%", "var(--success)", "Strong"],
+            ];
+            const [, w, c, t] = map[score];
+            bar.style.width = w;
+            bar.style.background = c;
+            txt.textContent = t;
+            txt.style.color = c;
+          });
+
+        function setReq(id, met) {
+          const el = document.getElementById(id);
+          el.classList.toggle("met", met);
+        }
+
+        /* ── Password toggles ── */
+        function initPwdToggle(toggleId, inputId, eyeId) {
+          document.getElementById(toggleId).addEventListener("click", () => {
+            const inp = document.getElementById(inputId);
+            const eye = document.getElementById(eyeId);
+            inp.type = inp.type === "password" ? "text" : "password";
+            eye.className =
+              inp.type === "password"
+                ? "fa-solid fa-eye"
+                : "fa-solid fa-eye-slash";
+          });
+        }
+        initPwdToggle("pwd1-toggle", "password", "pwd1-eye");
+        initPwdToggle("pwd2-toggle", "confirm_password", "pwd2-eye");
+
+        /* ── Confirm match hint ── */
+        document
+          .getElementById("confirm_password")
+          .addEventListener("input", function () {
+            const pwd = document.getElementById("password").value;
+            const hint = document.getElementById("confirm-hint");
+            if (!this.value) {
+              hint.style.display = "none";
+              return;
+            }
+            hint.style.display = "block";
+            if (this.value === pwd) {
+              hint.textContent = "✓ Passwords match";
+              hint.style.color = "var(--success)";
+            } else {
+              hint.textContent = "✗ Passwords do not match";
+              hint.style.color = "var(--danger)";
+            }
+          });
+
+        /* ── Submit ── */
+        document
+          .getElementById("create-form")
+          .addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const alertEl = document.getElementById("form-alert");
+            alertEl.style.display = "none";
+
+            const type = document.querySelector(
+              'input[name="account_type"]:checked',
+            ).value;
+            const first = document.getElementById("first_name").value.trim();
+            const middle = document.getElementById("middle_name").value.trim();
+            const last = document.getElementById("last_name").value.trim();
+            const ext = document.getElementById("extension_name").value.trim();
+            const email = document.getElementById("email_address").value.trim();
+            const phone = document.getElementById("phone_number").value.trim();
+            const pwd = document.getElementById("password").value;
+            const cpwd = document.getElementById("confirm_password").value;
+            const bhcId = document.getElementById("bhc_id").value;
+
+            /* Validation */
+            if (!first || !last || !email || !pwd) {
+              return showAlert(
+                "First name, last name, email, and password are required.",
+              );
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+              return showAlert("Please enter a valid email address.");
+            }
+            if (pwd.length < 8) {
+              return showAlert("Password must be at least 8 characters.");
+            }
+            if (pwd !== cpwd) {
+              return showAlert("Passwords do not match.");
+            }
+            if (type === "midwife" && !bhcId) {
+              return showAlert(
+                "Please select a Barangay Health Center for the midwife.",
+              );
+            }
+
+            const btn = document.getElementById("submit-btn");
+            btn.disabled = true;
+            btn.innerHTML = '<div class="btn-loader"></div> Creating…';
+
+            try {
+              /* Check email uniqueness */
+              const { data: existing } = await db
+                .from("accounts")
+                .select("account_id")
+                .eq("email_address", email)
+                .limit(1);
+              if (existing && existing.length > 0) {
+                return showAlert("An account with this email already exists.");
+              }
+
+              /* Hash password */
+              const bcrypt = dcodeIO.bcrypt;
+              const hash = await bcrypt.hash(pwd, 10);
+
+              /* Insert account */
+              const { data: newAcct, error: acctErr } = await db
+                .from("accounts")
+                .insert({
+                  email_address: email,
+                  password_hash: hash,
+                  account_type: type,
+                  first_name: first,
+                  middle_name: middle || null,
+                  last_name: last,
+                  extension_name: ext || null,
+                  phone_number: phone || null,
+                  is_verified: true,
+                  status: "active",
+                })
+                .select()
+                .single();
+              if (acctErr) throw acctErr;
+
+              /* If midwife, insert into midwives */
+              if (type === "midwife") {
+                const { error: mErr } = await db.from("midwives").insert({
+                  account_id: newAcct.account_id,
+                  assigned_bhc_id: parseInt(bhcId),
+                });
+                if (mErr) throw mErr;
+              }
+
+              /* Audit log */
+              await db.from("audit_trail").insert({
+                account_id: session.account_id,
+                action: "create_account",
+                table_name: "accounts",
+                description: `Created ${type} account for ${first} ${last} (${email})`,
+                new_data: { email, account_type: type },
+              });
+
+              showToast(
+                `Account created successfully for ${first} ${last}!`,
+                "success",
+              );
+              e.target.reset();
+              updatePreview();
+              document.getElementById("strength-bar").style.width = "0";
+              document.getElementById("strength-text").textContent = "";
+              document.getElementById("confirm-hint").style.display = "none";
+              ["req-len", "req-upper", "req-lower", "req-num"].forEach((id) =>
+                document.getElementById(id).classList.remove("met"),
+              );
+
+              // Redirect after short delay
+              setTimeout(() => (window.location.href = "accounts.html"), 1800);
+            } catch (err) {
+              showAlert("Error creating account: " + err.message);
+            } finally {
+              btn.disabled = false;
+              btn.innerHTML =
+                '<i class="fa-solid fa-user-plus"></i> Create Account';
+            }
+          });
+
+        function showAlert(msg) {
+          const el = document.getElementById("form-alert");
+          el.style.display = "flex";
+          el.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ${esc(msg)}`;
+          el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          const btn = document.getElementById("submit-btn");
+          btn.disabled = false;
+          btn.innerHTML =
+            '<i class="fa-solid fa-user-plus"></i> Create Account';
+        }
+      })();
+    </script>
+  </body>
+</html>
