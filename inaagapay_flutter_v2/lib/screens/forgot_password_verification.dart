@@ -6,6 +6,7 @@ import '../widgets/otp_input_field.dart';
 import '../widgets/validation_message.dart';
 import '../widgets/clickable_text.dart';
 import '../widgets/page_title.dart';
+import '../services/supabase_service.dart';
 
 class ForgotPasswordVerificationScreen extends StatefulWidget {
   const ForgotPasswordVerificationScreen({super.key});
@@ -24,6 +25,7 @@ class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerific
   
   String _code = '';
   bool _hasError = false;
+  bool _isVerifying = false;
 
   @override
   void didChangeDependencies() {
@@ -51,20 +53,50 @@ class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerific
     return '$minutes:$seconds';
   }
 
-  void _verifyCode() {
+  Future<void> _verifyCode() async {
+    setState(() {
+      _isVerifying = true;
+      _hasError = false;
+    });
+
+    // For password reset, you might want to verify the OTP differently
+    // This is a placeholder - adjust based on your needs
     if (_code.length == 6) {
-      // TODO: Verify code
+      // TODO: Verify reset code
       Navigator.pushNamed(context, '/change-forgot-password');
     } else {
-      setState(() => _hasError = true);
+      setState(() {
+        _isVerifying = false;
+        _hasError = true;
+      });
     }
   }
 
-  void _resendCode() {
-    _startTimer();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('New code sent!')),
-    );
+  Future<void> _resendCode() async {
+    setState(() => _isVerifying = true);
+
+    final result = await SupabaseService.resetPassword(email);
+
+    if (!mounted) return;
+
+    setState(() => _isVerifying = false);
+
+    if (result['success']) {
+      _startTimer();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message']),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message']),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -77,10 +109,19 @@ class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerific
           child: Column(
             children: [
               const SizedBox(height: 40),
-              Image.asset('assets/images/logo.png', height: 110),
-              const SizedBox(height: 16),
-              Image.asset('assets/images/inaagapay_name.png', width: 240),
+              
+              // App Name (text instead of image)
+              const Text(
+                'Inaagapay',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFDE3A53),
+                ),
+              ),
+              
               const SizedBox(height: 32),
+              
               const PageTitle(
                 title: 'Verify Code',
                 leadingIcon: Icons.mail,
@@ -110,9 +151,9 @@ class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerific
                 ),
               const SizedBox(height: 32),
               MainButton(
-                label: 'Verify',
+                label: _isVerifying ? 'Verifying...' : 'Verify',
                 showIcons: false,
-                onPressed: _code.length == 6 ? _verifyCode : null,
+                onPressed: _code.length == 6 && !_isVerifying ? _verifyCode : null,
               ),
               const SizedBox(height: 24),
               _secondsRemaining == 0
@@ -121,6 +162,20 @@ class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerific
                       'Resend Code in $_formattedTime',
                       style: const TextStyle(color: AppColors.textSecondary),
                     ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/login',
+                    (route) => false,
+                  );
+                },
+                child: const Text(
+                  'Back to Login',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
             ],
           ),
         ),

@@ -78,95 +78,59 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
   bool get _isEmailValid {
     final isValid = RegExp(r'^[^@]+@[^@]+\.[^@]+')
         .hasMatch(_emailController.text.trim());
-    print('Email valid check: $isValid for ${_emailController.text}');
     return isValid;
   }
 
   bool get _passwordsMatch {
-    final match = _confirmPasswordController.text.isNotEmpty &&
+    return _confirmPasswordController.text.isNotEmpty &&
         _passwordController.text == _confirmPasswordController.text;
-    print('Passwords match: $match');
-    return match;
   }
 
   bool get _canSubmit {
-    final canSubmit = _isEmailValid &&
+    return _isEmailValid &&
         _calculateStrength(_passwordController.text) == PasswordStrength.strong &&
         _passwordsMatch &&
         !_isLoading;
-    
-    print('=== CAN SUBMIT CHECK ===');
-    print('Email valid: $_isEmailValid');
-    print('Password strength: ${_calculateStrength(_passwordController.text)}');
-    print('Passwords match: $_passwordsMatch');
-    print('Loading: $_isLoading');
-    print('Can submit: $canSubmit');
-    
-    return canSubmit;
   }
 
   Future<void> _handleSubmit() async {
-    print('=== HANDLE SUBMIT CALLED ===');
-    
     if (!_canSubmit) {
-      print('Cannot submit - validation failed');
       _shakeController.forward(from: 0);
       return;
     }
 
     setState(() => _isLoading = true);
 
-    final res = await SupabaseService.register(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
+    // Send OTP via email using Supabase Auth
+    final res = await SupabaseService.sendOTPEmail(_emailController.text.trim());
 
-    print('Registration response: $res');
     setState(() => _isLoading = false);
 
     if (!mounted) return;
 
-    if (!res['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message']),
-          backgroundColor: AppColors.error,
-        ),
-      );
-      return;
-    }
-
-    if (res['email_failed'] == true) {
+    if (res['success']) {
       await showDialog(
         context: context,
         builder: (_) => DialogBox(
-          title: 'Warning',
-          content: 'Account created but we couldn\'t send the verification email. Please use "Resend Code" on the next screen.',
-          buttonText: 'Continue',
-          type: DialogType.warning,
-          onPressed: () => Navigator.pop(context),
-        ),
-      );
-    } else {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => DialogBox(
-          title: 'Verification Code Sent',
+          title: 'OTP Sent',
           content: 'A 6-digit verification code has been sent to ${_emailController.text.trim()}',
           buttonText: 'Continue',
           type: DialogType.success,
           onPressed: () => Navigator.pop(context),
         ),
       );
-    }
 
-    if (mounted) {
-      print('Navigating to verification screen');
       Navigator.pushNamed(
         context,
         '/verify-registration',
         arguments: _emailController.text.trim(),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message']),
+          backgroundColor: AppColors.error,
+        ),
       );
     }
   }
@@ -174,9 +138,6 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
   @override
   Widget build(BuildContext context) {
     final strength = _calculateStrength(_passwordController.text);
-    
-    print('=== REGISTRATION BUILD ===');
-    print('Button enabled: $_canSubmit');
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
@@ -212,10 +173,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                 keyboardType: TextInputType.emailAddress,
                 leadingIcon: Icons.email_outlined,
                 isRequired: true,
-                onChanged: (_) {
-                  setState(() {});
-                  print('Email changed: ${_emailController.text}');
-                },
+                onChanged: (_) => setState(() {}),
               ),
               
               const SizedBox(height: 16),
@@ -232,10 +190,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                   setState(() => _obscurePassword = !_obscurePassword);
                 },
                 isRequired: true,
-                onChanged: (_) {
-                  setState(() {});
-                  print('Password changed, length: ${_passwordController.text.length}');
-                },
+                onChanged: (_) => setState(() {}),
               ),
               
               const SizedBox(height: 8),
@@ -268,30 +223,11 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                         _obscureConfirmPassword = !_obscureConfirmPassword);
                   },
                   isRequired: true,
-                  onChanged: (_) {
-                    setState(() {});
-                    print('Confirm password changed, match: $_passwordsMatch');
-                  },
+                  onChanged: (_) => setState(() {}),
                 ),
               ),
               
               const SizedBox(height: 32),
-              
-              // Debug button to test navigation
-              if (true) // Set to false to hide
-                ElevatedButton(
-                  onPressed: () {
-                    print('TEST BUTTON PRESSED - Force navigation');
-                    Navigator.pushNamed(
-                      context,
-                      '/verify-registration',
-                      arguments: 'test@example.com',
-                    );
-                  },
-                  child: const Text('TEST NAVIGATION'),
-                ),
-              
-              const SizedBox(height: 8),
               
               MainButton(
                 label: _isLoading ? 'Sending...' : 'Send Verification Code',
@@ -311,7 +247,6 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                   ClickableText(
                     text: 'Sign in Here',
                     onTap: () {
-                      print('Navigating to login');
                       Navigator.pushNamedAndRemoveUntil(
                         context,
                         '/login',

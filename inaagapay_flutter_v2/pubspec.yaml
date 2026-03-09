@@ -19,6 +19,7 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   image_picker: ^1.1.2
   file_picker: ^8.1.4
+  emailjs: ^1.0.0
 
 dev_dependencies:
   flutter_test:

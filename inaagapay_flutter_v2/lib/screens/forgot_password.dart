@@ -3,6 +3,7 @@ import '../theme/app_colors.dart';
 import '../widgets/app_input_field.dart';
 import '../widgets/main_button.dart';
 import '../widgets/page_title.dart';
+import '../services/supabase_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -25,17 +26,33 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _isLoading = true);
 
-    // TODO: Implement password reset logic
-    await Future.delayed(const Duration(seconds: 1));
+    final result = await SupabaseService.resetPassword(_emailController.text.trim());
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    Navigator.pushNamed(
-      context,
-      '/forgot-password-verify',
-      arguments: _emailController.text.trim(),
-    );
+    if (result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message']),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      
+      // Navigate to verification or just show success
+      Navigator.pushNamed(
+        context,
+        '/forgot-password-verify',
+        arguments: _emailController.text.trim(),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message']),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -83,6 +100,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 label: _isLoading ? 'Sending...' : 'Send Reset Code',
                 showIcons: false,
                 onPressed: _isLoading ? null : _handleSubmit,
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/login',
+                    (route) => false,
+                  );
+                },
+                child: const Text(
+                  'Back to Login',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
               ),
             ],
           ),

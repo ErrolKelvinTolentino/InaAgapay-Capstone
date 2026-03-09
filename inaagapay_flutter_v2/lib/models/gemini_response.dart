@@ -4,7 +4,7 @@ class GeminiResponse {
   final List<String>? labels;
   final double? confidence;
   
-  // Fields for ultrasound assessment
+  // Fields for health assessment
   final String? healthStatus;
   final List<String>? normalFindings;
   final List<String>? concerns;
@@ -63,7 +63,7 @@ class GeminiResponse {
       healthStatus = 'CONSULT SPECIALIST ⚠️⚠️';
     }
 
-    // Extract measurements for ultrasound
+    // Extract measurements
     List<String> extractedMeasurements = [];
     List<String> normalList = [];
     List<String> concernsList = [];
@@ -89,9 +89,12 @@ class GeminiResponse {
           if (match.group(0) != null) {
             extractedMeasurements.add(match.group(0)!);
             
+            // Check if it's a heart rate
             if (match.group(0)!.contains('bpm')) {
               hr = match.group(0);
-            } else if (match.group(0)!.contains('kg') || match.group(0)!.contains('g')) {
+            }
+            // Check if it's fetal weight
+            else if (match.group(0)!.contains('kg') || match.group(0)!.contains('g')) {
               fw = match.group(0);
             }
           }
