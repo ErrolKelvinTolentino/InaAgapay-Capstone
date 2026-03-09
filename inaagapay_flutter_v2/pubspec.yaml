@@ -17,6 +17,8 @@ dependencies:
   provider: ^6.1.2
   http: ^1.2.2
   flutter_secure_storage: ^9.2.2
+  image_picker: ^1.1.2
+  file_picker: ^8.1.4
 
 dev_dependencies:
   flutter_test:
@@ -25,4 +27,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # assets section removed - no images needed
+  assets:
+  - .env

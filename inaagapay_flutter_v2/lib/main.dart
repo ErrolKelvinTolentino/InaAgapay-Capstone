@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'services/supabase_service.dart';
 import 'services/auth_storage.dart';
 import 'screens/login.dart';
 import 'screens/mother_registration.dart';
@@ -11,24 +12,41 @@ import 'screens/change_forgot_password.dart';
 import 'screens/complete_profile.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/congrats_page.dart';
-import 'screens/due_date_setter.dart';
-import 'screens/mother_dashboard.dart';
+import 'screens/mother_dashboard_shell.dart';
 import 'screens/admin_dashboard.dart';
 import 'screens/midwife_shell.dart';
+import 'screens/ultrasound_analyzer_screen.dart';
+import 'screens/lab_test_analyzer_screen.dart';
 import 'models/due_date_mode.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Load environment variables
+  try {
+    await dotenv.load(fileName: ".env");
+    if (kDebugMode) {
+      print('Environment variables loaded successfully');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error loading .env file: $e');
+    }
+  }
+
+  // Initialize Supabase
   try {
     await Supabase.initialize(
       url: 'https://buvseyqcdacctlupznya.supabase.co',
       anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw',
-      // Remove authFlowType parameter as it's not in your version
     );
-    print('Supabase initialized successfully');
+    if (kDebugMode) {
+      print('Supabase initialized successfully');
+    }
   } catch (e) {
-    print('Supabase initialization error: $e');
+    if (kDebugMode) {
+      print('Supabase initialization error: $e');
+    }
   }
 
   runApp(const InaagapayApp());
@@ -53,7 +71,7 @@ class InaagapayApp extends StatelessWidget {
     
     switch (role) {
       case 'mother':
-        return const MotherDashboard();
+        return const MotherDashboardShell();
       case 'midwife':
         return const MidwifeShell();
       case 'admin':
@@ -91,6 +109,16 @@ class InaagapayApp extends StatelessWidget {
               secondary: const Color(0xFF1B998B),
             ),
             fontFamily: 'Inter',
+            appBarTheme: const AppBarTheme(
+              elevation: 0,
+              centerTitle: true,
+            ),
+            bottomNavigationBarTheme: BottomNavigationBarThemeData(
+              selectedItemColor: const Color(0xFFDE3A53),
+              unselectedItemColor: Colors.grey.shade600,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: Colors.white,
+            ),
           ),
           home: snapshot.data ?? const LoginScreen(),
           routes: {
@@ -102,9 +130,11 @@ class InaagapayApp extends StatelessWidget {
             '/change-forgot-password': (context) => const ChangeForgotPasswordScreen(),
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
-            '/mother-dashboard': (context) => const MotherDashboard(),
+            '/mother-dashboard': (context) => const MotherDashboardShell(),
             '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
+            '/ultrasound-analyzer': (context) => const UltrasoundAnalyzerScreen(),
+            '/lab-test-analyzer': (context) => const LabTestAnalyzerScreen(),
           },
           onGenerateRoute: (settings) {
             if (settings.name == '/congrats') {
