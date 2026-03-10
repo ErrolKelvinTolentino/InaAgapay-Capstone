@@ -23,6 +23,7 @@ import 'screens/mother_children_screen.dart';
 import 'screens/midwife_mothers_screen.dart';
 import 'screens/midwife_children_screen.dart';
 import 'screens/midwife_schedules_screen.dart';
+import 'screens/midwife_add_mother_screen.dart';
 import 'models/due_date_mode.dart';
 
 void main() async {
@@ -137,6 +138,8 @@ class InaagapayApp extends StatelessWidget {
             '/midwife-mothers': (context) => const MidwifeMothersScreen(),
             '/midwife-children': (context) => const MidwifeChildrenScreen(),
             '/midwife-schedules': (context) => const MidwifeSchedulesScreen(),
+            '/midwife-add-mother': (context) =>
+                const MidwifeAddMotherScreen(),
           },
           onGenerateRoute: (settings) {
             if (settings.name == '/congrats') {

@@ -509,4 +509,66 @@ class SupabaseService {
       return {'success': false, 'message': 'Failed to fetch greeting'};
     }
   }
+
+  // Midwife creates a new mother account (pre-verified)
+  static Future<Map<String, dynamic>> createMotherByMidwife({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+    String? phoneNumber,
+  }) async {
+    try {
+      // Check if email already exists
+      final existing = await client
+          .from('accounts')
+          .select('account_id')
+          .eq('email_address', email)
+          .maybeSingle();
+
+      if (existing != null) {
+        return {
+          'success': false,
+          'message': 'An account with this email already exists.',
+        };
+      }
+
+      // Insert account (pre-verified since midwife is creating it)
+      final inserted = await client
+          .from('accounts')
+          .insert({
+            'email_address': email,
+            'password_hash': _hashPassword(password),
+            'account_type': 'mother',
+            'first_name': firstName,
+            'last_name': lastName,
+            'phone_number': phoneNumber,
+            'is_verified': true,
+            'status': 'active',
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select('account_id')
+          .single();
+
+      final accountId = inserted['account_id'] as int;
+
+      // Create corresponding mothers record
+      await client.from('mothers').insert({
+        'account_id': accountId,
+        'status': 'active',
+      });
+
+      return {
+        'success': true,
+        'message': 'Mother account created successfully.',
+        'account_id': accountId,
+      };
+    } catch (e) {
+      print('createMotherByMidwife error: $e');
+      return {
+        'success': false,
+        'message': 'Failed to create account: ${e.toString()}',
+      };
+    }
+  }
 }
