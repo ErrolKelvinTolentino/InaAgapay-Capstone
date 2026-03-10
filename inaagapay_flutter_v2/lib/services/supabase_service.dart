@@ -571,4 +571,202 @@ class SupabaseService {
       };
     }
   }
+
+  // Get midwife context (midwife_id, assigned_bhc_id, bhc_name)
+  static Future<Map<String, dynamic>> getMidwifeContext(int accountId) async {
+    try {
+      final result = await client
+          .from('midwives')
+          .select('midwife_id, assigned_bhc_id, bhc!inner(bhc_name)')
+          .eq('account_id', accountId)
+          .single();
+
+      final bhc = result['bhc'] as Map?;
+      return {
+        'success': true,
+        'midwife_id': result['midwife_id'] as int,
+        'assigned_bhc_id': result['assigned_bhc_id'] as int,
+        'bhc_name': (bhc?['bhc_name'] as String?) ?? '',
+      };
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  // Check whether an email address is available (not yet registered)
+  static Future<bool> isEmailAvailable(String email) async {
+    try {
+      final result = await client
+          .from('accounts')
+          .select('account_id')
+          .eq('email_address', email)
+          .maybeSingle();
+      return result == null;
+    } catch (_) {
+      return true; // Assume available if check fails
+    }
+  }
+
+  // Create a fully-populated mother record from the midwife Add Mother flow
+  static Future<Map<String, dynamic>> addMotherFullByMidwife({
+    required int midwifeId,
+    required int assignedBhcId,
+    required String email,
+    required String password,
+    required String firstName,
+    String? middleName,
+    required String lastName,
+    String? extensionName,
+    required String phone,
+    String? houseNumber,
+    String? street,
+    String? barangay,
+    String? city,
+    String? province,
+    DateTime? birthdate,
+    double? heightCm,
+    double? weightKg,
+    String? bloodType,
+    DateTime? lmp,
+    DateTime? edd,
+    List<Map<String, dynamic>> emergencyContacts = const [],
+    List<Map<String, dynamic>> medicalConditions = const [],
+    List<Map<String, dynamic>> allergies = const [],
+    List<Map<String, dynamic>> pastPregnancies = const [],
+  }) async {
+    try {
+      // 1. Verify email is not already taken
+      final emailFree = await isEmailAvailable(email);
+      if (!emailFree) {
+        return {'success': false, 'message': 'This email is already in use.'};
+      }
+
+      // 2. Create account (pre-verified since midwife is registering)
+      final accountRow = await client
+          .from('accounts')
+          .insert({
+            'email_address': email,
+            'password_hash': _hashPassword(password),
+            'account_type': 'mother',
+            'first_name': firstName,
+            'middle_name': middleName,
+            'last_name': lastName,
+            'extension_name': extensionName,
+            'phone_number': phone,
+            'is_verified': true,
+            'status': 'active',
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select('account_id')
+          .single();
+
+      final accountId = accountRow['account_id'] as int;
+
+      // 3. Create mother profile record
+      final motherRow = await client
+          .from('mothers')
+          .insert({
+            'account_id': accountId,
+            'assigned_bhc_id': assignedBhcId,
+            'birthdate': birthdate?.toIso8601String().split('T')[0],
+            'house_number': houseNumber,
+            'street': street,
+            'barangay': barangay,
+            'city_municipality': city,
+            'province': province,
+            'height': heightCm,
+            'weight': weightKg,
+            'blood_type': bloodType,
+            'status': 'active',
+          })
+          .select('mother_id')
+          .single();
+
+      final motherId = motherRow['mother_id'] as int;
+
+      // 4. Emergency contacts (batch insert)
+      if (emergencyContacts.isNotEmpty) {
+        await client.from('emergency_contacts').insert(
+          emergencyContacts
+              .map((ec) => {'mother_id': motherId, ...ec})
+              .toList(),
+        );
+      }
+
+      // 5. Medical conditions (batch insert)
+      if (medicalConditions.isNotEmpty) {
+        await client.from('medical_conditions').insert(
+          medicalConditions
+              .map((mc) => {'mother_id': motherId, ...mc})
+              .toList(),
+        );
+      }
+
+      // 6. Allergies (batch insert)
+      if (allergies.isNotEmpty) {
+        await client.from('allergies').insert(
+          allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
+        );
+      }
+
+      // 7. Current pregnancy
+      int? pregnancyId;
+      if (lmp != null && edd != null) {
+        final pregRow = await client
+            .from('pregnancies')
+            .insert({
+              'mother_id': motherId,
+              'last_menstrual_period': lmp.toIso8601String().split('T')[0],
+              'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
+              'status': 'ongoing',
+            })
+            .select('pregnancy_id')
+            .single();
+        pregnancyId = pregRow['pregnancy_id'] as int;
+      }
+
+      // 8. Past pregnancies + deliveries
+      for (final pp in pastPregnancies) {
+        final pastPregRow = await client
+            .from('pregnancies')
+            .insert({
+              'mother_id': motherId,
+              'status': 'ended',
+              'outcome': pp['outcome'],
+              'outcome_date': pp['outcome_date'],
+              'is_outcome_date_estimated':
+                  pp['is_outcome_date_estimated'] ?? false,
+              'gestational_age_at_end': pp['gestational_age_at_end'],
+            })
+            .select('pregnancy_id')
+            .single();
+
+        final pastPregId = pastPregRow['pregnancy_id'] as int;
+
+        if (pp['place_of_delivery'] != null || pp['delivery_method'] != null) {
+          await client.from('deliveries').insert({
+            'pregnancy_id': pastPregId,
+            'delivery_date': pp['outcome_date'],
+            'is_delivery_date_estimated':
+                pp['is_outcome_date_estimated'] ?? false,
+            'place_of_delivery': pp['place_of_delivery'],
+            'delivery_method': pp['delivery_method'],
+          });
+        }
+      }
+
+      return {
+        'success': true,
+        'mother_id': motherId,
+        'pregnancy_id': pregnancyId,
+        'account_id': accountId,
+      };
+    } catch (e) {
+      print('addMotherFullByMidwife error: $e');
+      return {
+        'success': false,
+        'message': 'Failed to add mother: ${e.toString()}',
+      };
+    }
+  }
 }

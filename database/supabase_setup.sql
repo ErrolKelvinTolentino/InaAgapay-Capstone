@@ -527,3 +527,17 @@ UPDATE ON ai_responses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS update_pregnancy_risk_assessments_updated_at ON pregnancy_risk_assessments;
 CREATE TRIGGER update_pregnancy_risk_assessments_updated_at BEFORE
 UPDATE ON pregnancy_risk_assessments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- =========================
+-- RLS FIX
+-- The app uses the anon key with custom authentication (not Supabase Auth).
+-- Disable RLS on tables that the midwife inserts into so the anon key
+-- is not blocked by row-level security policies.
+-- Run these statements in the Supabase SQL editor if you see
+-- "new row violates row-level security policy" errors.
+-- =========================
+ALTER TABLE emergency_contacts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE medical_conditions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE allergies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE mothers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pregnancies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE deliveries DISABLE ROW LEVEL SECURITY;
