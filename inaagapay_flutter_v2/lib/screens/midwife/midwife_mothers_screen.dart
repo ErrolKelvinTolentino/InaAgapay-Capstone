@@ -1,11 +1,10 @@
-// lib/screens/midwife/midwife_mothers_screen.dart
 import 'package:flutter/material.dart';
-// Change these:
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/main_header.dart';
 import 'midwife_add_mother_screen.dart';
+import '../mother/mother_profile_page.dart';
 
 class MidwifeMothersScreen extends StatefulWidget {
   const MidwifeMothersScreen({super.key});
@@ -13,7 +12,6 @@ class MidwifeMothersScreen extends StatefulWidget {
   @override
   State<MidwifeMothersScreen> createState() => _MidwifeMothersScreenState();
 }
-
 
 class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   List<Map<String, dynamic>> _mothers = [];
@@ -57,7 +55,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
               barangay, 
               city_municipality, 
               province, 
-              status
+              status,
+              pregnancies(count)
             )
           ''')
           .eq('account_type', 'mother')
@@ -65,9 +64,28 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           .order('first_name', ascending: true);
 
       final list = List<Map<String, dynamic>>.from(data);
+      
+      // Process the data to add full name and other computed fields
+      final processedList = list.map((mother) {
+        final motherData = mother['mothers'] as Map<String, dynamic>? ?? {};
+        final pregnancies = motherData['pregnancies'] as List? ?? [];
+        
+        return {
+          ...mother,
+          'full_name': [
+            mother['first_name'],
+            mother['last_name']
+          ].where((e) => e != null && e.toString().trim().isNotEmpty).join(' '),
+          'pregnancy_count': pregnancies.length,
+          'mother_id': motherData['mother_id'],
+          'barangay': motherData['barangay'],
+          'city': motherData['city_municipality'],
+        };
+      }).toList();
+
       setState(() {
-        _mothers = list;
-        _filtered = list;
+        _mothers = processedList;
+        _filtered = processedList;
         _loading = false;
       });
     } catch (e) {
@@ -79,13 +97,23 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   }
 
   void _onSearch() {
-    final query = _searchController.text.toLowerCase();
+    final query = _searchController.text.toLowerCase().trim();
     setState(() {
-      _filtered = _mothers.where((m) {
-        final name = '${m['first_name'] ?? ''} ${m['last_name'] ?? ''}'.toLowerCase();
-        final phone = (m['phone_number'] ?? '').toString().toLowerCase();
-        return name.contains(query) || phone.contains(query);
-      }).toList();
+      if (query.isEmpty) {
+        _filtered = List.from(_mothers);
+      } else {
+        _filtered = _mothers.where((m) {
+          final name = (m['full_name'] ?? '').toString().toLowerCase();
+          final phone = (m['phone_number'] ?? '').toString().toLowerCase();
+          final email = (m['email_address'] ?? '').toString().toLowerCase();
+          final barangay = (m['barangay'] ?? '').toString().toLowerCase();
+          
+          return name.contains(query) || 
+                 phone.contains(query) || 
+                 email.contains(query) ||
+                 barangay.contains(query);
+        }).toList();
+      }
     });
   }
 
@@ -194,12 +222,21 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Search by name or phone...',
+              hintText: 'Search by name, phone, email, or barangay...',
               hintStyle: const TextStyle(color: AppColors.textSecondary),
               prefixIcon: const Icon(
                 Icons.search,
                 color: AppColors.textSecondary,
               ),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearch();
+                      },
+                    )
+                  : null,
               filled: true,
               fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
@@ -231,8 +268,18 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                 style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
+              if (_searchController.text.isNotEmpty)
+                Text(
+                  ' (filtered)',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
             ],
           ),
         ),
@@ -245,7 +292,19 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                   itemCount: _filtered.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) =>
-                      _MotherCard(mother: _filtered[index]),
+                      _MotherCard(mother: _filtered[index], onTap: () {
+                        final motherId = _filtered[index]['mother_id'];
+                        if (motherId != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MotherProfilePage(
+                                motherId: motherId,
+                              ),
+                            ),
+                          ).then((_) => _loadMothers());
+                        }
+                      }),
                 ),
         ),
       ],
@@ -289,30 +348,31 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 
 class _MotherCard extends StatelessWidget {
   final Map<String, dynamic> mother;
+  final VoidCallback onTap;
 
-  const _MotherCard({required this.mother});
+  const _MotherCard({required this.mother, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final firstName = (mother['first_name'] ?? '').toString();
-    final lastName = (mother['last_name'] ?? '').toString();
-    final fullName = '$firstName $lastName'.trim();
-    final phone = (mother['phone_number'] ?? 'No phone number').toString();
-
-    final motherRecord = mother['mothers'];
-    final Map<String, dynamic>? profile =
-        motherRecord is Map ? Map<String, dynamic>.from(motherRecord) : null;
-    final barangay = (profile?['barangay'] ?? '').toString();
-    final city = (profile?['city_municipality'] ?? '').toString();
-    final location = [barangay, city].where((s) => s.isNotEmpty).join(', ');
+    final fullName = mother['full_name']?.toString() ?? 'Unnamed';
+    final phone = mother['phone_number']?.toString() ?? 'No phone number';
+    final email = mother['email_address']?.toString();
+    final barangay = mother['barangay']?.toString();
+    final city = mother['city']?.toString();
+    final pregnancyCount = mother['pregnancy_count'] ?? 0;
+    
+    // Build location string
+    final locationParts = [
+      if (barangay != null && barangay.isNotEmpty) barangay,
+      if (city != null && city.isNotEmpty) city,
+    ];
+    final location = locationParts.isNotEmpty ? locationParts.join(', ') : null;
 
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        onTap: () {
-          // TODO: navigate to mother detail
-        },
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.all(14),
@@ -322,37 +382,42 @@ class _MotherCard extends StatelessWidget {
           ),
           child: Row(
             children: [
+              // Avatar with initials
               Container(
-                width: 46,
-                height: 46,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: AppColors.brandPrimary.withOpacity(0.15),
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  _initials(firstName, lastName),
+                  _getInitials(fullName),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppColors.brandPrimary,
-                    fontSize: 16,
+                    fontSize: 18,
                   ),
                 ),
               ),
               const SizedBox(width: 12),
+              
+              // Mother details
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      fullName.isEmpty ? 'Unnamed' : fullName,
+                      fullName,
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 15,
+                        fontSize: 16,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
+                    
+                    // Phone
                     Row(
                       children: [
                         const Icon(
@@ -361,16 +426,21 @@ class _MotherCard extends StatelessWidget {
                           color: AppColors.textSecondary,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          phone,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
+                        Expanded(
+                          child: Text(
+                            phone,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
-                    if (location.isNotEmpty) ...[
+                    
+                    // Location if available
+                    if (location != null) ...[
                       const SizedBox(height: 2),
                       Row(
                         children: [
@@ -393,10 +463,64 @@ class _MotherCard extends StatelessWidget {
                         ],
                       ),
                     ],
+                    
+                    // Pregnancy count badge
+                    if (pregnancyCount > 0) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandPrimary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.pregnant_woman,
+                              size: 10,
+                              color: AppColors.brandPrimary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$pregnancyCount pregnancy${pregnancyCount != 1 ? 'ies' : ''}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: AppColors.brandPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+              
+              // Arrow and email tooltip
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Icon(
+                    Icons.chevron_right,
+                    color: AppColors.textSecondary,
+                    size: 20,
+                  ),
+                  if (email != null && email.isNotEmpty)
+                    Tooltip(
+                      message: email,
+                      child: const Icon(
+                        Icons.email_outlined,
+                        size: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -404,9 +528,13 @@ class _MotherCard extends StatelessWidget {
     );
   }
 
-  String _initials(String first, String last) {
-    final f = first.isNotEmpty ? first[0].toUpperCase() : '';
-    final l = last.isNotEmpty ? last[0].toUpperCase() : '';
-    return '$f$l'.isEmpty ? '?' : '$f$l';
+  String _getInitials(String fullName) {
+    if (fullName.isEmpty || fullName == 'Unnamed') return '?';
+    
+    final parts = fullName.trim().split(' ');
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    
+    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 }

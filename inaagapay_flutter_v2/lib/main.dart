@@ -13,6 +13,7 @@ import 'screens/mother/complete_profile.dart';
 import 'screens/mother/welcome_screen.dart';
 import 'screens/mother/congrats_page.dart';
 import 'screens/mother/mother_dashboard_shell.dart';
+import 'screens/mother/mother_profile_page.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/midwife/midwife_shell.dart';
 import 'screens/midwife/ultrasound_analyzer_screen.dart';
@@ -147,6 +148,13 @@ class InaagapayApp extends StatelessWidget {
             '/admin-dashboard': (context) => const AdminDashboard(),
             
             // Mother Feature Routes
+            '/mother-profile': (context) {
+              final args = ModalRoute.of(context)!.settings.arguments;
+              if (args is int) {
+                return MotherProfilePage(motherId: args);
+              }
+              return const MotherProfilePage(motherId: 0);
+            },
             '/ultrasound-analyzer': (context) => const UltrasoundAnalyzerScreen(),
             '/lab-test-analyzer': (context) => const LabTestAnalyzerScreen(),
             '/mother-records': (context) => const RecordsScreen(),
