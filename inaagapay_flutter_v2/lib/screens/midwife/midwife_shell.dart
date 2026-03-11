@@ -1,8 +1,9 @@
 // lib/screens/midwife_shell.dart
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../services/auth_storage.dart';
-import 'midwife/midwife_dashboard.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../services/auth_storage.dart';
+import 'midwife_dashboard.dart';
 import 'midwife_mothers_screen.dart';
 import 'midwife_children_screen.dart';
 import 'midwife_schedules_screen.dart';

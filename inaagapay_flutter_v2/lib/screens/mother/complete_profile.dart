@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/secondary_header.dart';
-import '../widgets/app_input_field.dart';
-import '../widgets/main_button.dart';
-import '../widgets/progressive_step_indicator.dart';
-import '../widgets/page_title.dart';
-import '../services/supabase_service.dart';
-import '../services/auth_storage.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../widgets/secondary_header.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/progressive_step_indicator.dart';
+import '../../widgets/page_title.dart';
+import '../../services/supabase_service.dart';
+import '../../services/auth_storage.dart';
 import 'welcome_screen.dart';
 
 class CompleteProfileScreen extends StatefulWidget {

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/app_input_field.dart';
-import '../widgets/main_button.dart';
-import '../widgets/clickable_text.dart';
-import '../services/supabase_service.dart';
-import '../services/auth_storage.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/clickable_text.dart';
+import '../../services/supabase_service.dart';
+import '../../services/auth_storage.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

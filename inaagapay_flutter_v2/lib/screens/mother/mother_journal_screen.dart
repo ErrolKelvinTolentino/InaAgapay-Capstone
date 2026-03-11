@@ -1,7 +1,8 @@
 // lib/screens/mother_journal_screen.dart
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../services/auth_storage.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../services/auth_storage.dart';
 
 class MotherJournalScreen extends StatefulWidget {
   const MotherJournalScreen({super.key});

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/app_input_field.dart';
-import '../widgets/main_button.dart';
-import '../widgets/page_title.dart';
-import '../services/supabase_service.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/page_title.dart';
+import '../../services/supabase_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});

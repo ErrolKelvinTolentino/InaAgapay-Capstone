@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/headline.dart';
-import '../widgets/main_button.dart';
-import '../widgets/info_row.dart';
-import '../models/due_date_mode.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../widgets/headline.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/info_row.dart';
+import '../../models/due_date_mode.dart';
 
 class CongratsPage extends StatelessWidget {
   final DueDateMode mode;

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/main_button.dart';
-import '../widgets/page_title.dart';
-import '../widgets/app_input_field.dart';
-import '../models/due_date_mode.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/page_title.dart';
+import '../../widgets/app_input_field.dart';
+import '../../models/due_date_mode.dart';
 
 class DueDateSetter extends StatefulWidget {
   final DueDateMode mode;

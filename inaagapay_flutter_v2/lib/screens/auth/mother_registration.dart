@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/app_input_field.dart';
-import '../widgets/main_button.dart';
-import '../widgets/clickable_text.dart';
-import '../widgets/page_title.dart';
-import '../widgets/password_constraints.dart';
-import '../widgets/password_strength_indicator.dart';
-import '../widgets/dialog_box.dart';
-import '../services/supabase_service.dart';
-import '../models/password_strength.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/clickable_text.dart';
+import '../../widgets/page_title.dart';
+import '../../widgets/password_constraints.dart';
+import '../../widgets/password_strength_indicator.dart';
+import '../../widgets/dialog_box.dart';
+import '../../services/supabase_service.dart';
+import '../../models/password_strength.dart';
 
 class MotherRegistrationScreen extends StatefulWidget {
   const MotherRegistrationScreen({super.key});

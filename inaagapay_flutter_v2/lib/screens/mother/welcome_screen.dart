@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/headline.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../widgets/headline.dart';
 import 'due_date_setter.dart';
-import '../models/due_date_mode.dart';
+import '../../models/due_date_mode.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});

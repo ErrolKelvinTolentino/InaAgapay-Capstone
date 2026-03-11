@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
+// Change this:
+import '../../theme/app_colors.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});

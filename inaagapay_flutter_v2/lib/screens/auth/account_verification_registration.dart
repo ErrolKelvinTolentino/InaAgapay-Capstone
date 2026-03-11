@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/main_button.dart';
-import '../widgets/otp_input_field.dart';
-import '../widgets/validation_message.dart';
-import '../widgets/clickable_text.dart';
-import '../widgets/dialog_box.dart';
-import '../widgets/page_title.dart';
-import '../services/supabase_service.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/otp_input_field.dart';
+import '../../widgets/validation_message.dart';
+import '../../widgets/clickable_text.dart';
+import '../../widgets/dialog_box.dart';
+import '../../widgets/page_title.dart';
+import '../../services/supabase_service.dart';
 
 class AccountVerificationRegistration extends StatefulWidget {
   const AccountVerificationRegistration({super.key});
