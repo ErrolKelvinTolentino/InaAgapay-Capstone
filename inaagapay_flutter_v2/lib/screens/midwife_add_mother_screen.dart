@@ -1,9 +1,13 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import '../models/ocr_result.dart';
 import '../services/auth_storage.dart';
+import '../services/gemini_service.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_input_field.dart';
@@ -12,6 +16,8 @@ import '../widgets/progressive_step_indicator.dart';
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Enums & Data Models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 enum _GestationMethod { lmp, edd, aog }
+
+enum _OcrDialogState { loading, results, error }
 
 class _EmergencyContact {
   String firstName = '';
@@ -122,6 +128,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscurePassword = true;
+  final _passwordFocus = FocusNode();
   String? _phoneError, _emailError;
   bool _emailChecking = false, _emailExists = false;
   Timer? _emailTimer;
@@ -172,12 +179,15 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   final _aogDaysCtrl = TextEditingController();
   DateTime? _lmp;
   DateTime? _edd;
+  // -- OCR -----------------------------------------------------------------------
+  final _geminiService = GeminiService();
 
   // â”€â”€ Lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   @override
   void initState() {
     super.initState();
+    _passwordFocus.addListener(() => setState(() {}));
     _loadContext();
   }
 
@@ -185,6 +195,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   void dispose() {
     _pageController.dispose();
     _emailTimer?.cancel();
+    _passwordFocus.dispose();
     for (final c in [
       _firstNameCtrl,
       _middleNameCtrl,
@@ -212,6 +223,754 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   }
 
   // â”€â”€ Context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  // ── OCR methods ──────────────────────────────────────────────────────────────
+
+  // ── OCR flow ──────────────────────────────────────────────────────────────────
+
+  /// Entry point – shown when the user taps the OCR button in the AppBar.
+  Future<void> _startOcrFlow() async {
+    // Step 1: choose camera vs gallery
+    final source = await _showOcrSourcePicker();
+    if (source == null || !mounted) return;
+
+    // Step 2: pick the image
+    final file =
+        await ImagePicker().pickImage(source: source, imageQuality: 85);
+    if (file == null || !mounted) return;
+
+    // Step 3: upload + review dialog
+    await _showOcrProcessDialog(file);
+  }
+
+  /// Bottom sheet that returns the chosen [ImageSource] (or null if dismissed).
+  Future<ImageSource?> _showOcrSourcePicker() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.borderPrimary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Scan Document',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Choose an image source to extract patient data',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0x1AFF68A5),
+                child: Icon(Icons.camera_alt_outlined,
+                    color: AppColors.brandPrimary),
+              ),
+              title: const Text('Camera'),
+              subtitle: const Text('Take a photo of the document'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0x1AFF68A5),
+                child: Icon(Icons.photo_library_outlined,
+                    color: AppColors.brandPrimary),
+              ),
+              title: const Text('Gallery'),
+              subtitle: const Text('Choose an existing photo'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Full upload→review dialog.
+  /// Starts OCR immediately while the dialog is visible.
+  Future<void> _showOcrProcessDialog(XFile imageFile) async {
+    var dialogState = _OcrDialogState.loading;
+    OcrResult? ocrResult;
+    String? ocrError;
+    StateSetter? _setS;
+
+    void startOcr() {
+      _geminiService.extractMotherRegistrationData(imageFile).then((r) {
+        _setS?.call(() {
+          if (!r.hasAnyValue) {
+            ocrError = 'No recognisable patient data found in the image.\n'
+                'Try a clearer or higher-quality photo.';
+            dialogState = _OcrDialogState.error;
+          } else {
+            ocrResult = r;
+            dialogState = _OcrDialogState.results;
+          }
+        });
+      }).catchError((dynamic e) {
+        _setS?.call(() {
+          ocrError = e.toString().replaceFirst('Exception: ', '');
+          dialogState = _OcrDialogState.error;
+        });
+      });
+    }
+
+    startOcr();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          _setS = setS;
+          return Dialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Header ─────────────────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.brandPrimary, Color(0xFFE91E8C)],
+                    ),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        switch (dialogState) {
+                          _OcrDialogState.loading =>
+                            Icons.cloud_upload_outlined,
+                          _OcrDialogState.results =>
+                            Icons.check_circle_outline_rounded,
+                          _OcrDialogState.error => Icons.error_outline_rounded,
+                        },
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              switch (dialogState) {
+                                _OcrDialogState.loading =>
+                                  'Scanning Document...',
+                                _OcrDialogState.results => 'Data Extracted',
+                                _OcrDialogState.error => 'Scan Failed',
+                              },
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Text(
+                              switch (dialogState) {
+                                _OcrDialogState.loading =>
+                                  'Uploading and analysing with Gemini...',
+                                _OcrDialogState.results =>
+                                  'Review the extracted fields below',
+                                _OcrDialogState.error =>
+                                  'An error occurred during scanning',
+                              },
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (dialogState != _OcrDialogState.loading)
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          icon: const Icon(Icons.close,
+                              color: Colors.white70, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 36, minHeight: 36),
+                        ),
+                    ],
+                  ),
+                ),
+                // ── Body ───────────────────────────────────────────────
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: switch (dialogState) {
+                      _OcrDialogState.loading => _ocrLoadingBody(imageFile),
+                      _OcrDialogState.results => _buildOcrFieldList(ocrResult!),
+                      _OcrDialogState.error => _ocrErrorBody(ocrError!),
+                    },
+                  ),
+                ),
+                // ── Footer ─────────────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  decoration: const BoxDecoration(
+                    border:
+                        Border(top: BorderSide(color: AppColors.borderPrimary)),
+                  ),
+                  child: switch (dialogState) {
+                    _OcrDialogState.loading => const SizedBox.shrink(),
+                    _OcrDialogState.results => Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.textSecondary,
+                                side: const BorderSide(
+                                    color: AppColors.borderPrimary),
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              icon: const Icon(Icons.check_rounded, size: 16),
+                              label: const Text('Apply to Form'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.brandPrimary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    _OcrDialogState.error => Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.textSecondary,
+                                side: const BorderSide(
+                                    color: AppColors.borderPrimary),
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text('Dismiss'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                setS(() {
+                                  dialogState = _OcrDialogState.loading;
+                                  ocrError = null;
+                                });
+                                startOcr();
+                              },
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.error,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    if (confirmed == true && mounted && ocrResult != null) {
+      _applyOcrResult(ocrResult!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Form autofilled from OCR scan. Please review & edit as needed.'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Color(0xFF4CAF50),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _ocrLoadingBody(XFile imageFile) => Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Image preview
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: FutureBuilder<Uint8List>(
+              future: imageFile.readAsBytes(),
+              builder: (ctx, snap) {
+                if (snap.hasData) {
+                  return Image.memory(
+                    snap.data!,
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  );
+                }
+                return Container(
+                  height: 180,
+                  color: AppColors.bgSecondary,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.brandPrimary),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
+          const CircularProgressIndicator(
+            color: AppColors.brandPrimary,
+            strokeWidth: 3,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Analysing with Gemini AI...',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Extracting patient data from the image',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 20),
+          _ocrStep(number: 1, label: 'Image uploaded', done: true),
+          _ocrStep(
+              number: 2, label: 'Gemini reading document...', loading: true),
+          _ocrStep(number: 3, label: 'Populating form fields'),
+        ],
+      );
+
+  Widget _ocrStep({
+    required int number,
+    required String label,
+    bool done = false,
+    bool loading = false,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: done
+                  ? const Icon(Icons.check_circle_rounded,
+                      color: Color(0xFF4CAF50), size: 20)
+                  : loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.brandPrimary),
+                        )
+                      : CircleAvatar(
+                          radius: 10,
+                          backgroundColor: AppColors.borderPrimary,
+                          child: Text(
+                            '$number',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: (done || loading)
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+                fontWeight: loading ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _ocrErrorBody(String message) => Column(
+        children: [
+          const Icon(Icons.error_outline_rounded,
+              color: AppColors.error, size: 52),
+          const SizedBox(height: 12),
+          const Text(
+            'Scan Failed',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: AppColors.error,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+            ),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppColors.error),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Tips for better results:',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 6),
+          _ocrTip('Ensure the document is well lit'),
+          _ocrTip('Keep the camera steady and in focus'),
+          _ocrTip('Make sure all text is visible and unobstructed'),
+        ],
+      );
+
+  Widget _ocrTip(String text) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            const Icon(Icons.lightbulb_outline,
+                size: 14, color: AppColors.brandAccent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildOcrFieldList(OcrResult r) {
+    final rows = <Widget>[];
+
+    void section(String title) {
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 12));
+      rows.add(_ocrSectionHeader(title));
+    }
+
+    void field(String label, String? value) {
+      if (value == null) return;
+      rows.add(_ocrFieldRow(label, value));
+    }
+
+    section('Personal Information');
+    field('First Name', r.firstName);
+    field('Middle Name', r.middleName);
+    field('Last Name', r.lastName);
+    field('Extension', r.extensionName);
+    field('Phone', r.phone);
+    field('Email', r.email);
+
+    section('Address');
+    field('House No.', r.houseNumber);
+    field('Street', r.street);
+    field('Barangay', r.barangay);
+    field('City', r.city);
+    field('Province', r.province);
+
+    section('Vital Statistics');
+    field('Birthdate', r.birthdate);
+    field('Height', r.heightCm != null ? '${r.heightCm} cm' : null);
+    field('Weight', r.weightKg != null ? '${r.weightKg} kg' : null);
+    field('Blood Type', r.bloodType);
+
+    section('Gestational Info');
+    field('LMP', r.lmpDate);
+    field('EDD', r.eddDate);
+
+    if (r.emergencyContacts.isNotEmpty) {
+      section('Emergency Contacts (${r.emergencyContacts.length})');
+      for (final c in r.emergencyContacts) {
+        rows.add(_ocrFieldRow(
+          '${c.firstName} ${c.lastName}',
+          '${c.phoneNumber}${c.affiliation != null ? ' · ${c.affiliation}' : ''}',
+        ));
+      }
+    }
+
+    if (r.medicalConditions.isNotEmpty) {
+      section('Medical Conditions (${r.medicalConditions.length})');
+      for (final m in r.medicalConditions) {
+        rows.add(_ocrFieldRow(
+          m.conditionName,
+          '${m.status}${m.diagnosisDate != null ? ' · ${m.diagnosisDate}' : ''}',
+        ));
+      }
+    }
+
+    if (r.allergies.isNotEmpty) {
+      section('Allergies (${r.allergies.length})');
+      for (final a in r.allergies) {
+        rows.add(_ocrFieldRow(
+          a.allergen,
+          '${a.status}${a.treatment != null ? ' · ${a.treatment}' : ''}',
+        ));
+      }
+    }
+
+    if (r.pastPregnancies.isNotEmpty) {
+      section('Past Pregnancies (${r.pastPregnancies.length})');
+      for (final p in r.pastPregnancies) {
+        rows.add(_ocrFieldRow(
+          _outcomeLabel(p.outcome),
+          '${p.outcomeDate}${p.placeOfDelivery != null ? ' · ${p.placeOfDelivery}' : ''}',
+        ));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
+    );
+  }
+
+  Widget _ocrSectionHeader(String title) => Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 3,
+              height: 12,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Text(
+              title.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _ocrFieldRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.check_circle_outline_rounded,
+                size: 15, color: Color(0xFF4CAF50)),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 110,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  void _applyOcrResult(OcrResult r) {
+    setState(() {
+      // Step 0 — Personal
+      if (r.firstName != null) _firstNameCtrl.text = r.firstName!;
+      if (r.middleName != null) _middleNameCtrl.text = r.middleName!;
+      if (r.lastName != null) _lastNameCtrl.text = r.lastName!;
+      if (r.extensionName != null) _extNameCtrl.text = r.extensionName!;
+      if (r.phone != null) {
+        _phoneCtrl.text = r.phone!;
+        _onPhoneChanged(r.phone!);
+      }
+      if (r.email != null) {
+        _emailCtrl.text = r.email!;
+        _onEmailChanged(r.email!);
+      }
+
+      // Step 1 — Address
+      if (r.houseNumber != null) _houseCtrl.text = r.houseNumber!;
+      if (r.street != null) _streetCtrl.text = r.street!;
+      if (r.barangay != null) {
+        final match = _bhcBarangays
+            .where((b) =>
+                b.toLowerCase().contains(r.barangay!.toLowerCase()) ||
+                r.barangay!.toLowerCase().contains(b.toLowerCase()))
+            .firstOrNull;
+        if (match != null) {
+          _selectedBarangay = match;
+          _barangayCtrl.text = match;
+          _addressSameAsBhc = false;
+        } else {
+          _addressSameAsBhc = false;
+          _selectedBarangay = null;
+          _barangayCtrl.text = r.barangay!;
+        }
+      }
+      if (r.city != null) {
+        _cityCtrl.text = r.city!;
+        _addressSameAsBhc = false;
+      }
+      if (r.province != null) {
+        _provinceCtrl.text = r.province!;
+        _addressSameAsBhc = false;
+      }
+
+      // Step 3 — Vitals
+      if (r.birthdate != null) {
+        final parsed = DateTime.tryParse(r.birthdate!);
+        if (parsed != null) {
+          _birthdate = parsed;
+          _birthdateCtrl.text = _dateFmt.format(parsed);
+        }
+      }
+      if (r.heightCm != null) {
+        _heightCtrl.text = r.heightCm!.toStringAsFixed(1);
+      }
+      if (r.weightKg != null) {
+        _weightCtrl.text = r.weightKg!.toStringAsFixed(1);
+      }
+      if (r.bloodType != null) _bloodType = r.bloodType;
+
+      // Step 4 — Medical Conditions
+      for (final m in r.medicalConditions) {
+        if (m.conditionName.isEmpty) continue;
+        final mc = _MedicalCondition(m.conditionName)
+          ..status = m.status
+          ..remarks = m.remarks;
+        if (m.diagnosisDate != null) {
+          mc.diagnosisDate = DateTime.tryParse(m.diagnosisDate!);
+        }
+        _medicalConditions.add(mc);
+      }
+
+      // Step 5 — Allergies
+      for (final a in r.allergies) {
+        if (a.allergen.isEmpty) continue;
+        final al = _Allergy(a.allergen)
+          ..status = a.status
+          ..treatment = a.treatment
+          ..remarks = a.remarks;
+        if (a.diagnosisDate != null) {
+          al.diagnosisDate = DateTime.tryParse(a.diagnosisDate!);
+        }
+        _allergies.add(al);
+      }
+
+      // Step 2 — Emergency Contacts
+      for (final ec in r.emergencyContacts) {
+        if (ec.firstName.isEmpty ||
+            ec.lastName.isEmpty ||
+            ec.phoneNumber.isEmpty) continue;
+        _emergencyContacts.add(
+          _EmergencyContact()
+            ..firstName = ec.firstName
+            ..middleName = ec.middleName
+            ..lastName = ec.lastName
+            ..extensionName = ec.extensionName
+            ..phoneNumber = ec.phoneNumber
+            ..affiliation = ec.affiliation,
+        );
+      }
+
+      // Step 6 — Pregnancy History
+      for (final p in r.pastPregnancies) {
+        if (p.outcomeDate.isEmpty) continue;
+        final date = DateTime.tryParse(p.outcomeDate);
+        if (date == null) continue;
+        _pastPregnancies.add(
+          _PastPregnancy(outcome: p.outcome, outcomeDate: date)
+            ..isEstimated = p.isEstimated
+            ..gestationalAgeAtEnd = p.gestationalAgeAtEnd
+            ..placeOfDelivery = p.placeOfDelivery
+            ..deliveryMethod = p.deliveryMethod,
+        );
+      }
+      if (_pastPregnancies.isNotEmpty) _hasPastPregnancy = true;
+
+      // Step 7 — Gestational Info
+      if (r.lmpDate != null) {
+        final lmp = DateTime.tryParse(r.lmpDate!);
+        if (lmp != null) _updateFromLmp(lmp);
+      } else if (r.eddDate != null) {
+        final edd = DateTime.tryParse(r.eddDate!);
+        if (edd != null) _updateFromEdd(edd);
+      }
+    });
+  }
 
   Future<void> _loadContext() async {
     try {
@@ -383,14 +1142,35 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
       case 3:
         final issues = <String>[];
-        if (_birthdate == null) issues.add('Birthdate');
+        if (_birthdate == null) {
+          issues.add('Birthdate');
+        } else {
+          final age =
+              (DateTime.now().difference(_birthdate!).inDays / 365.25).floor();
+          if (age < 10 || age > 50) {
+            issues.add(
+                'Maternal age ($age yrs) is outside the possible range for pregnancy (10–50 yrs)');
+          }
+        }
         if (double.tryParse(_heightCtrl.text.trim()) == null) {
           issues.add('Height (cm)');
+        } else {
+          final h = double.parse(_heightCtrl.text.trim());
+          if (h < 100 || h > 220) {
+            issues.add(
+                'Height must be between 100–220 cm (entered: ${h.toStringAsFixed(0)} cm)');
+          }
         }
         if (double.tryParse(_weightCtrl.text.trim()) == null) {
           issues.add('Weight (kg)');
+        } else {
+          final w = double.parse(_weightCtrl.text.trim());
+          if (w < 30 || w > 200) {
+            issues.add(
+                'Weight must be between 30–200 kg (entered: ${w.toStringAsFixed(0)} kg)');
+          }
         }
-        if (issues.isNotEmpty) msg = 'Please provide: ${issues.join(', ')}.';
+        if (issues.isNotEmpty) msg = 'Please fix: ${issues.join('; ')}.';
         break;
 
       case 6:
@@ -419,6 +1199,36 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           msg = 'Enter gestation in weeks or days.';
         } else if (_lmp == null || _edd == null) {
           msg = 'Unable to compute LMP and EDD. Please re-enter.';
+        } else {
+          // GA > 42 weeks is biologically impossible
+          final gaWeeks = DateTime.now().difference(_lmp!).inDays ~/ 7;
+          if (gaWeeks > 42) {
+            msg =
+                'Gestational age ($gaWeeks weeks) exceeds 42 weeks — biologically impossible. Please verify the LMP date.';
+          }
+          // Pregnancy interval check against the most recent past pregnancy
+          if (msg == null && _pastPregnancies.isNotEmpty) {
+            final sorted = [..._pastPregnancies]
+              ..sort((a, b) => b.outcomeDate.compareTo(a.outcomeDate));
+            final last = sorted.first;
+            final interval = _lmp!.difference(last.outcomeDate).inDays;
+            // Impossible thresholds per outcome (anything below = biologically impossible)
+            const impossibleThresholds = {
+              'live_birth': 1,
+              'stillbirth': 30,
+              'miscarriage': 30,
+              'abortion': 20,
+              'ectopic': 20,
+            };
+            final threshold = impossibleThresholds[last.outcome] ?? 30;
+            if (interval < 0) {
+              msg =
+                  'LMP date is before the last recorded past pregnancy end date. Please verify your dates.';
+            } else if (interval < threshold) {
+              msg =
+                  'Pregnancy interval of $interval days after the last ${_outcomeLabel(last.outcome)} is biologically impossible (minimum: $threshold days).';
+            }
+          }
         }
         break;
 
@@ -630,6 +1440,18 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     'Summary & Submit',
   ];
 
+  static const _stepSubtitles = [
+    'Name, phone, email and login credentials',
+    'Current place of residence',
+    'Who to contact in an emergency',
+    'Age, height, weight and blood type',
+    'Known diagnoses and health conditions',
+    'Known allergens and reactions',
+    'Previous pregnancy outcomes',
+    'Current pregnancy dating',
+    'Review before saving',
+  ];
+
   // â”€â”€ Step content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _pageFor(int index) {
@@ -666,6 +1488,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 hintText: 'First Name',
                 controller: _firstNameCtrl,
                 isRequired: true,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-\']")),
+                  LengthLimitingTextInputFormatter(100),
+                ],
               ),
             ),
             const SizedBox(width: 10),
@@ -674,6 +1500,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               child: AppInputField(
                 hintText: 'Middle',
                 controller: _middleNameCtrl,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-\']")),
+                  LengthLimitingTextInputFormatter(100),
+                ],
               ),
             ),
           ],
@@ -688,6 +1518,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 hintText: 'Last Name',
                 controller: _lastNameCtrl,
                 isRequired: true,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-\']")),
+                  LengthLimitingTextInputFormatter(100),
+                ],
               ),
             ),
             const SizedBox(width: 10),
@@ -696,6 +1530,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               child: AppInputField(
                 hintText: 'Ext. (Jr., III)',
                 controller: _extNameCtrl,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                      RegExp(r'[a-zA-Z\s\-\.\,]')),
+                  LengthLimitingTextInputFormatter(20),
+                ],
               ),
             ),
           ],
@@ -724,25 +1563,28 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         ),
         if (_emailChecking) ...[
           const SizedBox(height: 6),
-          const Row(
-            children: [
-              SizedBox(
-                width: 13,
-                height: 13,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.8,
-                  color: AppColors.brandAccent,
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Row(
+              children: const [
+                SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.8,
+                    color: AppColors.brandAccent,
+                  ),
                 ),
-              ),
-              SizedBox(width: 8),
-              Text(
-                'Checking availability...',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
+                SizedBox(width: 8),
+                Text(
+                  'Checking availability...',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
         const SizedBox(height: 12),
@@ -753,6 +1595,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: _passwordFocus.hasFocus
+                  ? AppColors.brandPrimary
+                  : Colors.transparent,
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.06),
@@ -772,7 +1620,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               Expanded(
                 child: TextField(
                   controller: _passwordCtrl,
+                  focusNode: _passwordFocus,
                   obscureText: _obscurePassword,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     hintText: 'Temporary Password *',
@@ -811,13 +1661,16 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        const Padding(
-          padding: EdgeInsets.only(left: 16),
-          child: Text(
-            'Tap the wand icon to auto-generate a secure password.',
-            style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        if (_passwordCtrl.text.isNotEmpty)
+          _passwordStrengthBar()
+        else
+          const Padding(
+            padding: EdgeInsets.only(left: 16),
+            child: Text(
+              'Tap the wand icon to auto-generate a secure password.',
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1025,6 +1878,15 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               ),
             ),
           ),
+          if (age < 10 || age > 50)
+            _riskHint(
+              'Maternal age ($age yrs) is outside the possible range (10–50).',
+              isError: true,
+            )
+          else if (age < 18)
+            _riskHint('High-risk: adolescent pregnancy (under 18).')
+          else if (age > 35)
+            _riskHint('Advanced maternal age (>35) — high-risk pregnancy.'),
         ],
         const SizedBox(height: 20),
         _sectionLabel('Body Measurements'),
@@ -1041,6 +1903,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  LengthLimitingTextInputFormatter(5),
                 ],
                 onChanged: (_) => setState(() {}),
               ),
@@ -1056,6 +1919,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  LengthLimitingTextInputFormatter(5),
                 ],
                 onChanged: (_) => setState(() {}),
               ),
@@ -1066,14 +1930,38 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.only(left: 16),
-            child: Text(
-              'BMI: ${bmi.toStringAsFixed(1)}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
+            child: Row(
+              children: [
+                Text(
+                  'BMI: ${bmi.toStringAsFixed(1)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _bmiTag(bmi),
+              ],
             ),
           ),
+          // Height risk hint
+          if (h != null && (h < 100 || h > 220))
+            _riskHint(
+              'Height (${h.toStringAsFixed(0)} cm) is outside the possible range (100–220 cm).',
+              isError: true,
+            )
+          else if (h != null && h < 140)
+            _riskHint('Unusually short height (<140 cm) — verify entry.'),
+          // Weight risk hint
+          if (w != null && (w < 30 || w > 200))
+            _riskHint(
+              'Weight (${w.toStringAsFixed(0)} kg) is outside the possible range (30–200 kg).',
+              isError: true,
+            )
+          else if (w != null && w < 46)
+            _riskHint('Low weight (<46 kg) — high-risk nutrition concern.')
+          else if (w != null && w > 90)
+            _riskHint('High weight (>90 kg) — high-risk for complications.'),
         ],
         const SizedBox(height: 20),
         _sectionLabel('Blood Type (optional)'),
@@ -1425,6 +2313,21 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         ),
         const SizedBox(height: 8),
         _derivedRow(Icons.timer_outlined, 'AOG', _formatAog()),
+        if (_lmp != null)
+          Builder(builder: (_) {
+            final weeks = DateTime.now().difference(_lmp!).inDays ~/ 7;
+            if (weeks > 42) {
+              return _riskHint(
+                'Gestational age ($weeks weeks) exceeds 42 weeks — biologically impossible. Please verify LMP.',
+                isError: true,
+              );
+            }
+            if (weeks == 42) {
+              return _riskHint(
+                  'Post-term pregnancy (42 weeks) — high-risk, monitor closely.');
+            }
+            return const SizedBox.shrink();
+          }),
       ],
     );
   }
@@ -1819,7 +2722,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         builder: (ctx, setS) {
           final needsDelivery =
               outcome == 'live_birth' || outcome == 'stillbirth';
+          final gaWeeks = int.tryParse(gaCtrl.text.trim());
+          final gaValid = gaCtrl.text.trim().isEmpty ||
+              (gaWeeks != null && gaWeeks >= 0 && gaWeeks <= 42);
           final isValid = outcomeDate != null &&
+              gaValid &&
               (!needsDelivery ||
                   (placeCtrl.text.trim().isNotEmpty && deliveryMethod != null));
 
@@ -1875,6 +2782,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     'Gestational age at outcome (weeks)',
                     gaCtrl,
                     keyboard: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
+                    onChanged: (_) => setS(() {}),
+                    errorText: gaCtrl.text.trim().isNotEmpty &&
+                            (int.tryParse(gaCtrl.text.trim()) == null ||
+                                int.parse(gaCtrl.text.trim()) < 0 ||
+                                int.parse(gaCtrl.text.trim()) > 42)
+                        ? 'Must be 0–42 weeks'
+                        : null,
                   ),
                   if (needsDelivery) ...[
                     _modalField(
@@ -1945,16 +2863,139 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         _ => outcome,
       };
 
+  /// Inline risk/warning chip displayed under input fields.
+  /// [isError] = red (impossible), false = amber (high-risk warning).
+  Widget _riskHint(String text, {bool isError = false}) => Padding(
+        padding: const EdgeInsets.only(left: 16, top: 3),
+        child: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.warning_amber_rounded,
+              size: 13,
+              color: isError ? AppColors.error : AppColors.warning,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isError ? AppColors.error : AppColors.warning,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  int _passwordStrengthLevel() {
+    final pw = _passwordCtrl.text;
+    if (pw.isEmpty) return 0;
+    if (pw.length < 8) return 1;
+    int score = 1;
+    if (RegExp(r'[A-Z]').hasMatch(pw)) score++;
+    if (RegExp(r'[0-9]').hasMatch(pw)) score++;
+    if (RegExp(r'[^a-zA-Z0-9]').hasMatch(pw)) score++;
+    return score.clamp(1, 3);
+  }
+
+  Widget _passwordStrengthBar() {
+    final level = _passwordStrengthLevel();
+    const labels = ['', 'Weak', 'Fair', 'Strong'];
+    final colors = [
+      Colors.transparent,
+      AppColors.error,
+      AppColors.warning,
+      const Color(0xFF4CAF50),
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, top: 4),
+      child: Row(
+        children: [
+          ...List.generate(
+            3,
+            (i) => Expanded(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                height: 3,
+                margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
+                decoration: BoxDecoration(
+                  color: i < level ? colors[level] : AppColors.borderPrimary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            labels[level],
+            style: TextStyle(
+              fontSize: 11,
+              color: colors[level],
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bmiTag(double bmi) {
+    final String label;
+    final Color color;
+    if (bmi < 18.5) {
+      label = 'Underweight';
+      color = AppColors.warning;
+    } else if (bmi < 25) {
+      label = 'Normal';
+      color = const Color(0xFF4CAF50);
+    } else if (bmi < 30) {
+      label = 'Overweight';
+      color = AppColors.warning;
+    } else {
+      label = 'Obese';
+      color = AppColors.error;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
   Widget _sectionLabel(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          text.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textSecondary,
-            letterSpacing: 1.3,
-          ),
+        child: Row(
+          children: [
+            Container(
+              width: 3,
+              height: 12,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Text(
+              text.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+                letterSpacing: 1.3,
+              ),
+            ),
+          ],
         ),
       );
 
@@ -2383,16 +3424,38 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     required String label,
     required VoidCallback onTap,
   }) =>
-      ListTile(
-        contentPadding: EdgeInsets.zero,
-        dense: true,
-        title: Text(label, style: const TextStyle(fontSize: 13)),
-        trailing: const Icon(
-          Icons.calendar_today_outlined,
-          size: 17,
-          color: AppColors.brandAccent,
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.bgPrimary,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderPrimary),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.calendar_today_outlined,
+                  size: 17,
+                  color: AppColors.brandAccent,
+                ),
+              ],
+            ),
+          ),
         ),
-        onTap: onTap,
       );
 
   Widget _modalDropdown(
@@ -2465,6 +3528,22 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton.icon(
+              onPressed: _startOcrFlow,
+              icon: const Icon(
+                Icons.document_scanner_outlined,
+                size: 18,
+              ),
+              label: const Text('OCR'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+              ),
+            ),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: AppColors.borderPrimary),
@@ -2499,11 +3578,20 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     color: AppColors.brandText,
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  _stepSubtitles[_step],
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   'Step ${_step + 1} of $_totalSteps',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: AppColors.textSecondary,
                   ),
                 ),
@@ -2562,13 +3650,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   child: SizedBox(
                     height: 48,
                     child: _step < _totalSteps - 1
-                        ? ElevatedButton.icon(
+                        ? ElevatedButton(
                             onPressed: _submitting ? null : _goNext,
-                            icon: const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 13,
-                            ),
-                            label: const Text('Next'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.brandPrimary,
                               foregroundColor: Colors.white,
@@ -2576,6 +3659,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                               ),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text('Next'),
+                                SizedBox(width: 6),
+                                Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 13,
+                                ),
+                              ],
                             ),
                           )
                         : ElevatedButton.icon(
