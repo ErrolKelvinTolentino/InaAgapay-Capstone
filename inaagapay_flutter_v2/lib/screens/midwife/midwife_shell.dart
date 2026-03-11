@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_storage.dart';
 import 'midwife/midwife_dashboard.dart';
-import 'midwife/midwife_mother_list.dart';
-import 'midwife/midwife_records.dart';
-import 'midwife/midwife_calendar.dart';
+import 'midwife_mothers_screen.dart';
+import 'midwife_children_screen.dart';
+import 'midwife_schedules_screen.dart';
 
 class MidwifeShell extends StatefulWidget {
   const MidwifeShell({super.key});
@@ -17,19 +17,25 @@ class MidwifeShell extends StatefulWidget {
 class _MidwifeShellState extends State<MidwifeShell> {
   int _currentIndex = 0;
 
-  // Remove const from this list
-  final List<Widget> _screens = [
-    const MidwifeDashboard(),
-    const MidwifeMotherList(),
-    const MidwifeRecords(),
-    const MidwifeCalendar(),
+  final List<Widget> _screens = const [
+    MidwifeDashboard(),
+    MidwifeMothersScreen(),
+    MidwifeChildrenScreen(),
+    MidwifeSchedulesScreen(),
   ];
 
   final List<String> _titles = const [
-    'Dashboard',
+    'Home',
     'Mothers',
-    'Records',
-    'Calendar',
+    'Children',
+    'Schedules',
+  ];
+
+  final List<IconData> _icons = const [
+    Icons.dashboard_rounded,
+    Icons.pregnant_woman_rounded,
+    Icons.child_care_rounded,
+    Icons.calendar_today_rounded,
   ];
 
   Future<void> _logout() async {
@@ -50,7 +56,7 @@ class _MidwifeShellState extends State<MidwifeShell> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: AppColors.brandSecondary,
+        backgroundColor: AppColors.brandPrimary,
         elevation: 0,
         actions: [
           IconButton(
@@ -70,30 +76,14 @@ class _MidwifeShellState extends State<MidwifeShell> {
         },
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
-        selectedItemColor: AppColors.brandSecondary,
+        selectedItemColor: AppColors.brandPrimary,
         unselectedItemColor: AppColors.textSecondary,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people_outline),
-            activeIcon: Icon(Icons.people),
-            label: 'Mothers',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.folder_outlined),
-            activeIcon: Icon(Icons.folder),
-            label: 'Records',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
-            label: 'Calendar',
-          ),
-        ],
+        items: List.generate(_titles.length, (index) {
+          return BottomNavigationBarItem(
+            icon: Icon(_icons[index]),
+            label: _titles[index],
+          );
+        }),
       ),
     );
   }

@@ -5,6 +5,71 @@ import 'package:flutter/foundation.dart';
 class SupabaseService {
   static SupabaseClient get client => Supabase.instance.client;
   
+// Add to SupabaseService class
+static Future<Map<String, dynamic>> getMidwifeContext(int accountId) async {
+  try {
+    if (kDebugMode) {
+      print('=== GET MIDWIFE CONTEXT ===');
+      print('Account ID: $accountId');
+    }
+
+    // Get midwife details
+    final midwifeResponse = await client
+        .from('midwives')
+        .select('''
+          midwife_id,
+          assigned_bhc_id,
+          bhc!inner (
+            bhc_name
+          )
+        ''')
+        .eq('account_id', accountId)
+        .maybeSingle();
+
+    if (midwifeResponse == null) {
+      return {
+        'success': false,
+        'message': 'Midwife record not found',
+      };
+    }
+
+    final bhc = midwifeResponse['bhc'] as Map?;
+
+    return {
+      'success': true,
+      'midwife_id': midwifeResponse['midwife_id'],
+      'assigned_bhc_id': midwifeResponse['assigned_bhc_id'],
+      'bhc_name': bhc?['bhc_name'] ?? '',
+    };
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error getting midwife context: $e');
+    }
+    return {
+      'success': false,
+      'message': 'Failed to get midwife context: ${e.toString()}',
+    };
+  }
+}
+
+// Add email availability check
+static Future<bool> isEmailAvailable(String email) async {
+  try {
+    final result = await client
+        .from('accounts')
+        .select('account_id')
+        .eq('email_address', email)
+        .maybeSingle();
+    
+    return result == null;
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error checking email: $e');
+    }
+    return false;
+  }
+}
+
   // Generate 6-digit OTP code
   static String _generateOTP() {
     final random = Random();
@@ -722,3 +787,4 @@ class SupabaseService {
     await client.auth.signOut();
   }
 }
+

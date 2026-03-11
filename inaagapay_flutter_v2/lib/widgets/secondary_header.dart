@@ -1,3 +1,4 @@
+// lib/widgets/secondary_header.dart
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -14,27 +15,26 @@ class SecondaryHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          if (onBack != null)
+          if (onBack != null) ...[
             IconButton(
-              icon: const Icon(Icons.arrow_back),
-              color: AppColors.textPrimary,
+              icon: const Icon(Icons.arrow_back_ios, size: 18),
               onPressed: onBack,
+              color: AppColors.textPrimary,
             ),
+          ],
           Expanded(
             child: Text(
               title,
               style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
-              textAlign: TextAlign.center,
             ),
           ),
-          if (onBack != null) const SizedBox(width: 48), // Balance the header
         ],
       ),
     );

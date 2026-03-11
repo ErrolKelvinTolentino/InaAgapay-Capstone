@@ -1,3 +1,4 @@
+// lib/widgets/otp_input_field.dart
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -16,48 +17,38 @@ class OtpInputField extends StatefulWidget {
 }
 
 class _OtpInputFieldState extends State<OtpInputField> {
-  late List<TextEditingController> controllers;
-  late List<FocusNode> focusNodes;
+  final List<TextEditingController> _controllers = List.generate(
+    6,
+    (index) => TextEditingController(),
+  );
+  final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
 
   @override
   void initState() {
     super.initState();
-    controllers = List.generate(6, (_) => TextEditingController());
-    focusNodes = List.generate(6, (_) => FocusNode());
-
     for (int i = 0; i < 6; i++) {
-      controllers[i].addListener(() => _onTextChanged(i));
+      _controllers[i].addListener(_onChange);
     }
   }
 
-  void _onTextChanged(int index) {
-    if (controllers[index].text.length == 1) {
-      if (index < 5) {
-        focusNodes[index + 1].requestFocus();
-      } else {
-        focusNodes[index].unfocus();
-      }
-    } else if (controllers[index].text.isEmpty && index > 0) {
-      focusNodes[index - 1].requestFocus();
+  void _onChange() {
+    String code = '';
+    for (var controller in _controllers) {
+      code += controller.text;
     }
-
-    // Combine all digits
-    String otp = '';
-    for (var controller in controllers) {
-      otp += controller.text;
-    }
-    widget.onChanged(otp);
+    widget.onChanged(code);
   }
 
-  @override
-  void dispose() {
-    for (var controller in controllers) {
-      controller.dispose();
+  void _onDigitEntered(int index, String value) {
+    if (value.isNotEmpty && index < 5) {
+      _focusNodes[index + 1].requestFocus();
     }
-    for (var node in focusNodes) {
-      node.dispose();
+  }
+
+  void _onBackspace(int index) {
+    if (index > 0 && _controllers[index].text.isEmpty) {
+      _focusNodes[index - 1].requestFocus();
     }
-    super.dispose();
   }
 
   @override
@@ -67,36 +58,51 @@ class _OtpInputFieldState extends State<OtpInputField> {
       children: List.generate(6, (index) {
         return Container(
           width: 45,
-          height: 45,
+          height: 56,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: widget.showError
                   ? AppColors.error
-                  : AppColors.textSecondary.withValues(alpha: 0.2),
+                  : (_controllers[index].text.isNotEmpty
+                      ? AppColors.brandAccent
+                      : AppColors.borderPrimary),
               width: 1.5,
             ),
           ),
           child: TextField(
-            controller: controllers[index],
-            focusNode: focusNodes[index],
+            controller: _controllers[index],
+            focusNode: _focusNodes[index],
             keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
             maxLength: 1,
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
             ),
             decoration: const InputDecoration(
               counterText: '',
               border: InputBorder.none,
             ),
-            onChanged: (_) => _onTextChanged(index),
+            onChanged: (value) {
+              _onDigitEntered(index, value);
+            },
+            onTapOutside: (event) => FocusScope.of(context).unfocus(),
           ),
         );
       }),
     );
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
   }
 }

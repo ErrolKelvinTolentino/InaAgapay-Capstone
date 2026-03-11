@@ -1,39 +1,37 @@
+// lib/widgets/password_constraints.dart
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class PasswordConstraints extends StatelessWidget {
   final String password;
 
-  const PasswordConstraints({
-    super.key,
-    required this.password,
-  });
+  const PasswordConstraints({super.key, required this.password});
+
+  bool get hasMinLength => password.length >= 8;
+  bool get hasNumber => RegExp(r'\d').hasMatch(password);
+  bool get hasUppercase => RegExp(r'[A-Z]').hasMatch(password);
+  bool get hasLowercase => RegExp(r'[a-z]').hasMatch(password);
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildConstraint(
-          'At least 8 characters',
-          password.length >= 8,
-        ),
-        const SizedBox(height: 4),
-        _buildConstraint(
-          'Contains a number',
-          RegExp(r'\d').hasMatch(password),
-        ),
-        const SizedBox(height: 4),
-        _buildConstraint(
-          'Contains uppercase letter',
-          RegExp(r'[A-Z]').hasMatch(password),
-        ),
-        const SizedBox(height: 4),
-        _buildConstraint(
-          'Contains lowercase letter',
-          RegExp(r'[a-z]').hasMatch(password),
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildConstraint('At least 8 characters', hasMinLength),
+          const SizedBox(height: 8),
+          _buildConstraint('Contains a number', hasNumber),
+          const SizedBox(height: 8),
+          _buildConstraint('Contains uppercase letter', hasUppercase),
+          const SizedBox(height: 8),
+          _buildConstraint('Contains lowercase letter', hasLowercase),
+        ],
+      ),
     );
   }
 
@@ -49,7 +47,7 @@ class PasswordConstraints extends StatelessWidget {
         Text(
           text,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 13,
             color: isMet ? AppColors.success : AppColors.textSecondary,
           ),
         ),

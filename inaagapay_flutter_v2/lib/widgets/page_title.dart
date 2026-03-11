@@ -1,3 +1,4 @@
+// lib/widgets/page_title.dart
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -18,12 +19,19 @@ class PageTitle extends StatelessWidget {
     return Row(
       children: [
         if (leadingIcon != null) ...[
-          Icon(
-            leadingIcon,
-            color: AppColors.brandAccent,
-            size: 24,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.brandAccent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              leadingIcon,
+              color: AppColors.brandAccent,
+              size: 20,
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
         ],
         Expanded(
           child: Text(
@@ -35,14 +43,19 @@ class PageTitle extends StatelessWidget {
             ),
           ),
         ),
-        if (trailingIcon != null) ...[
-          const SizedBox(width: 8),
-          Icon(
-            trailingIcon,
-            color: AppColors.success,
-            size: 24,
+        if (trailingIcon != null)
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              trailingIcon,
+              color: AppColors.success,
+              size: 18,
+            ),
           ),
-        ],
       ],
     );
   }
