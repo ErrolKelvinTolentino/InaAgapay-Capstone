@@ -1,8 +1,6 @@
 // lib/screens/midwife_shell.dart
 import 'package:flutter/material.dart';
-// Change these:
 import '../../theme/app_colors.dart';
-import '../../services/auth_storage.dart';
 import 'midwife_dashboard.dart';
 import 'midwife_mothers_screen.dart';
 import 'midwife_children_screen.dart';
@@ -39,34 +37,10 @@ class _MidwifeShellState extends State<MidwifeShell> {
     Icons.calendar_today_rounded,
   ];
 
-  Future<void> _logout() async {
-    await AuthStorage.clearAll();
-    if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        title: Text(
-          _titles[_currentIndex],
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: AppColors.brandPrimary,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,

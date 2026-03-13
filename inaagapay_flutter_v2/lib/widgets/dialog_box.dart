@@ -16,7 +16,6 @@ class DialogBox extends StatelessWidget {
     required this.title,
     required this.content,
     required this.buttonText,
-    required this.type,
     required this.onPressed,
     this.type = DialogType.info,
   });

@@ -75,7 +75,7 @@ class ChartCard extends StatelessWidget {
           // 📈 CHART
           SizedBox(
             height: 160,
-            child: GrowthLine(
+            child: GrowthLineChart(
               values: values,
               labels: labels,
               unit: unit,
