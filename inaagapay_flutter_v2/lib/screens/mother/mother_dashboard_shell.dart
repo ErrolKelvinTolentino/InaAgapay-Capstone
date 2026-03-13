@@ -19,19 +19,24 @@ class MotherDashboardShell extends StatefulWidget {
 class _MotherDashboardShellState extends State<MotherDashboardShell> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    MotherDashboard(),
-    MotherJournalScreen(),
-    MotherChildrenScreen(),
-    RecordsScreen(),
-  ];
+  late final List<Widget> _screens;
 
-  final List<String> _titles = const [
-    'HOME',
-    'JOURNAL',
-    'CHILDREN',
-    'RECORDS',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      const MotherDashboard(),
+      const MotherJournalScreen(),
+      const MotherChildrenScreen(),
+      const RecordsScreen(),
+    ];
+  }
+
+  Future<void> _logout() async {
+    await AuthStorage.clearAll();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,20 +45,11 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(72),
         child: MainHeader(
-          title: _titles[_currentIndex],
+          title: _getTitle(_currentIndex),
           onViewProfile: () => Navigator.pushNamed(context, '/profile'),
           onSettings: () => Navigator.pushNamed(context, '/settings'),
           onHelp: () => Navigator.pushNamed(context, '/help'),
-          onLogout: () async {
-            await AuthStorage.clearAll();
-            if (context.mounted) {
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/login',
-                (route) => false,
-              );
-            }
-          },
+          onLogout: _logout,
         ),
       ),
       body: _screens[_currentIndex],
@@ -92,5 +88,20 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
         ],
       ),
     );
+  }
+
+  String _getTitle(int index) {
+    switch (index) {
+      case 0:
+        return 'HOME';
+      case 1:
+        return 'JOURNAL';
+      case 2:
+        return 'CHILDREN';
+      case 3:
+        return 'RECORDS';
+      default:
+        return 'HOME';
+    }
   }
 }

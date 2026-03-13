@@ -10,44 +10,6 @@ class SupabaseService {
   // This ensures we always get the current client
   static SupabaseClient get client => Supabase.instance.client;
 
-  // Ensure session is active and restore if needed
-  static Future<bool> ensureSession() async {
-    try {
-      final session = client.auth.currentSession;
-      if (session != null) {
-        if (kDebugMode) {
-          debugPrint('✅ Session is active');
-          debugPrint('Session user ID: ${session.user.id}');
-        }
-        return true;
-      }
-      
-      // Try to restore session from token
-      final token = await AuthStorage.getToken();
-      if (token != null && token.isNotEmpty) {
-        if (kDebugMode) debugPrint('🔄 Attempting to restore session with token');
-        
-        // Set the session using the token
-        await client.auth.setSession(token);
-        
-        final newSession = client.auth.currentSession;
-        if (newSession != null) {
-          if (kDebugMode) {
-            debugPrint('✅ Session restored successfully');
-            debugPrint('Restored user ID: ${newSession.user.id}');
-          }
-          return true;
-        }
-      }
-      
-      if (kDebugMode) debugPrint('❌ No active session and no valid token');
-      return false;
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error ensuring session: $e');
-      return false;
-    }
-  }
-
   // Generate 6-digit OTP code
   static String _generateOTP() {
     final random = Random();
@@ -64,7 +26,6 @@ class SupabaseService {
     try {
       return BCrypt.checkpw(password, hash);
     } catch (e) {
-      // Fallback: plain text comparison for legacy plain-text passwords
       return password == hash;
     }
   }
@@ -82,7 +43,7 @@ class SupabaseService {
     }
   }
 
-  // Login - Works with your database schema
+  // Login - Using custom authentication with accounts table
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
     try {
@@ -98,7 +59,7 @@ class SupabaseService {
         };
       }
 
-      // First get the account with personal info
+      // Get the account with personal info
       final accountResponse = await client.from('accounts').select('''
             account_id,
             email_address,
@@ -140,21 +101,6 @@ class SupabaseService {
         return {'success': false, 'message': 'Account inactive'};
       }
 
-      // Sign in with Supabase Auth
-      final authResponse = await client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-
-      if (authResponse.user == null) {
-        return {'success': false, 'message': 'Authentication failed'};
-      }
-
-      if (kDebugMode) {
-        debugPrint('✅ Auth successful, user ID: ${authResponse.user!.id}');
-        debugPrint('Session token: ${authResponse.session?.accessToken.substring(0, 20)}...');
-      }
-
       // If mother, check if mother record exists
       Map<String, dynamic>? motherData;
       bool profileComplete = false;
@@ -181,7 +127,6 @@ class SupabaseService {
 
           if (kDebugMode) debugPrint('Mother data: $motherData');
 
-          // Determine if profile is complete
           if (motherData != null) {
             profileComplete = accountResponse['first_name'] != null &&
                 accountResponse['last_name'] != null &&
@@ -192,8 +137,8 @@ class SupabaseService {
         }
       }
 
-      // Get the token from the session
-      final token = authResponse.session?.accessToken ?? '';
+      // Generate a custom token (just a random string for session management)
+      final token = _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
 
       // Update last login token in accounts table
       try {
@@ -224,31 +169,23 @@ class SupabaseService {
       };
     } catch (e) {
       if (kDebugMode) debugPrint('Login error details: $e');
-
-      if (e.toString().contains('SocketException') ||
-          e.toString().contains('ClientException') ||
-          e.toString().contains('Connection refused')) {
-        return {
-          'success': false,
-          'message': 'Network error. Please check your internet connection.'
-        };
-      }
-
-      if (e.toString().contains('timeout')) {
-        return {
-          'success': false,
-          'message': 'Connection timeout. Server may be down.'
-        };
-      }
-
-      if (e.toString().contains('apikey')) {
-        return {
-          'success': false,
-          'message': 'API key error. Please restart the app.'
-        };
-      }
-
       return {'success': false, 'message': 'Login failed. Please try again.'};
+    }
+  }
+
+  // Ensure session is active (simplified version without Supabase Auth)
+  static Future<bool> ensureSession() async {
+    try {
+      final token = await AuthStorage.getToken();
+      if (token != null && token.isNotEmpty) {
+        if (kDebugMode) debugPrint('✅ Session token exists');
+        return true;
+      }
+      if (kDebugMode) debugPrint('❌ No session token');
+      return false;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error ensuring session: $e');
+      return false;
     }
   }
 
@@ -322,8 +259,6 @@ class SupabaseService {
       final emailSent = await sendOTPEmail(email, code);
 
       if (!emailSent) {
-        if (kDebugMode)
-          debugPrint('Failed to send email, but account was created');
         return {
           'success': true,
           'message':
@@ -354,7 +289,6 @@ class SupabaseService {
       final expires =
           DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
-      // Update the code in database
       await client
           .from('accounts')
           .update({
@@ -364,7 +298,6 @@ class SupabaseService {
           .eq('email_address', email)
           .eq('is_verified', false);
 
-      // Send email
       final emailSent = await sendOTPEmail(email, code);
 
       return {
@@ -392,14 +325,11 @@ class SupabaseService {
 
       if (account == null) return false;
 
-      // Check if code matches
       if (account['verification_code'] != code) return false;
 
-      // Check if code is expired
       final expires = DateTime.parse(account['verification_expires']);
       if (expires.isBefore(DateTime.now())) return false;
 
-      // Mark as verified
       await client.from('accounts').update({
         'is_verified': true,
         'verification_code': null,
@@ -420,7 +350,6 @@ class SupabaseService {
         debugPrint('📧 Sending password reset email to: $email');
       }
 
-      // Check if account exists
       final account = await client
           .from('accounts')
           .select('account_id')
@@ -434,18 +363,15 @@ class SupabaseService {
         };
       }
 
-      // Generate reset code
       final code = _generateOTP();
       final expires =
           DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
-      // Update account with reset code
       await client.from('accounts').update({
         'reset_code': code,
         'reset_expires': expires,
       }).eq('email_address', email);
 
-      // Send email with reset code
       final emailSent = await sendOTPEmail(email, code);
 
       return {
@@ -458,7 +384,6 @@ class SupabaseService {
       if (kDebugMode) {
         debugPrint('Error sending reset email: $e');
       }
-
       return {
         'success': false,
         'message': 'Failed to send reset email. Please try again.',
@@ -466,13 +391,12 @@ class SupabaseService {
     }
   }
 
-  // Complete mother profile - Updated with correct column names
+  // Complete mother profile
   static Future<Map<String, dynamic>> completeMotherProfile(
     int accountId,
     Map<String, dynamic> profileData,
   ) async {
     try {
-      // Update accounts table with personal info
       await client.from('accounts').update({
         'first_name': profileData['first_name'],
         'middle_name': profileData['middle_name'],
@@ -481,19 +405,16 @@ class SupabaseService {
         'phone_number': profileData['contact_number'],
       }).eq('account_id', accountId);
 
-      // Check if mother record exists
       final existingMother = await client
           .from('mothers')
           .select('mother_id')
           .eq('account_id', accountId)
           .maybeSingle();
 
-      // Parse birth date
       String? birthDateStr;
       if (profileData['birth_date'] != null &&
           profileData['birth_date'].isNotEmpty) {
         try {
-          // Handle MM/DD/YYYY format from date picker
           if (profileData['birth_date'].contains('/')) {
             final parts = profileData['birth_date'].split('/');
             if (parts.length == 3) {
@@ -504,7 +425,6 @@ class SupabaseService {
                   '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
             }
           } else {
-            // Handle YYYY-MM-DD format
             birthDateStr = profileData['birth_date'];
           }
         } catch (e) {
@@ -514,7 +434,6 @@ class SupabaseService {
       }
 
       if (existingMother == null) {
-        // Insert mother record
         await client.from('mothers').insert({
           'account_id': accountId,
           'birthdate': birthDateStr,
@@ -525,7 +444,6 @@ class SupabaseService {
           'province': profileData['province'],
         });
       } else {
-        // Update mother record
         await client.from('mothers').update({
           'birthdate': birthDateStr,
           'house_number': profileData['house_no'],
@@ -546,11 +464,10 @@ class SupabaseService {
     }
   }
 
-  // Get greeting data - Updated with correct column names
+  // Get greeting data
   static Future<Map<String, dynamic>> getGreeting(
       int accountId, String role) async {
     try {
-      // Get account info first
       final accountResponse = await client.from('accounts').select('''
             first_name,
             middle_name,
@@ -559,7 +476,6 @@ class SupabaseService {
           ''').eq('account_id', accountId).maybeSingle();
 
       if (role == 'mother') {
-        // Get mother's BHC info
         final motherResponse = await client.from('mothers').select('''
               assigned_bhc_id,
               bhc!inner (
@@ -580,7 +496,6 @@ class SupabaseService {
       }
 
       if (role == 'midwife') {
-        // Get midwife's BHC info
         final midwifeResponse = await client.from('midwives').select('''
               assigned_bhc_id,
               bhc!inner (
@@ -600,7 +515,6 @@ class SupabaseService {
         };
       }
 
-      // Admin
       return {
         'success': true,
         'first_name': accountResponse?['first_name'],
@@ -615,7 +529,7 @@ class SupabaseService {
     }
   }
 
-  // Midwife creates a new mother account (pre-verified)
+  // Midwife creates a new mother account
   static Future<Map<String, dynamic>> createMotherByMidwife({
     required String firstName,
     required String lastName,
@@ -624,7 +538,6 @@ class SupabaseService {
     String? phoneNumber,
   }) async {
     try {
-      // Check if email already exists
       final existing = await client
           .from('accounts')
           .select('account_id')
@@ -638,7 +551,6 @@ class SupabaseService {
         };
       }
 
-      // Insert account (pre-verified since midwife is creating it)
       final inserted = await client
           .from('accounts')
           .insert({
@@ -657,7 +569,6 @@ class SupabaseService {
 
       final accountId = inserted['account_id'] as int;
 
-      // Create corresponding mothers record
       await client.from('mothers').insert({
         'account_id': accountId,
         'status': 'active',
@@ -677,7 +588,7 @@ class SupabaseService {
     }
   }
 
-  // Get midwife context (midwife_id, assigned_bhc_id, bhc_name)
+  // Get midwife context
   static Future<Map<String, dynamic>> getMidwifeContext(int accountId) async {
     try {
       if (kDebugMode) {
@@ -703,7 +614,7 @@ class SupabaseService {
     }
   }
 
-  // Check whether an email address is available (not yet registered)
+  // Check email availability
   static Future<bool> isEmailAvailable(String email) async {
     try {
       final result = await client
@@ -713,11 +624,11 @@ class SupabaseService {
           .maybeSingle();
       return result == null;
     } catch (_) {
-      return true; // Assume available if check fails
+      return true;
     }
   }
 
-  // Create a fully-populated mother record from the midwife Add Mother flow
+  // Add mother full by midwife
   static Future<Map<String, dynamic>> addMotherFullByMidwife({
     required int midwifeId,
     required int assignedBhcId,
@@ -745,13 +656,11 @@ class SupabaseService {
     List<Map<String, dynamic>> pastPregnancies = const [],
   }) async {
     try {
-      // 1. Verify email is not already taken
       final emailFree = await isEmailAvailable(email);
       if (!emailFree) {
         return {'success': false, 'message': 'This email is already in use.'};
       }
 
-      // 2. Create account (pre-verified since midwife is registering)
       final accountRow = await client
           .from('accounts')
           .insert({
@@ -772,7 +681,6 @@ class SupabaseService {
 
       final accountId = accountRow['account_id'] as int;
 
-      // 3. Create mother profile record
       final motherRow = await client
           .from('mothers')
           .insert({
@@ -794,7 +702,6 @@ class SupabaseService {
 
       final motherId = motherRow['mother_id'] as int;
 
-      // 4. Emergency contacts (batch insert)
       if (emergencyContacts.isNotEmpty) {
         await client.from('emergency_contacts').insert(
               emergencyContacts
@@ -803,7 +710,6 @@ class SupabaseService {
             );
       }
 
-      // 5. Medical conditions (batch insert)
       if (medicalConditions.isNotEmpty) {
         await client.from('medical_conditions').insert(
               medicalConditions
@@ -812,14 +718,12 @@ class SupabaseService {
             );
       }
 
-      // 6. Allergies (batch insert)
       if (allergies.isNotEmpty) {
         await client.from('allergies').insert(
               allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
             );
       }
 
-      // 7. Current pregnancy
       int? pregnancyId;
       if (lmp != null && edd != null) {
         final pregRow = await client
@@ -835,7 +739,6 @@ class SupabaseService {
         pregnancyId = pregRow['pregnancy_id'] as int;
       }
 
-      // 8. Past pregnancies + deliveries
       for (final pp in pastPregnancies) {
         final pastPregRow = await client
             .from('pregnancies')
