@@ -1,10 +1,10 @@
-// Update imports at the top of the file
+// lib/screens/midwife/lab_test_analyzer_screen.dart
+
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// Change these:
 import '../../services/gemini_service.dart';
 import '../../services/auth_storage.dart';
 import '../../models/gemini_response.dart';
@@ -27,6 +27,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   bool _isLoading = false;
   bool _isSaving = false;
   String? _errorMessage;
+  String _rawResponse = '';
 
   Future<void> _pickImages() async {
     try {
@@ -41,6 +42,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
           _selectedImages.addAll(images);
           _combinedResponse = null;
           _errorMessage = null;
+          _rawResponse = '';
         });
       }
     } catch (e) {
@@ -64,6 +66,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
           _selectedImages.add(image);
           _combinedResponse = null;
           _errorMessage = null;
+          _rawResponse = '';
         });
       }
     } catch (e) {
@@ -77,6 +80,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     setState(() {
       _selectedImages.removeAt(index);
       _combinedResponse = null;
+      _rawResponse = '';
     });
   }
 
@@ -85,6 +89,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       _selectedImages.clear();
       _combinedResponse = null;
       _errorMessage = null;
+      _rawResponse = '';
     });
   }
 
@@ -100,15 +105,40 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       _isLoading = true;
       _errorMessage = null;
       _combinedResponse = null;
+      _rawResponse = '';
     });
 
     try {
       final result = await _geminiService.analyzeLabTestImages(_selectedImages);
       
+      // Store raw response for debugging
+      _rawResponse = result.description;
+      
+      // Log the response for debugging
+      if (kDebugMode) {
+        print('=== GEMINI RESPONSE ===');
+        print('Description length: ${result.description.length}');
+        print('First 500 chars: ${result.description.substring(0, min(500, result.description.length))}');
+        print('Has labResults: ${result.labResults != null}');
+        print('LabResults count: ${result.labResults?.length ?? 0}');
+        print('Has overallAssessment: ${result.overallAssessment != null}');
+      }
+      
       setState(() {
         _combinedResponse = result;
         _isLoading = false;
       });
+      
+      // If no lab results were parsed, show a warning
+      if (result.labResults == null || result.labResults!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('AI analyzed the image but could not extract structured lab results. Check the full response below.'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
@@ -152,6 +182,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
       // 1. Upload images to Supabase Storage
       final List<String> uploadedFilePaths = [];
+      final List<int> uploadedFileIds = [];
       
       for (int i = 0; i < _selectedImages.length; i++) {
         final image = _selectedImages[i];
@@ -171,7 +202,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         uploadedFilePaths.add(filePath);
         
         // 2. Create file record in files table
-        await Supabase.instance.client.from('files').insert({
+        final fileResponse = await Supabase.instance.client.from('files').insert({
           'bucket_name': 'medical-images',
           'file_path': filePath,
           'file_name': fileName,
@@ -183,7 +214,9 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
           'processing_type': 'lab_test_analysis',
           'ai_processed': true,
           'created_at': DateTime.now().toIso8601String(),
-        });
+        }).select('file_id').single();
+        
+        uploadedFileIds.add(fileResponse['file_id']);
       }
 
       // 3. Create lab test record
@@ -194,7 +227,10 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
             'lab_test_type': 'Multiple Tests',
             'lab_test_date': DateTime.now().toIso8601String().split('T')[0],
             'lab_test_location': 'Mobile Upload',
-            'remarks': _combinedResponse!.overallAssessment ?? 'Lab test analysis completed',
+            'remarks': _combinedResponse!.overallAssessment ?? 
+                      (_combinedResponse!.description.length > 500 
+                          ? _combinedResponse!.description.substring(0, 500) + '...' 
+                          : _combinedResponse!.description),
             'health_worker_name': 'Self (AI Assisted)',
             'health_worker_institution': 'Inaagapay App',
             'health_worker_profession': 'Patient',
@@ -222,13 +258,13 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
           });
 
       // 5. Link files to lab test record
-      for (String filePath in uploadedFilePaths) {
+      for (int i = 0; i < uploadedFilePaths.length; i++) {
         await Supabase.instance.client
             .from('files')
             .update({
               'reference_id': labTestId,
             })
-            .eq('file_path', filePath);
+            .eq('file_id', uploadedFileIds[i]);
       }
 
       // Show success dialog
@@ -593,10 +629,35 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                                 ),
                               )),
                             ],
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Raw Analysis Result:',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _combinedResponse!.description,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ],
+                            ),
                           ),
 
-                        if (_combinedResponse!.labResults != null && _combinedResponse!.labResults!.isNotEmpty)
-                          const SizedBox(height: 20),
+                        const SizedBox(height: 20),
 
                         // Overall Assessment
                         if (_combinedResponse!.overallAssessment != null)
@@ -743,3 +804,5 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     );
   }
 }
+
+int min(int a, int b) => a < b ? a : b;
