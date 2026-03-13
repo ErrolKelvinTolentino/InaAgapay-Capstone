@@ -4,10 +4,49 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'auth_storage.dart';
 
 class SupabaseService {
   // This ensures we always get the current client
   static SupabaseClient get client => Supabase.instance.client;
+
+  // Ensure session is active and restore if needed
+  static Future<bool> ensureSession() async {
+    try {
+      final session = client.auth.currentSession;
+      if (session != null) {
+        if (kDebugMode) {
+          debugPrint('✅ Session is active');
+          debugPrint('Session user ID: ${session.user.id}');
+        }
+        return true;
+      }
+      
+      // Try to restore session from token
+      final token = await AuthStorage.getToken();
+      if (token != null && token.isNotEmpty) {
+        if (kDebugMode) debugPrint('🔄 Attempting to restore session with token');
+        
+        // Set the session using the token
+        await client.auth.setSession(token);
+        
+        final newSession = client.auth.currentSession;
+        if (newSession != null) {
+          if (kDebugMode) {
+            debugPrint('✅ Session restored successfully');
+            debugPrint('Restored user ID: ${newSession.user.id}');
+          }
+          return true;
+        }
+      }
+      
+      if (kDebugMode) debugPrint('❌ No active session and no valid token');
+      return false;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error ensuring session: $e');
+      return false;
+    }
+  }
 
   // Generate 6-digit OTP code
   static String _generateOTP() {
@@ -101,6 +140,21 @@ class SupabaseService {
         return {'success': false, 'message': 'Account inactive'};
       }
 
+      // Sign in with Supabase Auth
+      final authResponse = await client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      if (authResponse.user == null) {
+        return {'success': false, 'message': 'Authentication failed'};
+      }
+
+      if (kDebugMode) {
+        debugPrint('✅ Auth successful, user ID: ${authResponse.user!.id}');
+        debugPrint('Session token: ${authResponse.session?.accessToken.substring(0, 20)}...');
+      }
+
       // If mother, check if mother record exists
       Map<String, dynamic>? motherData;
       bool profileComplete = false;
@@ -138,11 +192,10 @@ class SupabaseService {
         }
       }
 
-      // Generate token
-      final token =
-          _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
+      // Get the token from the session
+      final token = authResponse.session?.accessToken ?? '';
 
-      // Update last login token
+      // Update last login token in accounts table
       try {
         await client.from('accounts').update({
           'last_login_token': token,

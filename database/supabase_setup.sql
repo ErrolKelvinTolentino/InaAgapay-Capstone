@@ -541,3 +541,335 @@ ALTER TABLE allergies DISABLE ROW LEVEL SECURITY;
 ALTER TABLE mothers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancies DISABLE ROW LEVEL SECURITY;
 ALTER TABLE deliveries DISABLE ROW LEVEL SECURITY;
+
+
+--CHANGES IN THE JOURNAL ENTRIES TABLE
+
+-- Create storage bucket for journal photos if it doesn't exist
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('files', 'files', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Set up storage policy to allow authenticated users to upload files
+DROP POLICY IF EXISTS "Allow authenticated users to upload files" ON storage.objects;
+CREATE POLICY "Allow authenticated users to upload files"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'files');
+
+-- Allow users to read files
+DROP POLICY IF EXISTS "Allow public to read files" ON storage.objects;
+CREATE POLICY "Allow public to read files"
+ON storage.objects
+FOR SELECT
+TO public
+USING (bucket_id = 'files');
+
+-- Allow users to delete their own files
+DROP POLICY IF EXISTS "Allow users to delete own files" ON storage.objects;
+CREATE POLICY "Allow users to delete own files"
+ON storage.objects
+FOR DELETE
+TO authenticated
+USING (bucket_id = 'files' AND (storage.foldername(name))[1] = 'journal-photos');
+
+-- Create index for faster file lookups if not exists
+CREATE INDEX IF NOT EXISTS idx_files_reference ON files(reference_type, reference_id);
+
+--next
+
+-- First, drop existing policies
+DROP POLICY IF EXISTS "Mothers can insert their own journal entries" ON journal_entries;
+DROP POLICY IF EXISTS "Mothers can view their own journal entries" ON journal_entries;
+DROP POLICY IF EXISTS "Mothers can update their own journal entries" ON journal_entries;
+DROP POLICY IF EXISTS "Mothers can delete their own journal entries" ON journal_entries;
+
+-- Enable RLS on journal_entries table
+ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for mothers to insert their own journal entries
+CREATE POLICY "Mothers can insert their own journal entries"
+ON journal_entries
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1 
+    FROM mothers m
+    INNER JOIN accounts a ON a.account_id = m.account_id
+    WHERE m.mother_id = journal_entries.mother_id
+    AND a.account_id::text = auth.uid()::text
+  )
+);
+
+-- Create policy for mothers to view their own journal entries
+CREATE POLICY "Mothers can view their own journal entries"
+ON journal_entries
+FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 
+    FROM mothers m
+    INNER JOIN accounts a ON a.account_id = m.account_id
+    WHERE m.mother_id = journal_entries.mother_id
+    AND a.account_id::text = auth.uid()::text
+  )
+);
+
+-- Create policy for mothers to update their own journal entries
+CREATE POLICY "Mothers can update their own journal entries"
+ON journal_entries
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 
+    FROM mothers m
+    INNER JOIN accounts a ON a.account_id = m.account_id
+    WHERE m.mother_id = journal_entries.mother_id
+    AND a.account_id::text = auth.uid()::text
+  )
+);
+
+-- Create policy for mothers to delete their own journal entries
+CREATE POLICY "Mothers can delete their own journal entries"
+ON journal_entries
+FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 
+    FROM mothers m
+    INNER JOIN accounts a ON a.account_id = m.account_id
+    WHERE m.mother_id = journal_entries.mother_id
+    AND a.account_id::text = auth.uid()::text
+  )
+);
+
+-- Also update files table policies
+DROP POLICY IF EXISTS "Users can insert files" ON files;
+DROP POLICY IF EXISTS "Users can view files" ON files;
+DROP POLICY IF EXISTS "Users can delete their own files" ON files;
+
+-- Enable RLS on files table
+ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+
+-- Policy for inserting files
+CREATE POLICY "Users can insert files"
+ON files
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  uploaded_by::text = auth.uid()::text
+);
+
+-- Policy for viewing files
+CREATE POLICY "Users can view files"
+ON files
+FOR SELECT
+TO authenticated
+USING (true);
+
+-- Policy for deleting files
+CREATE POLICY "Users can delete their own files"
+ON files
+FOR DELETE
+TO authenticated
+USING (
+  uploaded_by::text = auth.uid()::text
+);
+
+--next
+
+-- First, disable RLS temporarily to test if inserts work
+ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
+
+-- Then re-enable it with a very simple policy
+ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
+
+-- Drop all existing policies
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON journal_entries;
+DROP POLICY IF EXISTS "Enable insert for mothers" ON journal_entries;
+DROP POLICY IF EXISTS "Mothers can insert their own journal entries" ON journal_entries;
+
+-- Create a single, simple policy that allows any authenticated user to insert
+CREATE POLICY "Allow authenticated inserts"
+ON journal_entries
+FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+-- Create select policy
+DROP POLICY IF EXISTS "Enable select for users based on mother_id" ON journal_entries;
+CREATE POLICY "Allow select for own entries"
+ON journal_entries
+FOR SELECT
+TO authenticated
+USING (
+  mother_id IN (
+    SELECT mother_id FROM mothers WHERE account_id::text = auth.uid()::text
+  )
+);
+
+-- Create update policy
+DROP POLICY IF EXISTS "Enable update for users based on mother_id" ON journal_entries;
+CREATE POLICY "Allow update for own entries"
+ON journal_entries
+FOR UPDATE
+TO authenticated
+USING (
+  mother_id IN (
+    SELECT mother_id FROM mothers WHERE account_id::text = auth.uid()::text
+  )
+);
+
+-- Create delete policy
+DROP POLICY IF EXISTS "Enable delete for users based on mother_id" ON journal_entries;
+CREATE POLICY "Allow delete for own entries"
+ON journal_entries
+FOR DELETE
+TO authenticated
+USING (
+  mother_id IN (
+    SELECT mother_id FROM mothers WHERE account_id::text = auth.uid()::text
+  )
+);
+
+-- Also simplify files table policies
+ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON files;
+DROP POLICY IF EXISTS "Enable select for authenticated users" ON files;
+DROP POLICY IF EXISTS "Enable delete for users based on uploaded_by" ON files;
+
+CREATE POLICY "Allow authenticated inserts on files"
+ON files
+FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+CREATE POLICY "Allow select on files"
+ON files
+FOR SELECT
+TO authenticated
+USING (true);
+
+CREATE POLICY "Allow delete on own files"
+ON files
+FOR DELETE
+TO authenticated
+USING (uploaded_by::text = auth.uid()::text);
+
+--next
+
+-- First, let's see what policies currently exist
+SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check 
+FROM pg_policies 
+WHERE tablename = 'journal_entries';
+
+-- Drop ALL existing policies to start fresh
+DROP POLICY IF EXISTS "Allow authenticated inserts" ON journal_entries;
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON journal_entries;
+DROP POLICY IF EXISTS "Mothers can insert their own journal entries" ON journal_entries;
+DROP POLICY IF EXISTS "Allow authenticated users to insert" ON journal_entries;
+
+-- Make sure RLS is enabled
+ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
+
+-- Create a VERY simple policy that allows ANY authenticated user to insert
+-- This is just for testing - we can make it more restrictive later
+CREATE POLICY "allow_all_authenticated_inserts"
+ON journal_entries
+FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+-- Create select policy
+DROP POLICY IF EXISTS "allow_select_own_entries" ON journal_entries;
+CREATE POLICY "allow_select_own_entries"
+ON journal_entries
+FOR SELECT
+TO authenticated
+USING (
+  mother_id IN (
+    SELECT mother_id FROM mothers WHERE account_id::text = auth.uid()::text
+  )
+);
+
+-- Create update policy
+DROP POLICY IF EXISTS "allow_update_own_entries" ON journal_entries;
+CREATE POLICY "allow_update_own_entries"
+ON journal_entries
+FOR UPDATE
+TO authenticated
+USING (
+  mother_id IN (
+    SELECT mother_id FROM mothers WHERE account_id::text = auth.uid()::text
+  )
+);
+
+-- Create delete policy
+DROP POLICY IF EXISTS "allow_delete_own_entries" ON journal_entries;
+CREATE POLICY "allow_delete_own_entries"
+ON journal_entries
+FOR DELETE
+TO authenticated
+USING (
+  mother_id IN (
+    SELECT mother_id FROM mothers WHERE account_id::text = auth.uid()::text
+  )
+);
+
+-- Also check files table policies
+SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check 
+FROM pg_policies 
+WHERE tablename = 'files';
+
+-- Ensure files table has proper policies
+DROP POLICY IF EXISTS "allow_all_authenticated_inserts_files" ON files;
+CREATE POLICY "allow_all_authenticated_inserts_files"
+ON files
+FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "allow_select_all_files" ON files;
+CREATE POLICY "allow_select_all_files"
+ON files
+FOR SELECT
+TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "allow_delete_own_files" ON files;
+CREATE POLICY "allow_delete_own_files"
+ON files
+FOR DELETE
+TO authenticated
+USING (uploaded_by::text = auth.uid()::text);
+
+-- Verify the current user's permissions
+SELECT auth.uid()::text as current_user_id;
+
+--next
+
+-- Drop ALL existing policies
+DROP POLICY IF EXISTS "allow_all_authenticated_inserts" ON journal_entries;
+DROP POLICY IF EXISTS "allow_select_own_entries" ON journal_entries;
+DROP POLICY IF EXISTS "allow_update_own_entries" ON journal_entries;
+DROP POLICY IF EXISTS "allow_delete_own_entries" ON journal_entries;
+DROP POLICY IF EXISTS "Allow authenticated inserts" ON journal_entries;
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON journal_entries;
+DROP POLICY IF EXISTS "Mothers can insert their own journal entries" ON journal_entries;
+DROP POLICY IF EXISTS "Allow authenticated users to insert" ON journal_entries;
+
+-- Temporarily disable RLS to test if inserts work
+ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
+
+-- For files table
+DROP POLICY IF EXISTS "allow_all_authenticated_inserts_files" ON files;
+DROP POLICY IF EXISTS "allow_select_all_files" ON files;
+DROP POLICY IF EXISTS "allow_delete_own_files" ON files;
+ALTER TABLE files DISABLE ROW LEVEL SECURITY;
+
