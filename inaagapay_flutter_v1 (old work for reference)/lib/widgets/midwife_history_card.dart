@@ -1,0 +1,163 @@
+import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
+import 'small_description.dart';
+
+class MidwifeHistoryCard extends StatelessWidget {
+  final List<MidwifeVisitItem> visits;
+  final VoidCallback? onTapItem;
+
+  const MidwifeHistoryCard({
+    super.key,
+    required this.visits,
+    this.onTapItem,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final displayedVisits = visits.take(3).toList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.bgPrimary,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        children: [
+          /// HEADER
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(
+                Icons.history,
+                size: 20,
+                color: AppColors.brandPrimary,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Recent Visits',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          /// VISIT ROWS
+          Column(
+            children: displayedVisits.map((visit) {
+              return _VisitRow(
+                visit: visit,
+                onTap: onTapItem,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ------------------------------------------------------------
+/// VISIT ROW (with subtle tap animation)
+/// ------------------------------------------------------------
+class _VisitRow extends StatelessWidget {
+  final MidwifeVisitItem visit;
+  final VoidCallback? onTap;
+
+  const _VisitRow({
+    required this.visit,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent, // 🔑 required for ripple
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        splashColor: AppColors.brandPrimary.withOpacity(0.08),
+        highlightColor: AppColors.brandPrimary.withOpacity(0.04),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              /// LEFT TEXT
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      visit.fullName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SmallDescription(text: visit.visitType),
+                  ],
+                ),
+              ),
+
+              /// RIGHT INDICATOR
+              _VisitTimeIndicator(label: visit.timeLabel),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ------------------------------------------------------------
+/// TIME INDICATOR PILL
+/// ------------------------------------------------------------
+class _VisitTimeIndicator extends StatelessWidget {
+  final String label;
+
+  const _VisitTimeIndicator({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.brandPrimary),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: AppColors.brandPrimary,
+        ),
+      ),
+    );
+  }
+}
+
+/// ------------------------------------------------------------
+/// MODEL
+/// ------------------------------------------------------------
+class MidwifeVisitItem {
+  final String fullName;
+  final String visitType;
+  final String timeLabel;
+
+  const MidwifeVisitItem({
+    required this.fullName,
+    required this.visitType,
+    required this.timeLabel,
+  });
+}

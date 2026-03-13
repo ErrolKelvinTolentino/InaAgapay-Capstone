@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/mother_profile_service.dart';
-import '../midwife/ultrasound_analyzer_screen.dart';
-import '../midwife/lab_test_analyzer_screen.dart';
+import '../midwife/add_lab_test_page.dart';
+import '../midwife/add_prenatal_checkup_screen.dart';
+import '../midwife/add_ultrasound_page.dart';
+import '../midwife/start_pregnancy_screen.dart';
 
 class MotherProfilePage extends StatefulWidget {
   final int motherId;
@@ -14,7 +16,8 @@ class MotherProfilePage extends StatefulWidget {
   State<MotherProfilePage> createState() => _MotherProfilePageState();
 }
 
-class _MotherProfilePageState extends State<MotherProfilePage> with SingleTickerProviderStateMixin {
+class _MotherProfilePageState extends State<MotherProfilePage>
+    with SingleTickerProviderStateMixin {
   late Future<Map<String, dynamic>> _profileFuture;
   late TabController _tabController;
   bool _riskExpanded = false;
@@ -115,7 +118,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
         buffer.write('📉 **Low Blood Pressure** noted. '
             'Ensure adequate hydration and gradual position changes.\n\n');
       } else {
-        buffer.write('✅ **Blood Pressure** is within normal pregnancy range.\n\n');
+        buffer.write(
+            '✅ **Blood Pressure** is within normal pregnancy range.\n\n');
       }
     }
 
@@ -133,9 +137,11 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
         if (rate >= 120 && rate <= 160) {
           buffer.write('💓 **Fetal Heart Rate**: $rate bpm (Normal range)\n\n');
         } else if (rate < 120) {
-          buffer.write('⚠️ **Fetal Heart Rate**: $rate bpm (Below normal range)\n\n');
+          buffer.write(
+              '⚠️ **Fetal Heart Rate**: $rate bpm (Below normal range)\n\n');
         } else {
-          buffer.write('⚠️ **Fetal Heart Rate**: $rate bpm (Above normal range)\n\n');
+          buffer.write(
+              '⚠️ **Fetal Heart Rate**: $rate bpm (Above normal range)\n\n');
         }
       }
     }
@@ -143,7 +149,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     // Edema
     final edema = checkup['edema']?.toString().toLowerCase();
     if (edema != null && edema != 'none') {
-      buffer.write('💧 **Edema**: ${edema.toUpperCase()} - Monitor for worsening symptoms.\n\n');
+      buffer.write(
+          '💧 **Edema**: ${edema.toUpperCase()} - Monitor for worsening symptoms.\n\n');
     }
 
     // TD Vaccine
@@ -183,13 +190,17 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
 
     // Analyze remarks
     if (remarks.contains('normal') || remarks.contains('healthy')) {
-      buffer.write('✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
+      buffer.write(
+          '✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
-      buffer.write('📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
+      buffer.write(
+          '📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
     } else if (remarks.contains('concern') || remarks.contains('abnormal')) {
-      buffer.write('🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
+      buffer.write(
+          '🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
     } else {
-      buffer.write('📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
+      buffer.write(
+          '📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
     }
 
     buffer.write('💡 **Key Recommendations**:\n');
@@ -237,7 +248,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
         buffer.write('• Glucose levels are within normal range\n');
       } else if (remarks.contains('high')) {
         buffer.write('• Elevated glucose levels detected\n');
-        buffer.write('• May indicate need for gestational diabetes screening\n');
+        buffer
+            .write('• May indicate need for gestational diabetes screening\n');
       }
     }
 
@@ -297,7 +309,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                         if (subtitle != null && subtitle.isNotEmpty)
                           Text(
                             subtitle,
-                            style: const TextStyle(color: AppColors.textSecondary),
+                            style:
+                                const TextStyle(color: AppColors.textSecondary),
                           ),
                       ],
                     ),
@@ -339,25 +352,28 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                   border: Border.all(color: AppColors.borderPrimary),
                 ),
                 child: Column(
-                  children: rows.map((entry) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: Text(
-                            entry.key,
-                            style: const TextStyle(color: AppColors.textSecondary),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 5,
-                          child: Text(entry.value),
-                        ),
-                      ],
-                    ),
-                  )).toList(),
+                  children: rows
+                      .map((entry) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    entry.key,
+                                    style: const TextStyle(
+                                        color: AppColors.textSecondary),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 5,
+                                  child: Text(entry.value),
+                                ),
+                              ],
+                            ),
+                          ))
+                      .toList(),
                 ),
               ),
 
@@ -374,14 +390,16 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                       colors: [Color(0xFFF3E5F5), Color(0xFFE8EAF6)],
                     ),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFF7E57C2).withValues(alpha: 0.2)),
+                    border: Border.all(
+                        color: const Color(0xFF7E57C2).withValues(alpha: 0.2)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.psychology_rounded, color: const Color(0xFF7E57C2), size: 20),
+                          Icon(Icons.psychology_rounded,
+                              color: const Color(0xFF7E57C2), size: 20),
                           const SizedBox(width: 8),
                           const Text(
                             'AI-Powered Insights',
@@ -419,7 +437,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
   }
 
   // Show conclude pregnancy dialog
-  Future<void> _showConcludePregnancyDialog(Map<String, dynamic> pregnancy) async {
+  Future<void> _showConcludePregnancyDialog(
+      Map<String, dynamic> pregnancy) async {
     String outcome = 'live_birth';
     DateTime? outcomeDate = DateTime.now();
     DateTime? deliveryDate;
@@ -464,7 +483,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                       const SizedBox(width: 8),
                       const Text(
                         'Conclude Pregnancy',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const Spacer(),
                       IconButton(
@@ -480,11 +500,16 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                     value: outcome,
                     decoration: const InputDecoration(labelText: 'Outcome'),
                     items: const [
-                      DropdownMenuItem(value: 'live_birth', child: Text('Live Birth')),
-                      DropdownMenuItem(value: 'stillbirth', child: Text('Stillbirth')),
-                      DropdownMenuItem(value: 'miscarriage', child: Text('Miscarriage')),
-                      DropdownMenuItem(value: 'abortion', child: Text('Abortion')),
-                      DropdownMenuItem(value: 'ectopic', child: Text('Ectopic')),
+                      DropdownMenuItem(
+                          value: 'live_birth', child: Text('Live Birth')),
+                      DropdownMenuItem(
+                          value: 'stillbirth', child: Text('Stillbirth')),
+                      DropdownMenuItem(
+                          value: 'miscarriage', child: Text('Miscarriage')),
+                      DropdownMenuItem(
+                          value: 'abortion', child: Text('Abortion')),
+                      DropdownMenuItem(
+                          value: 'ectopic', child: Text('Ectopic')),
                     ],
                     onChanged: (v) => setModal(() => outcome = v ?? outcome),
                   ),
@@ -494,7 +519,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Outcome Date'),
-                    subtitle: Text(DateFormat('MMM d, yyyy').format(outcomeDate!)),
+                    subtitle:
+                        Text(DateFormat('MMM d, yyyy').format(outcomeDate!)),
                     trailing: const Icon(Icons.calendar_today),
                     onTap: () async {
                       final picked = await showDatePicker(
@@ -506,7 +532,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                       if (picked != null) {
                         setModal(() {
                           outcomeDate = picked;
-                          if (outcome == 'live_birth' || outcome == 'stillbirth') {
+                          if (outcome == 'live_birth' ||
+                              outcome == 'stillbirth') {
                             deliveryDate = picked;
                           }
                         });
@@ -519,17 +546,23 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                     const SizedBox(height: 8),
                     TextField(
                       controller: placeController,
-                      decoration: const InputDecoration(labelText: 'Place of Delivery'),
+                      decoration:
+                          const InputDecoration(labelText: 'Place of Delivery'),
                       onChanged: (v) => placeOfDelivery = v,
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       value: deliveryMethod,
-                      decoration: const InputDecoration(labelText: 'Delivery Method'),
+                      decoration:
+                          const InputDecoration(labelText: 'Delivery Method'),
                       items: const [
-                        DropdownMenuItem(value: 'NSD', child: Text('Normal Spontaneous Delivery')),
-                        DropdownMenuItem(value: 'CS', child: Text('Cesarean Section')),
-                        DropdownMenuItem(value: 'Instrumental', child: Text('Instrumental')),
+                        DropdownMenuItem(
+                            value: 'NSD',
+                            child: Text('Normal Spontaneous Delivery')),
+                        DropdownMenuItem(
+                            value: 'CS', child: Text('Cesarean Section')),
+                        DropdownMenuItem(
+                            value: 'Instrumental', child: Text('Instrumental')),
                       ],
                       onChanged: (v) => setModal(() => deliveryMethod = v),
                     ),
@@ -538,7 +571,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                   const SizedBox(height: 8),
                   TextField(
                     controller: gestAgeController,
-                    decoration: const InputDecoration(labelText: 'Gestational Age at End (weeks)'),
+                    decoration: const InputDecoration(
+                        labelText: 'Gestational Age at End (weeks)'),
                     keyboardType: TextInputType.number,
                     onChanged: (v) => gestationalAge = double.tryParse(v),
                   ),
@@ -551,19 +585,24 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                         if (deliveryMethod == null) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please select delivery method')),
+                            const SnackBar(
+                                content: Text('Please select delivery method')),
                           );
                           return;
                         }
                       }
 
-                      final success = await MotherProfileService.concludePregnancy(
+                      final success =
+                          await MotherProfileService.concludePregnancy(
                         pregnancy['pregnancy_id'],
                         {
                           'outcome': outcome,
-                          'outcome_date': outcomeDate?.toIso8601String().split('T')[0],
-                          'delivery_date': deliveryDate?.toIso8601String().split('T')[0],
-                          'place_of_delivery': placeOfDelivery ?? placeController.text,
+                          'outcome_date':
+                              outcomeDate?.toIso8601String().split('T')[0],
+                          'delivery_date':
+                              deliveryDate?.toIso8601String().split('T')[0],
+                          'place_of_delivery':
+                              placeOfDelivery ?? placeController.text,
                           'delivery_method': deliveryMethod,
                           'gestational_age_at_end': gestationalAge,
                         },
@@ -573,7 +612,9 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                         Navigator.pop(ctx);
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Pregnancy concluded successfully')),
+                          const SnackBar(
+                              content:
+                                  Text('Pregnancy concluded successfully')),
                         );
                         _refresh();
                       }
@@ -597,91 +638,83 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     placeController.dispose();
   }
 
-  // Start new pregnancy
-  Future<void> _startNewPregnancy() async {
-    DateTime? lmp;
-    DateTime? edd;
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Start New Pregnancy'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Last Menstrual Period'),
-              subtitle: Text(lmp == null ? 'Select date' : DateFormat('MMM d, yyyy').format(lmp!)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: ctx,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime.now(),
-                );
-                if (picked != null) {
-                  lmp = picked;
-                  edd = picked.add(const Duration(days: 280));
-                }
-              },
-            ),
-            if (lmp != null) ...[
-              const SizedBox(height: 8),
-              ListTile(
-                title: const Text('Estimated Due Date'),
-                subtitle: Text(DateFormat('MMM d, yyyy').format(edd!)),
-                trailing: const Icon(Icons.event_available),
-              ),
-            ],
-          ],
+  Future<void> _startNewPregnancy({String? motherName}) async {
+    final started = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StartPregnancyScreen(
+          motherId: widget.motherId,
+          motherName: motherName,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: lmp == null ? null : () async {
-              final success = await MotherProfileService.startNewPregnancy(
-                widget.motherId,
-                lmp!,
-                edd!,
-              );
-              if (success && mounted) {
-                Navigator.pop(ctx);
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('New pregnancy started')),
-                );
-                _refresh();
-              }
-            },
-            child: const Text('Start'),
-          ),
-        ],
       ),
     );
+
+    if (started == true) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pregnancy started.')),
+      );
+      _refresh();
+    }
   }
 
-  // Navigate to ultrasound analyzer
-  void _goToUltrasoundAnalyzer() {
-    Navigator.push(
+  Future<void> _goToAddCheckup(
+    Map<String, dynamic> profile,
+    Map<String, dynamic> pregnancy,
+  ) async {
+    final lmpRaw = pregnancy['last_menstrual_period'];
+    final lmp = lmpRaw != null ? DateTime.tryParse(lmpRaw.toString()) : null;
+
+    final takenTd = <String>[];
+    final checkups = (pregnancy['checkups'] as List?) ?? const [];
+    for (final item in checkups) {
+      if (item is! Map<String, dynamic>) continue;
+      final dose = item['td_vaccine_dose']?.toString().trim();
+      if (dose != null && dose.isNotEmpty) {
+        takenTd.add(dose);
+      }
+    }
+
+    final added = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (context) => const UltrasoundAnalyzerScreen(),
+        builder: (_) => AddPrenatalCheckupScreen(
+          motherId: widget.motherId,
+          pregnancyId: int.parse(pregnancy['pregnancy_id'].toString()),
+          lmp: lmp,
+          motherWeight: _toDouble(profile['weight']),
+          takenTdDoses: takenTd,
+        ),
       ),
-    ).then((_) => _refresh());
+    );
+
+    if (added == true) {
+      _refresh();
+    }
   }
 
-  // Navigate to lab test analyzer
-  void _goToLabTestAnalyzer() {
-    Navigator.push(
+  Future<void> _goToAddUltrasound() async {
+    final added = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (context) => const LabTestAnalyzerScreen(),
+        builder: (_) => AddUltrasoundPage(motherId: widget.motherId),
       ),
-    ).then((_) => _refresh());
+    );
+    if (added == true) {
+      _refresh();
+    }
+  }
+
+  Future<void> _goToAddLabTest() async {
+    final added = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddLabTestPage(motherId: widget.motherId),
+      ),
+    );
+    if (added == true) {
+      _refresh();
+    }
   }
 
   @override
@@ -749,22 +782,26 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
           }
 
           final profile = snapshot.data!;
-          final currentPregnancy = profile['current_pregnancy'] as Map<String, dynamic>?;
+          final currentPregnancy =
+              profile['current_pregnancy'] as Map<String, dynamic>?;
           final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
-          final medicalConditions = profile['medical_conditions'] as List? ?? [];
+          final medicalConditions =
+              profile['medical_conditions'] as List? ?? [];
           final allergies = profile['allergies'] as List? ?? [];
-          final emergencyContacts = profile['emergency_contacts'] as List? ?? [];
+          final emergencyContacts =
+              profile['emergency_contacts'] as List? ?? [];
           final children = profile['children'] as List? ?? [];
 
           return TabBarView(
             controller: _tabController,
             children: [
               // OVERVIEW TAB
-              _buildOverviewTab(profile, medicalConditions, allergies, emergencyContacts, children),
-              
+              _buildOverviewTab(profile, medicalConditions, allergies,
+                  emergencyContacts, children),
+
               // CURRENT PREGNANCY TAB
               _buildCurrentPregnancyTab(profile, currentPregnancy),
-              
+
               // HISTORY TAB
               _buildHistoryTab(pastPregnancies),
             ],
@@ -816,7 +853,11 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                     ),
                     child: Center(
                       child: Text(
-                        profile['full_name']?.toString().substring(0, 1).toUpperCase() ?? 'M',
+                        profile['full_name']
+                                ?.toString()
+                                .substring(0, 1)
+                                .toUpperCase() ??
+                            'M',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -840,11 +881,13 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                         const SizedBox(height: 4),
                         Text(
                           profile['email_address'] ?? '—',
-                          style: const TextStyle(color: AppColors.textSecondary),
+                          style:
+                              const TextStyle(color: AppColors.textSecondary),
                         ),
                         Text(
                           profile['phone_number'] ?? '—',
-                          style: const TextStyle(color: AppColors.textSecondary),
+                          style:
+                              const TextStyle(color: AppColors.textSecondary),
                         ),
                       ],
                     ),
@@ -896,7 +939,10 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AppColors.brandPrimary, AppColors.brandPrimary.withValues(alpha: 0.8)],
+                  colors: [
+                    AppColors.brandPrimary,
+                    AppColors.brandPrimary.withValues(alpha: 0.8)
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -907,7 +953,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+                      const Icon(Icons.auto_awesome,
+                          color: Colors.white, size: 20),
                       const SizedBox(width: 8),
                       const Text(
                         'AI Analysis Tools',
@@ -932,7 +979,7 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                           'Ultrasound',
                           Icons.photo,
                           Colors.purple,
-                          _goToUltrasoundAnalyzer,
+                          _goToAddUltrasound,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -941,7 +988,7 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                           'Lab Test',
                           Icons.science,
                           Colors.orange,
-                          _goToLabTestAnalyzer,
+                          _goToAddLabTest,
                         ),
                       ),
                     ],
@@ -956,8 +1003,10 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
             _buildSection('Personal Information', [
               _buildInfoRow('Birthdate', _formatDate(profile['birthdate'])),
               _buildInfoRow('Blood Type', profile['blood_type'] ?? '—'),
-              _buildInfoRow('Height', profile['height'] != null ? '${profile['height']} cm' : '—'),
-              _buildInfoRow('Weight', profile['weight'] != null ? '${profile['weight']} kg' : '—'),
+              _buildInfoRow('Height',
+                  profile['height'] != null ? '${profile['height']} cm' : '—'),
+              _buildInfoRow('Weight',
+                  profile['weight'] != null ? '${profile['weight']} kg' : '—'),
             ]),
 
             // Address
@@ -974,14 +1023,16 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               'Medical Conditions (${medicalConditions.length})',
               medicalConditions.isEmpty
                   ? [const Text('No medical conditions recorded')]
-                  : medicalConditions.map<Widget>((c) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(c['condition_name'] ?? '—'),
-                      subtitle: Text(
-                        '${c['status'] ?? 'active'} • ${_formatDate(c['diagnosis_date'])}',
-                      ),
-                    )).toList(),
+                  : medicalConditions
+                      .map<Widget>((c) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(c['condition_name'] ?? '—'),
+                            subtitle: Text(
+                              '${c['status'] ?? 'active'} • ${_formatDate(c['diagnosis_date'])}',
+                            ),
+                          ))
+                      .toList(),
             ),
 
             // Allergies
@@ -989,14 +1040,16 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               'Allergies (${allergies.length})',
               allergies.isEmpty
                   ? [const Text('No allergies recorded')]
-                  : allergies.map<Widget>((a) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(a['allergen'] ?? '—'),
-                      subtitle: Text(
-                        '${a['status'] ?? 'active'} • ${_formatDate(a['diagnosis_date'])}',
-                      ),
-                    )).toList(),
+                  : allergies
+                      .map<Widget>((a) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(a['allergen'] ?? '—'),
+                            subtitle: Text(
+                              '${a['status'] ?? 'active'} • ${_formatDate(a['diagnosis_date'])}',
+                            ),
+                          ))
+                      .toList(),
             ),
 
             // Emergency Contacts
@@ -1005,24 +1058,25 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                 const Text('No emergency contacts')
               else
                 ...emergencyContacts.map((c) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        [
-                          c['first_name'],
-                          c['middle_name'],
-                          c['last_name'],
-                          c['extension_name'],
-                        ].where((e) => e != null).join(' '),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            [
+                              c['first_name'],
+                              c['middle_name'],
+                              c['last_name'],
+                              c['extension_name'],
+                            ].where((e) => e != null).join(' '),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          Text('📞 ${c['phone_number'] ?? '—'}'),
+                          if (c['affiliation'] != null)
+                            Text('🏥 ${c['affiliation']}'),
+                        ],
                       ),
-                      Text('📞 ${c['phone_number'] ?? '—'}'),
-                      if (c['affiliation'] != null) Text('🏥 ${c['affiliation']}'),
-                    ],
-                  ),
-                )),
+                    )),
             ]),
 
             // Children
@@ -1050,26 +1104,30 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               ),
               const SizedBox(height: 8),
               ..._filterAndSortChildren(children).map((c) => Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: AppColors.bgSecondary,
-                    child: Text(
-                      c['first_name']?.toString().substring(0, 1).toUpperCase() ?? 'C',
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.bgSecondary,
+                        child: Text(
+                          c['first_name']
+                                  ?.toString()
+                                  .substring(0, 1)
+                                  .toUpperCase() ??
+                              'C',
+                        ),
+                      ),
+                      title: Text([
+                        c['first_name'],
+                        c['middle_name'],
+                        c['last_name'],
+                      ].where((e) => e != null).join(' ')),
+                      subtitle: Text('Added: ${_formatDate(c['added_at'])}'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        // Navigate to child profile (to be implemented)
+                      },
                     ),
-                  ),
-                  title: Text([
-                    c['first_name'],
-                    c['middle_name'],
-                    c['last_name'],
-                  ].where((e) => e != null).join(' ')),
-                  subtitle: Text('Added: ${_formatDate(c['added_at'])}'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    // Navigate to child profile (to be implemented)
-                  },
-                ),
-              )),
+                  )),
             ]),
           ],
         ),
@@ -1078,13 +1136,15 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
   }
 
   // CURRENT PREGNANCY TAB
-  Widget _buildCurrentPregnancyTab(Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
+  Widget _buildCurrentPregnancyTab(
+      Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
     if (pregnancy == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.pregnant_woman, size: 64, color: AppColors.textSecondary),
+            const Icon(Icons.pregnant_woman,
+                size: 64, color: AppColors.textSecondary),
             const SizedBox(height: 16),
             const Text(
               'No ongoing pregnancy',
@@ -1092,7 +1152,9 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
             ),
             const SizedBox(height: 8),
             ElevatedButton.icon(
-              onPressed: _startNewPregnancy,
+              onPressed: () => _startNewPregnancy(
+                motherName: profile['full_name']?.toString(),
+              ),
               icon: const Icon(Icons.play_arrow),
               label: const Text('Start New Pregnancy'),
               style: ElevatedButton.styleFrom(
@@ -1115,14 +1177,17 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
       final dateA = DateTime.tryParse(a['checkup_datetime'] ?? '');
       final dateB = DateTime.tryParse(b['checkup_datetime'] ?? '');
       if (dateA == null || dateB == null) return 0;
-      return _checkupSort == 'desc' ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
+      return _checkupSort == 'desc'
+          ? dateB.compareTo(dateA)
+          : dateA.compareTo(dateB);
     });
 
     // Calculate gestation
     final lmp = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
     final edd = DateTime.tryParse(pregnancy['expected_date_of_delivery'] ?? '');
     final now = DateTime.now();
-    final gestWeeks = lmp != null ? (now.difference(lmp).inDays / 7).floor() : null;
+    final gestWeeks =
+        lmp != null ? (now.difference(lmp).inDays / 7).floor() : null;
     final daysToEdd = edd != null ? edd.difference(now).inDays : null;
 
     return RefreshIndicator(
@@ -1140,9 +1205,7 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                 runSpacing: 8,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () {
-                      // Navigate to add prenatal checkup (to be implemented)
-                    },
+                    onPressed: () => _goToAddCheckup(profile, pregnancy),
                     icon: const Icon(Icons.add),
                     label: const Text('Add Checkup'),
                     style: ElevatedButton.styleFrom(
@@ -1151,12 +1214,12 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                     ),
                   ),
                   OutlinedButton.icon(
-                    onPressed: _goToUltrasoundAnalyzer,
+                    onPressed: _goToAddUltrasound,
                     icon: const Icon(Icons.photo),
                     label: const Text('Add Ultrasound'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: _goToLabTestAnalyzer,
+                    onPressed: _goToAddLabTest,
                     icon: const Icon(Icons.science),
                     label: const Text('Add Lab Test'),
                   ),
@@ -1164,7 +1227,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                     onPressed: () => _showConcludePregnancyDialog(pregnancy),
                     icon: const Icon(Icons.flag),
                     label: const Text('Conclude'),
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                    style:
+                        OutlinedButton.styleFrom(foregroundColor: Colors.red),
                   ),
                 ],
               ),
@@ -1210,7 +1274,10 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                   Expanded(
                     child: _buildMetricTile(
                       'Risk Level',
-                      pregnancy['pregnancy_risk_level']?.toString().toUpperCase() ?? '—',
+                      pregnancy['pregnancy_risk_level']
+                              ?.toString()
+                              .toUpperCase() ??
+                          '—',
                       Icons.warning,
                       pregnancy['pregnancy_risk_level'] == 'high'
                           ? Colors.red
@@ -1227,9 +1294,12 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
 
             // Pregnancy Details
             _buildSection('Pregnancy Details', [
-              _buildInfoRow('LMP', _formatDate(pregnancy['last_menstrual_period'])),
-              _buildInfoRow('EDD', _formatDate(pregnancy['expected_date_of_delivery'])),
-              _buildInfoRow('Status', pregnancy['status']?.toString().toUpperCase() ?? '—'),
+              _buildInfoRow(
+                  'LMP', _formatDate(pregnancy['last_menstrual_period'])),
+              _buildInfoRow(
+                  'EDD', _formatDate(pregnancy['expected_date_of_delivery'])),
+              _buildInfoRow('Status',
+                  pregnancy['status']?.toString().toUpperCase() ?? '—'),
             ]),
 
             const SizedBox(height: 16),
@@ -1239,14 +1309,18 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Sort:', style: TextStyle(color: AppColors.textSecondary)),
+                  const Text('Sort:',
+                      style: TextStyle(color: AppColors.textSecondary)),
                   DropdownButton<String>(
                     value: _checkupSort,
                     items: const [
-                      DropdownMenuItem(value: 'desc', child: Text('Newest first')),
-                      DropdownMenuItem(value: 'asc', child: Text('Oldest first')),
+                      DropdownMenuItem(
+                          value: 'desc', child: Text('Newest first')),
+                      DropdownMenuItem(
+                          value: 'asc', child: Text('Oldest first')),
                     ],
-                    onChanged: (v) => setState(() => _checkupSort = v ?? 'desc'),
+                    onChanged: (v) =>
+                        setState(() => _checkupSort = v ?? 'desc'),
                   ),
                 ],
               ),
@@ -1264,14 +1338,18 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Sort:', style: TextStyle(color: AppColors.textSecondary)),
+                  const Text('Sort:',
+                      style: TextStyle(color: AppColors.textSecondary)),
                   DropdownButton<String>(
                     value: _ultrasoundSort,
                     items: const [
-                      DropdownMenuItem(value: 'desc', child: Text('Newest first')),
-                      DropdownMenuItem(value: 'asc', child: Text('Oldest first')),
+                      DropdownMenuItem(
+                          value: 'desc', child: Text('Newest first')),
+                      DropdownMenuItem(
+                          value: 'asc', child: Text('Oldest first')),
                     ],
-                    onChanged: (v) => setState(() => _ultrasoundSort = v ?? 'desc'),
+                    onChanged: (v) =>
+                        setState(() => _ultrasoundSort = v ?? 'desc'),
                   ),
                 ],
               ),
@@ -1279,7 +1357,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               if (ultrasounds.isEmpty)
                 const Text('No ultrasounds recorded')
               else
-                ..._sortByDate(ultrasounds, 'ultrasound_date', _ultrasoundSort).map(
+                ..._sortByDate(ultrasounds, 'ultrasound_date', _ultrasoundSort)
+                    .map(
                   (u) => _buildUltrasoundCard(u),
                 ),
             ]),
@@ -1291,12 +1370,15 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Sort:', style: TextStyle(color: AppColors.textSecondary)),
+                  const Text('Sort:',
+                      style: TextStyle(color: AppColors.textSecondary)),
                   DropdownButton<String>(
                     value: _labSort,
                     items: const [
-                      DropdownMenuItem(value: 'desc', child: Text('Newest first')),
-                      DropdownMenuItem(value: 'asc', child: Text('Oldest first')),
+                      DropdownMenuItem(
+                          value: 'desc', child: Text('Newest first')),
+                      DropdownMenuItem(
+                          value: 'asc', child: Text('Oldest first')),
                     ],
                     onChanged: (v) => setState(() => _labSort = v ?? 'desc'),
                   ),
@@ -1332,13 +1414,14 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
         itemBuilder: (context, index) {
           final p = pastPregnancies[index] as Map<String, dynamic>;
           final delivery = p['delivery'] as Map<String, dynamic>?;
-          
+
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
             child: ExpansionTile(
               leading: CircleAvatar(
                 backgroundColor: AppColors.bgSecondary,
-                child: const Icon(Icons.pregnant_woman, color: AppColors.brandPrimary),
+                child: const Icon(Icons.pregnant_woman,
+                    color: AppColors.brandPrimary),
               ),
               title: Text(_formatOutcome(p['outcome'])),
               subtitle: Text('Ended: ${_formatDate(p['outcome_date'])}'),
@@ -1350,15 +1433,19 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                     children: [
                       _buildInfoRow('Outcome', _formatOutcome(p['outcome'])),
                       _buildInfoRow('Date', _formatDate(p['outcome_date'])),
-                      _buildInfoRow('Gestational Age', p['gestational_age_at_end'] != null
-                          ? '${p['gestational_age_at_end']} weeks'
-                          : '—'),
+                      _buildInfoRow(
+                          'Gestational Age',
+                          p['gestational_age_at_end'] != null
+                              ? '${p['gestational_age_at_end']} weeks'
+                              : '—'),
                       if (delivery != null) ...[
                         const SizedBox(height: 8),
                         const Text('Delivery Details',
                             style: TextStyle(fontWeight: FontWeight.bold)),
-                        _buildInfoRow('Place', delivery['place_of_delivery'] ?? '—'),
-                        _buildInfoRow('Method', delivery['delivery_method'] ?? '—'),
+                        _buildInfoRow(
+                            'Place', delivery['place_of_delivery'] ?? '—'),
+                        _buildInfoRow(
+                            'Method', delivery['delivery_method'] ?? '—'),
                       ],
                     ],
                   ),
@@ -1372,7 +1459,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
   }
 
   // Helper Widgets
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1396,14 +1484,16 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
           ),
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            style:
+                const TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildToolCard(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildToolCard(
+      String label, IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1522,7 +1612,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     );
   }
 
-  Widget _buildMetricTile(String label, String value, IconData icon, Color color) {
+  Widget _buildMetricTile(
+      String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1544,7 +1635,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
           ),
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            style:
+                const TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -1561,17 +1653,15 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: const Icon(Icons.medical_services, color: AppColors.brandPrimary),
+        leading:
+            const Icon(Icons.medical_services, color: AppColors.brandPrimary),
         title: Text('Checkup • $date'),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (bpSys != '—' && bpDia != '—')
-              Text('BP: $bpSys/$bpDia'),
-            if (aog != '—')
-              Text('AOG: $aog weeks'),
-            if (weight != '—')
-              Text('Weight: $weight kg'),
+            if (bpSys != '—' && bpDia != '—') Text('BP: $bpSys/$bpDia'),
+            if (aog != '—') Text('AOG: $aog weeks'),
+            if (weight != '—') Text('Weight: $weight kg'),
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
@@ -1585,8 +1675,10 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               MapEntry('Age of Gestation', aog),
               MapEntry('Weight (kg)', weight),
               MapEntry('Blood Pressure', '$bpSys/$bpDia'),
-              MapEntry('Fetal Position', _formatValue(checkup['fetal_position'])),
-              MapEntry('Fetal Heart Beat', _formatValue(checkup['fetal_heart_beat'])),
+              MapEntry(
+                  'Fetal Position', _formatValue(checkup['fetal_position'])),
+              MapEntry('Fetal Heart Beat',
+                  _formatValue(checkup['fetal_heart_beat'])),
               MapEntry('TD Vaccine', _formatValue(checkup['td_vaccine_dose'])),
               MapEntry('Edema', _formatValue(checkup['edema'])),
               MapEntry('Remarks', _formatValue(checkup['remarks'])),
@@ -1601,7 +1693,7 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
 
   Widget _buildUltrasoundCard(Map<String, dynamic> ultrasound) {
     final date = _formatDate(ultrasound['ultrasound_date']);
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -1617,9 +1709,12 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
             imageUrl: ultrasound['ultrasound_image'],
             rows: [
               MapEntry('Date', _formatDate(ultrasound['ultrasound_date'])),
-              MapEntry('Location', _formatValue(ultrasound['ultrasound_location'])),
-              MapEntry('Health Worker', _formatValue(ultrasound['health_worker_name'])),
-              MapEntry('Institution', _formatValue(ultrasound['health_worker_institution'])),
+              MapEntry(
+                  'Location', _formatValue(ultrasound['ultrasound_location'])),
+              MapEntry('Health Worker',
+                  _formatValue(ultrasound['health_worker_name'])),
+              MapEntry('Institution',
+                  _formatValue(ultrasound['health_worker_institution'])),
               MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
             ],
             aiAnalysis: _generateUltrasoundAIInsights(ultrasound),
@@ -1632,7 +1727,7 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
   Widget _buildLabTestCard(Map<String, dynamic> labTest) {
     final date = _formatDate(labTest['lab_test_date']);
     final type = labTest['lab_test_type'] ?? 'Lab Test';
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -1650,7 +1745,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               MapEntry('Type', type),
               MapEntry('Date', _formatDate(labTest['lab_test_date'])),
               MapEntry('Location', _formatValue(labTest['lab_test_location'])),
-              MapEntry('Health Worker', _formatValue(labTest['health_worker_name'])),
+              MapEntry(
+                  'Health Worker', _formatValue(labTest['health_worker_name'])),
               MapEntry('Remarks', _formatValue(labTest['remarks'])),
             ],
             aiAnalysis: _generateLabTestAIInsights(labTest),
@@ -1661,7 +1757,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
   }
 
   // Helper methods
-  List<Map<String, dynamic>> _sortByDate(List list, String field, String order) {
+  List<Map<String, dynamic>> _sortByDate(
+      List list, String field, String order) {
     final sorted = List<Map<String, dynamic>>.from(list);
     sorted.sort((a, b) {
       final dateA = DateTime.tryParse(a[field] ?? '');
@@ -1673,16 +1770,14 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
   }
 
   List<Map<String, dynamic>> _filterAndSortChildren(List children) {
-    var filtered = List<Map<String, dynamic>>.from(children)
-        .where((c) {
-          final name = [
-            c['first_name'],
-            c['middle_name'],
-            c['last_name'],
-          ].where((e) => e != null).join(' ').toLowerCase();
-          return name.contains(_childQuery.toLowerCase());
-        })
-        .toList();
+    var filtered = List<Map<String, dynamic>>.from(children).where((c) {
+      final name = [
+        c['first_name'],
+        c['middle_name'],
+        c['last_name'],
+      ].where((e) => e != null).join(' ').toLowerCase();
+      return name.contains(_childQuery.toLowerCase());
+    }).toList();
 
     if (_childSort == 'name') {
       filtered.sort((a, b) {

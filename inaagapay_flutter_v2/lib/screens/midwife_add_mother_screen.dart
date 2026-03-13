@@ -1,6 +1,5 @@
 ﻿import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -307,11 +306,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     var dialogState = _OcrDialogState.loading;
     OcrResult? ocrResult;
     String? ocrError;
-    StateSetter? _setS;
+    StateSetter? dialogSetState;
 
     void startOcr() {
       _geminiService.extractMotherRegistrationData(imageFile).then((r) {
-        _setS?.call(() {
+        dialogSetState?.call(() {
           if (!r.hasAnyValue) {
             ocrError = 'No recognisable patient data found in the image.\n'
                 'Try a clearer or higher-quality photo.';
@@ -322,7 +321,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           }
         });
       }).catchError((dynamic e) {
-        _setS?.call(() {
+        dialogSetState?.call(() {
           ocrError = e.toString().replaceFirst('Exception: ', '');
           dialogState = _OcrDialogState.error;
         });
@@ -336,7 +335,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) {
-          _setS = setS;
+          dialogSetState = setS;
           return Dialog(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -934,7 +933,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       for (final ec in r.emergencyContacts) {
         if (ec.firstName.isEmpty ||
             ec.lastName.isEmpty ||
-            ec.phoneNumber.isEmpty) continue;
+            ec.phoneNumber.isEmpty) {
+          continue;
+        }
         _emergencyContacts.add(
           _EmergencyContact()
             ..firstName = ec.firstName
@@ -1099,6 +1100,82 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     return '${days ~/ 7}w ${days % 7}d';
   }
 
+  // ── Pregnancy‐history helpers ──────────────────────────────────────────────
+
+  /// Returns GA constraint (min weeks, max weeks, hint) for [outcome].
+  ({int min, int max, String hint})? _outcomeGaConstraint(String outcome) =>
+      switch (outcome) {
+        'live_birth' => (
+            min: 22,
+            max: 45,
+            hint: 'Valid: 22–45 weeks (typically 37–42 weeks)',
+          ),
+        'stillbirth' => (
+            min: 20,
+            max: 45,
+            hint: 'Fetal death at 20+ weeks gestation',
+          ),
+        'miscarriage' => (
+            min: 4,
+            max: 19,
+            hint: 'Pregnancy loss before 20 weeks',
+          ),
+        'abortion' => (
+            min: 4,
+            max: 23,
+            hint: 'Typically performed before 24 weeks',
+          ),
+        'ectopic' => (
+            min: 4,
+            max: 15,
+            hint: 'Ectopic pregnancies typically resolve before 16 weeks',
+          ),
+        _ => null,
+      };
+
+  /// Returns an error message if [weeks] is outside the valid range for
+  /// [outcome], or null if valid.
+  String? _gaConstraintErrorFor(String outcome, int weeks) {
+    final c = _outcomeGaConstraint(outcome);
+    if (c == null) return null;
+    if (weeks < c.min) {
+      return switch (outcome) {
+        'live_birth' =>
+          'A live birth at $weeks weeks is not viable (minimum: ${c.min} weeks)',
+        'stillbirth' =>
+          'Stillbirth is defined at 20+ weeks. Use Miscarriage for earlier loss.',
+        _ =>
+          'Gestational age cannot be less than ${c.min} weeks for this outcome',
+      };
+    }
+    if (weeks > c.max) {
+      return switch (outcome) {
+        'miscarriage' =>
+          'At $weeks weeks this is classified as Stillbirth, not Miscarriage',
+        'abortion' =>
+          'Gestational age ($weeks w) exceeds expected max for abortion (23 weeks)',
+        'ectopic' => 'Ectopic pregnancies cannot survive beyond 16 weeks',
+        _ =>
+          'Gestational age ($weeks w) exceeds expected maximum for this outcome',
+      };
+    }
+    return null;
+  }
+
+  /// Returns an error message if [date] is within 42 days of any existing
+  /// past pregnancy outcome date. [excludeIndex] skips that entry (edit mode).
+  String? _computeIntervalError(DateTime date, {int? excludeIndex}) {
+    const minGapDays = 42;
+    for (int i = 0; i < _pastPregnancies.length; i++) {
+      if (i == excludeIndex) continue;
+      final gap = date.difference(_pastPregnancies[i].outcomeDate).inDays.abs();
+      if (gap < minGapDays) {
+        return 'Only ${gap}d from another record (min: $minGapDays days / ~6 weeks)';
+      }
+    }
+    return null;
+  }
+
   // â”€â”€ Validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   bool _validateStep(int step) {
@@ -1177,12 +1254,42 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         if (_hasPastPregnancy && _pastPregnancies.isEmpty) {
           msg = 'Add at least one past pregnancy or disable the toggle.';
         } else {
+          // Check delivery info for live births & stillbirths
           for (final p in _pastPregnancies) {
             if ((p.outcome == 'live_birth' || p.outcome == 'stillbirth') &&
                 (p.placeOfDelivery == null || p.deliveryMethod == null)) {
               msg =
                   'Provide delivery place & method for live birth / stillbirth records.';
               break;
+            }
+          }
+          // Check GA constraints per outcome type
+          if (msg == null) {
+            for (final p in _pastPregnancies) {
+              if (p.gestationalAgeAtEnd != null) {
+                final gaErr = _gaConstraintErrorFor(
+                    p.outcome, p.gestationalAgeAtEnd!.toInt());
+                if (gaErr != null) {
+                  msg = '${_outcomeLabel(p.outcome)}: $gaErr';
+                  break;
+                }
+              }
+            }
+          }
+          // Check minimum interval between consecutive past pregnancies
+          if (msg == null && _pastPregnancies.length > 1) {
+            final sorted = [..._pastPregnancies]
+              ..sort((a, b) => a.outcomeDate.compareTo(b.outcomeDate));
+            for (int i = 0; i < sorted.length - 1; i++) {
+              final gap = sorted[i + 1]
+                  .outcomeDate
+                  .difference(sorted[i].outcomeDate)
+                  .inDays;
+              if (gap < 42) {
+                msg =
+                    'Two records are only ${gap}d apart (${_outcomeLabel(sorted[i].outcome)} → ${_outcomeLabel(sorted[i + 1].outcome)}). Minimum interval is 42 days. Please verify the dates.';
+                break;
+              }
             }
           }
         }
@@ -2142,7 +2249,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             ),
             subtitle: const Text('Toggle on to log past pregnancy records'),
             value: _hasPastPregnancy,
-            activeColor: AppColors.brandPrimary,
+            activeThumbColor: AppColors.brandPrimary,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             shape: RoundedRectangleBorder(
@@ -2169,20 +2276,29 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               'No records yet. Add at least one.',
             )
           else
-            ..._pastPregnancies.asMap().entries.map((e) {
-              final p = e.value;
-              return _itemCard(
-                leading: _iconAvatar(Icons.pregnant_woman_outlined),
-                title: _outcomeLabel(p.outcome),
-                subtitle: [
-                  _dateFmt.format(p.outcomeDate),
-                  if (p.placeOfDelivery != null) p.placeOfDelivery!,
-                  if (p.deliveryMethod != null) p.deliveryMethod!,
-                ].join(' - '),
-                onDelete: () =>
-                    setState(() => _pastPregnancies.removeAt(e.key)),
-              );
-            }),
+            ...(() {
+              final sorted = _pastPregnancies.asMap().entries.toList()
+                ..sort((a, b) =>
+                    a.value.outcomeDate.compareTo(b.value.outcomeDate));
+              return sorted.map((e) {
+                final p = e.value;
+                return _itemCard(
+                  leading: _iconAvatar(Icons.pregnant_woman_outlined),
+                  title:
+                      'G${sorted.indexOf(e) + 1} · ${_outcomeLabel(p.outcome)}',
+                  subtitle: [
+                    _dateFmt.format(p.outcomeDate),
+                    if (p.gestationalAgeAtEnd != null)
+                      '${p.gestationalAgeAtEnd!.toStringAsFixed(0)} wks AOG',
+                    if (p.placeOfDelivery != null) p.placeOfDelivery!,
+                    if (p.deliveryMethod != null) p.deliveryMethod!,
+                  ].join(' · '),
+                  onDelete: () =>
+                      setState(() => _pastPregnancies.removeAt(e.key)),
+                  onEdit: () => _showEditPastPregnancy(e.key),
+                );
+              });
+            })(),
         ],
       ],
     );
@@ -2709,12 +2825,37 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   }
 
   Future<void> _showAddPastPregnancy() async {
-    String outcome = 'live_birth';
-    DateTime? outcomeDate;
-    bool isEstimated = false;
-    final gaCtrl = TextEditingController();
-    final placeCtrl = TextEditingController();
-    String? deliveryMethod;
+    final result = await _showPastPregnancyDialog();
+    if (result != null) setState(() => _pastPregnancies.add(result));
+  }
+
+  Future<void> _showEditPastPregnancy(int index) async {
+    final result = await _showPastPregnancyDialog(
+      prefill: _pastPregnancies[index],
+      editIndex: index,
+    );
+    if (result != null) setState(() => _pastPregnancies[index] = result);
+  }
+
+  /// Shared add / edit dialog for a [_PastPregnancy] entry.
+  /// Pass [prefill] + [editIndex] when editing an existing record.
+  Future<_PastPregnancy?> _showPastPregnancyDialog({
+    _PastPregnancy? prefill,
+    int? editIndex,
+  }) async {
+    String outcome = prefill?.outcome ?? 'live_birth';
+    DateTime? outcomeDate = prefill?.outcomeDate;
+    bool isEstimated = prefill?.isEstimated ?? false;
+    final gaCtrl = TextEditingController(
+        text: prefill?.gestationalAgeAtEnd != null
+            ? prefill!.gestationalAgeAtEnd!.toStringAsFixed(0)
+            : '');
+    final placeCtrl =
+        TextEditingController(text: prefill?.placeOfDelivery ?? '');
+    String? deliveryMethod = prefill?.deliveryMethod;
+    String? intervalError = prefill?.outcomeDate != null
+        ? _computeIntervalError(prefill!.outcomeDate, excludeIndex: editIndex)
+        : null;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -2722,11 +2863,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         builder: (ctx, setS) {
           final needsDelivery =
               outcome == 'live_birth' || outcome == 'stillbirth';
-          final gaWeeks = int.tryParse(gaCtrl.text.trim());
-          final gaValid = gaCtrl.text.trim().isEmpty ||
-              (gaWeeks != null && gaWeeks >= 0 && gaWeeks <= 42);
+          final gaWeeksParsed = int.tryParse(gaCtrl.text.trim());
+          final gaEntered = gaCtrl.text.trim().isNotEmpty;
+          final gaError = gaEntered
+              ? (gaWeeksParsed != null
+                  ? _gaConstraintErrorFor(outcome, gaWeeksParsed)
+                  : 'Enter a whole number of weeks')
+              : null;
+          final constraint = _outcomeGaConstraint(outcome);
           final isValid = outcomeDate != null &&
-              gaValid &&
+              intervalError == null &&
+              gaError == null &&
               (!needsDelivery ||
                   (placeCtrl.text.trim().isNotEmpty && deliveryMethod != null));
 
@@ -2734,7 +2881,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            title: const Text('Past Pregnancy'),
+            title: Text(
+                editIndex != null ? 'Edit Pregnancy Record' : 'Past Pregnancy'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2752,11 +2900,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     },
                     onChanged: (v) => setS(() => outcome = v ?? 'live_birth'),
                   ),
-                  _modalDateTile(
+                  _modalDateTileWithError(
                     ctx,
                     label: outcomeDate == null
-                        ? 'Outcome Date *'
+                        ? 'Outcome / Delivery Date *'
                         : _dateFmt.format(outcomeDate!),
+                    errorText: intervalError,
                     onTap: () async {
                       final d = await showDatePicker(
                         context: ctx,
@@ -2764,7 +2913,13 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                         firstDate: DateTime(1900),
                         lastDate: DateTime.now(),
                       );
-                      if (d != null) setS(() => outcomeDate = d);
+                      if (d != null) {
+                        setS(() {
+                          outcomeDate = d;
+                          intervalError =
+                              _computeIntervalError(d, excludeIndex: editIndex);
+                        });
+                      }
                     },
                   ),
                   CheckboxListTile(
@@ -2787,13 +2942,30 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                       LengthLimitingTextInputFormatter(2),
                     ],
                     onChanged: (_) => setS(() {}),
-                    errorText: gaCtrl.text.trim().isNotEmpty &&
-                            (int.tryParse(gaCtrl.text.trim()) == null ||
-                                int.parse(gaCtrl.text.trim()) < 0 ||
-                                int.parse(gaCtrl.text.trim()) > 42)
-                        ? 'Must be 0–42 weeks'
-                        : null,
+                    errorText: gaError,
                   ),
+                  // Outcome-specific GA hint
+                  if (constraint != null)
+                    Padding(
+                      padding:
+                          const EdgeInsets.only(left: 4, bottom: 8, top: 2),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline,
+                              size: 13, color: AppColors.brandAccent),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              constraint.hint,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (needsDelivery) ...[
                     _modalField(
                       'Place of delivery *',
@@ -2833,7 +3005,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: const Text('Add'),
+                child: Text(editIndex != null ? 'Save Changes' : 'Add'),
               ),
             ],
           );
@@ -2842,14 +3014,14 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     );
 
     if (confirmed == true && outcomeDate != null) {
-      final pp = _PastPregnancy(outcome: outcome, outcomeDate: outcomeDate!)
+      return _PastPregnancy(outcome: outcome, outcomeDate: outcomeDate!)
         ..isEstimated = isEstimated
         ..gestationalAgeAtEnd = double.tryParse(gaCtrl.text.trim())
         ..placeOfDelivery =
             placeCtrl.text.trim().isEmpty ? null : placeCtrl.text.trim()
         ..deliveryMethod = deliveryMethod;
-      setState(() => _pastPregnancies.add(pp));
     }
+    return null;
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ UI Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -3212,6 +3384,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     required String title,
     required String subtitle,
     required VoidCallback onDelete,
+    VoidCallback? onEdit,
   }) =>
       Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -3244,14 +3417,42 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               color: AppColors.textSecondary,
             ),
           ),
-          trailing: IconButton(
-            icon: const Icon(
-              Icons.delete_outline_rounded,
-              color: AppColors.error,
-              size: 20,
-            ),
-            onPressed: onDelete,
-          ),
+          trailing: onEdit != null
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: AppColors.brandAccent,
+                        size: 20,
+                      ),
+                      onPressed: onEdit,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: AppColors.error,
+                        size: 20,
+                      ),
+                      onPressed: onDelete,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                  ],
+                )
+              : IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.error,
+                    size: 20,
+                  ),
+                  onPressed: onDelete,
+                ),
         ),
       );
 
@@ -3458,6 +3659,67 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         ),
       );
 
+  Widget _modalDateTileWithError(
+    BuildContext ctx, {
+    required String label,
+    required VoidCallback onTap,
+    String? errorText,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.bgPrimary,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: errorText != null
+                        ? AppColors.error
+                        : AppColors.borderPrimary,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 17,
+                      color: AppColors.brandAccent,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (errorText != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, top: 4),
+                child: Text(
+                  errorText,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.error,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+
   Widget _modalDropdown(
     BuildContext ctx, {
     required String label,
@@ -3468,7 +3730,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(
             labelText: label,
             filled: true,

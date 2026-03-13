@@ -479,6 +479,29 @@ CREATE TABLE ocr_results (
     -- Indicates whether OCR was performed by AI (Gemini)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE symptom_types (
+    symptom_type_id BIGSERIAL PRIMARY KEY,
+    -- Standardized pregnancy symptom
+    symptom_name VARCHAR(100) UNIQUE NOT NULL,
+    -- Clinical classification
+    risk_category VARCHAR(10) NOT NULL CHECK (risk_category IN ('normal', 'warning', 'danger')),
+    -- Optional medical explanation
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE pregnancy_symptoms (
+    symptom_id BIGSERIAL PRIMARY KEY,
+    -- Pregnancy where symptom occurred
+    pregnancy_id BIGINT NOT NULL REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
+    -- Prenatal visit where symptom was observed
+    prenatal_checkup_id BIGINT REFERENCES prenatal_checkups(prenatal_checkup_id) ON DELETE
+    SET NULL,
+        -- Link to standardized symptom
+        symptom_type_id BIGINT NOT NULL REFERENCES symptom_types(symptom_type_id) ON DELETE RESTRICT,
+        -- Optional clinical notes
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 -- =========================
 -- CREATE INDEXES FOR PERFORMANCE
 -- =========================
@@ -496,6 +519,8 @@ CREATE INDEX idx_checkup_schedule_date ON checkup_schedule(scheduled_date);
 CREATE INDEX idx_files_reference ON files(reference_type, reference_id);
 CREATE INDEX idx_ocr_file ON ocr_results(file_id);
 CREATE INDEX idx_ai_reference ON ai_responses(reference_table, reference_id);
+CREATE INDEX idx_symptoms_pregnancy ON pregnancy_symptoms(pregnancy_id);
+CREATE INDEX idx_symptoms_checkup ON pregnancy_symptoms(prenatal_checkup_id);
 -- =========================
 -- UPDATED_AT TRIGGERS
 -- =========================
@@ -541,3 +566,11 @@ ALTER TABLE allergies DISABLE ROW LEVEL SECURITY;
 ALTER TABLE mothers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancies DISABLE ROW LEVEL SECURITY;
 ALTER TABLE deliveries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE prenatal_checkups DISABLE ROW LEVEL SECURITY;
+ALTER TABLE mother_medications DISABLE ROW LEVEL SECURITY;
+ALTER TABLE given_medications DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ultrasounds DISABLE ROW LEVEL SECURITY;
+ALTER TABLE lab_tests DISABLE ROW LEVEL SECURITY;
+ALTER TABLE files DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pregnancy_symptoms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE symptom_types DISABLE ROW LEVEL SECURITY;
