@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿// lib/main.dart
+
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -100,7 +102,7 @@ class InaagapayApp extends StatelessWidget {
             home: Scaffold(
               body: Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(const Color(0xFFDE3A53)),
+                  valueColor: AlwaysStoppedAnimation<Color>(const Color(0xFFFF68A5)),
                 ),
               ),
             ),
@@ -111,18 +113,18 @@ class InaagapayApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Inaagapay',
           theme: ThemeData(
-            primaryColor: const Color(0xFFDE3A53),
+            primaryColor: const Color(0xFFFF68A5),
             colorScheme: ColorScheme.fromSwatch().copyWith(
-              primary: const Color(0xFFDE3A53),
-              secondary: const Color(0xFF1B998B),
+              primary: const Color(0xFFFF68A5),
+              secondary: const Color(0xFFE6398D),
             ),
-            fontFamily: 'Inter',
+            fontFamily: 'Poppins',
             appBarTheme: const AppBarTheme(
               elevation: 0,
               centerTitle: true,
             ),
             bottomNavigationBarTheme: BottomNavigationBarThemeData(
-              selectedItemColor: const Color(0xFFDE3A53),
+              selectedItemColor: const Color(0xFFFF68A5),
               unselectedItemColor: Colors.grey.shade600,
               type: BottomNavigationBarType.fixed,
               backgroundColor: Colors.white,

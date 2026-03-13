@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-// Change these:
+import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
@@ -26,7 +26,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    print('=== LOGIN SCREEN INITIALIZED ===');
+    if (kDebugMode) {
+      debugPrint('=== LOGIN SCREEN INITIALIZED ===');
+    }
   }
 
   @override
@@ -37,12 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    print('=== LOGIN ATTEMPT ===');
-    print('Email: ${_emailController.text}');
-    print('Password length: ${_passwordController.text.length}');
-    
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      print('ERROR: Empty fields');
       setState(() {
         _hasError = true;
         _errorMessage = 'Please fill in all fields';
@@ -62,13 +59,10 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
-      print('Login response: $response');
       setState(() => _isLoading = false);
-
       if (!mounted) return;
 
       if (response['success'] && response['token'] != null) {
-        // Save auth data
         await AuthStorage.saveToken(response['token']);
         await AuthStorage.saveUserRole(response['user']['role']);
         await AuthStorage.saveUserId(response['user']['id']);
@@ -80,57 +74,40 @@ class _LoginScreenState extends State<LoginScreen> {
           await AuthStorage.saveProfileComplete(
             response['user']['profile_complete'] == true,
           );
-          print('Profile complete: ${response['user']['profile_complete']}');
         }
 
-        // Navigate based on role
         final role = response['user']['role'];
         final profileComplete = response['user']['profile_complete'] == true;
 
+        if (!mounted) return;
+
         if (role == 'mother') {
-          if (profileComplete) {
-            print('Navigating to mother dashboard');
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              '/mother-dashboard',
-              (route) => false,
-            );
-          } else {
-            print('Navigating to complete profile');
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              '/complete-profile',
-              (route) => false,
-            );
-          }
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            profileComplete ? '/mother-dashboard' : '/complete-profile',
+            (route) => false,
+          );
         } else if (role == 'midwife') {
-          print('Navigating to midwife dashboard');
           Navigator.pushNamedAndRemoveUntil(
             context,
             '/midwife-dashboard',
             (route) => false,
           );
-        } else if (role == 'admin') {
-          print('Navigating to admin dashboard');
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/admin-dashboard',
-            (route) => false,
-          );
         } else {
           setState(() {
             _hasError = true;
-            _errorMessage = 'Unknown user role';
+            _errorMessage = role == 'admin'
+                ? 'Admin accounts must use the administrative web portal.'
+                : 'Unknown user role';
           });
         }
       } else {
         setState(() {
           _hasError = true;
-          _errorMessage = response['message'];
+          _errorMessage = response['message'] ?? 'Login failed';
         });
       }
     } catch (e) {
-      print('Login exception: $e');
       setState(() {
         _isLoading = false;
         _hasError = true;
@@ -141,8 +118,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print('Login screen build - Button enabled: ${!_isLoading}');
-    
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
@@ -151,16 +126,18 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 60),
-              
-              // App Name
-              const Text(
-                'Inaagapay',
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFDE3A53),
-                ),
+              const SizedBox(height: 40),
+
+              // Logo
+              Image.asset('assets/images/logo.png', height: 146),
+
+              const SizedBox(height: 20),
+
+              // App name
+              Image.asset(
+                'assets/images/inaagapay_name.png',
+                width: 282,
+                fit: BoxFit.contain,
               ),
 
               const SizedBox(height: 8),
@@ -169,54 +146,44 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text(
                 'Supporting you through every step',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
 
               const SizedBox(height: 56),
 
-              // Email Field
+              // Email
               AppInputField(
                 hintText: 'Email Address',
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 leadingIcon: Icons.email_outlined,
                 onChanged: (_) {
-                  if (_hasError) {
-                    setState(() {
-                      _hasError = false;
-                      _errorMessage = '';
-                    });
-                  }
+                  if (_hasError) setState(() => _hasError = false);
                 },
               ),
 
               const SizedBox(height: 20),
 
-              // Password Field
+              // Password
               AppInputField(
                 hintText: 'Password',
                 controller: _passwordController,
                 obscureText: _obscurePassword,
                 leadingIcon: Icons.lock_outline,
-                trailingIcon: _obscurePassword
-                    ? Icons.visibility_off
-                    : Icons.visibility,
-                onTrailingTap: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
-                },
+                trailingIcon:
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                onTrailingTap: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
                 onChanged: (_) {
-                  if (_hasError) {
-                    setState(() {
-                      _hasError = false;
-                      _errorMessage = '';
-                    });
-                  }
+                  if (_hasError) setState(() => _hasError = false);
                 },
               ),
 
-              // Error Message
+              // Error message
               if (_hasError) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -228,21 +195,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 20),
 
-              // Forgot Password Link
+              // Forgot password
               Align(
                 alignment: Alignment.centerRight,
                 child: ClickableText(
                   text: 'Forgot Password?',
-                  onTap: () {
-                    print('Navigating to forgot password');
-                    Navigator.pushNamed(context, '/forgot-password');
-                  },
+                  onTap: () => Navigator.pushNamed(context, '/forgot-password'),
                 ),
               ),
 
               const SizedBox(height: 56),
 
-              // Sign In Button
+              // Sign in button
               MainButton(
                 label: _isLoading ? 'Signing in...' : 'Sign in',
                 showIcons: false,
@@ -251,7 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 32),
 
-              // Register Link
+              // Register link
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -264,10 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   ClickableText(
                     text: 'Register Here',
-                    onTap: () {
-                      print('Navigating to register');
-                      Navigator.pushNamed(context, '/register');
-                    },
+                    onTap: () => Navigator.pushNamed(context, '/register'),
                   ),
                 ],
               ),

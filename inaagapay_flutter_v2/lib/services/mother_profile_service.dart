@@ -1,3 +1,5 @@
+// lib/services/mother_profile_service.dart
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 
@@ -31,10 +33,6 @@ class MotherProfileService {
           ''')
           .eq('mother_id', motherId)
           .single();
-
-      if (kDebugMode) {
-        print('Mother data fetched');
-      }
 
       final account = motherResponse['account'] as Map<String, dynamic>? ?? {};
 
@@ -146,33 +144,6 @@ class MotherProfileService {
       
       final List<dynamic> children = childrenResponse as List<dynamic>;
 
-      // Get medications
-      final medicationsResponse = await client
-          .from('mother_medications')
-          .select('*')
-          .eq('mother_id', motherId)
-          .order('created_at', ascending: false);
-      
-      final List<dynamic> medications = medicationsResponse as List<dynamic>;
-
-      // Get given medications
-      final givenMedicationsResponse = await client
-          .from('given_medications')
-          .select('*')
-          .eq('mother_id', motherId)
-          .order('date_given', ascending: false);
-      
-      final List<dynamic> givenMedications = givenMedicationsResponse as List<dynamic>;
-
-      // Get journal entries
-      final journalEntriesResponse = await client
-          .from('journal_entries')
-          .select('*')
-          .eq('mother_id', motherId)
-          .order('created_at', ascending: false);
-      
-      final List<dynamic> journalEntries = journalEntriesResponse as List<dynamic>;
-
       // Calculate children count
       final childrenCount = children.length;
 
@@ -223,13 +194,6 @@ class MotherProfileService {
         // Children
         'children': children,
         'children_count': childrenCount,
-        
-        // Medications
-        'mother_medications': medications,
-        'given_medications': givenMedications,
-        
-        // Journal
-        'journal_entries': journalEntries,
       };
 
       if (kDebugMode) {

@@ -1,4 +1,5 @@
 // lib/widgets/secondary_header.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -14,28 +15,34 @@ class SecondaryHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          if (onBack != null) ...[
-            IconButton(
-              icon: const Icon(Icons.arrow_back_ios, size: 18),
-              onPressed: onBack,
-              color: AppColors.textPrimary,
-            ),
-          ],
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+    return SafeArea(
+      bottom: false,
+      child: SizedBox(
+        height: 56,
+        child: Row(
+          children: [
+            if (onBack != null)
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new),
+                color: AppColors.brandPrimary,
+                onPressed: onBack,
+              )
+            else
+              const SizedBox(width: 48),
+            Expanded(
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.brandPrimary,
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 48),
+          ],
+        ),
       ),
     );
   }

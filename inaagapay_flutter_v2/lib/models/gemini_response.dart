@@ -1,11 +1,12 @@
 // lib/models/gemini_response.dart
+
 class GeminiResponse {
   final String description;
   final List<String>? measurements;
   final List<String>? labels;
   final double? confidence;
   
-  // Fields for health assessment
+  // Fields for ultrasound assessment
   final String? healthStatus;
   final List<String>? normalFindings;
   final List<String>? concerns;
@@ -64,7 +65,7 @@ class GeminiResponse {
       healthStatus = 'CONSULT SPECIALIST ⚠️⚠️';
     }
 
-    // Extract measurements
+    // Extract measurements for ultrasound
     List<String> extractedMeasurements = [];
     List<String> normalList = [];
     List<String> concernsList = [];
@@ -90,12 +91,9 @@ class GeminiResponse {
           if (match.group(0) != null) {
             extractedMeasurements.add(match.group(0)!);
             
-            // Check if it's a heart rate
             if (match.group(0)!.contains('bpm')) {
               hr = match.group(0);
-            }
-            // Check if it's fetal weight
-            else if (match.group(0)!.contains('kg') || match.group(0)!.contains('g')) {
+            } else if (match.group(0)!.contains('kg') || match.group(0)!.contains('g')) {
               fw = match.group(0);
             }
           }

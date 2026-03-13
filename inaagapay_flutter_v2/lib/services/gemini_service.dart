@@ -1,26 +1,24 @@
+// lib/services/gemini_service.dart
+
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/gemini_response.dart';
+import '../models/ocr_result.dart';
 
 class GeminiService {
-  // Start with base models, will be updated after checking available models
   final List<String> _modelsToTry = [
-    'gemini-pro-vision',
     'gemini-1.5-flash',
     'gemini-1.5-flash-001',
     'gemini-1.5-flash-latest',
-    'gemini-1.5-pro',
-    'gemini-1.0-pro-vision',
+    'gemini-pro-vision',
   ];
-  
+
   String? _workingModel;
   String? _workingApiVersion;
   List<String> _availableModels = [];
-
-  // For debugging - set to false in production
   final bool _debugMode = true;
 
   void _log(String message) {
@@ -29,49 +27,38 @@ class GeminiService {
     }
   }
 
-  // Method to check available models from the API
   Future<void> checkAvailableModels() async {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
-    if (apiKey == null || apiKey.isEmpty) {
-      _log('No API key found for checking models');
-      return;
-    }
-    
+    if (apiKey == null || apiKey.isEmpty) return;
+
     final url = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1/models?key=$apiKey'
-    );
-    
+        'https://generativelanguage.googleapis.com/v1/models?key=$apiKey');
+
     try {
-      _log('Checking available Gemini models...');
       final response = await http.get(url).timeout(const Duration(seconds: 10));
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final models = data['models'] as List? ?? [];
-        
+
         _availableModels = models
-            .map<String>((model) => model['name'].toString().replaceFirst('models/', ''))
-            .where((name) => name.contains('vision') || name.contains('flash') || name.contains('pro'))
+            .map<String>(
+                (model) => model['name'].toString().replaceFirst('models/', ''))
+            .where(
+                (name) => name.contains('flash') || name.contains('pro-vision'))
             .toList();
-        
-        _log('Available vision-capable models: ${_availableModels.join(', ')}');
-        
-        // Update _modelsToTry with actually available models
+
         if (_availableModels.isNotEmpty) {
           _modelsToTry.clear();
           _modelsToTry.addAll(_availableModels);
-          _log('Updated models to try: ${_modelsToTry.join(', ')}');
         }
-      } else {
-        _log('Failed to get models: HTTP ${response.statusCode}');
-        _log('Response: ${response.body}');
       }
     } catch (e) {
       _log('Error checking available models: $e');
     }
   }
 
-  // Method for analyzing multiple ultrasound images with health assessment
+  // Ultrasound Analysis
   Future<GeminiResponse> analyzeUltrasoundImages(List<XFile> imageFiles) async {
     if (imageFiles.isEmpty) {
       throw Exception('No images selected');
@@ -82,105 +69,45 @@ class GeminiService {
       throw Exception('Gemini API Key not found in .env');
     }
 
-    // Check available models first if we haven't already
     if (_availableModels.isEmpty) {
       await checkAvailableModels();
     }
 
-    _log('Analyzing ${imageFiles.length} ultrasound images together...');
-    
-    return _analyzeCombinedUltrasound(imageFiles, apiKey);
-  }
-
-  Future<GeminiResponse> _analyzeCombinedUltrasound(
-    List<XFile> imageFiles, 
-    String apiKey
-  ) async {
-    final String combinedPrompt = """
-You are an AI assistant that helps summarize ultrasound images for record-keeping purposes and provides health assessments based on standard medical guidelines.
+    final String prompt = """
+You are an AI assistant that helps analyze ultrasound images for maternal and child health.
 
 IMPORTANT DISCLAIMER: You are not making a medical diagnosis. You are providing observations based on standard fetal biometry reference ranges. Always consult with a healthcare professional.
 
 I am providing you with ${imageFiles.length} ultrasound images of the same patient/pregnancy. 
 Please analyze ALL images together and provide a COMPREHENSIVE HEALTH ASSESSMENT that includes:
 
-1. OVERALL HEALTH STATUS: Based on all images, provide a clear assessment of whether the pregnancy appears:
+1. OVERALL HEALTH STATUS: Based on all images, provide a clear assessment:
    - HEALTHY/NORMAL: All measurements within normal ranges
    - REQUIRES MONITORING: Some measurements slightly outside normal ranges
    - CONSULT SPECIALIST: Multiple measurements significantly outside normal ranges
 
-2. DETAILED ANALYSIS:
-   a) FETAL BIOMETRY ASSESSMENT:
-      - For each measurement found (BPD, HC, AC, FL), indicate if it's:
-        * Normal (within 5th-95th percentile)
-        * Borderline (just outside normal range)
-        * Concerning (significantly outside normal range)
-   
-   b) GESTATIONAL AGE: Provide the most consistent estimate and indicate if it matches expected dates
-   
-   c) FETAL WEIGHT: Provide estimate and indicate if it's appropriate for gestational age
-   
-   d) HEART RATE: Provide reading and indicate if it's within normal range (120-160 bpm)
+2. DETAILED MEASUREMENTS ASSESSMENT:
+   List all visible measurements (BPD, HC, AC, FL, Heart Rate, etc.) and indicate if they are NORMAL, BORDERLINE, or CONCERNING
 
-3. KEY FINDINGS:
-   - List all visible anatomical structures and indicate if they appear normal
-   - Note any visible abnormalities or concerns
-   - Assess amniotic fluid volume (normal, low, high)
-   - Assess placental position and appearance
+3. GESTATIONAL AGE ASSESSMENT:
+   Provide estimated gestational age based on measurements
 
-4. HEALTH SUMMARY:
-   - Overall assessment in 2-3 sentences
-   - Specific recommendations for monitoring if any concerns noted
-   - Clear disclaimer that this is not a medical diagnosis
+4. ANATOMICAL ASSESSMENT:
+   List visible structures and indicate if they appear normal (use ✓ for normal)
 
-Format your response exactly like this example:
+5. KEY OBSERVATIONS:
+   Note any important findings
 
-"COMPREHENSIVE ULTRASOUND HEALTH ASSESSMENT
-=============================================
+6. HEALTH SUMMARY:
+   Overall assessment and recommendations
 
-OVERALL HEALTH STATUS: HEALTHY/NORMAL ✓
-All measured parameters are within normal ranges for gestational age. The pregnancy appears to be progressing normally.
-
-DETAILED MEASUREMENTS ASSESSMENT:
-• BPD (Biparietal Diameter): 80 mm - NORMAL (appropriate for 32 weeks)
-• HC (Head Circumference): 290 mm - NORMAL (appropriate for 32 weeks)
-• AC (Abdominal Circumference): 270 mm - NORMAL (appropriate for 32 weeks)
-• FL (Femur Length): 62 mm - NORMAL (appropriate for 32 weeks)
-• Fetal Heart Rate: 142 bpm - NORMAL (within 120-160 bpm range)
-• Estimated Fetal Weight: 2.3 kg - NORMAL for gestational age
-• Amniotic Fluid Index: 14 cm - NORMAL
-• Placenta: Anterior, Grade II - NORMAL for this stage
-
-GESTATIONAL AGE ASSESSMENT:
-• Consistent at 32 weeks 1 day across all measurements
-• Matches expected dates based on measurements
-
-ANATOMICAL ASSESSMENT:
-✓ Fetal head: Normal shape and anatomy visualized
-✓ Fetal brain: Normal ventricular appearance
-✓ Fetal spine: Intact, normal alignment
-✓ Fetal heart: Four-chamber view normal, regular rhythm
-✓ Fetal abdomen: Stomach and bladder visualized
-✓ Fetal limbs: All present, normal movement observed
-✓ Umbilical cord: Three vessels visualized
-
-KEY OBSERVATIONS:
-• Good fetal movements noted throughout exam
-• Fetal position: Cephalic (head-down)
-• Posterior neck: Normal appearance
-
-HEALTH SUMMARY:
-This ultrasound shows a normally developing fetus at 32 weeks gestation with all biometric measurements within expected ranges. Fetal anatomy appears normal and amniotic fluid volume is adequate. The pregnancy is progressing as expected for gestational age.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ IMPORTANT DISCLAIMER: This assessment is based on standard fetal growth references and visible anatomical structures. It is NOT a medical diagnosis. Always consult with your healthcare provider for proper interpretation of ultrasound findings and medical advice.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Format your response with clear sections and use ✓ for normal findings.
 """;
 
-    return _makeMultiImageRequest(imageFiles, apiKey, combinedPrompt);
+    return _makeMultiImageRequest(imageFiles, apiKey, prompt);
   }
 
-  // Method for analyzing lab test images
+  // Lab Test Analysis
   Future<GeminiResponse> analyzeLabTestImages(List<XFile> imageFiles) async {
     if (imageFiles.isEmpty) {
       throw Exception('No images selected');
@@ -228,81 +155,228 @@ Format your response with clear sections and use bullet points for easy reading.
     return _makeMultiImageRequest(imageFiles, apiKey, prompt);
   }
 
-  Future<GeminiResponse> _makeMultiImageRequest(
-    List<XFile> imageFiles, 
-    String apiKey,
-    String customPrompt
-  ) async {
-    // If we already found a working model, use it
-    if (_workingModel != null && _workingApiVersion != null) {
-      return _sendMultiImageRequest(imageFiles, apiKey, _workingModel!, _workingApiVersion!, customPrompt);
+  // ─── OCR: Extract mother registration data from image ───────────────────────
+  /// Sends [imageFile] to Gemini and returns a structured [OcrResult] with
+  /// all fields that could be read from the document / handwritten form.
+  Future<OcrResult> extractMotherRegistrationData(XFile imageFile) async {
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Gemini API Key not found in .env');
     }
-    
+
+    if (_availableModels.isEmpty) {
+      await checkAvailableModels();
+    }
+
+    const prompt = r'''
+You are an OCR assistant that reads maternal health / patient registration forms (printed or handwritten).
+Extract every visible field and return ONLY a single JSON object — no markdown, no prose, no code fence.
+
+Output schema (all fields optional, omit if not found):
+{
+  "first_name": "string",
+  "middle_name": "string",
+  "last_name": "string",
+  "extension_name": "string",
+  "phone": "string",
+  "email": "string",
+  "house_number": "string",
+  "street": "string",
+  "barangay": "string",
+  "city": "string",
+  "province": "string",
+  "birthdate": "YYYY-MM-DD",
+  "height_cm": number,
+  "weight_kg": number,
+  "blood_type": "A+|A-|B+|B-|AB+|AB-|O+|O-|Unknown",
+  "lmp_date": "YYYY-MM-DD",
+  "edd_date": "YYYY-MM-DD",
+  "emergency_contacts": [
+    {
+      "first_name": "string",
+      "middle_name": "string",
+      "last_name": "string",
+      "extension_name": "string",
+      "phone_number": "string",
+      "affiliation": "string"
+    }
+  ],
+  "medical_conditions": [
+    {
+      "condition_name": "string",
+      "diagnosis_date": "YYYY-MM-DD",
+      "status": "active|resolved",
+      "remarks": "string"
+    }
+  ],
+  "allergies": [
+    {
+      "allergen": "string",
+      "diagnosis_date": "YYYY-MM-DD",
+      "status": "active|resolved",
+      "treatment": "string",
+      "remarks": "string"
+    }
+  ],
+  "past_pregnancies": [
+    {
+      "outcome": "live_birth|stillbirth|miscarriage|abortion|ectopic",
+      "outcome_date": "YYYY-MM-DD",
+      "is_estimated": false,
+      "gestational_age_at_end": number,
+      "place_of_delivery": "string",
+      "delivery_method": "Normal Spontaneous Vaginal Delivery|Cesarean Section|Assisted Vaginal Delivery|Other"
+    }
+  ]
+}
+Rules:
+- Dates must be ISO format (YYYY-MM-DD); infer year if only month/day visible.
+- For phone numbers keep Filipino format (09XXXXXXXXX or +639XXXXXXXXX).
+- outcome must be exactly one of the listed enum values in lowercase_with_underscores.
+- If a field is not visible or illegible, omit it entirely.
+- Return ONLY the JSON — no extra text.
+''';
+
+    // Build request parts
+    final bytes = await imageFile.readAsBytes();
+    final base64Image = base64Encode(bytes);
+    String mimeType = 'image/jpeg';
+    final ext = imageFile.path.split('.').last.toLowerCase();
+    if (ext == 'png')
+      mimeType = 'image/png';
+    else if (ext == 'webp') mimeType = 'image/webp';
+
+    final parts = [
+      {"text": prompt},
+      {
+        "inline_data": {"mime_type": mimeType, "data": base64Image}
+      },
+    ];
+
+    final requestBody = {
+      "contents": [
+        {"parts": parts}
+      ],
+      "generationConfig": {
+        "temperature": 0.1,
+        "topK": 32,
+        "topP": 1,
+        "maxOutputTokens": 4096,
+        "responseMimeType": "application/json",
+      }
+    };
+
     Exception? lastError;
-    
-    // Try all models until one works
-    for (String model in _modelsToTry) {
-      for (String apiVersion in ['v1', 'v1beta']) {
+    for (final model in _modelsToTry) {
+      for (final apiVersion in ['v1beta', 'v1']) {
         try {
-          _log('Trying $apiVersion/$model for multi-image analysis...');
-          final result = await _sendMultiImageRequest(imageFiles, apiKey, model, apiVersion, customPrompt);
-          // Save working model
+          final url = Uri.parse(
+            'https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent?key=$apiKey',
+          );
+          final response = await http
+              .post(
+                url,
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode(requestBody),
+              )
+              .timeout(const Duration(seconds: 60));
+
+          if (response.statusCode != 200) {
+            lastError = Exception('API Error (${response.statusCode})');
+            continue;
+          }
+
+          final data = jsonDecode(response.body);
+          String raw = '';
+          try {
+            raw =
+                data['candidates'][0]['content']['parts'][0]['text'] as String;
+          } catch (_) {
+            lastError = Exception('Unexpected Gemini response shape');
+            continue;
+          }
+
+          // Strip any accidental markdown fences
+          raw = raw.trim();
+          if (raw.startsWith('```')) {
+            raw = raw
+                .replaceAll(RegExp(r'^```[a-z]*\n?'), '')
+                .replaceAll(RegExp(r'\n?```$'), '')
+                .trim();
+          }
+
+          final json = jsonDecode(raw) as Map<String, dynamic>;
           _workingModel = model;
           _workingApiVersion = apiVersion;
-          _log('✅ SUCCESS! Using model: $model with API version: $apiVersion');
-          return result;
+          return OcrResult.fromJson(json);
         } catch (e) {
-          _log('❌ $apiVersion/$model failed: ${e.toString()}');
           lastError = e is Exception ? e : Exception(e.toString());
         }
       }
     }
-    
-    // If all models failed, show helpful error message
-    _log('❌ All models failed. Available models on your account: ${_availableModels.join(', ')}');
-    throw lastError ?? Exception('All models failed. Please check your API key permissions.');
+
+    throw lastError ??
+        Exception('OCR failed. Please check your API key and try again.');
+  }
+
+  Future<GeminiResponse> _makeMultiImageRequest(
+    List<XFile> imageFiles,
+    String apiKey,
+    String customPrompt,
+  ) async {
+    if (_workingModel != null && _workingApiVersion != null) {
+      return _sendMultiImageRequest(imageFiles, apiKey, _workingModel!,
+          _workingApiVersion!, customPrompt);
+    }
+
+    Exception? lastError;
+
+    for (String model in _modelsToTry) {
+      for (String apiVersion in ['v1', 'v1beta']) {
+        try {
+          final result = await _sendMultiImageRequest(
+              imageFiles, apiKey, model, apiVersion, customPrompt);
+          _workingModel = model;
+          _workingApiVersion = apiVersion;
+          return result;
+        } catch (e) {
+          lastError = e is Exception ? e : Exception(e.toString());
+        }
+      }
+    }
+
+    throw lastError ??
+        Exception('All models failed. Please check your API key permissions.');
   }
 
   Future<GeminiResponse> _sendMultiImageRequest(
-    List<XFile> imageFiles, 
-    String apiKey, 
-    String model,
-    String apiVersion,
-    String customPrompt
-  ) async {
+      List<XFile> imageFiles,
+      String apiKey,
+      String model,
+      String apiVersion,
+      String customPrompt) async {
     final url = Uri.parse(
-      'https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent?key=$apiKey'
-    );
+        'https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent?key=$apiKey');
 
-    // Build parts array with text prompt + all images
     List<Map<String, dynamic>> parts = [
       {"text": customPrompt}
     ];
 
-    // Add all images as inline_data
     for (int i = 0; i < imageFiles.length; i++) {
       final bytes = await imageFiles[i].readAsBytes();
       final base64Image = base64Encode(bytes);
-      
-      // Determine mime type
+
       String mimeType = 'image/jpeg';
       final extension = imageFiles[i].path.split('.').last.toLowerCase();
-      if (extension == 'png') {
+      if (extension == 'png')
         mimeType = 'image/png';
-      } else if (extension == 'jpg' || extension == 'jpeg') {
+      else if (extension == 'jpg' || extension == 'jpeg')
         mimeType = 'image/jpeg';
-      } else if (extension == 'webp') {
-        mimeType = 'image/webp';
-      }
+      else if (extension == 'webp') mimeType = 'image/webp';
 
       parts.add({
-        "inline_data": {
-          "mime_type": mimeType,
-          "data": base64Image
-        }
+        "inline_data": {"mime_type": mimeType, "data": base64Image}
       });
-      
-      _log('Image ${i + 1} added: ${(bytes.length / 1024).toStringAsFixed(2)} KB');
     }
 
     final requestBody = {
@@ -317,34 +391,19 @@ Format your response with clear sections and use bullet points for easy reading.
       }
     };
 
-    _log('Sending ${imageFiles.length} images together for health assessment...');
-    
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(requestBody),
-    ).timeout(const Duration(seconds: 60));
+    final response = await http
+        .post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 60));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      _log('✅ Health assessment successful!');
       return GeminiResponse.fromJson(data);
     } else {
-      _log('❌ HTTP ${response.statusCode}: ${response.body}');
       throw Exception('API Error (${response.statusCode})');
     }
-  }
-
-  // Method to get model information
-  String getCurrentModelInfo() {
-    if (_workingModel != null) {
-      return "✅ Using model: $_workingModel (API: $_workingApiVersion)";
-    }
-    return "⏳ No active model yet. Available models: ${_availableModels.join(', ')}";
-  }
-  
-  // Method to get available models
-  List<String> getAvailableModels() {
-    return List.from(_availableModels);
   }
 }

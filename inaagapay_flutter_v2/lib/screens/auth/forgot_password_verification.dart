@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-// Change these:
 import '../../theme/app_colors.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/otp_input_field.dart';
@@ -60,23 +59,23 @@ class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerific
       _hasError = false;
     });
 
-    // For password reset, you might want to verify the OTP differently
-    // This is a placeholder - adjust based on your needs
-    if (_code.length == 6) {
-      // TODO: Verify reset code
-      Navigator.pushNamed(context, '/change-forgot-password');
-    } else {
-      setState(() {
-        _isVerifying = false;
-        _hasError = true;
-      });
-    }
+    // Verify reset code - you need to implement this in SupabaseService
+    // For now, just navigate to change password
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    if (!mounted) return;
+    
+    setState(() {
+      _isVerifying = false;
+    });
+    
+    Navigator.pushNamed(context, '/change-forgot-password');
   }
 
   Future<void> _resendCode() async {
     setState(() => _isVerifying = true);
 
-    final result = await SupabaseService.resetPassword(email);
+    final result = await SupabaseService.resendVerificationCode(email);
 
     if (!mounted) return;
 
@@ -111,13 +110,13 @@ class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerific
             children: [
               const SizedBox(height: 40),
               
-              // App Name (text instead of image)
+              // App Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFDE3A53),
+                  color: Color(0xFFFF68A5),
                 ),
               ),
               

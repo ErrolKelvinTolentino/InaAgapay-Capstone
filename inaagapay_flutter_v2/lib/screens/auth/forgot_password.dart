@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-// Change these:
+import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
@@ -32,15 +32,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (result['success']) {
+    if (result['success'] as bool? ?? false) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message']),
+          content: Text(result['message'] as String? ?? 'Reset code sent'),
           backgroundColor: AppColors.success,
         ),
       );
       
-      // Navigate to verification or just show success
       Navigator.pushNamed(
         context,
         '/forgot-password-verify',
@@ -49,7 +48,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message']),
+          content: Text(result['message'] as String? ?? 'Failed to send reset code'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -67,13 +66,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             children: [
               const SizedBox(height: 40),
               
-              // App Name (text instead of image)
+              // App Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFDE3A53),
+                  color: Color(0xFFFF68A5),
                 ),
               ),
               

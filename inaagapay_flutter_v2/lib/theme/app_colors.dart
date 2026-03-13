@@ -1,27 +1,38 @@
+﻿// lib/theme/app_colors.dart
+
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Brand Colors
-  static const Color brandPrimary = Color(0xFFDE3A53); // Pink/Red
-  static const Color brandSecondary = Color(0xFF1B998B); // Teal
-  static const Color brandAccent = Color(0xFFFF6B6B); // Light Red
-  
-  // Text Colors
-  static const Color textPrimary = Color(0xFF2D3436);
-  static const Color textSecondary = Color(0xFF636E72);
-  static const Color brandText = Color(0xFF2D3436); // Added for profile page
-  
-  // Background Colors
-  static const Color bgPrimary = Color(0xFFF8F9FA);
-  static const Color bgSecondary = Color(0xFFE9ECEF);
-  static const Color faintWhite = Color(0xFFF5F5F5); // Added for profile page
-  
-  // Border Colors
-  static const Color borderPrimary = Color(0xFFDFE6E9);
-  
-  // Status Colors
-  static const Color success = Color(0xFF00B894);
-  static const Color warning = Color(0xFFFDCB6E);
-  static const Color error = Color(0xFFD63031);
-  static const Color info = Color(0xFF0984E3);
+  // ===== LIGHT =====
+  static const bgPrimary = Color(0xFFFAFAFA);
+  static const bgSecondary = Color(0xFFFFF5F8);
+
+  static const textPrimary = Color(0xFF2D2D2D);
+  static const textSecondary = Color(0xFF8A8A8A);
+  static const textOnColor = Color(0xFFFFFFFF);
+  static const faintWhite = Color(0xFFFFF9FC);
+
+  static const brandPrimary = Color(0xFFFF68A5);
+  static const brandSecondary = Color(0xFFFFF8FB);
+  static const brandAccent = Color(0xFFE6398D);
+  static const brandText = Color(0xFFC73578);
+
+  static const borderPrimary = Color(0xFFF0F0F0);
+
+  static const success = Color(0xFF68CBB8);
+  static const warning = Color(0xFFFFB562);
+  static const error = Color(0xFFE57373);
+  static const info = Color(0xFF3B82F6);
+
+  // ===== DARK =====
+  static const darkBgPrimary = Color(0xFF121212);
+  static const darkBgSecondary = Color(0xFF1C1C1E);
+
+  static const darkTextPrimary = Color(0xFFEDEDED);
+  static const darkTextSecondary = Color(0xFFB3B3B3);
+
+  static const darkBorderPrimary = Color(0xFF2C2C2E);
+
+  static const darkBrandPrimary = Color(0xFFFF7EB6);
+  static const darkBrandAccent = Color(0xFFFF5FA2);
 }

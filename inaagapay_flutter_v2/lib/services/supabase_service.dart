@@ -1,74 +1,13 @@
+// lib/services/supabase_service.dart
+
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:bcrypt/bcrypt.dart';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 class SupabaseService {
+  // This ensures we always get the current client
   static SupabaseClient get client => Supabase.instance.client;
-  
-// Add to SupabaseService class
-static Future<Map<String, dynamic>> getMidwifeContext(int accountId) async {
-  try {
-    if (kDebugMode) {
-      print('=== GET MIDWIFE CONTEXT ===');
-      print('Account ID: $accountId');
-    }
-
-    // Get midwife details
-    final midwifeResponse = await client
-        .from('midwives')
-        .select('''
-          midwife_id,
-          assigned_bhc_id,
-          bhc!inner (
-            bhc_name
-          )
-        ''')
-        .eq('account_id', accountId)
-        .maybeSingle();
-
-    if (midwifeResponse == null) {
-      return {
-        'success': false,
-        'message': 'Midwife record not found',
-      };
-    }
-
-    final bhc = midwifeResponse['bhc'] as Map?;
-
-    return {
-      'success': true,
-      'midwife_id': midwifeResponse['midwife_id'],
-      'assigned_bhc_id': midwifeResponse['assigned_bhc_id'],
-      'bhc_name': bhc?['bhc_name'] ?? '',
-    };
-  } catch (e) {
-    if (kDebugMode) {
-      print('Error getting midwife context: $e');
-    }
-    return {
-      'success': false,
-      'message': 'Failed to get midwife context: ${e.toString()}',
-    };
-  }
-}
-
-// Add email availability check
-static Future<bool> isEmailAvailable(String email) async {
-  try {
-    final result = await client
-        .from('accounts')
-        .select('account_id')
-        .eq('email_address', email)
-        .maybeSingle();
-    
-    return result == null;
-  } catch (e) {
-    if (kDebugMode) {
-      print('Error checking email: $e');
-    }
-    return false;
-  }
-}
 
   // Generate 6-digit OTP code
   static String _generateOTP() {
@@ -76,276 +15,275 @@ static Future<bool> isEmailAvailable(String email) async {
     return (100000 + random.nextInt(900000)).toString();
   }
 
+  // Hash password using bcrypt
+  static String _hashPassword(String password) {
+    return BCrypt.hashpw(password, BCrypt.gensalt());
+  }
+
+  // Verify password against bcrypt hash
+  static bool _verifyPassword(String password, String hash) {
+    try {
+      return BCrypt.checkpw(password, hash);
+    } catch (e) {
+      // Fallback: plain text comparison for legacy plain-text passwords
+      return password == hash;
+    }
+  }
+
   // Test connection
   static Future<bool> testConnection() async {
     try {
-      if (kDebugMode) {
-        print('Testing Supabase connection...');
-      }
+      if (kDebugMode) debugPrint('Testing Supabase connection...');
       final result = await client.from('accounts').select('count').limit(1);
-      if (kDebugMode) {
-        print('Connection test result: $result');
-      }
+      if (kDebugMode) debugPrint('Connection test result: $result');
       return true;
     } catch (e) {
-      if (kDebugMode) {
-        print('Connection test failed: $e');
-      }
+      if (kDebugMode) debugPrint('Connection test failed: $e');
       return false;
     }
   }
 
-  // Login - Using Supabase Auth
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  // Login - Works with your database schema
+  static Future<Map<String, dynamic>> login(
+      String email, String password) async {
     try {
-      if (kDebugMode) {
-        print('Attempting login for: $email');
-      }
-      
+      if (kDebugMode) debugPrint('Attempting login for: $email');
+
       // Test connection first
       final isConnected = await testConnection();
       if (!isConnected) {
         return {
           'success': false,
-          'message': 'Cannot connect to server. Please check your internet connection.'
+          'message':
+              'Cannot connect to server. Please check your internet connection.'
         };
       }
-      
-      // Use Supabase Auth to sign in
-      final response = await client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
 
-      if (response.user != null) {
-        if (kDebugMode) {
-          print('✅ Auth login successful');
-          print('User ID: ${response.user!.id}');
-          print('Email confirmed: ${response.user!.emailConfirmedAt}');
-        }
-        
-        // Get user details from accounts table using email
-        final accountResponse = await client
-            .from('accounts')
-            .select('''
-              account_id,
-              account_type,
-              first_name,
-              middle_name,
-              last_name,
-              extension_name,
-              phone_number,
-              is_verified,
-              status
-            ''')
-            .eq('email_address', email)
-            .maybeSingle();
+      // First get the account with personal info
+      final accountResponse = await client.from('accounts').select('''
+            account_id,
+            email_address,
+            password_hash,
+            account_type,
+            is_verified,
+            status,
+            first_name,
+            middle_name,
+            last_name,
+            extension_name,
+            phone_number
+          ''').eq('email_address', email).maybeSingle();
 
-        // If account doesn't exist in accounts table, create it
-        if (accountResponse == null) {
-          if (kDebugMode) {
-            print('Account not found in accounts table, creating...');
-          }
-          
-          final newAccount = await client.from('accounts').insert({
-            'email_address': email,
-            'account_type': 'mother',
-            'is_verified': response.user!.emailConfirmedAt != null,
-            'status': response.user!.emailConfirmedAt != null ? 'active' : 'inactive',
-            'created_at': DateTime.now().toIso8601String(),
-          }).select('account_id, account_type, first_name, last_name, is_verified, status').single();
-              
-          // Generate token
-          final token = _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
-          
-          return {
-            'success': true,
-            'message': 'Login successful',
-            'token': token,
-            'user': {
-              'id': newAccount['account_id'],
-              'role': newAccount['account_type'],
-              'first_name': newAccount['first_name'],
-              'last_name': newAccount['last_name'],
-              'profile_complete': false,
-              'mother_id': null,
-            },
-          };
-        }
+      if (kDebugMode) debugPrint('Account query response: $accountResponse');
 
-        // Check if email is verified
-        final isEmailVerified = response.user!.emailConfirmedAt != null;
-        
-        if (!isEmailVerified) {
-          return {'success': false, 'message': 'Please verify your email first'};
-        }
+      if (accountResponse == null) {
+        return {'success': false, 'message': 'Invalid credentials'};
+      }
 
-        // Check account status
-        if (accountResponse['status'] != 'active') {
-          // Auto-fix status if email is verified
-          if (isEmailVerified) {
-            await client
-                .from('accounts')
-                .update({'status': 'active', 'is_verified': true})
-                .eq('email_address', email);
-                
-            if (kDebugMode) {
-              print('✅ Auto-fixed account status to active');
-            }
-          } else {
-            return {'success': false, 'message': 'Account is inactive'};
-          }
-        }
-
-        // Check if mother profile is complete
-        Map<String, dynamic>? motherData;
-        bool profileComplete = false;
-        
-        if (accountResponse['account_type'] == 'mother') {
-          try {
-            motherData = await client
-                .from('mothers')
-                .select('''
-                  mother_id,
-                  birthdate,
-                  house_number,
-                  street,
-                  barangay,
-                  city_municipality,
-                  province
-                ''')
-                .eq('account_id', accountResponse['account_id'])
-                .maybeSingle();
-            
-            if (motherData != null) {
-              profileComplete = 
-                  accountResponse['first_name'] != null && 
-                  accountResponse['last_name'] != null && 
-                  motherData['birthdate'] != null;
-            }
-          } catch (e) {
-            if (kDebugMode) {
-              print('Error fetching mother data: $e');
-            }
-          }
-        }
-
-        // Generate token
-        final token = _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
-
-        return {
-          'success': true,
-          'message': 'Login successful',
-          'token': token,
-          'user': {
-            'id': accountResponse['account_id'],
-            'role': accountResponse['account_type'],
-            'first_name': accountResponse['first_name'],
-            'last_name': accountResponse['last_name'],
-            'profile_complete': profileComplete,
-            'mother_id': motherData?['mother_id'],
-          },
-        };
-      } else {
+      // Block admin accounts from mobile login
+      if (accountResponse['account_type'] == 'admin') {
         return {
           'success': false,
-          'message': 'Invalid email or password',
+          'message': 'Admin accounts must use the administrative web portal.'
         };
       }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Login error: $e');
+
+      // Check password using bcrypt
+      if (!_verifyPassword(password, accountResponse['password_hash'] ?? '')) {
+        return {'success': false, 'message': 'Invalid credentials'};
       }
-      
-      // Handle specific error cases
-      if (e.toString().contains('Invalid login credentials')) {
-        return {
-          'success': false,
-          'message': 'Invalid email or password',
-        };
+
+      if (!accountResponse['is_verified']) {
+        return {'success': false, 'message': 'Account not verified'};
       }
-      
-      if (e.toString().contains('Email not confirmed')) {
-        return {
-          'success': false,
-          'message': 'Please verify your email first',
-        };
+
+      if (accountResponse['status'] != 'active') {
+        return {'success': false, 'message': 'Account inactive'};
       }
-      
-      return {
-        'success': false,
-        'message': 'Login failed. Please try again.',
+
+      // If mother, check if mother record exists
+      Map<String, dynamic>? motherData;
+      bool profileComplete = false;
+
+      if (accountResponse['account_type'] == 'mother') {
+        try {
+          // Get mother data
+          motherData = await client
+              .from('mothers')
+              .select('''
+                mother_id,
+                birthdate,
+                house_number,
+                street,
+                barangay,
+                city_municipality,
+                province,
+                height,
+                weight,
+                blood_type
+              ''')
+              .eq('account_id', accountResponse['account_id'])
+              .maybeSingle();
+
+          if (kDebugMode) debugPrint('Mother data: $motherData');
+
+          // Determine if profile is complete
+          if (motherData != null) {
+            profileComplete = accountResponse['first_name'] != null &&
+                accountResponse['last_name'] != null &&
+                motherData['birthdate'] != null;
+          }
+        } catch (e) {
+          if (kDebugMode) debugPrint('Error fetching mother data: $e');
+        }
+      }
+
+      // Generate token
+      final token =
+          _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
+
+      // Update last login token
+      try {
+        await client.from('accounts').update({
+          'last_login_token': token,
+          'last_login_at': DateTime.now().toIso8601String(),
+        }).eq('account_id', accountResponse['account_id']);
+      } catch (e) {
+        if (kDebugMode) debugPrint('Error updating last login token: $e');
+      }
+
+      // Prepare user response
+      final userData = {
+        'id': accountResponse['account_id'],
+        'role': accountResponse['account_type'],
       };
+
+      if (accountResponse['account_type'] == 'mother') {
+        userData['profile_complete'] = profileComplete;
+        userData['mother_id'] = motherData?['mother_id'];
+      }
+
+      return {
+        'success': true,
+        'message': 'Login successful',
+        'token': token,
+        'user': userData,
+      };
+    } catch (e) {
+      if (kDebugMode) debugPrint('Login error details: $e');
+
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('ClientException') ||
+          e.toString().contains('Connection refused')) {
+        return {
+          'success': false,
+          'message': 'Network error. Please check your internet connection.'
+        };
+      }
+
+      if (e.toString().contains('timeout')) {
+        return {
+          'success': false,
+          'message': 'Connection timeout. Server may be down.'
+        };
+      }
+
+      if (e.toString().contains('apikey')) {
+        return {
+          'success': false,
+          'message': 'API key error. Please restart the app.'
+        };
+      }
+
+      return {'success': false, 'message': 'Login failed. Please try again.'};
     }
   }
 
-  // Register with Supabase Auth
-  static Future<Map<String, dynamic>> register(String email, String password) async {
+  // Send OTP email via Edge Function
+  static Future<bool> sendOTPEmail(String email, String code) async {
     try {
-      if (kDebugMode) {
-        print('=== REGISTRATION ATTEMPT ===');
-        print('Email: $email');
-      }
-      
-      // Use Supabase Auth to sign up
-      final response = await client.auth.signUp(
-        email: email,
-        password: password,
+      if (kDebugMode) debugPrint('Sending OTP email to: $email with code: $code');
+
+      final response = await client.functions.invoke(
+        'send-otp',
+        body: {
+          'email': email,
+          'code': code,
+          'type': 'verification',
+        },
       );
 
-      if (response.user != null) {
-        // Generate OTP for database
-        final code = _generateOTP();
-        final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
-        
-        // Check if account already exists in accounts table
-        final existing = await client
-            .from('accounts')
-            .select('account_id')
-            .eq('email_address', email)
-            .maybeSingle();
+      if (kDebugMode) debugPrint('Email send response: $response');
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error sending OTP email: $e');
+      return false;
+    }
+  }
 
-        if (existing == null) {
-          // Create new account record
-          await client.from('accounts').insert({
-            'email_address': email,
-            'account_type': 'mother',
-            'is_verified': false,
-            'status': 'inactive',
-            'verification_code': code,
-            'verification_expires': expires,
-            'created_at': DateTime.now().toIso8601String(),
-          });
+  // Register
+  static Future<Map<String, dynamic>> register(
+      String email, String password) async {
+    try {
+      // Check if account exists
+      final existing = await client
+          .from('accounts')
+          .select('account_id, is_verified')
+          .eq('email_address', email)
+          .maybeSingle();
+
+      final code = _generateOTP();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+
+      if (existing != null) {
+        if (existing['is_verified']) {
+          return {
+            'success': false,
+            'message': 'Account already verified. Please log in.',
+          };
         }
 
-        if (kDebugMode) {
-          print('✅ Registration successful');
-          print('🔐 Verification code: $code');
-        }
+        // Update existing unverified account
+        await client.from('accounts').update({
+          'password_hash': _hashPassword(password),
+          'verification_code': code,
+          'verification_expires': expires,
+        }).eq('email_address', email);
+      } else {
+        // Create new account
+        await client.from('accounts').insert({
+          'email_address': email,
+          'password_hash': _hashPassword(password),
+          'account_type': 'mother',
+          'verification_code': code,
+          'verification_expires': expires,
+          'is_verified': false,
+          'status': 'active',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
 
+      // Send email with OTP using Edge Function
+      final emailSent = await sendOTPEmail(email, code);
+
+      if (!emailSent) {
+        if (kDebugMode) debugPrint('Failed to send email, but account was created');
         return {
           'success': true,
-          'message': 'Verification email sent. Please check your inbox.',
-          'code': kDebugMode ? code : null,
-        };
-      } else {
-        return {
-          'success': false,
-          'message': 'Registration failed',
+          'message':
+              'Account created but email failed to send. Please use "Resend Code" on the next screen.',
+          'email_failed': true,
         };
       }
+
+      return {
+        'success': true,
+        'message': 'Verification code sent to your email.',
+        'email_sent': true,
+      };
     } catch (e) {
-      if (kDebugMode) {
-        print('Registration error: $e');
-      }
-      
-      if (e.toString().contains('User already registered')) {
-        return {
-          'success': false,
-          'message': 'Email already registered. Please login.',
-        };
-      }
-      
+      if (kDebugMode) debugPrint('Registration error: $e');
       return {
         'success': false,
         'message': 'Registration failed: ${e.toString()}',
@@ -353,80 +291,37 @@ static Future<bool> isEmailAvailable(String email) async {
     }
   }
 
-  // Send OTP via email using Supabase Auth
-  static Future<Map<String, dynamic>> sendOTPEmail(String email) async {
+  // Resend verification code
+  static Future<Map<String, dynamic>> resendVerificationCode(
+      String email) async {
     try {
-      if (kDebugMode) {
-        print('📧 Sending OTP via Supabase Auth to: $email');
-      }
-      
-      // Generate OTP for database
-      final otpCode = _generateOTP();
-      
-      // Use Supabase to send OTP email
-      await client.auth.signInWithOtp(
-        email: email,
-        shouldCreateUser: true,
-      );
+      final code = _generateOTP();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
-      // Check if account exists
-      final existingAccount = await client
+      // Update the code in database
+      await client
           .from('accounts')
-          .select('account_id')
+          .update({
+            'verification_code': code,
+            'verification_expires': expires,
+          })
           .eq('email_address', email)
-          .maybeSingle();
+          .eq('is_verified', false);
 
-      // Store OTP in your accounts table for verification
-      if (existingAccount == null) {
-        // Create new account record
-        await client.from('accounts').insert({
-          'email_address': email,
-          'account_type': 'mother',
-          'is_verified': false,
-          'status': 'inactive',
-          'verification_code': otpCode,
-          'verification_expires': DateTime.now().add(const Duration(minutes: 10)).toIso8601String(),
-          'created_at': DateTime.now().toIso8601String(),
-        });
-      } else {
-        // Update existing account with new OTP
-        await client
-            .from('accounts')
-            .update({
-              'verification_code': otpCode,
-              'verification_expires': DateTime.now().add(const Duration(minutes: 10)).toIso8601String(),
-              'status': 'inactive',
-              'updated_at': DateTime.now().toIso8601String(),
-            })
-            .eq('email_address', email);
-      }
-
-      if (kDebugMode) {
-        print('✅ OTP sent successfully');
-        print('🔐 OTP Code for testing: $otpCode');
-      }
+      // Send email
+      final emailSent = await sendOTPEmail(email, code);
 
       return {
-        'success': true,
-        'message': 'OTP sent to your email',
-        'code': kDebugMode ? otpCode : null,
+        'success': emailSent,
+        'message': emailSent
+            ? 'New verification code sent to your email.'
+            : 'Failed to send email. Please try again.',
       };
     } catch (e) {
-      if (kDebugMode) {
-        print('Error sending OTP: $e');
-      }
-      
-      if (e.toString().contains('rate limit')) {
-        return {
-          'success': false,
-          'message': 'Too many attempts. Please wait a few minutes.',
-          'rate_limited': true,
-        };
-      }
-      
       return {
         'success': false,
-        'message': 'Failed to send OTP. Please try again.',
+        'message': 'Failed to resend code: ${e.toString()}',
       };
     }
   }
@@ -434,46 +329,6 @@ static Future<bool> isEmailAvailable(String email) async {
   // Verify OTP code
   static Future<bool> verifyCode(String email, String code) async {
     try {
-      if (kDebugMode) {
-        print('=== VERIFYING CODE ===');
-        print('Email: $email');
-        print('Code: $code');
-      }
-      
-      // First try to verify with Supabase Auth
-      try {
-        final response = await client.auth.verifyOTP(
-          email: email,
-          token: code,
-          type: OtpType.email,
-        );
-        
-        if (response.user != null) {
-          if (kDebugMode) {
-            print('✅ OTP verified via Supabase Auth');
-          }
-          
-          // Update account in database
-          await client
-              .from('accounts')
-              .update({
-                'is_verified': true,
-                'status': 'active',
-                'verification_code': null,
-                'verification_expires': null,
-                'updated_at': DateTime.now().toIso8601String(),
-              })
-              .eq('email_address', email);
-              
-          return true;
-        }
-      } catch (authError) {
-        if (kDebugMode) {
-          print('Supabase Auth verification failed, checking database: $authError');
-        }
-      }
-      
-      // Fallback: Check against database directly
       final account = await client
           .from('accounts')
           .select('verification_code, verification_expires')
@@ -490,68 +345,16 @@ static Future<bool> isEmailAvailable(String email) async {
       if (expires.isBefore(DateTime.now())) return false;
 
       // Mark as verified
-      await client
-          .from('accounts')
-          .update({
-            'is_verified': true,
-            'status': 'active',
-            'verification_code': null,
-            'verification_expires': null,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('email_address', email);
+      await client.from('accounts').update({
+        'is_verified': true,
+        'verification_code': null,
+        'verification_expires': null,
+      }).eq('email_address', email);
 
-      if (kDebugMode) {
-        print('✅ Code verified via database');
-      }
       return true;
     } catch (e) {
-      if (kDebugMode) {
-        print('Verification error: $e');
-      }
+      if (kDebugMode) debugPrint('Verification error: $e');
       return false;
-    }
-  }
-
-  // Resend verification code
-  static Future<Map<String, dynamic>> resendVerificationCode(String email) async {
-    try {
-      final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
-
-      if (kDebugMode) {
-        print('Resending code: $code to: $email');
-      }
-
-      // Update the code in database
-      await client
-          .from('accounts')
-          .update({
-            'verification_code': code,
-            'verification_expires': expires,
-          })
-          .eq('email_address', email)
-          .eq('is_verified', false);
-
-      // Send email via Supabase Auth
-      await client.auth.signInWithOtp(
-        email: email,
-        shouldCreateUser: true,
-      );
-
-      return {
-        'success': true,
-        'message': 'New verification code sent to your email.',
-        'code': kDebugMode ? code : null,
-      };
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error resending code: $e');
-      }
-      return {
-        'success': false,
-        'message': 'Failed to resend code. Please try again.',
-      };
     }
   }
 
@@ -559,26 +362,48 @@ static Future<bool> isEmailAvailable(String email) async {
   static Future<Map<String, dynamic>> resetPassword(String email) async {
     try {
       if (kDebugMode) {
-        print('📧 Sending password reset email to: $email');
+        debugPrint('📧 Sending password reset email to: $email');
       }
       
-      await client.auth.resetPasswordForEmail(email);
+      // Check if account exists
+      final account = await client
+          .from('accounts')
+          .select('account_id')
+          .eq('email_address', email)
+          .maybeSingle();
+
+      if (account == null) {
+        return {
+          'success': false,
+          'message': 'No account found with this email address.',
+        };
+      }
+
+      // Generate reset code
+      final code = _generateOTP();
+      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      
+      // Update account with reset code
+      await client
+          .from('accounts')
+          .update({
+            'reset_code': code,
+            'reset_expires': expires,
+          })
+          .eq('email_address', email);
+
+      // Send email with reset code
+      final emailSent = await sendOTPEmail(email, code);
 
       return {
-        'success': true,
-        'message': 'Password reset email sent. Please check your inbox.',
+        'success': emailSent,
+        'message': emailSent
+            ? 'Password reset code sent to your email.'
+            : 'Failed to send email. Please try again.',
       };
     } catch (e) {
       if (kDebugMode) {
-        print('Error sending reset email: $e');
-      }
-      
-      if (e.toString().contains('rate limit')) {
-        return {
-          'success': false,
-          'message': 'Too many attempts. Please wait a few minutes.',
-          'rate_limited': true,
-        };
+        debugPrint('Error sending reset email: $e');
       }
       
       return {
@@ -588,56 +413,20 @@ static Future<bool> isEmailAvailable(String email) async {
     }
   }
 
-  // Update password after reset
-  static Future<Map<String, dynamic>> updatePassword(String newPassword) async {
-    try {
-      if (kDebugMode) {
-        print('Updating password...');
-      }
-      
-      await client.auth.updateUser(
-        UserAttributes(
-          password: newPassword,
-        ),
-      );
-
-      return {
-        'success': true,
-        'message': 'Password updated successfully.',
-      };
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error updating password: $e');
-      }
-      return {
-        'success': false,
-        'message': 'Failed to update password. Please try again.',
-      };
-    }
-  }
-
-  // Complete mother profile
+  // Complete mother profile - Updated with correct column names
   static Future<Map<String, dynamic>> completeMotherProfile(
     int accountId,
     Map<String, dynamic> profileData,
   ) async {
     try {
-      if (kDebugMode) {
-        print('=== COMPLETING MOTHER PROFILE ===');
-        print('Account ID: $accountId');
-      }
-      
       // Update accounts table with personal info
-      await client
-          .from('accounts')
-          .update({
-            'first_name': profileData['first_name'],
-            'middle_name': profileData['middle_name'],
-            'last_name': profileData['last_name'],
-            'extension_name': profileData['extension_name'],
-            'phone_number': profileData['contact_number'],
-          })
-          .eq('account_id', accountId);
+      await client.from('accounts').update({
+        'first_name': profileData['first_name'],
+        'middle_name': profileData['middle_name'],
+        'last_name': profileData['last_name'],
+        'extension_name': profileData['extension_name'],
+        'phone_number': profileData['contact_number'],
+      }).eq('account_id', accountId);
 
       // Check if mother record exists
       final existingMother = await client
@@ -648,23 +437,25 @@ static Future<bool> isEmailAvailable(String email) async {
 
       // Parse birth date
       String? birthDateStr;
-      if (profileData['birth_date'] != null && profileData['birth_date'].isNotEmpty) {
+      if (profileData['birth_date'] != null &&
+          profileData['birth_date'].isNotEmpty) {
         try {
+          // Handle MM/DD/YYYY format from date picker
           if (profileData['birth_date'].contains('/')) {
             final parts = profileData['birth_date'].split('/');
             if (parts.length == 3) {
               final month = int.parse(parts[0]);
               final day = int.parse(parts[1]);
               final year = int.parse(parts[2]);
-              birthDateStr = '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+              birthDateStr =
+                  '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
             }
           } else {
+            // Handle YYYY-MM-DD format
             birthDateStr = profileData['birth_date'];
           }
         } catch (e) {
-          if (kDebugMode) {
-            print('Date parsing error: $e');
-          }
+          if (kDebugMode) debugPrint('Date parsing error: $e');
           birthDateStr = profileData['birth_date'];
         }
       }
@@ -682,53 +473,46 @@ static Future<bool> isEmailAvailable(String email) async {
         });
       } else {
         // Update mother record
-        await client
-            .from('mothers')
-            .update({
-              'birthdate': birthDateStr,
-              'house_number': profileData['house_no'],
-              'street': profileData['street'],
-              'barangay': profileData['barangay'],
-              'city_municipality': profileData['city'],
-              'province': profileData['province'],
-            })
-            .eq('account_id', accountId);
+        await client.from('mothers').update({
+          'birthdate': birthDateStr,
+          'house_number': profileData['house_no'],
+          'street': profileData['street'],
+          'barangay': profileData['barangay'],
+          'city_municipality': profileData['city'],
+          'province': profileData['province'],
+        }).eq('account_id', accountId);
       }
 
       return {'success': true, 'message': 'Profile completed successfully'};
     } catch (e) {
-      if (kDebugMode) {
-        print('Profile completion error: $e');
-      }
-      return {'success': false, 'message': 'Failed to complete profile: ${e.toString()}'};
+      if (kDebugMode) debugPrint('Profile completion error: $e');
+      return {
+        'success': false,
+        'message': 'Failed to complete profile: ${e.toString()}'
+      };
     }
   }
 
-  // Get greeting data
-  static Future<Map<String, dynamic>> getGreeting(int accountId, String role) async {
+  // Get greeting data - Updated with correct column names
+  static Future<Map<String, dynamic>> getGreeting(
+      int accountId, String role) async {
     try {
-      final accountResponse = await client
-          .from('accounts')
-          .select('''
+      // Get account info first
+      final accountResponse = await client.from('accounts').select('''
             first_name,
             middle_name,
             last_name,
             extension_name
-          ''')
-          .eq('account_id', accountId)
-          .maybeSingle();
+          ''').eq('account_id', accountId).maybeSingle();
 
       if (role == 'mother') {
-        final motherResponse = await client
-            .from('mothers')
-            .select('''
+        // Get mother's BHC info
+        final motherResponse = await client.from('mothers').select('''
               assigned_bhc_id,
               bhc!inner (
                 bhc_name
               )
-            ''')
-            .eq('account_id', accountId)
-            .maybeSingle();
+            ''').eq('account_id', accountId).maybeSingle();
 
         final bhc = motherResponse?['bhc'] as Map?;
 
@@ -741,18 +525,15 @@ static Future<bool> isEmailAvailable(String email) async {
           'bhc_name': bhc?['bhc_name'] ?? 'No Barangay Assigned',
         };
       }
-      
+
       if (role == 'midwife') {
-        final midwifeResponse = await client
-            .from('midwives')
-            .select('''
+        // Get midwife's BHC info
+        final midwifeResponse = await client.from('midwives').select('''
               assigned_bhc_id,
               bhc!inner (
                 bhc_name
               )
-            ''')
-            .eq('account_id', accountId)
-            .maybeSingle();
+            ''').eq('account_id', accountId).maybeSingle();
 
         final bhc = midwifeResponse?['bhc'] as Map?;
 
@@ -766,6 +547,7 @@ static Future<bool> isEmailAvailable(String email) async {
         };
       }
 
+      // Admin
       return {
         'success': true,
         'first_name': accountResponse?['first_name'],
@@ -775,16 +557,273 @@ static Future<bool> isEmailAvailable(String email) async {
         'bhc_name': null,
       };
     } catch (e) {
-      if (kDebugMode) {
-        print('Greeting error: $e');
-      }
+      if (kDebugMode) debugPrint('Greeting error: $e');
       return {'success': false, 'message': 'Failed to fetch greeting'};
     }
   }
 
-  // Logout
-  static Future<void> logout() async {
-    await client.auth.signOut();
+  // Midwife creates a new mother account (pre-verified)
+  static Future<Map<String, dynamic>> createMotherByMidwife({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+    String? phoneNumber,
+  }) async {
+    try {
+      // Check if email already exists
+      final existing = await client
+          .from('accounts')
+          .select('account_id')
+          .eq('email_address', email)
+          .maybeSingle();
+
+      if (existing != null) {
+        return {
+          'success': false,
+          'message': 'An account with this email already exists.',
+        };
+      }
+
+      // Insert account (pre-verified since midwife is creating it)
+      final inserted = await client
+          .from('accounts')
+          .insert({
+            'email_address': email,
+            'password_hash': _hashPassword(password),
+            'account_type': 'mother',
+            'first_name': firstName,
+            'last_name': lastName,
+            'phone_number': phoneNumber,
+            'is_verified': true,
+            'status': 'active',
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select('account_id')
+          .single();
+
+      final accountId = inserted['account_id'] as int;
+
+      // Create corresponding mothers record
+      await client.from('mothers').insert({
+        'account_id': accountId,
+        'status': 'active',
+      });
+
+      return {
+        'success': true,
+        'message': 'Mother account created successfully.',
+        'account_id': accountId,
+      };
+    } catch (e) {
+      if (kDebugMode) debugPrint('createMotherByMidwife error: $e');
+      return {
+        'success': false,
+        'message': 'Failed to create account: ${e.toString()}',
+      };
+    }
+  }
+
+  // Get midwife context (midwife_id, assigned_bhc_id, bhc_name)
+  static Future<Map<String, dynamic>> getMidwifeContext(int accountId) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('=== GET MIDWIFE CONTEXT ===');
+        debugPrint('Account ID: $accountId');
+      }
+
+      final result = await client
+          .from('midwives')
+          .select('midwife_id, assigned_bhc_id, bhc!inner(bhc_name)')
+          .eq('account_id', accountId)
+          .single();
+
+      final bhc = result['bhc'] as Map?;
+      return {
+        'success': true,
+        'midwife_id': result['midwife_id'] as int,
+        'assigned_bhc_id': result['assigned_bhc_id'] as int,
+        'bhc_name': (bhc?['bhc_name'] as String?) ?? '',
+      };
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  // Check whether an email address is available (not yet registered)
+  static Future<bool> isEmailAvailable(String email) async {
+    try {
+      final result = await client
+          .from('accounts')
+          .select('account_id')
+          .eq('email_address', email)
+          .maybeSingle();
+      return result == null;
+    } catch (_) {
+      return true; // Assume available if check fails
+    }
+  }
+
+  // Create a fully-populated mother record from the midwife Add Mother flow
+  static Future<Map<String, dynamic>> addMotherFullByMidwife({
+    required int midwifeId,
+    required int assignedBhcId,
+    required String email,
+    required String password,
+    required String firstName,
+    String? middleName,
+    required String lastName,
+    String? extensionName,
+    required String phone,
+    String? houseNumber,
+    String? street,
+    String? barangay,
+    String? city,
+    String? province,
+    DateTime? birthdate,
+    double? heightCm,
+    double? weightKg,
+    String? bloodType,
+    DateTime? lmp,
+    DateTime? edd,
+    List<Map<String, dynamic>> emergencyContacts = const [],
+    List<Map<String, dynamic>> medicalConditions = const [],
+    List<Map<String, dynamic>> allergies = const [],
+    List<Map<String, dynamic>> pastPregnancies = const [],
+  }) async {
+    try {
+      // 1. Verify email is not already taken
+      final emailFree = await isEmailAvailable(email);
+      if (!emailFree) {
+        return {'success': false, 'message': 'This email is already in use.'};
+      }
+
+      // 2. Create account (pre-verified since midwife is registering)
+      final accountRow = await client
+          .from('accounts')
+          .insert({
+            'email_address': email,
+            'password_hash': _hashPassword(password),
+            'account_type': 'mother',
+            'first_name': firstName,
+            'middle_name': middleName,
+            'last_name': lastName,
+            'extension_name': extensionName,
+            'phone_number': phone,
+            'is_verified': true,
+            'status': 'active',
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select('account_id')
+          .single();
+
+      final accountId = accountRow['account_id'] as int;
+
+      // 3. Create mother profile record
+      final motherRow = await client
+          .from('mothers')
+          .insert({
+            'account_id': accountId,
+            'assigned_bhc_id': assignedBhcId,
+            'birthdate': birthdate?.toIso8601String().split('T')[0],
+            'house_number': houseNumber,
+            'street': street,
+            'barangay': barangay,
+            'city_municipality': city,
+            'province': province,
+            'height': heightCm,
+            'weight': weightKg,
+            'blood_type': bloodType,
+            'status': 'active',
+          })
+          .select('mother_id')
+          .single();
+
+      final motherId = motherRow['mother_id'] as int;
+
+      // 4. Emergency contacts (batch insert)
+      if (emergencyContacts.isNotEmpty) {
+        await client.from('emergency_contacts').insert(
+          emergencyContacts
+              .map((ec) => {'mother_id': motherId, ...ec})
+              .toList(),
+        );
+      }
+
+      // 5. Medical conditions (batch insert)
+      if (medicalConditions.isNotEmpty) {
+        await client.from('medical_conditions').insert(
+          medicalConditions
+              .map((mc) => {'mother_id': motherId, ...mc})
+              .toList(),
+        );
+      }
+
+      // 6. Allergies (batch insert)
+      if (allergies.isNotEmpty) {
+        await client.from('allergies').insert(
+          allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
+        );
+      }
+
+      // 7. Current pregnancy
+      int? pregnancyId;
+      if (lmp != null && edd != null) {
+        final pregRow = await client
+            .from('pregnancies')
+            .insert({
+              'mother_id': motherId,
+              'last_menstrual_period': lmp.toIso8601String().split('T')[0],
+              'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
+              'status': 'ongoing',
+            })
+            .select('pregnancy_id')
+            .single();
+        pregnancyId = pregRow['pregnancy_id'] as int;
+      }
+
+      // 8. Past pregnancies + deliveries
+      for (final pp in pastPregnancies) {
+        final pastPregRow = await client
+            .from('pregnancies')
+            .insert({
+              'mother_id': motherId,
+              'status': 'ended',
+              'outcome': pp['outcome'],
+              'outcome_date': pp['outcome_date'],
+              'is_outcome_date_estimated':
+                  pp['is_outcome_date_estimated'] ?? false,
+              'gestational_age_at_end': pp['gestational_age_at_end'],
+            })
+            .select('pregnancy_id')
+            .single();
+
+        final pastPregId = pastPregRow['pregnancy_id'] as int;
+
+        if (pp['place_of_delivery'] != null || pp['delivery_method'] != null) {
+          await client.from('deliveries').insert({
+            'pregnancy_id': pastPregId,
+            'delivery_date': pp['outcome_date'],
+            'is_delivery_date_estimated':
+                pp['is_outcome_date_estimated'] ?? false,
+            'place_of_delivery': pp['place_of_delivery'],
+            'delivery_method': pp['delivery_method'],
+          });
+        }
+      }
+
+      return {
+        'success': true,
+        'mother_id': motherId,
+        'pregnancy_id': pregnancyId,
+        'account_id': accountId,
+      };
+    } catch (e) {
+      if (kDebugMode) debugPrint('addMotherFullByMidwife error: $e');
+      return {
+        'success': false,
+        'message': 'Failed to add mother: ${e.toString()}',
+      };
+    }
   }
 }
-
