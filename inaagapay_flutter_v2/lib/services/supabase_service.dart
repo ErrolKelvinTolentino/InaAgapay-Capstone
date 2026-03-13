@@ -1,6 +1,9 @@
+// lib/services/supabase_service.dart
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 
 class SupabaseService {
   // This ensures we always get the current client
@@ -30,13 +33,12 @@ class SupabaseService {
   // Test connection
   static Future<bool> testConnection() async {
     try {
-      print('Testing Supabase connection...');
-      // Try a simple query to test connection
+      if (kDebugMode) debugPrint('Testing Supabase connection...');
       final result = await client.from('accounts').select('count').limit(1);
-      print('Connection test result: $result');
+      if (kDebugMode) debugPrint('Connection test result: $result');
       return true;
     } catch (e) {
-      print('Connection test failed: $e');
+      if (kDebugMode) debugPrint('Connection test failed: $e');
       return false;
     }
   }
@@ -45,7 +47,7 @@ class SupabaseService {
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
     try {
-      print('Attempting login for: $email');
+      if (kDebugMode) debugPrint('Attempting login for: $email');
 
       // Test connection first
       final isConnected = await testConnection();
@@ -72,7 +74,7 @@ class SupabaseService {
             phone_number
           ''').eq('email_address', email).maybeSingle();
 
-      print('Account query response: $accountResponse');
+      if (kDebugMode) debugPrint('Account query response: $accountResponse');
 
       if (accountResponse == null) {
         return {'success': false, 'message': 'Invalid credentials'};
@@ -105,7 +107,7 @@ class SupabaseService {
 
       if (accountResponse['account_type'] == 'mother') {
         try {
-          // Get mother data - only query columns that exist in mothers table
+          // Get mother data
           motherData = await client
               .from('mothers')
               .select('''
@@ -123,18 +125,16 @@ class SupabaseService {
               .eq('account_id', accountResponse['account_id'])
               .maybeSingle();
 
-          print('Mother data: $motherData');
+          if (kDebugMode) debugPrint('Mother data: $motherData');
 
           // Determine if profile is complete
-          // Check if account has personal info AND mother has birthdate
           if (motherData != null) {
             profileComplete = accountResponse['first_name'] != null &&
                 accountResponse['last_name'] != null &&
                 motherData['birthdate'] != null;
           }
         } catch (e) {
-          print('Error fetching mother data: $e');
-          // Continue even if mother data fetch fails
+          if (kDebugMode) debugPrint('Error fetching mother data: $e');
         }
       }
 
@@ -149,8 +149,7 @@ class SupabaseService {
           'last_login_at': DateTime.now().toIso8601String(),
         }).eq('account_id', accountResponse['account_id']);
       } catch (e) {
-        print('Error updating last login token: $e');
-        // Continue even if token update fails
+        if (kDebugMode) debugPrint('Error updating last login token: $e');
       }
 
       // Prepare user response
@@ -171,9 +170,8 @@ class SupabaseService {
         'user': userData,
       };
     } catch (e) {
-      print('Login error details: $e');
+      if (kDebugMode) debugPrint('Login error details: $e');
 
-      // Check for specific error types
       if (e.toString().contains('SocketException') ||
           e.toString().contains('ClientException') ||
           e.toString().contains('Connection refused')) {
@@ -204,7 +202,8 @@ class SupabaseService {
   // Send OTP email via Edge Function
   static Future<bool> sendOTPEmail(String email, String code) async {
     try {
-      print('Sending OTP email to: $email with code: $code');
+      if (kDebugMode)
+        debugPrint('Sending OTP email to: $email with code: $code');
 
       final response = await client.functions.invoke(
         'send-otp',
@@ -215,10 +214,10 @@ class SupabaseService {
         },
       );
 
-      print('Email send response: $response');
+      if (kDebugMode) debugPrint('Email send response: $response');
       return true;
     } catch (e) {
-      print('Error sending OTP email: $e');
+      if (kDebugMode) debugPrint('Error sending OTP email: $e');
       return false;
     }
   }
@@ -270,7 +269,8 @@ class SupabaseService {
       final emailSent = await sendOTPEmail(email, code);
 
       if (!emailSent) {
-        print('Failed to send email, but account was created');
+        if (kDebugMode)
+          debugPrint('Failed to send email, but account was created');
         return {
           'success': true,
           'message':
@@ -285,7 +285,7 @@ class SupabaseService {
         'email_sent': true,
       };
     } catch (e) {
-      print('Registration error: $e');
+      if (kDebugMode) debugPrint('Registration error: $e');
       return {
         'success': false,
         'message': 'Registration failed: ${e.toString()}',
@@ -355,8 +355,61 @@ class SupabaseService {
 
       return true;
     } catch (e) {
-      print('Verification error: $e');
+      if (kDebugMode) debugPrint('Verification error: $e');
       return false;
+    }
+  }
+
+  // Reset Password - Send reset email
+  static Future<Map<String, dynamic>> resetPassword(String email) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('📧 Sending password reset email to: $email');
+      }
+
+      // Check if account exists
+      final account = await client
+          .from('accounts')
+          .select('account_id')
+          .eq('email_address', email)
+          .maybeSingle();
+
+      if (account == null) {
+        return {
+          'success': false,
+          'message': 'No account found with this email address.',
+        };
+      }
+
+      // Generate reset code
+      final code = _generateOTP();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+
+      // Update account with reset code
+      await client.from('accounts').update({
+        'reset_code': code,
+        'reset_expires': expires,
+      }).eq('email_address', email);
+
+      // Send email with reset code
+      final emailSent = await sendOTPEmail(email, code);
+
+      return {
+        'success': emailSent,
+        'message': emailSent
+            ? 'Password reset code sent to your email.'
+            : 'Failed to send email. Please try again.',
+      };
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error sending reset email: $e');
+      }
+
+      return {
+        'success': false,
+        'message': 'Failed to send reset email. Please try again.',
+      };
     }
   }
 
@@ -391,7 +444,6 @@ class SupabaseService {
           if (profileData['birth_date'].contains('/')) {
             final parts = profileData['birth_date'].split('/');
             if (parts.length == 3) {
-              // Assuming format is MM/DD/YYYY
               final month = int.parse(parts[0]);
               final day = int.parse(parts[1]);
               final year = int.parse(parts[2]);
@@ -403,13 +455,13 @@ class SupabaseService {
             birthDateStr = profileData['birth_date'];
           }
         } catch (e) {
-          print('Date parsing error: $e');
+          if (kDebugMode) debugPrint('Date parsing error: $e');
           birthDateStr = profileData['birth_date'];
         }
       }
 
       if (existingMother == null) {
-        // Insert mother record with correct column names
+        // Insert mother record
         await client.from('mothers').insert({
           'account_id': accountId,
           'birthdate': birthDateStr,
@@ -420,7 +472,7 @@ class SupabaseService {
           'province': profileData['province'],
         });
       } else {
-        // Update mother record with correct column names
+        // Update mother record
         await client.from('mothers').update({
           'birthdate': birthDateStr,
           'house_number': profileData['house_no'],
@@ -433,7 +485,7 @@ class SupabaseService {
 
       return {'success': true, 'message': 'Profile completed successfully'};
     } catch (e) {
-      print('Profile completion error: $e');
+      if (kDebugMode) debugPrint('Profile completion error: $e');
       return {
         'success': false,
         'message': 'Failed to complete profile: ${e.toString()}'
@@ -505,7 +557,7 @@ class SupabaseService {
         'bhc_name': null,
       };
     } catch (e) {
-      print('Greeting error: $e');
+      if (kDebugMode) debugPrint('Greeting error: $e');
       return {'success': false, 'message': 'Failed to fetch greeting'};
     }
   }
@@ -564,7 +616,7 @@ class SupabaseService {
         'account_id': accountId,
       };
     } catch (e) {
-      print('createMotherByMidwife error: $e');
+      if (kDebugMode) debugPrint('createMotherByMidwife error: $e');
       return {
         'success': false,
         'message': 'Failed to create account: ${e.toString()}',
@@ -575,6 +627,11 @@ class SupabaseService {
   // Get midwife context (midwife_id, assigned_bhc_id, bhc_name)
   static Future<Map<String, dynamic>> getMidwifeContext(int accountId) async {
     try {
+      if (kDebugMode) {
+        debugPrint('=== GET MIDWIFE CONTEXT ===');
+        debugPrint('Account ID: $accountId');
+      }
+
       final result = await client
           .from('midwives')
           .select('midwife_id, assigned_bhc_id, bhc!inner(bhc_name)')
@@ -687,26 +744,26 @@ class SupabaseService {
       // 4. Emergency contacts (batch insert)
       if (emergencyContacts.isNotEmpty) {
         await client.from('emergency_contacts').insert(
-          emergencyContacts
-              .map((ec) => {'mother_id': motherId, ...ec})
-              .toList(),
-        );
+              emergencyContacts
+                  .map((ec) => {'mother_id': motherId, ...ec})
+                  .toList(),
+            );
       }
 
       // 5. Medical conditions (batch insert)
       if (medicalConditions.isNotEmpty) {
         await client.from('medical_conditions').insert(
-          medicalConditions
-              .map((mc) => {'mother_id': motherId, ...mc})
-              .toList(),
-        );
+              medicalConditions
+                  .map((mc) => {'mother_id': motherId, ...mc})
+                  .toList(),
+            );
       }
 
       // 6. Allergies (batch insert)
       if (allergies.isNotEmpty) {
         await client.from('allergies').insert(
-          allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
-        );
+              allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
+            );
       }
 
       // 7. Current pregnancy
@@ -762,7 +819,7 @@ class SupabaseService {
         'account_id': accountId,
       };
     } catch (e) {
-      print('addMotherFullByMidwife error: $e');
+      if (kDebugMode) debugPrint('addMotherFullByMidwife error: $e');
       return {
         'success': false,
         'message': 'Failed to add mother: ${e.toString()}',

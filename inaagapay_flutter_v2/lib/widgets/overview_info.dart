@@ -1,3 +1,5 @@
+// lib/widgets/overview_info.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -42,25 +44,21 @@ class OverviewInfo extends StatelessWidget {
             size: 18,
             color: AppColors.brandPrimary,
           ),
-
           const SizedBox(height: 10),
-
           Text(
             value.toString(),
             style: const TextStyle(
-              fontSize: 24, // matches your dashboard numbers
+              fontSize: 24,
               fontWeight: FontWeight.w600,
               color: AppColors.brandPrimary,
             ),
           ),
-
           const SizedBox(height: 6),
-
           Text(
             label,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 12, // consistent with your small labels
+              fontSize: 12,
               color: AppColors.textSecondary,
             ),
           ),

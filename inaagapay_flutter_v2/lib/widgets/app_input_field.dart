@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+// lib/widgets/app_input_field.dart
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 
@@ -162,4 +164,3 @@ class _AppInputFieldState extends State<AppInputField> {
     );
   }
 }
-

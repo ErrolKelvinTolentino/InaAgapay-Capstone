@@ -1,20 +1,17 @@
-﻿import 'package:flutter/material.dart';
-
-import '../theme/app_colors.dart';
-import '../services/auth_storage.dart';
-import '../widgets/main_header.dart';
-import '../widgets/headline.dart';
-import '../widgets/small_description.dart';
-
-import '../widgets/hero_card.dart';
-import '../widgets/small_info_box.dart';
-import '../widgets/long_info_box.dart';
-import '../widgets/comparison_card.dart';
-
-import '../widgets/main_button.dart';
-import '../widgets/secondary_button.dart';
-
-import '../models/baby_growth_model.dart';
+// lib/screens/mother/mother_dashboard.dart
+import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
+import '../../services/auth_storage.dart';
+import '../../widgets/main_header.dart';
+import '../../widgets/headline.dart';
+import '../../widgets/small_description.dart';
+import '../../widgets/hero_card.dart';
+import '../../widgets/small_info_box.dart';
+import '../../widgets/long_info_box.dart';
+import '../../widgets/comparison_card.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/secondary_button.dart';
+import '../../models/baby_growth_model.dart';
 
 class MotherDashboard extends StatelessWidget {
   const MotherDashboard({super.key});

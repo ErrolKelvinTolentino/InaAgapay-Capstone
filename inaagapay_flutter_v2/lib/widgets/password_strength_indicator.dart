@@ -1,52 +1,57 @@
-﻿import 'package:flutter/material.dart';
+// lib/widgets/password_strength_indicator.dart
+import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../models/password_strength.dart';
 
 class PasswordStrengthIndicator extends StatelessWidget {
   final PasswordStrength strength;
 
-  const PasswordStrengthIndicator({
-    super.key,
-    required this.strength,
-  });
+  const PasswordStrengthIndicator({super.key, required this.strength});
 
   @override
   Widget build(BuildContext context) {
-    late final String label;
-    late final Color color;
-    late final IconData icon;
+    String text;
+    Color color;
+    double value;
 
     switch (strength) {
-      case PasswordStrength.strong:
-        label = 'Strong';
-        color = AppColors.success;
-        icon = Icons.check_circle;
+      case PasswordStrength.weak:
+        text = 'Weak';
+        color = AppColors.error;
+        value = 0.33;
         break;
       case PasswordStrength.medium:
-        label = 'Medium';
+        text = 'Medium';
         color = AppColors.warning;
-        icon = Icons.radio_button_unchecked;
+        value = 0.66;
         break;
-      case PasswordStrength.weak:
-        label = 'Weak';
-        color = AppColors.error;
-        icon = Icons.cancel;
+      case PasswordStrength.strong:
+        text = 'Strong';
+        color = AppColors.success;
+        value = 1.0;
         break;
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
-          label,
+          text,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 12,
             color: color,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(width: 6),
-        Icon(icon, size: 16, color: color),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 100,
+          child: LinearProgressIndicator(
+            value: value,
+            backgroundColor: color.withValues(alpha: 0.2),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
       ],
     );
   }

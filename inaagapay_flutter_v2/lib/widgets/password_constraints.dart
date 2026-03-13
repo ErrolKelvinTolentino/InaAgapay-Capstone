@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+// lib/widgets/password_constraints.dart
+import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class PasswordConstraints extends StatelessWidget {
@@ -19,10 +20,13 @@ class PasswordConstraints extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ConstraintItem(label: 'At least eight characters long', isValid: hasMinLength),
+        _ConstraintItem(
+            label: 'At least eight characters long', isValid: hasMinLength),
         _ConstraintItem(label: 'At least one number', isValid: hasNumber),
-        _ConstraintItem(label: 'At least one uppercase letter', isValid: hasUppercase),
-        _ConstraintItem(label: 'At least one lowercase letter', isValid: hasLowercase),
+        _ConstraintItem(
+            label: 'At least one uppercase letter', isValid: hasUppercase),
+        _ConstraintItem(
+            label: 'At least one lowercase letter', isValid: hasLowercase),
       ],
     );
   }

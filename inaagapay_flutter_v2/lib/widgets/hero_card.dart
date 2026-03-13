@@ -1,8 +1,10 @@
+// lib/widgets/hero_card.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class HeroCard extends StatelessWidget {
-  final ImageProvider image;
+  final ImageProvider? image;
   final String? title;
   final String? subtitle;
   final int? week;
@@ -11,7 +13,7 @@ class HeroCard extends StatelessWidget {
 
   const HeroCard({
     super.key,
-    required this.image,
+    this.image,
     this.title,
     this.subtitle,
     this.week,
@@ -46,14 +48,15 @@ class HeroCard extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: AppColors.bgSecondary,
                   ),
-                  child: Image(
-                    image: image,
-                    height: 140,
-                    fit: BoxFit.cover,
-                  ),
+                  child: image != null
+                      ? Image(image: image!, height: 140, fit: BoxFit.cover)
+                      : const Icon(
+                          Icons.person,
+                          size: 80,
+                          color: AppColors.brandPrimary,
+                        ),
                 ),
               ),
-
               if (showWeekBadge && week != null)
                 Positioned(
                   top: 6,
@@ -62,7 +65,6 @@ class HeroCard extends StatelessWidget {
                 ),
             ],
           ),
-
           if (title != null) ...[
             const SizedBox(height: 16),
             Text(
@@ -74,7 +76,6 @@ class HeroCard extends StatelessWidget {
               ),
             ),
           ],
-
           if (subtitle != null) ...[
             const SizedBox(height: 4),
             Text(
@@ -85,15 +86,13 @@ class HeroCard extends StatelessWidget {
               ),
             ),
           ],
-
           if (showHeartRow) ...[
             const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: const [
-                Icon(Icons.favorite,
-                    size: 16, color: AppColors.brandPrimary),
-                SizedBox(width: 6),
+                Icon(Icons.favorite, size: 16, color: AppColors.brandPrimary),
+                const SizedBox(width: 6),
                 Text(
                   'Your baby is growing beautifully!',
                   style: TextStyle(

@@ -1,22 +1,24 @@
+// Update imports at the top of the file
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/gemini_service.dart';
-import '../services/auth_storage.dart';
-import '../models/gemini_response.dart';
-import '../theme/app_colors.dart';
-import '../widgets/dialog_box.dart';
+// Change these:
+import '../../services/gemini_service.dart';
+import '../../services/auth_storage.dart';
+import '../../models/gemini_response.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/dialog_box.dart';
 
-class UltrasoundAnalyzerScreen extends StatefulWidget {
-  const UltrasoundAnalyzerScreen({super.key});
+class LabTestAnalyzerScreen extends StatefulWidget {
+  const LabTestAnalyzerScreen({super.key});
 
   @override
-  State<UltrasoundAnalyzerScreen> createState() => _UltrasoundAnalyzerScreenState();
+  State<LabTestAnalyzerScreen> createState() => _LabTestAnalyzerScreenState();
 }
 
-class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
+class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   final ImagePicker _picker = ImagePicker();
   final GeminiService _geminiService = GeminiService();
 
@@ -25,24 +27,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   bool _isLoading = false;
   bool _isSaving = false;
   String? _errorMessage;
-  
-  // Controllers for editable fields
-  late TextEditingController _healthSummaryController;
-  late TextEditingController _explanationController;
-
-  @override
-  void initState() {
-    super.initState();
-    _healthSummaryController = TextEditingController();
-    _explanationController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _healthSummaryController.dispose();
-    _explanationController.dispose();
-    super.dispose();
-  }
 
   Future<void> _pickImages() async {
     try {
@@ -107,7 +91,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   Future<void> _analyzeImages() async {
     if (_selectedImages.isEmpty) {
       setState(() {
-        _errorMessage = 'Please select at least one ultrasound image';
+        _errorMessage = 'Please select at least one lab test image';
       });
       return;
     }
@@ -119,13 +103,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     });
 
     try {
-      final result = await _geminiService.analyzeUltrasoundImages(_selectedImages);
+      final result = await _geminiService.analyzeLabTestImages(_selectedImages);
       
       setState(() {
         _combinedResponse = result;
         _isLoading = false;
-        _healthSummaryController.text = _extractHealthSummary(result.description);
-        _explanationController.text = _extractExplanation(result.description);
       });
     } catch (e) {
       setState(() {
@@ -174,8 +156,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       for (int i = 0; i < _selectedImages.length; i++) {
         final image = _selectedImages[i];
         final bytes = await image.readAsBytes();
-        final fileName = 'ultrasound_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-        final filePath = 'ultrasounds/$motherId/$fileName';
+        final fileName = 'lab_test_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+        final filePath = 'lab-tests/$motherId/$fileName';
         
         // Upload to Supabase Storage
         await Supabase.instance.client.storage
@@ -193,42 +175,43 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           'bucket_name': 'medical-images',
           'file_path': filePath,
           'file_name': fileName,
-          'file_category': 'ultrasound_image',
+          'file_category': 'lab_result_image',
           'mime_type': 'image/jpeg',
           'file_size': bytes.length,
           'uploaded_by': userId,
-          'reference_type': 'ultrasound',
-          'processing_type': 'ultrasound_analysis',
+          'reference_type': 'lab_test',
+          'processing_type': 'lab_test_analysis',
           'ai_processed': true,
           'created_at': DateTime.now().toIso8601String(),
         });
       }
 
-      // 3. Create ultrasound record
-      final ultrasoundResponse = await Supabase.instance.client
-          .from('ultrasounds')
+      // 3. Create lab test record
+      final labTestResponse = await Supabase.instance.client
+          .from('lab_tests')
           .insert({
             'pregnancy_id': pregnancyId,
-            'ultrasound_date': DateTime.now().toIso8601String().split('T')[0],
-            'ultrasound_location': 'Mobile Upload',
-            'remarks': _healthSummaryController.text,
+            'lab_test_type': 'Multiple Tests',
+            'lab_test_date': DateTime.now().toIso8601String().split('T')[0],
+            'lab_test_location': 'Mobile Upload',
+            'remarks': _combinedResponse!.overallAssessment ?? 'Lab test analysis completed',
             'health_worker_name': 'Self (AI Assisted)',
             'health_worker_institution': 'Inaagapay App',
             'health_worker_profession': 'Patient',
             'created_at': DateTime.now().toIso8601String(),
           })
-          .select('ultrasound_id')
+          .select('lab_test_id')
           .single();
 
-      final ultrasoundId = ultrasoundResponse['ultrasound_id'];
+      final labTestId = labTestResponse['lab_test_id'];
 
       // 4. Create AI response record
       await Supabase.instance.client
           .from('ai_responses')
           .insert({
-            'response_type': 'ultrasound_analysis',
-            'reference_table': 'ultrasounds',
-            'reference_id': ultrasoundId,
+            'response_type': 'lab_test_analysis',
+            'reference_table': 'lab_tests',
+            'reference_id': labTestId,
             'ai_model': 'Gemini 1.5 Flash',
             'confidence_score': 0.92,
             'response': _combinedResponse!.description,
@@ -238,12 +221,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             'created_at': DateTime.now().toIso8601String(),
           });
 
-      // 5. Link files to ultrasound record
+      // 5. Link files to lab test record
       for (String filePath in uploadedFilePaths) {
         await Supabase.instance.client
             .from('files')
             .update({
-              'reference_id': ultrasoundId,
+              'reference_id': labTestId,
             })
             .eq('file_path', filePath);
       }
@@ -255,7 +238,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         context: context,
         builder: (_) => DialogBox(
           title: 'Success',
-          content: 'Ultrasound analysis saved successfully!',
+          content: 'Lab test analysis saved successfully!',
           buttonText: 'OK',
           type: DialogType.success,
           onPressed: () {
@@ -287,56 +270,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     }
   }
 
-  String _extractHealthSummary(String description) {
-    final summaryMatch = RegExp(r'HEALTH SUMMARY:([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)', caseSensitive: false).firstMatch(description);
-    if (summaryMatch != null) {
-      return summaryMatch.group(1)?.trim() ?? description.split('\n').first;
-    }
-    return description.split('\n').first;
-  }
-
-  String _extractExplanation(String description) {
-    final explanationMatch = RegExp(r'(?:BASIS|REASONING|EXPLANATION):([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)', caseSensitive: false).firstMatch(description);
-    if (explanationMatch != null) {
-      return explanationMatch.group(1)?.trim() ?? '';
-    }
-    
-    final lines = description.split('\n');
-    final filteredLines = <String>[];
-    
-    bool skipSection = false;
-    
-    for (String line in lines) {
-      if (line.contains('ANATOMICAL ASSESSMENT:')) {
-        skipSection = true;
-        continue;
-      }
-      
-      if (line.contains('KEY OBSERVATIONS:')) {
-        skipSection = true;
-        continue;
-      }
-      
-      if (line.contains('HEALTH SUMMARY:')) {
-        skipSection = false;
-        continue;
-      }
-      
-      if (!skipSection) {
-        if (line.trim().isNotEmpty || 
-            (filteredLines.isNotEmpty && filteredLines.last.isNotEmpty)) {
-          filteredLines.add(line);
-        }
-      }
-    }
-    
-    if (filteredLines.isNotEmpty) {
-      return filteredLines.join('\n').trim();
-    }
-    
-    return '';
-  }
-
   void _showImageSourceDialog() {
     showModalBottomSheet(
       context: context,
@@ -349,11 +282,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                'Add Ultrasound Images',
+                'Add Lab Test Images',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.purple.shade800,
+                  color: Colors.orange.shade800,
                 ),
               ),
             ),
@@ -361,10 +294,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               leading: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.purple.shade50,
+                  color: Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.photo_library, color: Colors.purple.shade700),
+                child: Icon(Icons.photo_library, color: Colors.orange.shade700),
               ),
               title: const Text('Choose from Gallery'),
               subtitle: const Text('Select multiple images'),
@@ -395,30 +328,16 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     );
   }
 
-  Color _getHealthStatusColor(String? status) {
-    if (status == null) return Colors.grey;
-    if (status.contains('HEALTHY') || status.contains('NORMAL')) return Colors.green;
-    if (status.contains('MONITORING')) return Colors.orange;
-    return Colors.grey;
-  }
-
-  IconData _getHealthStatusIcon(String? status) {
-    if (status == null) return Icons.help_outline;
-    if (status.contains('HEALTHY') || status.contains('NORMAL')) return Icons.check_circle;
-    if (status.contains('MONITORING')) return Icons.warning;
-    return Icons.help_outline;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: AppBar(
         title: const Text(
-          'Ultrasound Analysis',
+          'Lab Test Analysis',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
-        backgroundColor: Colors.purple,
+        backgroundColor: Colors.orange,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -450,7 +369,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.purple, width: 1.5),
+                            border: Border.all(color: Colors.orange, width: 1.5),
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
@@ -506,11 +425,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       backgroundColor: Colors.white,
-                      foregroundColor: Colors.purple.shade700,
+                      foregroundColor: Colors.orange.shade700,
                       elevation: 1,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: Colors.purple.shade200),
+                        side: BorderSide(color: Colors.orange.shade200),
                       ),
                     ),
                   ),
@@ -519,14 +438,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _analyzeImages,
-                    icon: const Icon(Icons.health_and_safety, size: 18),
+                    icon: const Icon(Icons.science, size: 18),
                     label: const Text(
                       'Analyze',
                       style: TextStyle(fontSize: 13),
                     ),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: Colors.purple,
+                      backgroundColor: Colors.orange,
                       foregroundColor: Colors.white,
                       elevation: 1,
                       shape: RoundedRectangleBorder(
@@ -559,7 +478,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                               width: 30,
                               height: 30,
                               child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
                               ),
                             ),
                             SizedBox(height: 12),
@@ -602,7 +521,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 ),
               ),
 
-            // Health Assessment Response
+            // Lab Test Results Response
             if (_combinedResponse != null && !_isLoading)
               Expanded(
                 child: SingleChildScrollView(
@@ -615,87 +534,120 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Status Badge
-                        if (_combinedResponse!.healthStatus != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: _getHealthStatusColor(_combinedResponse!.healthStatus).withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: _getHealthStatusColor(_combinedResponse!.healthStatus).withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _getHealthStatusIcon(_combinedResponse!.healthStatus),
-                                  color: _getHealthStatusColor(_combinedResponse!.healthStatus),
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _combinedResponse!.healthStatus!,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: _getHealthStatusColor(_combinedResponse!.healthStatus),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                        const SizedBox(height: 20),
-
-                        // Measurements
-                        if (_combinedResponse!.measurements != null && _combinedResponse!.measurements!.isNotEmpty)
+                        // Lab Results
+                        if (_combinedResponse!.labResults != null && _combinedResponse!.labResults!.isNotEmpty)
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Measurements',
+                                'Laboratory Results',
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              ..._combinedResponse!.measurements!.map((m) => Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
+                              const SizedBox(height: 16),
+                              ..._combinedResponse!.labResults!.map((result) => Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: result.isNormal ? Colors.green.shade50 : Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: result.isNormal ? Colors.green.shade200 : Colors.orange.shade200,
+                                  ),
+                                ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.straighten, size: 16, color: Colors.purple),
-                                    const SizedBox(width: 8),
-                                    Expanded(child: Text(m)),
+                                    Icon(
+                                      result.isNormal ? Icons.check_circle : Icons.warning,
+                                      color: result.isNormal ? Colors.green : Colors.orange,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            result.testName,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            result.value,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: result.isNormal ? Colors.green.shade700 : Colors.orange.shade700,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               )),
                             ],
                           ),
 
-                        if (_combinedResponse!.measurements != null && _combinedResponse!.measurements!.isNotEmpty)
+                        if (_combinedResponse!.labResults != null && _combinedResponse!.labResults!.isNotEmpty)
                           const SizedBox(height: 20),
 
-                        // Normal Findings
-                        if (_combinedResponse!.normalFindings != null && _combinedResponse!.normalFindings!.isNotEmpty)
+                        // Overall Assessment
+                        if (_combinedResponse!.overallAssessment != null)
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Normal Findings',
+                                'Overall Assessment',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              ..._combinedResponse!.normalFindings!.map((f) => Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  _combinedResponse!.overallAssessment!,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                        if (_combinedResponse!.overallAssessment != null)
+                          const SizedBox(height: 20),
+
+                        // Abnormal Findings
+                        if (_combinedResponse!.abnormalFindings != null && _combinedResponse!.abnormalFindings!.isNotEmpty)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Abnormal Findings',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              ..._combinedResponse!.abnormalFindings!.map((f) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
                                 child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                                    const Icon(Icons.warning, size: 16, color: Colors.orange),
                                     const SizedBox(width: 8),
                                     Expanded(child: Text(f)),
                                   ],
@@ -704,38 +656,36 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                             ],
                           ),
 
-                        if (_combinedResponse!.normalFindings != null && _combinedResponse!.normalFindings!.isNotEmpty)
+                        if (_combinedResponse!.abnormalFindings != null && _combinedResponse!.abnormalFindings!.isNotEmpty)
                           const SizedBox(height: 20),
 
-                        // Concerns
-                        if (_combinedResponse!.concerns != null && _combinedResponse!.concerns!.isNotEmpty)
+                        // Normal Ranges
+                        if (_combinedResponse!.normalRanges != null && _combinedResponse!.normalRanges!.isNotEmpty)
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Areas to Monitor',
+                                'Reference Ranges',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.orange,
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              ..._combinedResponse!.concerns!.map((c) => Padding(
+                              ..._combinedResponse!.normalRanges!.map((r) => Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.warning, size: 16, color: Colors.orange),
+                                    const Icon(Icons.info, size: 14, color: Colors.grey),
                                     const SizedBox(width: 8),
-                                    Expanded(child: Text(c)),
+                                    Expanded(child: Text(r, style: const TextStyle(fontSize: 13))),
                                   ],
                                 ),
                               )),
                             ],
                           ),
 
-                        if (_combinedResponse!.concerns != null && _combinedResponse!.concerns!.isNotEmpty)
-                          const SizedBox(height: 20),
+                        const SizedBox(height: 20),
 
                         // Save Button
                         if (!_isSaving)
@@ -771,7 +721,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'For reference only. Always consult your healthcare provider.',
+                                  'For reference only. Always consult your healthcare provider for proper interpretation.',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.blue.shade800,

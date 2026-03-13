@@ -1,29 +1,32 @@
-﻿import 'package:flutter/material.dart';
+// lib/main.dart
+
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/auth_storage.dart';
-import 'screens/login.dart';
-import 'screens/mother_registration.dart';
-import 'screens/account_verification_registration.dart';
-import 'screens/forgot_password.dart';
-import 'screens/forgot_password_verification.dart';
-import 'screens/change_forgot_password.dart';
-import 'screens/complete_profile.dart';
-import 'screens/welcome_screen.dart';
-import 'screens/congrats_page.dart';
-import 'screens/mother_dashboard_shell.dart';
-import 'screens/admin_dashboard.dart';
-import 'screens/midwife_shell.dart';
-import 'screens/ultrasound_analyzer_screen.dart';
-import 'screens/lab_test_analyzer_screen.dart';
-import 'screens/records_screen.dart';
-import 'screens/mother_journal_screen.dart';
-import 'screens/mother_children_screen.dart';
-import 'screens/midwife_mothers_screen.dart';
-import 'screens/midwife_children_screen.dart';
-import 'screens/midwife_schedules_screen.dart';
-import 'screens/midwife_add_mother_screen.dart';
+import 'screens/auth/login.dart';
+import 'screens/auth/mother_registration.dart';
+import 'screens/auth/account_verification_registration.dart';
+import 'screens/auth/forgot_password.dart';
+import 'screens/auth/forgot_password_verification.dart';
+import 'screens/auth/change_forgot_password.dart';
+import 'screens/mother/complete_profile.dart';
+import 'screens/mother/welcome_screen.dart';
+import 'screens/mother/congrats_page.dart';
+import 'screens/mother/mother_dashboard_shell.dart';
+import 'screens/mother/mother_profile_page.dart';
+import 'screens/admin/admin_dashboard.dart';
+import 'screens/midwife/midwife_shell.dart';
+import 'screens/midwife/ultrasound_analyzer_screen.dart';
+import 'screens/midwife/lab_test_analyzer_screen.dart';
+import 'screens/mother/records_screen.dart';
+import 'screens/mother/mother_journal_screen.dart';
+import 'screens/mother/mother_children_screen.dart';
+import 'screens/midwife/midwife_mothers_screen.dart';
+import 'screens/midwife/midwife_children_screen.dart';
+import 'screens/midwife/midwife_schedules_screen.dart';
+import 'screens/midwife/midwife_add_mother_screen.dart';
 import 'models/due_date_mode.dart';
 
 void main() async {
@@ -85,7 +88,8 @@ class InaagapayApp extends StatelessWidget {
             home: Scaffold(
               body: Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF68A5)),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(const Color(0xFFFF68A5)),
                 ),
               ),
             ),
@@ -115,6 +119,7 @@ class InaagapayApp extends StatelessWidget {
           ),
           home: snapshot.data ?? const LoginScreen(),
           routes: {
+            // Authentication Routes
             '/login': (context) => const LoginScreen(),
             '/register': (context) => const MotherRegistrationScreen(),
             '/verify-registration': (context) =>
@@ -124,22 +129,36 @@ class InaagapayApp extends StatelessWidget {
                 const ForgotPasswordVerificationScreen(),
             '/change-forgot-password': (context) =>
                 const ChangeForgotPasswordScreen(),
+
+            // Mother Onboarding Routes
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
+
+            // Dashboard Routes
             '/mother-dashboard': (context) => const MotherDashboardShell(),
             '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
+
+            // Mother Feature Routes
+            '/mother-profile': (context) {
+              final args = ModalRoute.of(context)!.settings.arguments;
+              if (args is int) {
+                return MotherProfilePage(motherId: args);
+              }
+              return const MotherProfilePage(motherId: 0);
+            },
             '/ultrasound-analyzer': (context) =>
                 const UltrasoundAnalyzerScreen(),
             '/lab-test-analyzer': (context) => const LabTestAnalyzerScreen(),
             '/mother-records': (context) => const RecordsScreen(),
             '/mother-journal': (context) => const MotherJournalScreen(),
             '/mother-children': (context) => const MotherChildrenScreen(),
+
+            // Midwife Feature Routes
             '/midwife-mothers': (context) => const MidwifeMothersScreen(),
             '/midwife-children': (context) => const MidwifeChildrenScreen(),
             '/midwife-schedules': (context) => const MidwifeSchedulesScreen(),
-            '/midwife-add-mother': (context) =>
-                const MidwifeAddMotherScreen(),
+            '/midwife-add-mother': (context) => const MidwifeAddMotherScreen(),
           },
           onGenerateRoute: (settings) {
             if (settings.name == '/congrats') {

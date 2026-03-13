@@ -1,5 +1,7 @@
-﻿// Model returned by Gemini OCR for autofilling the Add Mother form.
-// All fields are nullable â€” only fields visible in the document are populated.
+﻿// lib/models/ocr_result.dart
+
+// Model returned by Gemini OCR for autofilling the Add Mother form.
+// All fields are nullable — only fields visible in the document are populated.
 
 class OcrEmergencyContact {
   String firstName;
@@ -103,7 +105,7 @@ class OcrPastPregnancy {
 }
 
 class OcrResult {
-  // Step 0 â€” Personal & Credentials
+  // Step 0 — Personal & Credentials
   String? firstName;
   String? middleName;
   String? lastName;
@@ -111,32 +113,32 @@ class OcrResult {
   String? phone;
   String? email;
 
-  // Step 1 â€” Address
+  // Step 1 — Address
   String? houseNumber;
   String? street;
   String? barangay;
   String? city;
   String? province;
 
-  // Step 2 â€” Emergency Contacts
+  // Step 2 — Emergency Contacts
   List<OcrEmergencyContact> emergencyContacts;
 
-  // Step 3 â€” Vitals
+  // Step 3 — Vitals
   String? birthdate; // ISO yyyy-MM-dd
   double? heightCm;
   double? weightKg;
   String? bloodType;
 
-  // Step 4 â€” Medical Conditions
+  // Step 4 — Medical Conditions
   List<OcrMedicalCondition> medicalConditions;
 
-  // Step 5 â€” Allergies
+  // Step 5 — Allergies
   List<OcrAllergy> allergies;
 
-  // Step 6 â€” Pregnancy History
+  // Step 6 — Pregnancy History
   List<OcrPastPregnancy> pastPregnancies;
 
-  // Step 7 â€” Gestational Info
+  // Step 7 — Gestational Info
   String? lmpDate; // ISO yyyy-MM-dd
   String? eddDate; // ISO yyyy-MM-dd
 

@@ -1,3 +1,5 @@
+// lib/models/gemini_response.dart
+
 class GeminiResponse {
   final String description;
   final List<String>? measurements;

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/app_input_field.dart';
-import '../widgets/main_button.dart';
-import '../widgets/page_title.dart';
+import 'package:flutter/foundation.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/page_title.dart';
+import '../../services/supabase_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -25,17 +27,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _isLoading = true);
 
-    // TODO: Implement password reset logic
-    await Future.delayed(const Duration(seconds: 1));
+    final result = await SupabaseService.resetPassword(_emailController.text.trim());
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    Navigator.pushNamed(
-      context,
-      '/forgot-password-verify',
-      arguments: _emailController.text.trim(),
-    );
+    if (result['success'] as bool? ?? false) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] as String? ?? 'Reset code sent'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      
+      Navigator.pushNamed(
+        context,
+        '/forgot-password-verify',
+        arguments: _emailController.text.trim(),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] as String? ?? 'Failed to send reset code'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -49,13 +66,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             children: [
               const SizedBox(height: 40),
               
-              // App Name (text instead of image)
+              // App Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFDE3A53),
+                  color: Color(0xFFFF68A5),
                 ),
               ),
               
@@ -83,6 +100,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 label: _isLoading ? 'Sending...' : 'Send Reset Code',
                 showIcons: false,
                 onPressed: _isLoading ? null : _handleSubmit,
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/login',
+                    (route) => false,
+                  );
+                },
+                child: const Text(
+                  'Back to Login',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
               ),
             ],
           ),

@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+// lib/widgets/validation_message.dart
+import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-enum ValidationType { error, success, info }
+enum ValidationType { info, success, error }
 
 class ValidationMessage extends StatelessWidget {
   final String message;
@@ -19,37 +20,44 @@ class ValidationMessage extends StatelessWidget {
     switch (type) {
       case ValidationType.success:
         return AppColors.success;
-      case ValidationType.info:
-        return AppColors.info;
       case ValidationType.error:
         return AppColors.error;
-    }
-  }
-
-  IconData get _defaultIcon {
-    switch (type) {
-      case ValidationType.success:
-        return Icons.check_circle;
       case ValidationType.info:
-        return Icons.info_outline;
-      case ValidationType.error:
-        return Icons.cancel;
+        return AppColors.info;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon ?? _defaultIcon, color: _color, size: 18),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            message,
-            style: TextStyle(fontSize: 14, color: _color),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: _color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon ??
+                (type == ValidationType.error
+                    ? Icons.error_outline
+                    : Icons.info_outline),
+            color: _color,
+            size: 16,
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: _color,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

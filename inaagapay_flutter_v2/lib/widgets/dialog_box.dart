@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+// lib/widgets/dialog_box.dart
+import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 enum DialogType { info, success, warning, error }
@@ -7,14 +8,15 @@ class DialogBox extends StatelessWidget {
   final String title;
   final String content;
   final String buttonText;
-  final VoidCallback onPressed;
   final DialogType type;
+  final VoidCallback onPressed;
 
   const DialogBox({
     super.key,
     required this.title,
-    this.content = '',
+    required this.content,
     required this.buttonText,
+    required this.type,
     required this.onPressed,
     this.type = DialogType.info,
   });

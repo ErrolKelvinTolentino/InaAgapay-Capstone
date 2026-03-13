@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+// lib/widgets/otp_input_field.dart
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 
@@ -72,8 +73,8 @@ class _OtpInputFieldState extends State<OtpInputField>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _shakeAnimation,
-      builder: (context, child) =>
-          Transform.translate(offset: Offset(_shakeAnimation.value, 0), child: child),
+      builder: (context, child) => Transform.translate(
+          offset: Offset(_shakeAnimation.value, 0), child: child),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: List.generate(widget.length, (index) {
@@ -128,9 +129,12 @@ class _OtpInputFieldState extends State<OtpInputField>
   @override
   void dispose() {
     _shakeController.dispose();
-    for (final c in _controllers) { c.dispose(); }
-    for (final f in _focusNodes) { f.dispose(); }
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    for (final f in _focusNodes) {
+      f.dispose();
+    }
     super.dispose();
   }
 }
-

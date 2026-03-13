@@ -1,19 +1,17 @@
+// lib/widgets/main_header.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../widgets/confirmation_dialog_box.dart';
-
 
 class MainHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onNotificationTap;
   final ImageProvider? avatarImage;
-
-
   final VoidCallback? onViewProfile;
   final VoidCallback? onSettings;
   final VoidCallback? onHelp;
   final VoidCallback? onLogout;
-
 
   const MainHeader({
     super.key,
@@ -26,25 +24,19 @@ class MainHeader extends StatelessWidget {
     this.onLogout,
   });
 
-
   void _showProfileMenu(BuildContext context) {
     final overlay = Overlay.of(context);
     late OverlayEntry entry;
 
-
     entry = OverlayEntry(
       builder: (_) => Stack(
         children: [
-          /// 🌑 FULLSCREEN OVERLAY
           GestureDetector(
             onTap: () => entry.remove(),
             child: Container(
               color: Colors.black.withOpacity(0.35),
             ),
           ),
-
-
-          /// 📋 PROFILE MENU
           Positioned(
             top: 80,
             right: 16,
@@ -63,10 +55,8 @@ class MainHeader extends StatelessWidget {
       ),
     );
 
-
     overlay.insert(entry);
   }
-
 
   void _confirmLogout(BuildContext context) {
     showDialog(
@@ -87,7 +77,6 @@ class MainHeader extends StatelessWidget {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -107,17 +96,19 @@ class MainHeader extends StatelessWidget {
         ),
         child: Row(
           children: [
-            /// 🔹 LOGO
+            /// LOGO
             Image.asset(
               'assets/images/logo.png',
               height: 40,
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.favorite,
+                  color: AppColors.brandPrimary,
+                  size: 30),
             ),
-
 
             const SizedBox(width: 12),
 
-
-            /// 🔹 TITLE
+            /// TITLE
             Text(
               title.toUpperCase(),
               style: const TextStyle(
@@ -128,11 +119,9 @@ class MainHeader extends StatelessWidget {
               ),
             ),
 
-
             const Spacer(),
 
-
-            /// 🔔 NOTIFICATIONS
+            /// NOTIFICATIONS
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
@@ -144,11 +133,9 @@ class MainHeader extends StatelessWidget {
               ),
             ),
 
-
             const SizedBox(width: 14),
 
-
-            /// 👤 AVATAR
+            /// AVATAR
             GestureDetector(
               onTap: () => _showProfileMenu(context),
               child: Container(
@@ -164,6 +151,13 @@ class MainHeader extends StatelessWidget {
                         )
                       : null,
                 ),
+                child: avatarImage == null
+                    ? const Icon(
+                        Icons.person,
+                        size: 18,
+                        color: Colors.white,
+                      )
+                    : null,
               ),
             ),
           ],
@@ -173,11 +167,9 @@ class MainHeader extends StatelessWidget {
   }
 }
 
-
 /* -------------------------------------------------------------------------- */
 /*                               PROFILE MENU                                 */
 /* -------------------------------------------------------------------------- */
-
 
 class _ProfileMenu extends StatelessWidget {
   final VoidCallback onClose;
@@ -186,7 +178,6 @@ class _ProfileMenu extends StatelessWidget {
   final VoidCallback? onHelp;
   final VoidCallback? onLogout;
 
-
   const _ProfileMenu({
     required this.onClose,
     this.onViewProfile,
@@ -194,7 +185,6 @@ class _ProfileMenu extends StatelessWidget {
     this.onHelp,
     this.onLogout,
   });
-
 
   @override
   Widget build(BuildContext context) {
@@ -256,13 +246,11 @@ class _ProfileMenu extends StatelessWidget {
   }
 }
 
-
 class _MenuItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool isDanger;
-
 
   const _MenuItem({
     required this.icon,
@@ -271,12 +259,9 @@ class _MenuItem extends StatelessWidget {
     this.isDanger = false,
   });
 
-
   @override
   Widget build(BuildContext context) {
-    final color =
-        isDanger ? Colors.redAccent : AppColors.textPrimary;
-
+    final color = isDanger ? Colors.redAccent : AppColors.textPrimary;
 
     return InkWell(
       onTap: onTap,
@@ -300,6 +285,3 @@ class _MenuItem extends StatelessWidget {
     );
   }
 }
-
-
-

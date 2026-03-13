@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../services/auth_storage.dart';
+// Change these:
+import '../../theme/app_colors.dart';
+import '../../services/auth_storage.dart';
 import 'records_screen.dart';
 
 class MotherDashboardShell extends StatefulWidget {

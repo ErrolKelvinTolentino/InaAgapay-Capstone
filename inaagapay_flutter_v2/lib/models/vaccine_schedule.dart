@@ -1,14 +1,14 @@
+// lib/models/vaccine_schedule.dart
+
 enum VaccineStatus {
   done,
   pending,
   locked,
 }
 
-
 class VaccineDefinition {
   final String key; // 👈 unique ID (important for DB mapping)
   final String name;
-
 
   const VaccineDefinition({
     required this.key,
@@ -16,12 +16,10 @@ class VaccineDefinition {
   });
 }
 
-
 class VaccineAgeGroup {
   final String label; // e.g. "At Birth"
   final int week;
   final List<VaccineDefinition> vaccines;
-
 
   const VaccineAgeGroup({
     required this.label,
@@ -29,7 +27,6 @@ class VaccineAgeGroup {
     required this.vaccines,
   });
 }
-
 
 /// 🧠 THIS NEVER CHANGES
 const List<VaccineAgeGroup> vaccineSchedule = [
@@ -72,6 +69,3 @@ const List<VaccineAgeGroup> vaccineSchedule = [
     ],
   ),
 ];
-
-
-

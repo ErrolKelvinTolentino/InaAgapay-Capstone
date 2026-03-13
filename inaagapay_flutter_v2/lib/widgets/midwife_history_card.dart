@@ -1,6 +1,7 @@
+// lib/widgets/midwife_history_card.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-import 'small_description.dart';
 
 class MidwifeHistoryCard extends StatelessWidget {
   final List<MidwifeVisitItem> visits;
@@ -64,9 +65,6 @@ class MidwifeHistoryCard extends StatelessWidget {
   }
 }
 
-/// ------------------------------------------------------------
-/// VISIT ROW (with subtle tap animation)
-/// ------------------------------------------------------------
 class _VisitRow extends StatelessWidget {
   final MidwifeVisitItem visit;
   final VoidCallback? onTap;
@@ -79,7 +77,7 @@ class _VisitRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent, // 🔑 required for ripple
+      color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
@@ -104,7 +102,13 @@ class _VisitRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    SmallDescription(text: visit.visitType),
+                    Text(
+                      visit.visitType,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -119,9 +123,6 @@ class _VisitRow extends StatelessWidget {
   }
 }
 
-/// ------------------------------------------------------------
-/// TIME INDICATOR PILL
-/// ------------------------------------------------------------
 class _VisitTimeIndicator extends StatelessWidget {
   final String label;
 
@@ -147,9 +148,6 @@ class _VisitTimeIndicator extends StatelessWidget {
   }
 }
 
-/// ------------------------------------------------------------
-/// MODEL
-/// ------------------------------------------------------------
 class MidwifeVisitItem {
   final String fullName;
   final String visitType;

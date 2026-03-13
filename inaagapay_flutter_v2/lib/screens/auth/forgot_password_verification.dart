@@ -1,30 +1,28 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/main_button.dart';
-import '../widgets/otp_input_field.dart';
-import '../widgets/validation_message.dart';
-import '../widgets/clickable_text.dart';
-import '../widgets/dialog_box.dart';
-import '../widgets/page_title.dart';
-import '../services/supabase_service.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/otp_input_field.dart';
+import '../../widgets/validation_message.dart';
+import '../../widgets/clickable_text.dart';
+import '../../widgets/page_title.dart';
+import '../../services/supabase_service.dart';
 
-class AccountVerificationRegistration extends StatefulWidget {
-  const AccountVerificationRegistration({super.key});
+class ForgotPasswordVerificationScreen extends StatefulWidget {
+  const ForgotPasswordVerificationScreen({super.key});
 
   @override
-  State<AccountVerificationRegistration> createState() =>
-      _AccountVerificationRegistrationState();
+  State<ForgotPasswordVerificationScreen> createState() =>
+      _ForgotPasswordVerificationScreenState();
 }
 
-class _AccountVerificationRegistrationState
-    extends State<AccountVerificationRegistration> {
-  static const int _initialSeconds = 300; // 5 minutes
+class _ForgotPasswordVerificationScreenState
+    extends State<ForgotPasswordVerificationScreen> {
+  static const int _initialSeconds = 300;
 
   late String email;
   int _secondsRemaining = _initialSeconds;
   Timer? _timer;
-  bool _isResending = false;
 
   String _code = '';
   bool _hasError = false;
@@ -62,58 +60,34 @@ class _AccountVerificationRegistrationState
       _hasError = false;
     });
 
-    final success = await SupabaseService.verifyCode(email, _code);
-
+    // Verify reset code - you need to implement this in SupabaseService
+    // For now, just navigate to change password
+    await Future.delayed(const Duration(milliseconds: 500));
+    
     if (!mounted) return;
-
+    
     setState(() {
       _isVerifying = false;
-      _hasError = !success;
     });
-
-    if (success) {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => DialogBox(
-          title: 'Verification Successful',
-          content: 'Your account has been verified. You can now log in.',
-          buttonText: 'Go to Login',
-          type: DialogType.success,
-          onPressed: () {
-            Navigator.pop(context);
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              '/login',
-              (route) => false,
-            );
-          },
-        ),
-      );
-    }
+    
+    Navigator.pushNamed(context, '/change-forgot-password');
   }
 
   Future<void> _resendCode() async {
-    setState(() {
-      _isResending = true;
-    });
+    setState(() => _isVerifying = true);
 
     final result = await SupabaseService.resendVerificationCode(email);
 
     if (!mounted) return;
 
-    setState(() {
-      _isResending = false;
-    });
+    setState(() => _isVerifying = false);
 
     if (result['success']) {
       _startTimer();
-      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result['message']),
           backgroundColor: AppColors.success,
-          duration: const Duration(seconds: 3),
         ),
       );
     } else {
@@ -132,27 +106,26 @@ class _AccountVerificationRegistrationState
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
+          padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
               
-              // App Name (text instead of image)
+              // App Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFDE3A53),
+                  color: Color(0xFFFF68A5),
                 ),
               ),
               
               const SizedBox(height: 32),
               
               const PageTitle(
-                title: 'VERIFY EMAIL',
+                title: 'Verify Code',
                 leadingIcon: Icons.mail,
-                trailingIcon: Icons.check,
               ),
               const SizedBox(height: 16),
               Text(
@@ -174,34 +147,23 @@ class _AccountVerificationRegistrationState
                 const Padding(
                   padding: EdgeInsets.only(top: 12),
                   child: ValidationMessage(
-                    message: 'Incorrect or expired code. Please try again.',
-                    type: ValidationType.error,
+                    message: 'Invalid code. Please try again.',
                   ),
                 ),
               const SizedBox(height: 32),
               MainButton(
                 label: _isVerifying ? 'Verifying...' : 'Verify',
                 showIcons: false,
-                onPressed: _code.length == 6 && !_isVerifying
-                    ? _verifyCode
-                    : null,
+                onPressed: _code.length == 6 && !_isVerifying ? _verifyCode : null,
               ),
-              const SizedBox(height: 32),
-              if (_isResending)
-                const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDE3A53)),
-                )
-              else if (_secondsRemaining == 0)
-                ClickableText(
-                  text: 'Resend Code',
-                  onTap: _resendCode,
-                )
-              else
-                Text(
-                  'Resend Code in $_formattedTime',
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
               const SizedBox(height: 24),
+              _secondsRemaining == 0
+                  ? ClickableText(text: 'Resend Code', onTap: _resendCode)
+                  : Text(
+                      'Resend Code in $_formattedTime',
+                      style: const TextStyle(color: AppColors.textSecondary),
+                    ),
+              const SizedBox(height: 16),
               TextButton(
                 onPressed: () {
                   Navigator.pushNamedAndRemoveUntil(
@@ -215,7 +177,6 @@ class _AccountVerificationRegistrationState
                   style: TextStyle(color: AppColors.textSecondary),
                 ),
               ),
-              const SizedBox(height: 24),
             ],
           ),
         ),

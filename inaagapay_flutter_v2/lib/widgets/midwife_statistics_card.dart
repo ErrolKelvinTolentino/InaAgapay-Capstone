@@ -1,6 +1,7 @@
+// lib/widgets/midwife_statistics_card.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-import 'trimester_card.dart';
 
 class MidwifeStatisticsCard extends StatelessWidget {
   final int totalPregnancies;
@@ -67,14 +68,14 @@ class MidwifeStatisticsCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: TrimesterCard(
+                child: _TrimesterCard(
                   value: firstTrimester,
                   title: '1st\nTrimester',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: TrimesterCard(
+                child: _TrimesterCard(
                   value: secondTrimester,
                   title: '2nd\nTrimester',
                   backgroundColor: AppColors.brandSecondary,
@@ -82,13 +83,65 @@ class MidwifeStatisticsCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: TrimesterCard(
+                child: _TrimesterCard(
                   value: thirdTrimester,
                   title: '3rd\nTrimester',
                   backgroundColor: AppColors.faintWhite,
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrimesterCard extends StatelessWidget {
+  final int value;
+  final String title;
+  final Color? backgroundColor;
+
+  const _TrimesterCard({
+    required this.value,
+    required this.title,
+    this.backgroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        vertical: 18,
+        horizontal: 16,
+      ),
+      decoration: BoxDecoration(
+        color: backgroundColor ?? AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.borderPrimary,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value.toString(),
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              color: AppColors.brandText,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.3,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),

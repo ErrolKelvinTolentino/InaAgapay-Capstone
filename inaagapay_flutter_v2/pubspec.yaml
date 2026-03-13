@@ -19,7 +19,6 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   image_picker: ^1.1.2
   file_picker: ^8.1.4
-
   fl_chart: ^0.68.0
   bcrypt: ^1.1.3
 

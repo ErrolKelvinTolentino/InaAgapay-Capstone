@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+// lib/widgets/secondary_header.dart
+
+import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class SecondaryHeader extends StatelessWidget {

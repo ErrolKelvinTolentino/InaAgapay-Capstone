@@ -1,3 +1,5 @@
+// lib/widgets/progressive_step_indicator.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 

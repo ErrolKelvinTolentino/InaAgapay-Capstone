@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+// lib/widgets/clickable_text.dart
+import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class ClickableText extends StatefulWidget {
@@ -6,8 +7,8 @@ class ClickableText extends StatefulWidget {
   final VoidCallback onTap;
   final bool underline;
   final Color? color;
-  final double fontSize;
-  final FontWeight fontWeight;
+  final double? fontSize;
+  final FontWeight? fontWeight;
 
   const ClickableText({
     super.key,
@@ -15,8 +16,8 @@ class ClickableText extends StatefulWidget {
     required this.onTap,
     this.underline = false,
     this.color,
-    this.fontSize = 14,
-    this.fontWeight = FontWeight.w500,
+    this.fontSize,
+    this.fontWeight,
   });
 
   @override
@@ -56,8 +57,8 @@ class _ClickableTextState extends State<ClickableText> {
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeOut,
             style: TextStyle(
-              fontSize: widget.fontSize,
-              fontWeight: widget.fontWeight,
+              fontSize: widget.fontSize ?? 14,
+              fontWeight: widget.fontWeight ?? FontWeight.w600,
               color: textColor(),
               decoration: widget.underline
                   ? TextDecoration.underline
