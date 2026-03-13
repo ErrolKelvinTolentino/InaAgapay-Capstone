@@ -1,4 +1,5 @@
 // lib/screens/midwife/midwife_dashboard.dart
+
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
@@ -29,6 +30,24 @@ class MidwifeDashboard extends StatelessWidget {
       'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
     ];
 
+    final List<MidwifeVisitItem> recentVisits = [
+      const MidwifeVisitItem(
+        fullName: 'Maria Santos',
+        visitType: 'Prenatal Check-up',
+        timeLabel: 'Today',
+      ),
+      const MidwifeVisitItem(
+        fullName: 'Juana Dela Cruz',
+        visitType: 'Prenatal Check-up',
+        timeLabel: 'Yesterday',
+      ),
+      const MidwifeVisitItem(
+        fullName: 'Ana Lopez',
+        visitType: 'Prenatal Check-up',
+        timeLabel: '2 days ago',
+      ),
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: Column(
@@ -57,7 +76,7 @@ class MidwifeDashboard extends StatelessWidget {
                   const SizedBox(height: 16),
                   
                   // Hero Card
-                  HeroCard(
+                  const HeroCard(
                     image: null,
                     title: 'Welcome, Midwife! 🌸',
                     subtitle: 'Barangay Sta. Barbara',
@@ -132,23 +151,7 @@ class MidwifeDashboard extends StatelessWidget {
 
                   // Recent Visits
                   MidwifeHistoryCard(
-                    visits: const [
-                      MidwifeVisitItem(
-                        fullName: 'Maria Santos',
-                        visitType: 'Prenatal Check-up',
-                        timeLabel: 'Today',
-                      ),
-                      MidwifeVisitItem(
-                        fullName: 'Juana Dela Cruz',
-                        visitType: 'Prenatal Check-up',
-                        timeLabel: 'Yesterday',
-                      ),
-                      MidwifeVisitItem(
-                        fullName: 'Ana Lopez',
-                        visitType: 'Prenatal Check-up',
-                        timeLabel: '2 days ago',
-                      ),
-                    ],
+                    visits: recentVisits,
                   ),
 
                   const SizedBox(height: 20),

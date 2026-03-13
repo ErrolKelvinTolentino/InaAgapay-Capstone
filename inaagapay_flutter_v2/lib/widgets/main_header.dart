@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import 'confirmation_dialog_box.dart';
 
 class MainHeader extends StatelessWidget {
   final String title;
@@ -24,84 +25,58 @@ class MainHeader extends StatelessWidget {
   });
 
   void _showProfileMenu(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.borderPrimary,
-                borderRadius: BorderRadius.circular(2),
-              ),
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          /// FULLSCREEN OVERLAY
+          GestureDetector(
+            onTap: () => entry.remove(),
+            child: Container(
+              color: Colors.black.withOpacity(0.35),
             ),
-            const SizedBox(height: 16),
-            _buildMenuItem(
-              icon: Icons.person_outline,
-              label: 'View Profile',
-              onTap: () {
-                Navigator.pop(ctx);
-                onViewProfile?.call();
+          ),
+
+          /// PROFILE MENU
+          Positioned(
+            top: 80,
+            right: 16,
+            child: _ProfileMenu(
+              onClose: () => entry.remove(),
+              onViewProfile: onViewProfile,
+              onSettings: onSettings,
+              onHelp: onHelp,
+              onLogout: () {
+                entry.remove();
+                _confirmLogout(context);
               },
             ),
-            _buildMenuItem(
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              onTap: () {
-                Navigator.pop(ctx);
-                onSettings?.call();
-              },
-            ),
-            _buildMenuItem(
-              icon: Icons.help_outline,
-              label: 'Help',
-              onTap: () {
-                Navigator.pop(ctx);
-                onHelp?.call();
-              },
-            ),
-            const Divider(height: 1),
-            _buildMenuItem(
-              icon: Icons.logout_rounded,
-              label: 'Log out',
-              isDanger: true,
-              onTap: () {
-                Navigator.pop(ctx);
-                onLogout?.call();
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+
+    overlay.insert(entry);
   }
 
-  Widget _buildMenuItem({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool isDanger = false,
-  }) {
-    final color = isDanger ? AppColors.error : AppColors.textPrimary;
-    
-    return ListTile(
-      leading: Icon(icon, color: color),
-      title: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w500,
-        ),
+  void _confirmLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ConfirmationDialogBox(
+        title: 'Log out',
+        subtitle: 'Are you sure you want to log out of your account?',
+        confirmText: 'Log out',
+        cancelText: 'Cancel',
+        accentColor: Colors.redAccent,
+        onCancel: () => Navigator.pop(context),
+        onConfirm: () {
+          Navigator.pop(context);
+          onLogout?.call();
+        },
       ),
-      onTap: onTap,
     );
   }
 
@@ -184,6 +159,125 @@ class MainHeader extends StatelessWidget {
                         color: Colors.white,
                       )
                     : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               PROFILE MENU                                 */
+/* -------------------------------------------------------------------------- */
+
+class _ProfileMenu extends StatelessWidget {
+  final VoidCallback onClose;
+  final VoidCallback? onViewProfile;
+  final VoidCallback? onSettings;
+  final VoidCallback? onHelp;
+  final VoidCallback? onLogout;
+
+  const _ProfileMenu({
+    required this.onClose,
+    this.onViewProfile,
+    this.onSettings,
+    this.onHelp,
+    this.onLogout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: 200,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            _MenuItem(
+              icon: Icons.person_outline,
+              label: 'View Profile',
+              onTap: () {
+                onClose();
+                onViewProfile?.call();
+              },
+            ),
+            _MenuItem(
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+              onTap: () {
+                onClose();
+                onSettings?.call();
+              },
+            ),
+            _MenuItem(
+              icon: Icons.help_outline,
+              label: 'Help',
+              onTap: () {
+                onClose();
+                onHelp?.call();
+              },
+            ),
+            const Divider(height: 8),
+            _MenuItem(
+              icon: Icons.logout_rounded,
+              label: 'Log out',
+              isDanger: true,
+              onTap: () {
+                onLogout?.call();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isDanger;
+
+  const _MenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDanger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDanger ? Colors.redAccent : AppColors.textPrimary;
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: color,
               ),
             ),
           ],

@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+// lib/screens/auth/forgot_password.dart
+
+import 'package:flutter/material.dart'; // Remove the foundation import
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/page_title.dart';
 import '../../services/supabase_service.dart';
+
+// Rest of the file remains the same
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});

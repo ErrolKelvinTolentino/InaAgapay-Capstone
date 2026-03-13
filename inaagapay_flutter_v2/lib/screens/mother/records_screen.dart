@@ -1,5 +1,6 @@
+// lib/screens/mother/records_screen.dart
+
 import 'package:flutter/material.dart';
-// Change this:
 import '../../theme/app_colors.dart';
 
 class RecordsScreen extends StatelessWidget {
@@ -271,7 +272,7 @@ class RecordsScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.1),
+              color: statusColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -342,7 +343,7 @@ class RecordsScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: summaryColor.withValues(alpha: 0.1),
+              color: summaryColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(

@@ -4,19 +4,24 @@ import '../theme/app_colors.dart';
 
 class Headline extends StatelessWidget {
   final String text;
+  final double fontSize;
 
-  const Headline({super.key, required this.text});
+  const Headline({
+    super.key,
+    required this.text,
+    this.fontSize = 22,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-        fontSize: 28,
-        fontWeight: FontWeight.bold,
-        color: AppColors.textPrimary,
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: FontWeight.w600,
+        color: AppColors.brandPrimary,
+        letterSpacing: 0.2,
       ),
-      textAlign: TextAlign.center,
     );
   }
 }
