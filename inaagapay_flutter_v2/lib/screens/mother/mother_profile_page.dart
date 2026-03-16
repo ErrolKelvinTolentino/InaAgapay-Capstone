@@ -104,68 +104,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   // AI Analysis Generators
   String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
-    final buffer = StringBuffer();
-    buffer.write('🤖 AI Analysis:\n\n');
-
-    // Blood Pressure Analysis
-    final bpSys = _toDouble(checkup['blood_pressure_systolic']);
-    final bpDia = _toDouble(checkup['blood_pressure_diastolic']);
-    if (bpSys != null && bpDia != null) {
-      if (bpSys >= 140 || bpDia >= 90) {
-        buffer.write('⚠️ **Elevated Blood Pressure** detected. '
-            'Consider monitoring for preeclampsia symptoms.\n\n');
-      } else if (bpSys < 90 || bpDia < 60) {
-        buffer.write('📉 **Low Blood Pressure** noted. '
-            'Ensure adequate hydration and gradual position changes.\n\n');
-      } else {
-        buffer.write(
-            '✅ **Blood Pressure** is within normal pregnancy range.\n\n');
-      }
-    }
-
-    // Weight Analysis
-    final weight = _toDouble(checkup['checkup_weight']);
-    if (weight != null) {
-      buffer.write('⚖️ **Weight**: $weight kg\n\n');
-    }
-
-    // Fetal Heart Rate
-    final fhr = checkup['fetal_heart_beat'];
-    if (fhr != null) {
-      final rate = int.tryParse(fhr.toString());
-      if (rate != null) {
-        if (rate >= 120 && rate <= 160) {
-          buffer.write('💓 **Fetal Heart Rate**: $rate bpm (Normal range)\n\n');
-        } else if (rate < 120) {
-          buffer.write(
-              '⚠️ **Fetal Heart Rate**: $rate bpm (Below normal range)\n\n');
-        } else {
-          buffer.write(
-              '⚠️ **Fetal Heart Rate**: $rate bpm (Above normal range)\n\n');
-        }
-      }
-    }
-
-    // Edema
-    final edema = checkup['edema']?.toString().toLowerCase();
-    if (edema != null && edema != 'none') {
-      buffer.write(
-          '💧 **Edema**: ${edema.toUpperCase()} - Monitor for worsening symptoms.\n\n');
-    }
-
-    // TD Vaccine
-    final tdDose = checkup['td_vaccine_dose']?.toString();
-    if (tdDose != null && tdDose.isNotEmpty) {
-      buffer.write('💉 **TD Vaccine**: $tdDose administered\n\n');
-    }
-
-    // Recommendations
-    buffer.write('📋 **Recommendations**:\n');
-    buffer.write('• Continue regular prenatal visits\n');
-    buffer.write('• Monitor fetal movements daily\n');
-    buffer.write('• Report any unusual symptoms immediately\n');
-
-    return buffer.toString();
+    final aiMap = checkup['risk_ai_response'] as Map<String, dynamic>?;
+    final text = aiMap?['response']?.toString().trim() ?? '';
+    return text;
   }
 
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
@@ -1649,6 +1590,38 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final bpDia = _formatValue(checkup['blood_pressure_diastolic']);
     final aog = _formatValue(checkup['age_of_gestation']);
     final weight = _formatValue(checkup['checkup_weight']);
+    final symptoms =
+        (checkup['symptoms'] as List?)?.cast<Map<String, dynamic>>() ??
+            const <Map<String, dynamic>>[];
+    final riskAssessment = checkup['risk_assessment'] as Map<String, dynamic>?;
+    final riskFactors =
+        (checkup['risk_factors'] as List?)?.cast<Map<String, dynamic>>() ??
+            const <Map<String, dynamic>>[];
+    final riskLevel = (riskAssessment?['risk_level'] ?? '').toString();
+
+    final symptomSummary = symptoms.isEmpty
+        ? '—'
+        : symptoms.map((s) {
+            final type = s['symptom_type'] as Map<String, dynamic>?;
+            final name =
+                (type?['symptom_name'] ?? 'Unknown symptom').toString();
+            final category =
+                (type?['risk_category'] ?? '').toString().toUpperCase();
+            final notes = (s['notes'] ?? '').toString().trim();
+            final suffix = notes.isEmpty ? '' : ' - $notes';
+            return category.isEmpty
+                ? '$name$suffix'
+                : '$name [$category]$suffix';
+          }).join('\n');
+
+    final riskFactorSummary = riskFactors.isEmpty
+        ? '—'
+        : riskFactors
+            .map((f) =>
+                '- ${_formatValue(f['factor'])} (${_formatValue(f['risk_influence'])})')
+            .join('\n');
+
+    final hasAiInsight = _generatePrenatalAIInsights(checkup).isNotEmpty;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1662,6 +1635,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             if (bpSys != '—' && bpDia != '—') Text('BP: $bpSys/$bpDia'),
             if (aog != '—') Text('AOG: $aog weeks'),
             if (weight != '—') Text('Weight: $weight kg'),
+            if (riskLevel.isNotEmpty) Text('Risk: ${riskLevel.toUpperCase()}'),
+            if (hasAiInsight) const Text('AI Insight: Available'),
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
@@ -1671,6 +1646,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             subtitle: date,
             icon: Icons.medical_services,
             rows: [
+              MapEntry(
+                  'Checkup ID', _formatValue(checkup['prenatal_checkup_id'])),
               MapEntry('Date', _formatDateTime(checkup['checkup_datetime'])),
               MapEntry('Age of Gestation', aog),
               MapEntry('Weight (kg)', weight),
@@ -1679,8 +1656,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   'Fetal Position', _formatValue(checkup['fetal_position'])),
               MapEntry('Fetal Heart Beat',
                   _formatValue(checkup['fetal_heart_beat'])),
+              MapEntry('Fetal Heart Tone',
+                  _formatValue(checkup['fetal_heart_tone'])),
               MapEntry('TD Vaccine', _formatValue(checkup['td_vaccine_dose'])),
               MapEntry('Edema', _formatValue(checkup['edema'])),
+              MapEntry('Symptoms', symptomSummary),
+              MapEntry('Risk Level (Saved)',
+                  riskLevel.isEmpty ? '—' : riskLevel.toString().toUpperCase()),
+              MapEntry('Risk Factors (Saved)', riskFactorSummary),
               MapEntry('Remarks', _formatValue(checkup['remarks'])),
               MapEntry('Next Schedule', _formatDate(checkup['next_schedule'])),
             ],
