@@ -1,4 +1,4 @@
-﻿// lib/main.dart
+﻿// lib/main.dart (updated section for routes)
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -28,6 +28,7 @@ import 'screens/midwife/midwife_children_screen.dart';
 import 'screens/midwife/midwife_schedules_screen.dart';
 import 'screens/midwife/midwife_add_mother_screen.dart';
 import 'models/due_date_mode.dart';
+import 'models/analyzer_args.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -157,8 +158,6 @@ class InaagapayApp extends StatelessWidget {
               }
               return const MotherProfilePage(motherId: 0);
             },
-            '/ultrasound-analyzer': (context) => const UltrasoundAnalyzerScreen(),
-            '/lab-test-analyzer': (context) => const LabTestAnalyzerScreen(),
             '/mother-records': (context) => const RecordsScreen(),
             '/mother-journal': (context) => const MotherJournalScreen(),
             '/mother-children': (context) => const MotherChildrenScreen(),
@@ -174,6 +173,25 @@ class InaagapayApp extends StatelessWidget {
               final mode = settings.arguments as DueDateMode;
               return MaterialPageRoute(
                 builder: (_) => CongratsPage(mode: mode),
+              );
+            }
+            // Handle analyzer screens with arguments
+            if (settings.name == '/ultrasound-analyzer') {
+              final args = settings.arguments as AnalyzerArgs;
+              return MaterialPageRoute(
+                builder: (_) => UltrasoundAnalyzerScreen(
+                  motherId: args.motherId,
+                  pregnancyId: args.pregnancyId,
+                ),
+              );
+            }
+            if (settings.name == '/lab-test-analyzer') {
+              final args = settings.arguments as AnalyzerArgs;
+              return MaterialPageRoute(
+                builder: (_) => LabTestAnalyzerScreen(
+                  motherId: args.motherId,
+                  pregnancyId: args.pregnancyId,
+                ),
               );
             }
             return null;

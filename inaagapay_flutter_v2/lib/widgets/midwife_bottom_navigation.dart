@@ -15,54 +15,50 @@ class MidwifeBottomNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
+    return Container(
+      height: 70, // Match mother's bottom navigation height
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -6),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(
-              icon: Icons.home_filled,
-              label: 'Home',
-              isActive: currentIndex == 0,
-              onTap: () => onTabSelected(0),
-            ),
-            _NavItem(
-              icon: Icons.pregnant_woman_rounded,
-              label: 'Mothers',
-              isActive: currentIndex == 1,
-              onTap: () => onTabSelected(1),
-            ),
-            _NavItem(
-              icon: Icons.child_care_outlined,
-              label: 'Children',
-              isActive: currentIndex == 2,
-              onTap: () => onTabSelected(2),
-            ),
-            _NavItem(
-              icon: Icons.calendar_today_rounded,
-              label: 'Schedules',
-              isActive: currentIndex == 3,
-              onTap: () => onTabSelected(3),
-            ),
-          ],
-        ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _NavItem(
+            icon: Icons.home_filled,
+            label: 'Home',
+            isActive: currentIndex == 0,
+            onTap: () => onTabSelected(0),
+          ),
+          _NavItem(
+            icon: Icons.pregnant_woman_rounded,
+            label: 'Mothers',
+            isActive: currentIndex == 1,
+            onTap: () => onTabSelected(1),
+          ),
+          _NavItem(
+            icon: Icons.child_care_outlined,
+            label: 'Children',
+            isActive: currentIndex == 2,
+            onTap: () => onTabSelected(2),
+          ),
+          _NavItem(
+            icon: Icons.calendar_today_rounded,
+            label: 'Schedules',
+            isActive: currentIndex == 3,
+            onTap: () => onTabSelected(3),
+          ),
+        ],
       ),
     );
   }
@@ -106,12 +102,12 @@ class _NavItem extends StatelessWidget {
               color: color,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           if (isActive)
             Container(
-              width: 6,
-              height: 6,
-              decoration: const BoxDecoration(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
                 color: AppColors.brandPrimary,
                 shape: BoxShape.circle,
               ),

@@ -1,17 +1,30 @@
-// Update imports at the top of the file
+// lib/screens/midwife/ultrasound_analyzer_screen.dart
+
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// Change these:
 import '../../services/gemini_service.dart';
 import '../../services/auth_storage.dart';
 import '../../models/gemini_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/dialog_box.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/secondary_button.dart';
+import '../../widgets/page_title.dart';
+import '../../widgets/headline.dart';
+
 class UltrasoundAnalyzerScreen extends StatefulWidget {
-  const UltrasoundAnalyzerScreen({super.key});
+  final int motherId;
+  final int pregnancyId;
+
+  const UltrasoundAnalyzerScreen({
+    super.key,
+    required this.motherId,
+    required this.pregnancyId,
+  });
 
   @override
   State<UltrasoundAnalyzerScreen> createState() => _UltrasoundAnalyzerScreenState();
@@ -20,6 +33,7 @@ class UltrasoundAnalyzerScreen extends StatefulWidget {
 class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   final ImagePicker _picker = ImagePicker();
   final GeminiService _geminiService = GeminiService();
+  final DateFormat _dateFormat = DateFormat('MMMM d, yyyy');
 
   final List<XFile> _selectedImages = [];
   GeminiResponse? _combinedResponse;
@@ -32,18 +46,67 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   late TextEditingController _explanationController;
   bool _isEditing = false;
 
+  // New fields for ultrasound metadata
+  DateTime? _ultrasoundDate;
+  final TextEditingController _dateController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _healthWorkerNameController = TextEditingController();
+  final TextEditingController _healthWorkerInstitutionController = TextEditingController();
+  final TextEditingController _healthWorkerProfessionController = TextEditingController();
+
+  // Store the user's context
+  String? _userRole;
+  late int _motherId;
+  late int _pregnancyId;
+
+  // Store uploaded image URLs
+  List<String> _uploadedImageUrls = [];
+
   @override
   void initState() {
     super.initState();
     _healthSummaryController = TextEditingController();
     _explanationController = TextEditingController();
+    
+    // Set default date to today
+    _ultrasoundDate = DateTime.now();
+    _dateController.text = _dateFormat.format(_ultrasoundDate!);
+    
+    _motherId = widget.motherId;
+    _pregnancyId = widget.pregnancyId;
+    
+    _loadUserContext();
   }
 
   @override
   void dispose() {
     _healthSummaryController.dispose();
     _explanationController.dispose();
+    _dateController.dispose();
+    _locationController.dispose();
+    _healthWorkerNameController.dispose();
+    _healthWorkerInstitutionController.dispose();
+    _healthWorkerProfessionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadUserContext() async {
+    try {
+      final role = await AuthStorage.getUserRole();
+      
+      setState(() {
+        _userRole = role;
+      });
+
+      if (kDebugMode) {
+        print('User context loaded:');
+        print('  Role: $_userRole');
+        print('  Mother ID: $_motherId');
+        print('  Pregnancy ID: $_pregnancyId');
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error loading user context: $e');
+    }
   }
 
   Future<void> _pickImages() async {
@@ -60,6 +123,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           _combinedResponse = null;
           _errorMessage = null;
           _isEditing = false;
+          _healthSummaryController.clear();
+          _explanationController.clear();
+          _uploadedImageUrls.clear();
         });
       }
     } catch (e) {
@@ -84,6 +150,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           _combinedResponse = null;
           _errorMessage = null;
           _isEditing = false;
+          _healthSummaryController.clear();
+          _explanationController.clear();
+          _uploadedImageUrls.clear();
         });
       }
     } catch (e) {
@@ -96,7 +165,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   void _removeImage(int index) {
     setState(() {
       _selectedImages.removeAt(index);
-      _combinedResponse = null;
+      if (_selectedImages.isEmpty) {
+        _combinedResponse = null;
+        _healthSummaryController.clear();
+        _explanationController.clear();
+        _uploadedImageUrls.clear();
+      }
       _isEditing = false;
     });
   }
@@ -107,22 +181,76 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       _combinedResponse = null;
       _errorMessage = null;
       _isEditing = false;
+      _healthSummaryController.clear();
+      _explanationController.clear();
+      _uploadedImageUrls.clear();
+      _dateController.text = _dateFormat.format(DateTime.now());
+      _ultrasoundDate = DateTime.now();
+      _locationController.clear();
+      _healthWorkerNameController.clear();
+      _healthWorkerInstitutionController.clear();
+      _healthWorkerProfessionController.clear();
     });
   }
 
-  Future<void> _analyzeImages() async {
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _ultrasoundDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+    
+    if (picked != null) {
+      setState(() {
+        _ultrasoundDate = picked;
+        _dateController.text = _dateFormat.format(picked);
+      });
+    }
+  }
+
+  bool _validateForm() {
     if (_selectedImages.isEmpty) {
       setState(() {
         _errorMessage = 'Please select at least one ultrasound image';
       });
-      return;
+      return false;
     }
+
+    if (_ultrasoundDate == null) {
+      setState(() {
+        _errorMessage = 'Please select the ultrasound date';
+      });
+      return false;
+    }
+
+    if (_healthWorkerNameController.text.trim().isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter the health worker\'s name';
+      });
+      return false;
+    }
+
+    if (_healthWorkerProfessionController.text.trim().isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter the health worker\'s profession';
+      });
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _analyzeImages() async {
+    if (!_validateForm()) return;
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
       _combinedResponse = null;
       _isEditing = false;
+      _healthSummaryController.clear();
+      _explanationController.clear();
     });
 
     try {
@@ -131,15 +259,28 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       setState(() {
         _combinedResponse = result;
         _isLoading = false;
-        // Initialize text controllers with the response
-        _healthSummaryController.text = _extractHealthSummary(result.description);
-        _explanationController.text = _extractExplanation(result.description);
+        
+        // Set the text controllers with the complete response
+        if (result.description.isNotEmpty) {
+          _healthSummaryController.text = result.description; // Store full description
+          _explanationController.text = _extractExplanation(result.description);
+        } else {
+          _healthSummaryController.text = "No analysis available";
+          _explanationController.text = "No recommendations available";
+        }
       });
+      
+      if (kDebugMode) {
+        print('Analysis complete: ${result.description}');
+      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
+      if (kDebugMode) {
+        print('Error analyzing images: $e');
+      }
     }
   }
 
@@ -152,85 +293,87 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
     try {
       final userId = await AuthStorage.getUserId();
-      final motherId = await AuthStorage.getMotherId();
       
       if (userId == null) {
         throw Exception('User not logged in');
       }
 
-      if (motherId == null) {
-        throw Exception('Mother ID not found');
-      }
+      // Clear previous image URLs
+      _uploadedImageUrls.clear();
 
-      // Get the current pregnancy ID for this mother
-      final pregnancyResponse = await Supabase.instance.client
-          .from('pregnancies')
-          .select('pregnancy_id')
-          .eq('mother_id', motherId)
-          .eq('status', 'ongoing')
-          .maybeSingle();
-
-      if (pregnancyResponse == null) {
-        throw Exception('No ongoing pregnancy found');
-      }
-
-      final pregnancyId = pregnancyResponse['pregnancy_id'];
-
-      // 1. Upload images to Supabase Storage
+      // 1. Upload images to Supabase Storage (using files bucket)
       final List<String> uploadedFilePaths = [];
+      final List<int> fileIds = [];
       
       for (int i = 0; i < _selectedImages.length; i++) {
         final image = _selectedImages[i];
         final bytes = await image.readAsBytes();
         final fileName = 'ultrasound_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-        final filePath = 'ultrasounds/$motherId/$fileName';
+        final filePath = 'ultrasounds/$_motherId/$fileName';
         
-        // Upload to Supabase Storage
+        // Upload to Supabase Storage using the existing 'files' bucket
         await Supabase.instance.client.storage
-            .from('medical-images')
+            .from('files')
             .uploadBinary(
               filePath,
               bytes,
               fileOptions: const FileOptions(contentType: 'image/jpeg'),
             );
         
+        // Get public URL
+        final publicUrl = Supabase.instance.client.storage
+            .from('files')
+            .getPublicUrl(filePath);
+        
         uploadedFilePaths.add(filePath);
+        _uploadedImageUrls.add(publicUrl);
         
         // 2. Create file record in files table
-        await Supabase.instance.client.from('files').insert({
-          'bucket_name': 'medical-images',
-          'file_path': filePath,
-          'file_name': fileName,
-          'file_category': 'ultrasound_image',
-          'mime_type': 'image/jpeg',
-          'file_size': bytes.length,
-          'uploaded_by': userId,
-          'reference_type': 'ultrasound',
-          'processing_type': 'ultrasound_analysis',
-          'ai_processed': true,
-          'created_at': DateTime.now().toIso8601String(),
-        });
+        final fileResponse = await Supabase.instance.client
+            .from('files')
+            .insert({
+              'bucket_name': 'files',
+              'file_path': filePath,
+              'file_name': fileName,
+              'file_category': 'ultrasound_image',
+              'mime_type': 'image/jpeg',
+              'file_size': bytes.length,
+              'uploaded_by': userId,
+              'reference_type': 'ultrasound',
+              'processing_type': 'ultrasound_analysis',
+              'ai_processed': true,
+              'created_at': DateTime.now().toIso8601String(),
+            })
+            .select('file_id')
+            .single();
+
+        fileIds.add(fileResponse['file_id'] as int);
       }
 
-      // 3. Create ultrasound record
+      // 3. Create ultrasound record with all the fields
       final ultrasoundResponse = await Supabase.instance.client
           .from('ultrasounds')
           .insert({
-            'pregnancy_id': pregnancyId,
-            'ultrasound_date': DateTime.now().toIso8601String().split('T')[0],
-            'ultrasound_location': 'Mobile Upload',
-            'remarks': _healthSummaryController.text,
-            'health_worker_name': 'Self (AI Assisted)',
-            'health_worker_institution': 'Inaagapay App',
-            'health_worker_profession': 'Patient',
+            'pregnancy_id': _pregnancyId,
+            'ultrasound_date': _ultrasoundDate!.toIso8601String().split('T')[0],
+            'ultrasound_location': _locationController.text.trim().isEmpty 
+                ? 'Mobile Upload' 
+                : _locationController.text.trim(),
+            'ultrasound_image': _uploadedImageUrls.isNotEmpty ? _uploadedImageUrls.first : null,
+            'remarks': _healthSummaryController.text, // Store full AI analysis
+            'health_worker_name': _healthWorkerNameController.text.trim(),
+            'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
+                ? null 
+                : _healthWorkerInstitutionController.text.trim(),
+            'health_worker_profession': _healthWorkerProfessionController.text.trim(),
             'created_at': DateTime.now().toIso8601String(),
           })
           .select('ultrasound_id')
           .single();
 
-      final ultrasoundId = ultrasoundResponse['ultrasound_id'];
+      final ultrasoundId = ultrasoundResponse['ultrasound_id'] as int;
 
-      // 4. Create AI response record
+      // 4. Create AI response record with complete analysis
       await Supabase.instance.client
           .from('ai_responses')
           .insert({
@@ -239,7 +382,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             'reference_id': ultrasoundId,
             'ai_model': 'Gemini 1.5 Flash',
             'confidence_score': 0.92,
-            'response': _combinedResponse!.description,
+            'response': _combinedResponse!.description, // Store full AI response
             'response_category': 'analysis',
             'status': 'generated',
             'generated_by_ai': true,
@@ -247,13 +390,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           });
 
       // 5. Link files to ultrasound record
-      for (String filePath in uploadedFilePaths) {
+      for (int fileId in fileIds) {
         await Supabase.instance.client
             .from('files')
             .update({
               'reference_id': ultrasoundId,
             })
-            .eq('file_path', filePath);
+            .eq('file_id', fileId);
       }
 
       // Show success dialog
@@ -267,8 +410,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           buttonText: 'OK',
           type: DialogType.success,
           onPressed: () {
-            Navigator.pop(context); // Close dialog
-            Navigator.pop(context); // Go back to records screen
+            Navigator.pop(context);
+            Navigator.pop(context, true);
           },
         ),
       );
@@ -296,7 +439,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   String _extractHealthSummary(String description) {
-    // Extract health summary from description
     final summaryMatch = RegExp(r'HEALTH SUMMARY:([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)', caseSensitive: false).firstMatch(description);
     if (summaryMatch != null) {
       return summaryMatch.group(1)?.trim() ?? description.split('\n').first;
@@ -305,40 +447,33 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   String _extractExplanation(String description) {
-    // First, try to extract BASIS/REASONING/EXPLANATION section
     final explanationMatch = RegExp(r'(?:BASIS|REASONING|EXPLANATION):([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)', caseSensitive: false).firstMatch(description);
     if (explanationMatch != null) {
       return explanationMatch.group(1)?.trim() ?? '';
     }
     
-    // If no specific section, filter out the unwanted sections
     final lines = description.split('\n');
     final filteredLines = <String>[];
     
     bool skipSection = false;
     
     for (String line in lines) {
-      // Skip Anatomical Assessment section
       if (line.contains('ANATOMICAL ASSESSMENT:')) {
         skipSection = true;
         continue;
       }
       
-      // Skip KEY OBSERVATIONS section
       if (line.contains('KEY OBSERVATIONS:')) {
         skipSection = true;
         continue;
       }
       
-      // Stop skipping when we hit HEALTH SUMMARY or end of sections
       if (line.contains('HEALTH SUMMARY:')) {
         skipSection = false;
         continue;
       }
       
-      // Only add lines when not in skipped sections
       if (!skipSection) {
-        // Skip empty lines at boundaries
         if (line.trim().isNotEmpty || 
             (filteredLines.isNotEmpty && filteredLines.last.isNotEmpty)) {
           filteredLines.add(line);
@@ -448,21 +583,51 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     );
   }
 
-  Color _getHealthStatusColor(String? status) {
-    if (status == null) return Colors.grey;
-    if (status.contains('HEALTHY') || status.contains('NORMAL')) return Colors.green;
-    if (status.contains('MONITORING')) return Colors.amber;
-    return Colors.grey;
+  String _getHealthStatus() {
+    if (_combinedResponse == null) return 'Assessment Complete';
+    
+    if (_combinedResponse!.healthStatus != null) {
+      if (_combinedResponse!.healthStatus!.contains('HEALTHY')) {
+        return 'HEALTHY PREGNANCY';
+      } else if (_combinedResponse!.healthStatus!.contains('MONITORING')) {
+        return 'REQUIRES MONITORING';
+      }
+    }
+    
+    return 'ASSESSMENT COMPLETE';
   }
 
-  IconData _getHealthStatusIcon(String? status) {
-    if (status == null) return Icons.help_outline;
-    if (status.contains('HEALTHY') || status.contains('NORMAL')) return Icons.check_circle;
-    if (status.contains('MONITORING')) return Icons.warning;
-    return Icons.help_outline;
+  Color _getHealthStatusColor() {
+    if (_combinedResponse == null) return Colors.grey;
+    
+    if (_combinedResponse!.healthStatus != null) {
+      if (_combinedResponse!.healthStatus!.contains('HEALTHY')) {
+        return Colors.green;
+      } else if (_combinedResponse!.healthStatus!.contains('MONITORING')) {
+        return Colors.orange;
+      }
+    }
+    
+    return AppColors.brandPrimary;
+  }
+
+  IconData _getHealthStatusIcon() {
+    if (_combinedResponse == null) return Icons.help_outline;
+    
+    if (_combinedResponse!.healthStatus != null) {
+      if (_combinedResponse!.healthStatus!.contains('HEALTHY')) {
+        return Icons.check_circle;
+      } else if (_combinedResponse!.healthStatus!.contains('MONITORING')) {
+        return Icons.warning;
+      }
+    }
+    
+    return Icons.info;
   }
 
   Widget _buildEditableSection() {
+    if (_combinedResponse == null) return const SizedBox.shrink();
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -477,7 +642,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     _isEditing = true;
                   });
                 },
-                icon: Icon(Icons.edit, color: Colors.teal.shade700),
+                icon: Icon(Icons.edit, color: AppColors.brandPrimary),
                 tooltip: 'Edit notes',
               )
             else
@@ -509,15 +674,16 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           ],
         ),
 
-        // Health Summary (Editable)
+        // Health Summary Card
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: _getHealthStatusColor(_combinedResponse!.healthStatus).withValues(alpha: 0.05),
+            color: _getHealthStatusColor().withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _getHealthStatusColor(_combinedResponse!.healthStatus).withValues(alpha: 0.3),
+              color: _getHealthStatusColor().withValues(alpha: 0.3),
+              width: 1.5,
             ),
           ),
           child: Column(
@@ -525,32 +691,45 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.health_and_safety, color: _getHealthStatusColor(_combinedResponse!.healthStatus), size: 18),
-                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _getHealthStatusColor().withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.health_and_safety,
+                      color: _getHealthStatusColor(),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Text(
-                    'Health Summary',
+                    'Clinical Assessment',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _getHealthStatusColor(),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               if (!_isEditing)
                 _buildFormattedText(_healthSummaryController.text)
               else
                 TextField(
                   controller: _healthSummaryController,
-                  maxLines: 3,
+                  maxLines: 4,
                   decoration: InputDecoration(
-                    hintText: 'Enter health summary...',
+                    hintText: 'Enter clinical assessment...',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     filled: true,
                     fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.all(16),
                   ),
                   style: const TextStyle(fontSize: 15, height: 1.5),
                 ),
@@ -560,32 +739,50 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
         const SizedBox(height: 16),
 
-        // Explanation with Bullet Points (Editable)
+        // Recommendations Card
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.grey.shade50,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(Icons.lightbulb_outline, color: Colors.amber.shade700, size: 18),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Why?',
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.lightbulb_outline,
+                      color: Colors.blue,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Recommendations',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               if (!_isEditing)
                 _buildBulletPoints(_explanationController.text)
               else
@@ -593,12 +790,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   controller: _explanationController,
                   maxLines: 6,
                   decoration: InputDecoration(
-                    hintText: 'Enter explanation with bullet points...\n• Point 1\n• Point 2\n• Point 3',
+                    hintText: 'Enter recommendations with bullet points...\n• Point 1\n• Point 2\n• Point 3',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: Colors.grey.shade50,
+                    contentPadding: const EdgeInsets.all(16),
                   ),
                 ),
             ],
@@ -609,6 +808,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   Widget _buildBulletPoints(String text) {
+    if (text.isEmpty) {
+      return const Text(
+        'No recommendations available',
+        style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+      );
+    }
+    
     final lines = text.split('\n');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -618,11 +824,19 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         // Check if line starts with bullet point
         if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('• ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Container(
+                  margin: const EdgeInsets.only(top: 4, right: 12),
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 Expanded(
                   child: _buildFormattedText(line.trim().substring(1).trim()),
                 ),
@@ -639,176 +853,187 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     );
   }
 
-  Widget _buildExtraDetails() {
+  Widget _buildDetailedFindings() {
+    if (_combinedResponse == null) return const SizedBox.shrink();
+    
     return Container(
       margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          dividerColor: Colors.transparent,
-          splashColor: Colors.transparent,
-        ),
-        child: ExpansionTile(
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.teal.shade50,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.info_outline, color: Colors.teal.shade700, size: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.info_outline, color: Colors.teal, size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Detailed Findings',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
-          title: Text(
-            'Detailed Findings',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
+
+          const SizedBox(height: 20),
+
+          // Measurements
+          if (_combinedResponse!.measurements != null && _combinedResponse!.measurements!.isNotEmpty) ...[
+            const Text(
+              'MEASUREMENTS',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+                letterSpacing: 1.2,
+              ),
             ),
-          ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 12),
+            ..._combinedResponse!.measurements!.map((measurement) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.teal.shade200),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.straighten, color: Colors.teal, size: 16),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        measurement,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 16),
+          ],
+
+          // Key Findings
+          if (_combinedResponse!.normalFindings != null && _combinedResponse!.normalFindings!.isNotEmpty) ...[
+            const Text(
+              'KEY FINDINGS',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ..._combinedResponse!.normalFindings!.map((finding) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        finding,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 16),
+          ],
+
+          // Concerns
+          if (_combinedResponse!.concerns != null && _combinedResponse!.concerns!.isNotEmpty) ...[
+            const Text(
+              'AREAS TO MONITOR',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ..._combinedResponse!.concerns!.map((concern) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.orange, size: 16),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        concern,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+
+          // Disclaimer
+          Padding(
+            padding: const EdgeInsets.only(top: 20),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Row(
                 children: [
-                  // Measurements
-                  if (_combinedResponse!.measurements != null && _combinedResponse!.measurements!.isNotEmpty)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.straighten, color: Colors.teal.shade600, size: 16),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Measurements',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ..._combinedResponse!.measurements!.map((measurement) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4, left: 24),
-                            child: Text(
-                              '• $measurement',
-                              style: const TextStyle(fontSize: 13, color: Colors.black87),
-                            ),
-                          );
-                        }).toList(),
-                      ],
-                    ),
-
-                  if (_combinedResponse!.measurements != null && _combinedResponse!.measurements!.isNotEmpty)
-                    const SizedBox(height: 16),
-
-                  // Key Findings
-                  if (_combinedResponse!.normalFindings != null && _combinedResponse!.normalFindings!.isNotEmpty)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.key, color: Colors.amber.shade600, size: 16),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Key Findings',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ..._combinedResponse!.normalFindings!.map((finding) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4, left: 24),
-                            child: Text(
-                              '• $finding',
-                              style: const TextStyle(fontSize: 13, color: Colors.black87),
-                            ),
-                          );
-                        }).toList(),
-                      ],
-                    ),
-
-                  // Concerns (if any)
-                  if (_combinedResponse!.concerns != null && _combinedResponse!.concerns!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.warning, color: Colors.amber.shade700, size: 16),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Areas to Monitor',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          ..._combinedResponse!.concerns!.map((concern) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 4, left: 24),
-                              child: Text(
-                                '• $concern',
-                                style: const TextStyle(fontSize: 13, color: Colors.black87),
-                              ),
-                            );
-                          }).toList(),
-                        ],
-                      ),
-                    ),
-
-                  // Disclaimer
-                  Padding(
-                    padding: const EdgeInsets.only(top: 20),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info, size: 16, color: Colors.blue.shade700),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'For reference only. Always consult your healthcare provider.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.blue.shade800,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ),
-                        ],
+                  Icon(Icons.info_outline, size: 16, color: Colors.amber.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This analysis is AI-generated for reference only. Always consult with a qualified healthcare provider.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.amber.shade800,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -816,293 +1041,554 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text(
-          'Ultrasound Assessment',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-        ),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        actions: [
-          if (_selectedImages.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.delete_sweep, size: 22),
-              onPressed: _clearAll,
-              tooltip: 'Clear all images',
-            ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      backgroundColor: AppColors.bgPrimary,
+      body: SafeArea(
         child: Column(
           children: [
-            // Selected Images Grid
-            if (_selectedImages.isNotEmpty)
-              Container(
-                height: 90,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _selectedImages.length,
-                  itemBuilder: (context, index) {
-                    return Stack(
-                      children: [
-                        Container(
-                          width: 70,
-                          height: 70,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.teal, width: 1.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withValues(alpha: 0.1),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
+            // Custom Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSecondary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+                      onPressed: () => Navigator.pop(context),
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Ultrasound Assessment',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.brandText,
+                      ),
+                    ),
+                  ),
+                  if (_selectedImages.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.delete_sweep, color: Colors.red),
+                      onPressed: _clearAll,
+                      tooltip: 'Clear all images',
+                    ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    // Mother Info Banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.person, size: 20, color: Colors.teal.shade700),
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: kIsWeb
-                                ? Image.network(
-                                    _selectedImages[index].path,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Image.file(
-                                    File(_selectedImages[index].path),
-                                    fit: BoxFit.cover,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Mother #$_motherId',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.teal,
                                   ),
+                                ),
+                                Text(
+                                  'Pregnancy ID: $_pregnancyId',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.teal.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Selected Images Grid
+                    if (_selectedImages.isNotEmpty) ...[
+                      SizedBox(
+                        height: 90,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _selectedImages.length,
+                          itemBuilder: (context, index) {
+                            return Stack(
+                              children: [
+                                Container(
+                                  width: 80,
+                                  height: 80,
+                                  margin: const EdgeInsets.only(right: 8),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.teal, width: 2),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: kIsWeb
+                                        ? Image.network(
+                                            _selectedImages[index].path,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Image.file(
+                                            File(_selectedImages[index].path),
+                                            fit: BoxFit.cover,
+                                          ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: -4,
+                                  right: 4,
+                                  child: GestureDetector(
+                                    onTap: () => _removeImage(index),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 12,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Action Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SecondaryButton(
+                            label: _selectedImages.isEmpty ? 'Add Images' : 'Add More',
+                            onPressed: _showImageSourceDialog,
+                            leadingIcon: Icons.add_a_photo,
                           ),
                         ),
-                        Positioned(
-                          top: -4,
-                          right: 4,
-                          child: GestureDetector(
-                            onTap: () => _removeImage(index),
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                size: 12,
-                                color: Colors.white,
-                              ),
-                            ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: MainButton(
+                            label: 'Analyze',
+                            onPressed: _analyzeImages,
+                            leftIcon: Icons.auto_awesome,
                           ),
                         ),
                       ],
-                    );
-                  },
-                ),
-              ),
-
-            const SizedBox(height: 16),
-
-            // Action Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _showImageSourceDialog,
-                    icon: const Icon(Icons.add_a_photo, size: 18),
-                    label: Text(
-                      _selectedImages.isEmpty ? 'Add Images' : 'Add More',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.teal.shade700,
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: Colors.teal.shade200),
+
+                    const SizedBox(height: 16),
+
+                    // Study Details Card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.assignment, color: Colors.teal),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Study Details',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          
+                          // Date Field
+                          InkWell(
+                            onTap: _selectDate,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: AppColors.bgSecondary,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.calendar_today, size: 20, color: Colors.teal),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Study Date *',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                        ),
+                                        Text(
+                                          _dateController.text,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                                ],
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          // Location Field
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: AppColors.bgSecondary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextField(
+                              controller: _locationController,
+                              decoration: const InputDecoration(
+                                labelText: 'Location/Facility',
+                                border: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _analyzeImages,
-                    icon: const Icon(Icons.health_and_safety, size: 18),
-                    label: const Text(
-                      'Assess',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+
+                    const SizedBox(height: 16),
+
+                    // Health Worker Card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.person, color: Colors.teal),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Health Worker Information',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          
+                          // Name Field
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: AppColors.bgSecondary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextField(
+                              controller: _healthWorkerNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Full Name *',
+                                border: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          // Institution Field
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: AppColors.bgSecondary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextField(
+                              controller: _healthWorkerInstitutionController,
+                              decoration: const InputDecoration(
+                                labelText: 'Institution/Clinic',
+                                border: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          // Profession Field
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: AppColors.bgSecondary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextField(
+                              controller: _healthWorkerProfessionController,
+                              decoration: const InputDecoration(
+                                labelText: 'Profession *',
+                                border: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 8),
+                          const Text(
+                            '* Required fields',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ),
 
-            const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
-            // Loading Indicator
-            if (_isLoading)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
+                    // Loading Indicator
+                    if (_isLoading)
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(32),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.grey.withValues(alpha: 0.1),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
+                              color: Colors.grey.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
                         child: const Column(
                           children: [
                             SizedBox(
-                              width: 30,
-                              height: 30,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              width: 50,
+                              height: 50,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                              ),
                             ),
-                            SizedBox(height: 12),
+                            SizedBox(height: 16),
                             Text(
-                              'Analyzing...',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                              'Analyzing with AI...',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.teal,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
 
-            // Error Message
-            if (_errorMessage != null && !_isLoading)
-              Expanded(
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline, size: 32, color: Colors.red.shade400),
-                        const SizedBox(height: 8),
-                        Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.red, fontSize: 13),
-                          textAlign: TextAlign.center,
+                    // Error Message
+                    if (_errorMessage != null && !_isLoading)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.shade200),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            // Health Assessment Response
-            if (_combinedResponse != null && !_isLoading)
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withValues(alpha: 0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Status Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _getHealthStatusColor(_combinedResponse!.healthStatus).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: _getHealthStatusColor(_combinedResponse!.healthStatus).withValues(alpha: 0.3),
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.red.shade400),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: TextStyle(color: Colors.red.shade700),
+                              ),
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _getHealthStatusIcon(_combinedResponse!.healthStatus),
-                                color: _getHealthStatusColor(_combinedResponse!.healthStatus),
-                                size: 16,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _combinedResponse!.healthStatus ?? 'Assessment Complete',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _getHealthStatusColor(_combinedResponse!.healthStatus),
-                                ),
-                              ),
-                            ],
+                          ],
+                        ),
+                      ),
+
+                    // Results
+                    if (_combinedResponse != null && !_isLoading) ...[
+                      const SizedBox(height: 16),
+                      
+                      // Status Banner
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: _getHealthStatusColor().withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _getHealthStatusColor().withValues(alpha: 0.3),
                           ),
                         ),
-
-                        const SizedBox(height: 20),
-
-                        // Editable Sections (Health Summary + Why?)
-                        _buildEditableSection(),
-
-                        // Extra Details Dropdown (contains Key Findings)
-                        _buildExtraDetails(),
-
-                        const SizedBox(height: 20),
-
-                        // Save Button
-                        if (!_isSaving)
-                          ElevatedButton.icon(
-                            onPressed: _saveToDatabase,
-                            icon: const Icon(Icons.save),
-                            label: const Text('Save to Records'),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 50),
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: _getHealthStatusColor().withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _getHealthStatusIcon(),
+                                color: _getHealthStatusColor(),
+                                size: 32,
+                              ),
                             ),
-                          )
-                        else
-                          const Center(
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Analysis Complete',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _getHealthStatus(),
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: _getHealthStatusColor(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Editable Sections
+                      _buildEditableSection(),
+
+                      const SizedBox(height: 16),
+
+                      // Detailed Findings
+                      _buildDetailedFindings(),
+
+                      const SizedBox(height: 20),
+
+                      // Save Button
+                      if (!_isSaving)
+                        MainButton(
+                          label: 'Save to Records',
+                          onPressed: _saveToDatabase,
+                          leftIcon: Icons.save,
+                        )
+                      else
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
                             child: CircularProgressIndicator(
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
                             ),
                           ),
-                      ],
-                    ),
-                  ),
+                        ),
+                    ],
+                  ],
                 ),
               ),
+            ),
           ],
         ),
       ),
