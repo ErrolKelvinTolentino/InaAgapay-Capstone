@@ -1,7 +1,5 @@
-// lib/models/baby_growth_model.dart
-
 class BabyGrowth {
-  final String size;   // length (cm)
+  final String size; // length (cm)
   final String weight; // weight (g / kg)
 
   const BabyGrowth({
@@ -17,7 +15,6 @@ class BabyGrowthData {
     1: BabyGrowth(size: '—', weight: '—'),
     2: BabyGrowth(size: '—', weight: '—'),
     3: BabyGrowth(size: '—', weight: '—'),
-
     4: BabyGrowth(size: '0.1 cm', weight: '< 1 g'),
     5: BabyGrowth(size: '0.2 cm', weight: '< 1 g'),
     6: BabyGrowth(size: '0.4 cm', weight: '< 1 g'),
@@ -25,7 +22,6 @@ class BabyGrowthData {
     8: BabyGrowth(size: '1.6 cm', weight: '1 g'),
     9: BabyGrowth(size: '2.3 cm', weight: '2 g'),
     10: BabyGrowth(size: '3.1 cm', weight: '4 g'),
-
     11: BabyGrowth(size: '4.1 cm', weight: '7 g'),
     12: BabyGrowth(size: '5.4 cm', weight: '14 g'),
     13: BabyGrowth(size: '7.4 cm', weight: '23 g'),
@@ -36,7 +32,6 @@ class BabyGrowthData {
     18: BabyGrowth(size: '14.2 cm', weight: '190 g'),
     19: BabyGrowth(size: '15.3 cm', weight: '240 g'),
     20: BabyGrowth(size: '16.4 cm', weight: '300 g'),
-
     21: BabyGrowth(size: '26.7 cm', weight: '360 g'),
     22: BabyGrowth(size: '27.8 cm', weight: '430 g'),
     23: BabyGrowth(size: '28.9 cm', weight: '500 g'),
@@ -45,7 +40,6 @@ class BabyGrowthData {
     26: BabyGrowth(size: '35.6 cm', weight: '760 g'),
     27: BabyGrowth(size: '36.6 cm', weight: '875 g'),
     28: BabyGrowth(size: '37.6 cm', weight: '1 kg'),
-
     29: BabyGrowth(size: '38.6 cm', weight: '1.2 kg'),
     30: BabyGrowth(size: '39.9 cm', weight: '1.3 kg'),
     31: BabyGrowth(size: '41.1 cm', weight: '1.5 kg'),
@@ -61,7 +55,6 @@ class BabyGrowthData {
   };
 
   static BabyGrowth getForWeek(int week) {
-    return byWeek[week] ??
-        const BabyGrowth(size: '—', weight: '—');
+    return byWeek[week] ?? const BabyGrowth(size: '—', weight: '—');
   }
 }

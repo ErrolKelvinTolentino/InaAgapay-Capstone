@@ -15,9 +15,7 @@ class MotherProfileService {
       }
 
       // Get account ID from mother record
-      final motherResponse = await client
-          .from('mothers')
-          .select('''
+      final motherResponse = await client.from('mothers').select('''
             *,
             account:account_id (
               account_id,
@@ -30,16 +28,12 @@ class MotherProfileService {
               status,
               created_at
             )
-          ''')
-          .eq('mother_id', motherId)
-          .single();
+          ''').eq('mother_id', motherId).single();
 
       final account = motherResponse['account'] as Map<String, dynamic>? ?? {};
 
       // Get all pregnancies for this mother
-      final pregnanciesResponse = await client
-          .from('pregnancies')
-          .select('''
+      final pregnanciesResponse = await client.from('pregnancies').select('''
             *,
             checkups:prenatal_checkups (
               prenatal_checkup_id,
@@ -54,7 +48,16 @@ class MotherProfileService {
               edema,
               remarks,
               checkup_datetime,
-              next_schedule
+              next_schedule,
+              symptoms:pregnancy_symptoms (
+                symptom_id,
+                notes,
+                symptom_type_id,
+                symptom_type:symptom_types (
+                  symptom_name,
+                  risk_category
+                )
+              )
             ),
             ultrasounds (
               ultrasound_id,
@@ -85,16 +88,133 @@ class MotherProfileService {
               place_of_delivery,
               delivery_method
             )
-          ''')
-          .eq('mother_id', motherId)
-          .order('created_at', ascending: false);
+          ''').eq('mother_id', motherId).order('created_at', ascending: false);
 
       final List<dynamic> pregnancies = pregnanciesResponse as List<dynamic>;
+
+      final pregnancyIds = pregnancies
+          .map((p) => (p as Map)['pregnancy_id'])
+          .whereType<int>()
+          .toList();
+      final checkupIds = <int>[];
+      for (final p in pregnancies) {
+        final map = p as Map<String, dynamic>;
+        final checkups = (map['checkups'] as List?) ?? const [];
+        for (final c in checkups) {
+          final cid = (c as Map<String, dynamic>)['prenatal_checkup_id'];
+          if (cid is int) checkupIds.add(cid);
+        }
+      }
+
+      final aiByCheckupId = <int, Map<String, dynamic>>{};
+      final riskByAiResponseId = <int, Map<String, dynamic>>{};
+      final factorsByRiskId = <int, List<Map<String, dynamic>>>{};
+
+      if (checkupIds.isNotEmpty) {
+        final aiRows = await client
+            .from('ai_responses')
+            .select('''
+              ai_response_id,
+              reference_id,
+              response,
+              ai_model,
+              status,
+              generated_by_ai,
+              created_at,
+              updated_at
+            ''')
+            .eq('reference_table', 'prenatal_checkups')
+            .eq('response_type', 'risk_assessment')
+            .inFilter('reference_id', checkupIds);
+
+        for (final row in (aiRows as List).cast<Map<String, dynamic>>()) {
+          final refId = row['reference_id'];
+          if (refId is int) {
+            aiByCheckupId[refId] = row;
+          }
+        }
+      }
+
+      if (pregnancyIds.isNotEmpty) {
+        final riskRows = await client
+            .from('pregnancy_risk_assessments')
+            .select('''
+              pregnancy_risk_id,
+              pregnancy_id,
+              ai_response_id,
+              risk_level,
+              assessed_by_ai,
+              created_at,
+              updated_at
+            ''')
+            .inFilter('pregnancy_id', pregnancyIds)
+            .order('created_at', ascending: false);
+
+        for (final row in (riskRows as List).cast<Map<String, dynamic>>()) {
+          final aiId = row['ai_response_id'];
+          if (aiId is int && !riskByAiResponseId.containsKey(aiId)) {
+            riskByAiResponseId[aiId] = row;
+          }
+        }
+
+        final riskIds = riskByAiResponseId.values
+            .map((r) => r['pregnancy_risk_id'])
+            .whereType<int>()
+            .toList();
+
+        if (riskIds.isNotEmpty) {
+          final factorRows = await client
+              .from('pregnancy_risk_factors')
+              .select('''
+                risk_factor_id,
+                pregnancy_risk_id,
+                factor,
+                risk_influence,
+                source_table,
+                source_id
+              ''')
+              .inFilter('pregnancy_risk_id', riskIds)
+              .order('created_at', ascending: true);
+
+          for (final row in (factorRows as List).cast<Map<String, dynamic>>()) {
+            final riskId = row['pregnancy_risk_id'];
+            if (riskId is! int) continue;
+            factorsByRiskId.putIfAbsent(riskId, () => <Map<String, dynamic>>[]);
+            factorsByRiskId[riskId]!.add(row);
+          }
+        }
+      }
+
+      for (final p in pregnancies) {
+        final pregnancy = p as Map<String, dynamic>;
+        final checkups = (pregnancy['checkups'] as List?) ?? const [];
+        for (final c in checkups) {
+          final checkup = c as Map<String, dynamic>;
+          final checkupId = checkup['prenatal_checkup_id'];
+          if (checkupId is! int) continue;
+          final aiRow = aiByCheckupId[checkupId];
+          if (aiRow != null) {
+            checkup['risk_ai_response'] = aiRow;
+            final aiId = aiRow['ai_response_id'];
+            if (aiId is int) {
+              final risk = riskByAiResponseId[aiId];
+              if (risk != null) {
+                checkup['risk_assessment'] = risk;
+                final riskId = risk['pregnancy_risk_id'];
+                if (riskId is int) {
+                  checkup['risk_factors'] =
+                      factorsByRiskId[riskId] ?? <Map<String, dynamic>>[];
+                }
+              }
+            }
+          }
+        }
+      }
 
       // Separate current and past pregnancies
       Map<String, dynamic>? currentPregnancy;
       final List<Map<String, dynamic>> pastPregnancies = [];
-      
+
       for (var p in pregnancies) {
         final pregnancy = Map<String, dynamic>.from(p as Map);
         if (pregnancy['status'] == 'ongoing') {
@@ -110,8 +230,9 @@ class MotherProfileService {
           .select('*')
           .eq('mother_id', motherId)
           .order('created_at', ascending: false);
-      
-      final List<dynamic> medicalConditions = medicalConditionsResponse as List<dynamic>;
+
+      final List<dynamic> medicalConditions =
+          medicalConditionsResponse as List<dynamic>;
 
       // Get allergies
       final allergiesResponse = await client
@@ -119,7 +240,7 @@ class MotherProfileService {
           .select('*')
           .eq('mother_id', motherId)
           .order('created_at', ascending: false);
-      
+
       final List<dynamic> allergies = allergiesResponse as List<dynamic>;
 
       // Get emergency contacts
@@ -128,20 +249,17 @@ class MotherProfileService {
           .select('*')
           .eq('mother_id', motherId)
           .order('created_at', ascending: false);
-      
-      final List<dynamic> emergencyContacts = emergencyContactsResponse as List<dynamic>;
+
+      final List<dynamic> emergencyContacts =
+          emergencyContactsResponse as List<dynamic>;
 
       // Get children
-      final childrenResponse = await client
-          .from('children')
-          .select('''
+      final childrenResponse = await client.from('children').select('''
             *,
             birth_details (*),
             child_details (*)
-          ''')
-          .eq('mother_id', motherId)
-          .order('added_at', ascending: false);
-      
+          ''').eq('mother_id', motherId).order('added_at', ascending: false);
+
       final List<dynamic> children = childrenResponse as List<dynamic>;
 
       // Calculate children count
@@ -162,7 +280,7 @@ class MotherProfileService {
         'weight': motherResponse['weight'],
         'blood_type': motherResponse['blood_type'],
         'status': motherResponse['status'],
-        
+
         // Account info
         'first_name': account['first_name'],
         'middle_name': account['middle_name'],
@@ -172,7 +290,7 @@ class MotherProfileService {
         'phone_number': account['phone_number'],
         'account_status': account['status'],
         'created_at': account['created_at'],
-        
+
         // Full name
         'full_name': [
           account['first_name'],
@@ -180,17 +298,17 @@ class MotherProfileService {
           account['last_name'],
           account['extension_name']
         ].where((e) => e != null && e.toString().trim().isNotEmpty).join(' '),
-        
+
         // Pregnancies
         'current_pregnancy': currentPregnancy,
         'past_pregnancies': pastPregnancies,
         'pregnancies_count': pregnancies.length,
-        
+
         // Medical info
         'medical_conditions': medicalConditions,
         'allergies': allergies,
         'emergency_contacts': emergencyContacts,
-        
+
         // Children
         'children': children,
         'children_count': childrenCount,
@@ -210,18 +328,16 @@ class MotherProfileService {
   }
 
   // Conclude pregnancy
-  static Future<bool> concludePregnancy(int pregnancyId, Map<String, dynamic> data) async {
+  static Future<bool> concludePregnancy(
+      int pregnancyId, Map<String, dynamic> data) async {
     try {
-      await client
-          .from('pregnancies')
-          .update({
-            'status': 'ended',
-            'outcome': data['outcome'],
-            'outcome_date': data['outcome_date'],
-            'gestational_age_at_end': data['gestational_age_at_end'],
-            'ended_at': DateTime.now().toIso8601String(),
-          })
-          .eq('pregnancy_id', pregnancyId);
+      await client.from('pregnancies').update({
+        'status': 'ended',
+        'outcome': data['outcome'],
+        'outcome_date': data['outcome_date'],
+        'gestational_age_at_end': data['gestational_age_at_end'],
+        'ended_at': DateTime.now().toIso8601String(),
+      }).eq('pregnancy_id', pregnancyId);
 
       // If live birth or stillbirth, add delivery record
       if (data['outcome'] == 'live_birth' || data['outcome'] == 'stillbirth') {
@@ -243,7 +359,8 @@ class MotherProfileService {
   }
 
   // Start new pregnancy
-  static Future<bool> startNewPregnancy(int motherId, DateTime lmp, DateTime edd) async {
+  static Future<bool> startNewPregnancy(
+      int motherId, DateTime lmp, DateTime edd) async {
     try {
       await client.from('pregnancies').insert({
         'mother_id': motherId,
@@ -270,7 +387,7 @@ class MotherProfileService {
           .eq('reference_id', checkupId)
           .eq('response_type', 'checkup_analysis')
           .maybeSingle();
-      
+
       return response?['response'] as String?;
     } catch (e) {
       return null;
@@ -287,7 +404,7 @@ class MotherProfileService {
           .eq('reference_id', ultrasoundId)
           .eq('response_type', 'ultrasound_analysis')
           .maybeSingle();
-      
+
       return response?['response'] as String?;
     } catch (e) {
       return null;
@@ -304,7 +421,7 @@ class MotherProfileService {
           .eq('reference_id', labTestId)
           .eq('response_type', 'lab_analysis')
           .maybeSingle();
-      
+
       return response?['response'] as String?;
     } catch (e) {
       return null;

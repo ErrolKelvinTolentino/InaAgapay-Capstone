@@ -202,7 +202,8 @@ class SupabaseService {
   // Send OTP email via Edge Function
   static Future<bool> sendOTPEmail(String email, String code) async {
     try {
-      if (kDebugMode) debugPrint('Sending OTP email to: $email with code: $code');
+      if (kDebugMode)
+        debugPrint('Sending OTP email to: $email with code: $code');
 
       final response = await client.functions.invoke(
         'send-otp',
@@ -268,7 +269,8 @@ class SupabaseService {
       final emailSent = await sendOTPEmail(email, code);
 
       if (!emailSent) {
-        if (kDebugMode) debugPrint('Failed to send email, but account was created');
+        if (kDebugMode)
+          debugPrint('Failed to send email, but account was created');
         return {
           'success': true,
           'message':
@@ -364,7 +366,7 @@ class SupabaseService {
       if (kDebugMode) {
         debugPrint('📧 Sending password reset email to: $email');
       }
-      
+
       // Check if account exists
       final account = await client
           .from('accounts')
@@ -381,16 +383,14 @@ class SupabaseService {
 
       // Generate reset code
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
-      
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+
       // Update account with reset code
-      await client
-          .from('accounts')
-          .update({
-            'reset_code': code,
-            'reset_expires': expires,
-          })
-          .eq('email_address', email);
+      await client.from('accounts').update({
+        'reset_code': code,
+        'reset_expires': expires,
+      }).eq('email_address', email);
 
       // Send email with reset code
       final emailSent = await sendOTPEmail(email, code);
@@ -405,7 +405,7 @@ class SupabaseService {
       if (kDebugMode) {
         debugPrint('Error sending reset email: $e');
       }
-      
+
       return {
         'success': false,
         'message': 'Failed to send reset email. Please try again.',
@@ -744,26 +744,26 @@ class SupabaseService {
       // 4. Emergency contacts (batch insert)
       if (emergencyContacts.isNotEmpty) {
         await client.from('emergency_contacts').insert(
-          emergencyContacts
-              .map((ec) => {'mother_id': motherId, ...ec})
-              .toList(),
-        );
+              emergencyContacts
+                  .map((ec) => {'mother_id': motherId, ...ec})
+                  .toList(),
+            );
       }
 
       // 5. Medical conditions (batch insert)
       if (medicalConditions.isNotEmpty) {
         await client.from('medical_conditions').insert(
-          medicalConditions
-              .map((mc) => {'mother_id': motherId, ...mc})
-              .toList(),
-        );
+              medicalConditions
+                  .map((mc) => {'mother_id': motherId, ...mc})
+                  .toList(),
+            );
       }
 
       // 6. Allergies (batch insert)
       if (allergies.isNotEmpty) {
         await client.from('allergies').insert(
-          allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
-        );
+              allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
+            );
       }
 
       // 7. Current pregnancy

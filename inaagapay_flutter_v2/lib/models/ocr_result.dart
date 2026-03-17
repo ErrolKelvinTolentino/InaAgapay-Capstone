@@ -1,4 +1,4 @@
-// lib/models/ocr_result.dart
+﻿// lib/models/ocr_result.dart
 
 // Model returned by Gemini OCR for autofilling the Add Mother form.
 // All fields are nullable — only fields visible in the document are populated.

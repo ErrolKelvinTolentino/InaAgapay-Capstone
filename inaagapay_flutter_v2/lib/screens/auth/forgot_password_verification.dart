@@ -16,13 +16,14 @@ class ForgotPasswordVerificationScreen extends StatefulWidget {
       _ForgotPasswordVerificationScreenState();
 }
 
-class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerificationScreen> {
+class _ForgotPasswordVerificationScreenState
+    extends State<ForgotPasswordVerificationScreen> {
   static const int _initialSeconds = 300;
-  
+
   late String email;
   int _secondsRemaining = _initialSeconds;
   Timer? _timer;
-  
+
   String _code = '';
   bool _hasError = false;
   bool _isVerifying = false;
@@ -37,7 +38,7 @@ class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerific
   void _startTimer() {
     _timer?.cancel();
     _secondsRemaining = _initialSeconds;
-    
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining == 0) {
         timer.cancel();

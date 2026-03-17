@@ -1,20 +1,24 @@
-// lib/widgets/chart_card.dart
-
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-import 'growth_line_chart.dart';
+import '../widgets/growth_line_chart.dart';
 
 class ChartCard extends StatelessWidget {
   final String title;
   final IconData headerIcon;
+
+  // Chart
   final List<double> values;
   final List<String> labels;
   final String unit;
   final Color lineColor;
+
+  // Records
   final String startingLabel;
   final String startingValue;
   final String latestLabel;
   final String latestValue;
+
+  // Insight text
   final String insightText;
 
   const ChartCard({
@@ -50,7 +54,7 @@ class ChartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // 🏷 HEADER
           Row(
             children: [
               Icon(headerIcon, color: AppColors.brandPrimary, size: 20),
@@ -68,7 +72,7 @@ class ChartCard extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // Chart
+          // 📈 CHART
           SizedBox(
             height: 160,
             child: GrowthLineChart(
@@ -81,7 +85,7 @@ class ChartCard extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Records
+          // 📌 STARTING RECORD
           _RecordPill(
             icon: Icons.flag,
             label: startingLabel,
@@ -90,6 +94,7 @@ class ChartCard extends StatelessWidget {
 
           const SizedBox(height: 10),
 
+          // 📌 LATEST RECORD
           _RecordPill(
             icon: Icons.trending_up,
             label: latestLabel,
@@ -98,7 +103,7 @@ class ChartCard extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // Insight
+          // 💡 INSIGHT
           Row(
             children: [
               const Icon(

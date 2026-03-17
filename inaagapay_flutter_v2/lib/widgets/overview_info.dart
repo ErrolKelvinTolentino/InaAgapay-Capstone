@@ -44,9 +44,7 @@ class OverviewInfo extends StatelessWidget {
             size: 18,
             color: AppColors.brandPrimary,
           ),
-
           const SizedBox(height: 10),
-
           Text(
             value.toString(),
             style: const TextStyle(
@@ -55,9 +53,7 @@ class OverviewInfo extends StatelessWidget {
               color: AppColors.brandPrimary,
             ),
           ),
-
           const SizedBox(height: 6),
-
           Text(
             label,
             textAlign: TextAlign.center,

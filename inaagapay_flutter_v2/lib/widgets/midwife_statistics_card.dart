@@ -133,9 +133,7 @@ class _TrimesterCard extends StatelessWidget {
               color: AppColors.brandText,
             ),
           ),
-
           const SizedBox(height: 6),
-
           Text(
             title,
             textAlign: TextAlign.center,

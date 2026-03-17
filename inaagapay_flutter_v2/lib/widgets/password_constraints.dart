@@ -5,7 +5,10 @@ import '../theme/app_colors.dart';
 class PasswordConstraints extends StatelessWidget {
   final String password;
 
-  const PasswordConstraints({super.key, required this.password});
+  const PasswordConstraints({
+    super.key,
+    required this.password,
+  });
 
   bool get hasMinLength => password.length >= 8;
   bool get hasNumber => RegExp(r'\d').hasMatch(password);
@@ -14,44 +17,51 @@ class PasswordConstraints extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgSecondary,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildConstraint('At least 8 characters', hasMinLength),
-          const SizedBox(height: 8),
-          _buildConstraint('Contains a number', hasNumber),
-          const SizedBox(height: 8),
-          _buildConstraint('Contains uppercase letter', hasUppercase),
-          const SizedBox(height: 8),
-          _buildConstraint('Contains lowercase letter', hasLowercase),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ConstraintItem(
+            label: 'At least eight characters long', isValid: hasMinLength),
+        _ConstraintItem(label: 'At least one number', isValid: hasNumber),
+        _ConstraintItem(
+            label: 'At least one uppercase letter', isValid: hasUppercase),
+        _ConstraintItem(
+            label: 'At least one lowercase letter', isValid: hasLowercase),
+      ],
     );
   }
+}
 
-  Widget _buildConstraint(String text, bool isMet) {
-    return Row(
-      children: [
-        Icon(
-          isMet ? Icons.check_circle : Icons.circle_outlined,
-          size: 16,
-          color: isMet ? AppColors.success : AppColors.textSecondary,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 13,
-            color: isMet ? AppColors.success : AppColors.textSecondary,
+class _ConstraintItem extends StatelessWidget {
+  final String label;
+  final bool isValid;
+
+  const _ConstraintItem({required this.label, required this.isValid});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = isValid ? AppColors.success : AppColors.error;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            isValid ? Icons.circle : Icons.radio_button_unchecked,
+            size: 14,
+            color: color,
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: color,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -57,7 +57,6 @@ class HeroCard extends StatelessWidget {
                         ),
                 ),
               ),
-
               if (showWeekBadge && week != null)
                 Positioned(
                   top: 6,
@@ -66,7 +65,6 @@ class HeroCard extends StatelessWidget {
                 ),
             ],
           ),
-
           if (title != null) ...[
             const SizedBox(height: 16),
             Text(
@@ -78,7 +76,6 @@ class HeroCard extends StatelessWidget {
               ),
             ),
           ],
-
           if (subtitle != null) ...[
             const SizedBox(height: 4),
             Text(
@@ -89,14 +86,12 @@ class HeroCard extends StatelessWidget {
               ),
             ),
           ],
-
           if (showHeartRow) ...[
             const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: const [
-                Icon(Icons.favorite,
-                    size: 16, color: AppColors.brandPrimary),
+                Icon(Icons.favorite, size: 16, color: AppColors.brandPrimary),
                 const SizedBox(width: 6),
                 Text(
                   'Your baby is growing beautifully!',

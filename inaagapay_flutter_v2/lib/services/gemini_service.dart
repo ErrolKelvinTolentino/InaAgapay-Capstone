@@ -155,6 +155,62 @@ Format your response with clear sections and use bullet points for easy reading.
     return _makeMultiImageRequest(imageFiles, apiKey, prompt);
   }
 
+  // Generic text analysis
+  Future<String> generateTextInsight({
+    required String prompt,
+    double temperature = 0.2,
+    int maxOutputTokens = 2048,
+  }) async {
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Gemini API Key not found in .env');
+    }
+
+    if (_availableModels.isEmpty) {
+      await checkAvailableModels();
+    }
+
+    Exception? lastError;
+
+    if (_workingModel != null && _workingApiVersion != null) {
+      try {
+        return await _sendTextRequest(
+          prompt: prompt,
+          apiKey: apiKey,
+          model: _workingModel!,
+          apiVersion: _workingApiVersion!,
+          temperature: temperature,
+          maxOutputTokens: maxOutputTokens,
+        );
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+      }
+    }
+
+    for (final model in _modelsToTry) {
+      for (final apiVersion in ['v1', 'v1beta']) {
+        try {
+          final text = await _sendTextRequest(
+            prompt: prompt,
+            apiKey: apiKey,
+            model: model,
+            apiVersion: apiVersion,
+            temperature: temperature,
+            maxOutputTokens: maxOutputTokens,
+          );
+          _workingModel = model;
+          _workingApiVersion = apiVersion;
+          return text;
+        } catch (e) {
+          lastError = e is Exception ? e : Exception(e.toString());
+        }
+      }
+    }
+
+    throw lastError ??
+        Exception('All Gemini text models failed. Please check API access.');
+  }
+
   // ─── OCR: Extract mother registration data from image ───────────────────────
   /// Sends [imageFile] to Gemini and returns a structured [OcrResult] with
   /// all fields that could be read from the document / handwritten form.
@@ -405,5 +461,63 @@ Rules:
     } else {
       throw Exception('API Error (${response.statusCode})');
     }
+  }
+
+  Future<String> _sendTextRequest({
+    required String prompt,
+    required String apiKey,
+    required String model,
+    required String apiVersion,
+    required double temperature,
+    required int maxOutputTokens,
+  }) async {
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent?key=$apiKey',
+    );
+
+    final requestBody = {
+      'contents': [
+        {
+          'parts': [
+            {'text': prompt}
+          ]
+        }
+      ],
+      'generationConfig': {
+        'temperature': temperature,
+        'topK': 32,
+        'topP': 1,
+        'maxOutputTokens': maxOutputTokens,
+      }
+    };
+
+    final response = await http
+        .post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 60));
+
+    if (response.statusCode != 200) {
+      throw Exception('API Error (${response.statusCode})');
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final candidates = data['candidates'] as List?;
+    if (candidates == null || candidates.isEmpty) {
+      throw Exception('Empty Gemini response');
+    }
+    final content = candidates.first['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List?;
+    if (parts == null || parts.isEmpty) {
+      throw Exception('Unexpected Gemini response shape');
+    }
+    final text = parts.first['text'] as String?;
+    if (text == null || text.trim().isEmpty) {
+      throw Exception('Gemini returned empty text');
+    }
+
+    return text.trim();
   }
 }

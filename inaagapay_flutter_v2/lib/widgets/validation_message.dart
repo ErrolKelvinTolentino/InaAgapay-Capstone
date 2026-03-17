@@ -7,11 +7,13 @@ enum ValidationType { info, success, error }
 class ValidationMessage extends StatelessWidget {
   final String message;
   final ValidationType type;
+  final IconData? icon;
 
   const ValidationMessage({
     super.key,
     required this.message,
     this.type = ValidationType.error,
+    this.icon,
   });
 
   Color get _color {
@@ -37,7 +39,10 @@ class ValidationMessage extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            type == ValidationType.error ? Icons.error_outline : Icons.info_outline,
+            icon ??
+                (type == ValidationType.error
+                    ? Icons.error_outline
+                    : Icons.info_outline),
             color: _color,
             size: 16,
           ),
