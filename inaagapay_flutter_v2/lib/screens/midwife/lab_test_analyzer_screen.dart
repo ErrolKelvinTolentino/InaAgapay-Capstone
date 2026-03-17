@@ -13,8 +13,6 @@ import '../../theme/app_colors.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/secondary_button.dart';
-import '../../widgets/page_title.dart';
-import '../../widgets/headline.dart';
 
 class LabTestAnalyzerScreen extends StatefulWidget {
   final int motherId;
@@ -41,25 +39,20 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   bool _isSaving = false;
   String? _errorMessage;
   
-  // Controllers for editable fields
   late TextEditingController _healthSummaryController;
   late TextEditingController _explanationController;
   bool _isEditing = false;
 
-  // New fields for lab test metadata
   DateTime? _labTestDate;
   final TextEditingController _dateController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController();
   final TextEditingController _healthWorkerNameController = TextEditingController();
   final TextEditingController _healthWorkerInstitutionController = TextEditingController();
   final TextEditingController _healthWorkerProfessionController = TextEditingController();
 
-  // Store the user's context
   String? _userRole;
   late int _motherId;
   late int _pregnancyId;
 
-  // Store uploaded image URLs
   List<String> _uploadedImageUrls = [];
 
   @override
@@ -68,7 +61,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     _healthSummaryController = TextEditingController();
     _explanationController = TextEditingController();
     
-    // Set default date to today
     _labTestDate = DateTime.now();
     _dateController.text = _dateFormat.format(_labTestDate!);
     
@@ -83,7 +75,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     _healthSummaryController.dispose();
     _explanationController.dispose();
     _dateController.dispose();
-    _locationController.dispose();
     _healthWorkerNameController.dispose();
     _healthWorkerInstitutionController.dispose();
     _healthWorkerProfessionController.dispose();
@@ -93,17 +84,9 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   Future<void> _loadUserContext() async {
     try {
       final role = await AuthStorage.getUserRole();
-      
       setState(() {
         _userRole = role;
       });
-
-      if (kDebugMode) {
-        print('User context loaded:');
-        print('  Role: $_userRole');
-        print('  Mother ID: $_motherId');
-        print('  Pregnancy ID: $_pregnancyId');
-      }
     } catch (e) {
       if (kDebugMode) print('Error loading user context: $e');
     }
@@ -186,7 +169,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       _uploadedImageUrls.clear();
       _dateController.text = _dateFormat.format(DateTime.now());
       _labTestDate = DateTime.now();
-      _locationController.clear();
       _healthWorkerNameController.clear();
       _healthWorkerInstitutionController.clear();
       _healthWorkerProfessionController.clear();
@@ -260,27 +242,19 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         _combinedResponse = result;
         _isLoading = false;
         
-        // Set the text controllers with the complete response
         if (result.description.isNotEmpty) {
-          _healthSummaryController.text = result.description; // Store full description
+          _healthSummaryController.text = result.description;
           _explanationController.text = _extractExplanation(result.description);
         } else {
           _healthSummaryController.text = "No analysis available";
           _explanationController.text = "No recommendations available";
         }
       });
-      
-      if (kDebugMode) {
-        print('Analysis complete: ${result.description}');
-      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
-      if (kDebugMode) {
-        print('Error analyzing images: $e');
-      }
     }
   }
 
@@ -298,7 +272,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         throw Exception('User not logged in');
       }
 
-      // Clear previous image URLs
       _uploadedImageUrls.clear();
 
       // Determine lab test type from response or set default
@@ -310,7 +283,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         }
       }
 
-      // 1. Upload images to Supabase Storage (using files bucket)
       final List<String> uploadedFilePaths = [];
       final List<int> fileIds = [];
       
@@ -320,7 +292,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         final fileName = 'lab_test_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
         final filePath = 'lab-tests/$_motherId/$fileName';
         
-        // Upload to Supabase Storage using the existing 'files' bucket
         await Supabase.instance.client.storage
             .from('files')
             .uploadBinary(
@@ -329,7 +300,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               fileOptions: const FileOptions(contentType: 'image/jpeg'),
             );
         
-        // Get public URL
         final publicUrl = Supabase.instance.client.storage
             .from('files')
             .getPublicUrl(filePath);
@@ -337,7 +307,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         uploadedFilePaths.add(filePath);
         _uploadedImageUrls.add(publicUrl);
         
-        // 2. Create file record in files table
         final fileResponse = await Supabase.instance.client
             .from('files')
             .insert({
@@ -359,34 +328,29 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         fileIds.add(fileResponse['file_id'] as int);
       }
 
-      // 3. Create lab test record with all the fields
-      // 3. Create lab test record with all the fields
-final labTestResponse = await Supabase.instance.client
-    .from('lab_tests')
-    .insert({
-      'pregnancy_id': _pregnancyId,
-      'lab_test_type': labTestType,
-      'lab_test_date': _labTestDate!.toIso8601String().split('T')[0],
-      'lab_test_location': _locationController.text.trim().isEmpty 
-          ? 'Mobile Upload' 
-          : _locationController.text.trim(),
-      'lab_test_image': _uploadedImageUrls.isNotEmpty 
-          ? _uploadedImageUrls.join(',')  // Store all URLs as comma-separated string
-          : null,
-      'remarks': _healthSummaryController.text,
-      'health_worker_name': _healthWorkerNameController.text.trim(),
-      'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
-          ? null 
-          : _healthWorkerInstitutionController.text.trim(),
-      'health_worker_profession': _healthWorkerProfessionController.text.trim(),
-      'created_at': DateTime.now().toIso8601String(),
-    })
-    .select('lab_test_id')
-    .single();
+      final labTestResponse = await Supabase.instance.client
+          .from('lab_tests')
+          .insert({
+            'pregnancy_id': _pregnancyId,
+            'lab_test_type': labTestType,
+            'lab_test_date': _labTestDate!.toIso8601String().split('T')[0],
+            'lab_test_location': 'Mobile Upload', // Default value
+            'lab_test_image': _uploadedImageUrls.isNotEmpty 
+                ? _uploadedImageUrls.join(',')
+                : null,
+            'remarks': _healthSummaryController.text,
+            'health_worker_name': _healthWorkerNameController.text.trim(),
+            'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
+                ? null 
+                : _healthWorkerInstitutionController.text.trim(),
+            'health_worker_profession': _healthWorkerProfessionController.text.trim(),
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select('lab_test_id')
+          .single();
 
       final labTestId = labTestResponse['lab_test_id'] as int;
 
-      // 4. Create AI response record with complete analysis
       await Supabase.instance.client
           .from('ai_responses')
           .insert({
@@ -395,14 +359,13 @@ final labTestResponse = await Supabase.instance.client
             'reference_id': labTestId,
             'ai_model': 'Gemini 1.5 Flash',
             'confidence_score': 0.92,
-            'response': _combinedResponse!.description, // Store full AI response
+            'response': _combinedResponse!.description,
             'response_category': 'analysis',
             'status': 'generated',
             'generated_by_ai': true,
             'created_at': DateTime.now().toIso8601String(),
           });
 
-      // 5. Link files to lab test record
       for (int fileId in fileIds) {
         await Supabase.instance.client
             .from('files')
@@ -412,7 +375,6 @@ final labTestResponse = await Supabase.instance.client
             .eq('file_id', fileId);
       }
 
-      // Show success dialog
       if (!mounted) return;
       
       await showDialog(
@@ -482,7 +444,6 @@ final labTestResponse = await Supabase.instance.client
     return description;
   }
 
-  // Helper function to format text with bold for capitalized words
   Widget _buildFormattedText(String text) {
     if (text.isEmpty) return const SizedBox.shrink();
     
@@ -492,7 +453,6 @@ final labTestResponse = await Supabase.instance.client
     for (int i = 0; i < words.length; i++) {
       final word = words[i];
       
-      // Check if word is all caps and longer than 1 character
       if (word.length > 1 && word == word.toUpperCase() && !word.contains(RegExp(r'[0-9]'))) {
         spans.add(TextSpan(
           text: word,
@@ -505,7 +465,6 @@ final labTestResponse = await Supabase.instance.client
         spans.add(TextSpan(text: word));
       }
       
-      // Add space between words (except last)
       if (i < words.length - 1) {
         spans.add(const TextSpan(text: ' '));
       }
@@ -637,7 +596,6 @@ final labTestResponse = await Supabase.instance.client
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Edit/Save buttons
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -680,7 +638,6 @@ final labTestResponse = await Supabase.instance.client
           ],
         ),
 
-        // Clinical Assessment Card
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
@@ -745,7 +702,6 @@ final labTestResponse = await Supabase.instance.client
 
         const SizedBox(height: 16),
 
-        // Recommendations Card
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -879,7 +835,6 @@ final labTestResponse = await Supabase.instance.client
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Container(
@@ -903,7 +858,6 @@ final labTestResponse = await Supabase.instance.client
 
           const SizedBox(height: 20),
 
-          // Lab Results
           if (_combinedResponse!.labResults != null && _combinedResponse!.labResults!.isNotEmpty) ...[
             const Text(
               'TEST RESULTS',
@@ -989,7 +943,6 @@ final labTestResponse = await Supabase.instance.client
             const SizedBox(height: 16),
           ],
 
-          // Abnormal Findings
           if (_combinedResponse!.abnormalFindings != null && _combinedResponse!.abnormalFindings!.isNotEmpty) ...[
             const Text(
               'ABNORMAL FINDINGS',
@@ -1027,7 +980,6 @@ final labTestResponse = await Supabase.instance.client
             const SizedBox(height: 16),
           ],
 
-          // Reference Ranges
           if (_combinedResponse!.normalRanges != null && _combinedResponse!.normalRanges!.isNotEmpty) ...[
             const Text(
               'REFERENCE RANGES',
@@ -1059,7 +1011,6 @@ final labTestResponse = await Supabase.instance.client
             }),
           ],
 
-          // Disclaimer
           Padding(
             padding: const EdgeInsets.only(top: 20),
             child: Container(
@@ -1098,7 +1049,6 @@ final labTestResponse = await Supabase.instance.client
       body: SafeArea(
         child: Column(
           children: [
-            // Custom Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -1154,7 +1104,6 @@ final labTestResponse = await Supabase.instance.client
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    // Mother Info Banner
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
@@ -1201,7 +1150,6 @@ final labTestResponse = await Supabase.instance.client
 
                     const SizedBox(height: 16),
 
-                    // Selected Images Grid
                     if (_selectedImages.isNotEmpty) ...[
                       SizedBox(
                         height: 90,
@@ -1259,7 +1207,6 @@ final labTestResponse = await Supabase.instance.client
                       const SizedBox(height: 16),
                     ],
 
-                    // Action Buttons
                     Row(
                       children: [
                         Expanded(
@@ -1282,7 +1229,6 @@ final labTestResponse = await Supabase.instance.client
 
                     const SizedBox(height: 16),
 
-                    // Test Details Card
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -1321,7 +1267,6 @@ final labTestResponse = await Supabase.instance.client
                           ),
                           const SizedBox(height: 20),
                           
-                          // Date Field
                           InkWell(
                             onTap: _selectDate,
                             child: Container(
@@ -1360,31 +1305,12 @@ final labTestResponse = await Supabase.instance.client
                               ),
                             ),
                           ),
-                          
-                          const SizedBox(height: 12),
-                          
-                          // Location Field
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: AppColors.bgSecondary,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: TextField(
-                              controller: _locationController,
-                              decoration: const InputDecoration(
-                                labelText: 'Location/Facility',
-                                border: InputBorder.none,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
-                    // Health Worker Card
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -1423,7 +1349,6 @@ final labTestResponse = await Supabase.instance.client
                           ),
                           const SizedBox(height: 20),
                           
-                          // Name Field
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1441,7 +1366,6 @@ final labTestResponse = await Supabase.instance.client
                           
                           const SizedBox(height: 12),
                           
-                          // Institution Field
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1459,7 +1383,6 @@ final labTestResponse = await Supabase.instance.client
                           
                           const SizedBox(height: 12),
                           
-                          // Profession Field
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1490,7 +1413,6 @@ final labTestResponse = await Supabase.instance.client
 
                     const SizedBox(height: 16),
 
-                    // Loading Indicator
                     if (_isLoading)
                       Container(
                         padding: const EdgeInsets.all(32),
@@ -1528,7 +1450,6 @@ final labTestResponse = await Supabase.instance.client
                         ),
                       ),
 
-                    // Error Message
                     if (_errorMessage != null && !_isLoading)
                       Container(
                         width: double.infinity,
@@ -1552,11 +1473,9 @@ final labTestResponse = await Supabase.instance.client
                         ),
                       ),
 
-                    // Results
                     if (_combinedResponse != null && !_isLoading) ...[
                       const SizedBox(height: 16),
                       
-                      // Status Banner
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
@@ -1611,17 +1530,14 @@ final labTestResponse = await Supabase.instance.client
 
                       const SizedBox(height: 16),
 
-                      // Editable Sections
                       _buildEditableSection(),
 
                       const SizedBox(height: 16),
 
-                      // Detailed Results
                       _buildDetailedResults(),
 
                       const SizedBox(height: 20),
 
-                      // Save Button
                       if (!_isSaving)
                         MainButton(
                           label: 'Save to Records',

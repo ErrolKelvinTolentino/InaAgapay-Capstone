@@ -7,6 +7,7 @@ import 'mother_dashboard.dart';
 import 'mother_journal_screen.dart';
 import 'mother_children_screen.dart';
 import 'records_screen.dart';
+import 'mother_profile_page.dart';
 
 class MotherDashboardShell extends StatefulWidget {
   const MotherDashboardShell({super.key});
@@ -45,15 +46,12 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     entry = OverlayEntry(
       builder: (_) => Stack(
         children: [
-          // Fullscreen overlay
           GestureDetector(
             onTap: () => entry.remove(),
             child: Container(
               color: Colors.black.withOpacity(0.35),
             ),
           ),
-
-          // Profile menu
           Positioned(
             top: 90,
             right: 16,
@@ -82,10 +80,11 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                         entry.remove();
                         AuthStorage.getMotherId().then((motherId) {
                           if (motherId != null && mounted) {
-                            Navigator.pushNamed(
+                            Navigator.push(
                               context,
-                              '/mother-profile',
-                              arguments: motherId,
+                              MaterialPageRoute(
+                                builder: (context) => MotherProfilePage(motherId: motherId),
+                              ),
                             );
                           }
                         });
@@ -230,7 +229,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
               ),
               child: Row(
                 children: [
-                  // Logo
                   Padding(
                     padding: const EdgeInsets.only(right: 12),
                     child: Image.asset(
@@ -240,8 +238,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                         const Icon(Icons.favorite, color: AppColors.brandPrimary, size: 30),
                     ),
                   ),
-
-                  // Title
                   Text(
                     _titles[_currentIndex],
                     style: const TextStyle(
@@ -251,26 +247,18 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                       letterSpacing: 0.4,
                     ),
                   ),
-
                   const Spacer(),
-
-                  // Notifications
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
-                    onPressed: () {
-                      // Handle notifications
-                    },
+                    onPressed: () {},
                     icon: const Icon(
                       Icons.notifications_none_rounded,
                       size: 24,
                       color: AppColors.textPrimary,
                     ),
                   ),
-
                   const SizedBox(width: 14),
-
-                  // Avatar with profile menu
                   GestureDetector(
                     onTap: () => _showProfileMenu(context),
                     child: Container(
@@ -290,8 +278,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 ],
               ),
             ),
-
-            // Screen content
             Expanded(
               child: IndexedStack(
                 index: _currentIndex,

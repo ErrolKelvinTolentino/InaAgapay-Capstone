@@ -2,16 +2,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
-import '../../widgets/main_header.dart';
+import '../../services/supabase_service.dart';
 import '../../widgets/hero_card.dart';
 import '../../widgets/overview_info.dart';
 import '../../widgets/midwife_statistics_card.dart';
 import '../../widgets/midwife_history_card.dart';
 import '../../widgets/chart_card.dart';
-import '../../services/supabase_service.dart';
 
 class MidwifeDashboard extends StatefulWidget {
   const MidwifeDashboard({super.key});
@@ -93,7 +91,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       final mothersResponse = await SupabaseService.client
           .from('mothers')
           .select('mother_id')
-          .eq('assigned_bhc_id', assignedBhcId)  // Use the non-null variable
+          .eq('assigned_bhc_id', assignedBhcId)
           .eq('status', 'active');
       
       _registeredMothers = mothersResponse.length;
@@ -336,278 +334,262 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      body: Column(
-        children: [
-          MainHeader(
-            title: 'Home',
-            onViewProfile: () => Navigator.pushNamed(context, '/profile'),
-            onSettings: () => Navigator.pushNamed(context, '/settings'),
-            onHelp: () => Navigator.pushNamed(context, '/help'),
-            onLogout: () async {
-              await AuthStorage.clearAll();
-              if (context.mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/login',
-                  (route) => false,
-                );
-              }
-            },
-          ),
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+    return Container(
+      color: AppColors.bgPrimary,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                ),
+              )
+            : _errorMessage != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.error_outline,
+                              size: 48,
+                              color: Colors.red,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Failed to load dashboard',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _loadDashboardData,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.brandPrimary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   )
-                : _errorMessage != null
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                : RefreshIndicator(
+                    onRefresh: _loadDashboardData,
+                    color: AppColors.brandPrimary,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 16),
+                          
+                          // Hero Card with dynamic data
+                          HeroCard(
+                            image: null,
+                            title: _getWelcomeMessage(),
+                            subtitle: _bhcName,
+                            showWeekBadge: false,
+                            showHeartRow: false,
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Quick Overview - Children and Mothers
+                          Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade50,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.error_outline,
-                                  size: 48,
-                                  color: Colors.red,
+                              Expanded(
+                                child: OverviewInfo(
+                                  value: _registeredChildren,
+                                  label: 'Registered\nChildren',
+                                  icon: Icons.child_care_rounded,
                                 ),
                               ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Failed to load dashboard',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _errorMessage!,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: AppColors.textSecondary),
-                              ),
-                              const SizedBox(height: 24),
-                              ElevatedButton.icon(
-                                onPressed: _loadDashboardData,
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Retry'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.brandPrimary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OverviewInfo(
+                                  value: _registeredMothers,
+                                  label: 'Registered\nMothers',
+                                  icon: Icons.pregnant_woman,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadDashboardData,
-                        color: AppColors.brandPrimary,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Column(
+
+                          const SizedBox(height: 20),
+
+                          // Medication Statistics
+                          Row(
                             children: [
-                              const SizedBox(height: 16),
-                              
-                              // Hero Card with dynamic data
-                              HeroCard(
-                                image: null,
-                                title: _getWelcomeMessage(),
-                                subtitle: _bhcName,
-                                showWeekBadge: false,
-                                showHeartRow: false,
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // Quick Overview - Children and Mothers
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OverviewInfo(
-                                      value: _registeredChildren,
-                                      label: 'Registered\nChildren',
-                                      icon: Icons.child_care_rounded,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OverviewInfo(
-                                      value: _registeredMothers,
-                                      label: 'Registered\nMothers',
-                                      icon: Icons.pregnant_woman,
-                                    ),
-                                  ),
-                                ],
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // Medication Statistics
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OverviewInfo(
-                                      value: _ferrousGiven,
-                                      label: 'Ferrous FA\ngiven',
-                                      icon: Icons.medication,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OverviewInfo(
-                                      value: _calciumGiven,
-                                      label: 'Calcium\ngiven',
-                                      icon: Icons.local_pharmacy,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OverviewInfo(
-                                      value: _tdDosesGiven,
-                                      label: 'TD Vaccine\ndoses given',
-                                      icon: Icons.vaccines,
-                                    ),
-                                  ),
-                                ],
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // Active Pregnancies Card with real data
-                              MidwifeStatisticsCard(
-                                totalPregnancies: _totalPregnancies,
-                                firstTrimester: _firstTrimester,
-                                secondTrimester: _secondTrimester,
-                                thirdTrimester: _thirdTrimester,
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // Recent Visits with real data
-                              if (_recentVisits.isNotEmpty)
-                                MidwifeHistoryCard(
-                                  visits: _recentVisits,
-                                  onTapItem: () {
-                                    Navigator.pushNamed(context, '/midwife-mothers');
-                                  },
-                                )
-                              else
-                                Container(
-                                  padding: const EdgeInsets.all(24),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: AppColors.borderPrimary),
-                                  ),
-                                  child: const Column(
-                                    children: [
-                                      Icon(
-                                        Icons.history,
-                                        size: 48,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                      SizedBox(height: 12),
-                                      Text(
-                                        'No recent visits',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        'Checkups in the last 7 days will appear here',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              Expanded(
+                                child: OverviewInfo(
+                                  value: _ferrousGiven,
+                                  label: 'Ferrous FA\ngiven',
+                                  icon: Icons.medication,
                                 ),
-
-                              const SizedBox(height: 20),
-
-                              // BHC Visits Chart with real data
-                              if (_bhcVisitValues.any((v) => v > 0))
-                                ChartCard(
-                                  title: 'BHC Daily Visits (Last 7 Days)',
-                                  headerIcon: Icons.show_chart_rounded,
-                                  values: _bhcVisitValues,
-                                  labels: _bhcVisitDays,
-                                  unit: 'visits',
-                                  lineColor: AppColors.brandPrimary,
-                                  startingLabel: 'Lowest',
-                                  startingValue: '${_bhcVisitValues.reduce((a, b) => a < b ? a : b).toInt()} visits',
-                                  latestLabel: 'Highest',
-                                  latestValue: '${_bhcVisitValues.reduce((a, b) => a > b ? a : b).toInt()} visits',
-                                  insightText: _getChartInsight(),
-                                )
-                              else
-                                Container(
-                                  padding: const EdgeInsets.all(24),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: AppColors.borderPrimary),
-                                  ),
-                                  child: const Column(
-                                    children: [
-                                      Icon(
-                                        Icons.show_chart,
-                                        size: 48,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                      SizedBox(height: 12),
-                                      Text(
-                                        'No visit data available',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        'Visits in the last 7 days will appear here',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OverviewInfo(
+                                  value: _calciumGiven,
+                                  label: 'Calcium\ngiven',
+                                  icon: Icons.local_pharmacy,
                                 ),
-
-                              const SizedBox(height: 32),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OverviewInfo(
+                                  value: _tdDosesGiven,
+                                  label: 'TD Vaccine\ndoses given',
+                                  icon: Icons.vaccines,
+                                ),
+                              ),
                             ],
                           ),
-                        ),
+
+                          const SizedBox(height: 20),
+
+                          // Active Pregnancies Card with real data
+                          MidwifeStatisticsCard(
+                            totalPregnancies: _totalPregnancies,
+                            firstTrimester: _firstTrimester,
+                            secondTrimester: _secondTrimester,
+                            thirdTrimester: _thirdTrimester,
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Recent Visits with real data
+                          if (_recentVisits.isNotEmpty)
+                            MidwifeHistoryCard(
+                              visits: _recentVisits,
+                              onTapItem: () {
+                                // Navigate to mothers list when tapped
+                                // You'll need to access the shell's navigation
+                                // This is handled by the shell's IndexedStack
+                              },
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: AppColors.borderPrimary),
+                              ),
+                              child: const Column(
+                                children: [
+                                  Icon(
+                                    Icons.history,
+                                    size: 48,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  SizedBox(height: 12),
+                                  Text(
+                                    'No recent visits',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Checkups in the last 7 days will appear here',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          const SizedBox(height: 20),
+
+                          // BHC Visits Chart with real data
+                          if (_bhcVisitValues.any((v) => v > 0))
+                            ChartCard(
+                              title: 'BHC Daily Visits (Last 7 Days)',
+                              headerIcon: Icons.show_chart_rounded,
+                              values: _bhcVisitValues,
+                              labels: _bhcVisitDays,
+                              unit: 'visits',
+                              lineColor: AppColors.brandPrimary,
+                              startingLabel: 'Lowest',
+                              startingValue: '${_bhcVisitValues.reduce((a, b) => a < b ? a : b).toInt()} visits',
+                              latestLabel: 'Highest',
+                              latestValue: '${_bhcVisitValues.reduce((a, b) => a > b ? a : b).toInt()} visits',
+                              insightText: _getChartInsight(),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: AppColors.borderPrimary),
+                              ),
+                              child: const Column(
+                                children: [
+                                  Icon(
+                                    Icons.show_chart,
+                                    size: 48,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  SizedBox(height: 12),
+                                  Text(
+                                    'No visit data available',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Visits in the last 7 days will appear here',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          const SizedBox(height: 32),
+                        ],
                       ),
-          ),
-        ],
+                    ),
+                  ),
       ),
     );
   }

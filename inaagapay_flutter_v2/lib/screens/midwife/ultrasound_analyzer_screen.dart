@@ -13,8 +13,6 @@ import '../../theme/app_colors.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/secondary_button.dart';
-import '../../widgets/page_title.dart';
-import '../../widgets/headline.dart';
 
 class UltrasoundAnalyzerScreen extends StatefulWidget {
   final int motherId;
@@ -41,25 +39,20 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   bool _isSaving = false;
   String? _errorMessage;
   
-  // Controllers for editable fields
   late TextEditingController _healthSummaryController;
   late TextEditingController _explanationController;
   bool _isEditing = false;
 
-  // New fields for ultrasound metadata
   DateTime? _ultrasoundDate;
   final TextEditingController _dateController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController();
   final TextEditingController _healthWorkerNameController = TextEditingController();
   final TextEditingController _healthWorkerInstitutionController = TextEditingController();
   final TextEditingController _healthWorkerProfessionController = TextEditingController();
 
-  // Store the user's context
   String? _userRole;
   late int _motherId;
   late int _pregnancyId;
 
-  // Store uploaded image URLs
   List<String> _uploadedImageUrls = [];
 
   @override
@@ -68,7 +61,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     _healthSummaryController = TextEditingController();
     _explanationController = TextEditingController();
     
-    // Set default date to today
     _ultrasoundDate = DateTime.now();
     _dateController.text = _dateFormat.format(_ultrasoundDate!);
     
@@ -83,7 +75,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     _healthSummaryController.dispose();
     _explanationController.dispose();
     _dateController.dispose();
-    _locationController.dispose();
     _healthWorkerNameController.dispose();
     _healthWorkerInstitutionController.dispose();
     _healthWorkerProfessionController.dispose();
@@ -93,17 +84,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   Future<void> _loadUserContext() async {
     try {
       final role = await AuthStorage.getUserRole();
-      
       setState(() {
         _userRole = role;
       });
-
-      if (kDebugMode) {
-        print('User context loaded:');
-        print('  Role: $_userRole');
-        print('  Mother ID: $_motherId');
-        print('  Pregnancy ID: $_pregnancyId');
-      }
     } catch (e) {
       if (kDebugMode) print('Error loading user context: $e');
     }
@@ -186,7 +169,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       _uploadedImageUrls.clear();
       _dateController.text = _dateFormat.format(DateTime.now());
       _ultrasoundDate = DateTime.now();
-      _locationController.clear();
       _healthWorkerNameController.clear();
       _healthWorkerInstitutionController.clear();
       _healthWorkerProfessionController.clear();
@@ -260,27 +242,19 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         _combinedResponse = result;
         _isLoading = false;
         
-        // Set the text controllers with the complete response
         if (result.description.isNotEmpty) {
-          _healthSummaryController.text = result.description; // Store full description
+          _healthSummaryController.text = result.description;
           _explanationController.text = _extractExplanation(result.description);
         } else {
           _healthSummaryController.text = "No analysis available";
           _explanationController.text = "No recommendations available";
         }
       });
-      
-      if (kDebugMode) {
-        print('Analysis complete: ${result.description}');
-      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
-      if (kDebugMode) {
-        print('Error analyzing images: $e');
-      }
     }
   }
 
@@ -298,10 +272,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         throw Exception('User not logged in');
       }
 
-      // Clear previous image URLs
       _uploadedImageUrls.clear();
 
-      // 1. Upload images to Supabase Storage (using files bucket)
       final List<String> uploadedFilePaths = [];
       final List<int> fileIds = [];
       
@@ -311,7 +283,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         final fileName = 'ultrasound_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
         final filePath = 'ultrasounds/$_motherId/$fileName';
         
-        // Upload to Supabase Storage using the existing 'files' bucket
         await Supabase.instance.client.storage
             .from('files')
             .uploadBinary(
@@ -320,7 +291,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               fileOptions: const FileOptions(contentType: 'image/jpeg'),
             );
         
-        // Get public URL
         final publicUrl = Supabase.instance.client.storage
             .from('files')
             .getPublicUrl(filePath);
@@ -328,7 +298,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         uploadedFilePaths.add(filePath);
         _uploadedImageUrls.add(publicUrl);
         
-        // 2. Create file record in files table
         final fileResponse = await Supabase.instance.client
             .from('files')
             .insert({
@@ -350,33 +319,28 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         fileIds.add(fileResponse['file_id'] as int);
       }
 
-      // 3. Create ultrasound record with all the fields
-     // 3. Create ultrasound record with all the fields
-final ultrasoundResponse = await Supabase.instance.client
-    .from('ultrasounds')
-    .insert({
-      'pregnancy_id': _pregnancyId,
-      'ultrasound_date': _ultrasoundDate!.toIso8601String().split('T')[0],
-      'ultrasound_location': _locationController.text.trim().isEmpty 
-          ? 'Mobile Upload' 
-          : _locationController.text.trim(),
-      'ultrasound_image': _uploadedImageUrls.isNotEmpty 
-          ? _uploadedImageUrls.join(',')  // Store all URLs as comma-separated string
-          : null,
-      'remarks': _healthSummaryController.text,
-      'health_worker_name': _healthWorkerNameController.text.trim(),
-      'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
-          ? null 
-          : _healthWorkerInstitutionController.text.trim(),
-      'health_worker_profession': _healthWorkerProfessionController.text.trim(),
-      'created_at': DateTime.now().toIso8601String(),
-    })
-    .select('ultrasound_id')
-    .single();
+      final ultrasoundResponse = await Supabase.instance.client
+          .from('ultrasounds')
+          .insert({
+            'pregnancy_id': _pregnancyId,
+            'ultrasound_date': _ultrasoundDate!.toIso8601String().split('T')[0],
+            'ultrasound_location': 'Mobile Upload',
+            'ultrasound_image': _uploadedImageUrls.isNotEmpty 
+                ? _uploadedImageUrls.join(',')
+                : null,
+            'remarks': _healthSummaryController.text,
+            'health_worker_name': _healthWorkerNameController.text.trim(),
+            'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
+                ? null 
+                : _healthWorkerInstitutionController.text.trim(),
+            'health_worker_profession': _healthWorkerProfessionController.text.trim(),
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select('ultrasound_id')
+          .single();
 
       final ultrasoundId = ultrasoundResponse['ultrasound_id'] as int;
 
-      // 4. Create AI response record with complete analysis
       await Supabase.instance.client
           .from('ai_responses')
           .insert({
@@ -385,14 +349,13 @@ final ultrasoundResponse = await Supabase.instance.client
             'reference_id': ultrasoundId,
             'ai_model': 'Gemini 1.5 Flash',
             'confidence_score': 0.92,
-            'response': _combinedResponse!.description, // Store full AI response
+            'response': _combinedResponse!.description,
             'response_category': 'analysis',
             'status': 'generated',
             'generated_by_ai': true,
             'created_at': DateTime.now().toIso8601String(),
           });
 
-      // 5. Link files to ultrasound record
       for (int fileId in fileIds) {
         await Supabase.instance.client
             .from('files')
@@ -402,7 +365,6 @@ final ultrasoundResponse = await Supabase.instance.client
             .eq('file_id', fileId);
       }
 
-      // Show success dialog
       if (!mounted) return;
       
       await showDialog(
@@ -491,40 +453,197 @@ final ultrasoundResponse = await Supabase.instance.client
     return '';
   }
 
-  // Helper function to format text with bold for capitalized words
+  // Beautiful formatted text widget
   Widget _buildFormattedText(String text) {
     if (text.isEmpty) return const SizedBox.shrink();
     
-    final words = text.split(' ');
-    final List<TextSpan> spans = [];
+    // Split by sections (marked by ALL CAPS lines)
+    final lines = text.split('\n');
+    final List<Widget> sections = [];
     
-    for (int i = 0; i < words.length; i++) {
-      final word = words[i];
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty) continue;
       
-      // Check if word is all caps and longer than 1 character
-      if (word.length > 1 && word == word.toUpperCase() && !word.contains(RegExp(r'[0-9]'))) {
-        spans.add(TextSpan(
-          text: word,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 15,
+      // Check if this is a section header (all caps and longer than 2 chars)
+      if (line.length > 2 && line == line.toUpperCase() && !line.contains(RegExp(r'[0-9]'))) {
+        sections.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 16, bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.brandPrimary.withOpacity(0.1),
+                    AppColors.brandSecondary.withOpacity(0.05),
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.brandPrimary.withOpacity(0.2),
+                ),
+              ),
+              child: Text(
+                line,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.brandPrimary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
           ),
-        ));
-      } else {
-        spans.add(TextSpan(text: word));
+        );
       }
-      
-      // Add space between words (except last)
-      if (i < words.length - 1) {
-        spans.add(const TextSpan(text: ' '));
+      // Check if line starts with bullet point
+      else if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
+        sections.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 6, right: 8),
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.brandPrimary, AppColors.brandSecondary],
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    line.substring(1).trim(),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textPrimary,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      // Regular text
+      else {
+        // Check if line contains important keywords
+        if (line.contains('✅') || line.contains('NORMAL')) {
+          sections.add(
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      line,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.green,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        else if (line.contains('⚠️') || line.contains('MONITORING') || line.contains('CONCERN')) {
+          sections.add(
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      line,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        else if (line.contains('🔍') || line.contains('FURTHER EVALUATION')) {
+          sections.add(
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      line,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.red,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        else {
+          sections.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              child: Text(
+                line,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textPrimary,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          );
+        }
       }
     }
     
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.5),
-        children: spans,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: sections,
     );
   }
 
@@ -634,7 +753,6 @@ final ultrasoundResponse = await Supabase.instance.client
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Edit/Save buttons
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -677,15 +795,22 @@ final ultrasoundResponse = await Supabase.instance.client
           ],
         ),
 
-        // Health Summary Card
+        // Clinical Assessment Card
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: _getHealthStatusColor().withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                _getHealthStatusColor().withOpacity(0.1),
+                _getHealthStatusColor().withOpacity(0.05),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: _getHealthStatusColor().withValues(alpha: 0.3),
+              color: _getHealthStatusColor().withOpacity(0.3),
               width: 1.5,
             ),
           ),
@@ -695,35 +820,75 @@ final ultrasoundResponse = await Supabase.instance.client
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: _getHealthStatusColor().withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(10),
+                      color: _getHealthStatusColor().withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       Icons.health_and_safety,
                       color: _getHealthStatusColor(),
-                      size: 20,
+                      size: 24,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    'Clinical Assessment',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: _getHealthStatusColor(),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Clinical Assessment',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: _getHealthStatusColor(),
+                          ),
+                        ),
+                        Text(
+                          'AI-Powered Analysis',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _getHealthStatusColor().withOpacity(0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _getHealthStatusColor().withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.auto_awesome,
+                          size: 14,
+                          color: _getHealthStatusColor(),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'AI',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _getHealthStatusColor(),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const Divider(height: 24),
               if (!_isEditing)
                 _buildFormattedText(_healthSummaryController.text)
               else
                 TextField(
                   controller: _healthSummaryController,
-                  maxLines: 4,
+                  maxLines: 10,
                   decoration: InputDecoration(
                     hintText: 'Enter clinical assessment...',
                     border: OutlineInputBorder(
@@ -734,7 +899,7 @@ final ultrasoundResponse = await Supabase.instance.client
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.all(16),
                   ),
-                  style: const TextStyle(fontSize: 15, height: 1.5),
+                  style: const TextStyle(fontSize: 14, height: 1.5),
                 ),
             ],
           ),
@@ -747,11 +912,11 @@ final ultrasoundResponse = await Supabase.instance.client
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.grey.shade200),
             boxShadow: [
               BoxShadow(
-                color: Colors.grey.withValues(alpha: 0.1),
+                color: Colors.grey.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -763,35 +928,37 @@ final ultrasoundResponse = await Supabase.instance.client
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
                       Icons.lightbulb_outline,
                       color: Colors.blue,
-                      size: 20,
+                      size: 24,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
-                    'Recommendations',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+                  const Expanded(
+                    child: Text(
+                      'Recommendations',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const Divider(height: 24),
               if (!_isEditing)
-                _buildBulletPoints(_explanationController.text)
+                _buildFormattedText(_explanationController.text)
               else
                 TextField(
                   controller: _explanationController,
-                  maxLines: 6,
+                  maxLines: 8,
                   decoration: InputDecoration(
                     hintText: 'Enter recommendations with bullet points...\n• Point 1\n• Point 2\n• Point 3',
                     border: OutlineInputBorder(
@@ -810,52 +977,6 @@ final ultrasoundResponse = await Supabase.instance.client
     );
   }
 
-  Widget _buildBulletPoints(String text) {
-    if (text.isEmpty) {
-      return const Text(
-        'No recommendations available',
-        style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-      );
-    }
-    
-    final lines = text.split('\n');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: lines.map((line) {
-        if (line.trim().isEmpty) return const SizedBox(height: 4);
-        
-        // Check if line starts with bullet point
-        if (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*')) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  margin: const EdgeInsets.only(top: 4, right: 12),
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                Expanded(
-                  child: _buildFormattedText(line.trim().substring(1).trim()),
-                ),
-              ],
-            ),
-          );
-        } else {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _buildFormattedText(line),
-          );
-        }
-      }).toList(),
-    );
-  }
-
   Widget _buildDetailedFindings() {
     if (_combinedResponse == null) return const SizedBox.shrink();
     
@@ -864,11 +985,11 @@ final ultrasoundResponse = await Supabase.instance.client
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
+            color: Colors.grey.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -877,16 +998,15 @@ final ultrasoundResponse = await Supabase.instance.client
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.teal.shade50,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.info_outline, color: Colors.teal, size: 20),
+                child: const Icon(Icons.info_outline, color: Colors.teal, size: 24),
               ),
               const SizedBox(width: 12),
               const Text(
@@ -898,142 +1018,202 @@ final ultrasoundResponse = await Supabase.instance.client
               ),
             ],
           ),
-
-          const SizedBox(height: 20),
+          const Divider(height: 24),
 
           // Measurements
           if (_combinedResponse!.measurements != null && _combinedResponse!.measurements!.isNotEmpty) ...[
-            const Text(
-              'MEASUREMENTS',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-                letterSpacing: 1.2,
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.teal.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.teal.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.straighten, color: Colors.teal, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Measurements',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._combinedResponse!.measurements!.map((measurement) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(right: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.teal,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              measurement,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            ..._combinedResponse!.measurements!.map((measurement) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.teal.shade200),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.straighten, color: Colors.teal, size: 16),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        measurement,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: 16),
           ],
 
           // Key Findings
           if (_combinedResponse!.normalFindings != null && _combinedResponse!.normalFindings!.isNotEmpty) ...[
-            const Text(
-              'KEY FINDINGS',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-                letterSpacing: 1.2,
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Normal Findings',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._combinedResponse!.normalFindings!.map((finding) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(right: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              finding,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            ..._combinedResponse!.normalFindings!.map((finding) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 16),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        finding,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: 16),
           ],
 
           // Concerns
           if (_combinedResponse!.concerns != null && _combinedResponse!.concerns!.isNotEmpty) ...[
-            const Text(
-              'AREAS TO MONITOR',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-                letterSpacing: 1.2,
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.orange, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Areas to Monitor',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._combinedResponse!.concerns!.map((concern) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(right: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              concern,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            ..._combinedResponse!.concerns!.map((concern) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.orange, size: 16),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        concern,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
           ],
 
           // Disclaimer
-          Padding(
-            padding: const EdgeInsets.only(top: 20),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: Colors.amber.shade800),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'This analysis is AI-generated for reference only. Always consult with a qualified healthcare provider.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.amber.shade800,
-                      ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, size: 20, color: Colors.amber.shade800),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'This analysis is AI-generated for reference only. Always consult with a qualified healthcare provider.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.amber.shade800,
+                      height: 1.4,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1048,7 +1228,6 @@ final ultrasoundResponse = await Supabase.instance.client
       body: SafeArea(
         child: Column(
           children: [
-            // Custom Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -1104,7 +1283,6 @@ final ultrasoundResponse = await Supabase.instance.client
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    // Mother Info Banner
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
@@ -1151,7 +1329,6 @@ final ultrasoundResponse = await Supabase.instance.client
 
                     const SizedBox(height: 16),
 
-                    // Selected Images Grid
                     if (_selectedImages.isNotEmpty) ...[
                       SizedBox(
                         height: 90,
@@ -1209,7 +1386,6 @@ final ultrasoundResponse = await Supabase.instance.client
                       const SizedBox(height: 16),
                     ],
 
-                    // Action Buttons
                     Row(
                       children: [
                         Expanded(
@@ -1232,7 +1408,6 @@ final ultrasoundResponse = await Supabase.instance.client
 
                     const SizedBox(height: 16),
 
-                    // Study Details Card
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -1271,7 +1446,6 @@ final ultrasoundResponse = await Supabase.instance.client
                           ),
                           const SizedBox(height: 20),
                           
-                          // Date Field
                           InkWell(
                             onTap: _selectDate,
                             child: Container(
@@ -1310,31 +1484,12 @@ final ultrasoundResponse = await Supabase.instance.client
                               ),
                             ),
                           ),
-                          
-                          const SizedBox(height: 12),
-                          
-                          // Location Field
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: AppColors.bgSecondary,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: TextField(
-                              controller: _locationController,
-                              decoration: const InputDecoration(
-                                labelText: 'Location/Facility',
-                                border: InputBorder.none,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
-                    // Health Worker Card
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -1373,7 +1528,6 @@ final ultrasoundResponse = await Supabase.instance.client
                           ),
                           const SizedBox(height: 20),
                           
-                          // Name Field
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1391,7 +1545,6 @@ final ultrasoundResponse = await Supabase.instance.client
                           
                           const SizedBox(height: 12),
                           
-                          // Institution Field
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1409,7 +1562,6 @@ final ultrasoundResponse = await Supabase.instance.client
                           
                           const SizedBox(height: 12),
                           
-                          // Profession Field
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1440,7 +1592,6 @@ final ultrasoundResponse = await Supabase.instance.client
 
                     const SizedBox(height: 16),
 
-                    // Loading Indicator
                     if (_isLoading)
                       Container(
                         padding: const EdgeInsets.all(32),
@@ -1478,7 +1629,6 @@ final ultrasoundResponse = await Supabase.instance.client
                         ),
                       ),
 
-                    // Error Message
                     if (_errorMessage != null && !_isLoading)
                       Container(
                         width: double.infinity,
@@ -1502,7 +1652,6 @@ final ultrasoundResponse = await Supabase.instance.client
                         ),
                       ),
 
-                    // Results
                     if (_combinedResponse != null && !_isLoading) ...[
                       const SizedBox(height: 16),
                       
@@ -1511,10 +1660,17 @@ final ultrasoundResponse = await Supabase.instance.client
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: _getHealthStatusColor().withValues(alpha: 0.1),
+                          gradient: LinearGradient(
+                            colors: [
+                              _getHealthStatusColor().withOpacity(0.2),
+                              _getHealthStatusColor().withOpacity(0.05),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: _getHealthStatusColor().withValues(alpha: 0.3),
+                            color: _getHealthStatusColor().withOpacity(0.3),
                           ),
                         ),
                         child: Row(
@@ -1522,7 +1678,7 @@ final ultrasoundResponse = await Supabase.instance.client
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: _getHealthStatusColor().withValues(alpha: 0.2),
+                                color: _getHealthStatusColor().withOpacity(0.2),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(

@@ -1,4 +1,4 @@
-// lib/screens/mother/records_screen.dart (updated - remove header)
+// lib/screens/mother/records_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -22,16 +22,13 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
   String? _errorMessage;
   int? _motherId;
   
-  // Data lists
   List<Map<String, dynamic>> _ultrasounds = [];
   List<Map<String, dynamic>> _labTests = [];
   
-  // Filter and sort
-  String _selectedFilter = 'all'; // all, ultrasounds, labtests
-  String _sortOrder = 'desc'; // desc = newest first, asc = oldest first
+  String _selectedFilter = 'all';
+  String _sortOrder = 'desc';
   String _searchQuery = '';
   
-  // Tab controller
   late TabController _tabController;
 
   @override
@@ -54,21 +51,18 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
     });
 
     try {
-      // Get mother ID from auth storage
       _motherId = await AuthStorage.getMotherId();
       
       if (_motherId == null) {
         throw Exception('Mother ID not found');
       }
 
-      // Get all pregnancies for this mother
       final pregnanciesResponse = await SupabaseService.client
           .from('pregnancies')
           .select('pregnancy_id')
           .eq('mother_id', _motherId!);
 
       if (pregnanciesResponse.isEmpty) {
-        // No pregnancies found
         setState(() {
           _ultrasounds = [];
           _labTests = [];
@@ -90,32 +84,16 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
   }
 
   Future<void> _loadRecordsForPregnancies(List<int> pregnancyIds) async {
-    // Load ultrasounds
     if (pregnancyIds.isNotEmpty) {
       final ultrasoundsResponse = await SupabaseService.client
           .from('ultrasounds')
-          .select('''
-            *,
-            pregnancies!inner (
-              pregnancy_id,
-              last_menstrual_period,
-              expected_date_of_delivery
-            )
-          ''')
+          .select('*')
           .inFilter('pregnancy_id', pregnancyIds)
           .order('ultrasound_date', ascending: false);
 
-      // Load lab tests
       final labTestsResponse = await SupabaseService.client
           .from('lab_tests')
-          .select('''
-            *,
-            pregnancies!inner (
-              pregnancy_id,
-              last_menstrual_period,
-              expected_date_of_delivery
-            )
-          ''')
+          .select('*')
           .inFilter('pregnancy_id', pregnancyIds)
           .order('lab_test_date', ascending: false);
 
@@ -188,7 +166,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
         ),
         child: Column(
           children: [
-            // Handle
             Container(
               margin: const EdgeInsets.only(top: 8),
               width: 40,
@@ -204,7 +181,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header
                     Row(
                       children: [
                         Container(
@@ -244,7 +220,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                     ),
                     const SizedBox(height: 16),
 
-                    // Image Gallery if available
                     if (imageUrls != null && imageUrls.isNotEmpty) ...[
                       SizedBox(
                         height: 200,
@@ -299,7 +274,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                                           );
                                         },
                                       ),
-                                      // Image counter overlay
                                       if (imageUrls.length > 1 && index == 0)
                                         Positioned(
                                           top: 8,
@@ -334,7 +308,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       const SizedBox(height: 16),
                     ],
 
-                    // Details
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -374,7 +347,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       ),
                     ),
 
-                    // AI Analysis if available
                     if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Container(
@@ -482,32 +454,26 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
   List<Map<String, dynamic>> _getFilteredAndSortedRecords() {
     List<Map<String, dynamic>> allRecords = [];
     
-    // Add ultrasounds with type identifier
     for (var ultrasound in _ultrasounds) {
       allRecords.add({
         ...ultrasound,
         'record_type': 'ultrasound',
         'record_date': ultrasound['ultrasound_date'],
-        'display_title': 'Ultrasound - ${_formatDate(ultrasound['ultrasound_date'])}',
       });
     }
     
-    // Add lab tests with type identifier
     for (var labTest in _labTests) {
       allRecords.add({
         ...labTest,
         'record_type': 'labtest',
         'record_date': labTest['lab_test_date'],
-        'display_title': '${labTest['lab_test_type'] ?? 'Lab Test'} - ${_formatDate(labTest['lab_test_date'])}',
       });
     }
     
-    // Apply filter
     if (_selectedFilter != 'all') {
       allRecords = allRecords.where((record) => record['record_type'] == _selectedFilter).toList();
     }
     
-    // Apply search
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       allRecords = allRecords.where((record) {
@@ -522,7 +488,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
       }).toList();
     }
     
-    // Apply sort
     allRecords.sort((a, b) {
       final dateA = DateTime.tryParse(a['record_date'] ?? '');
       final dateB = DateTime.tryParse(b['record_date'] ?? '');
@@ -585,7 +550,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
 
     return Column(
       children: [
-        // Tabs
         Container(
           color: Colors.white,
           child: TabBar(
@@ -599,15 +563,11 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
             ],
           ),
         ),
-
         Expanded(
           child: TabBarView(
             controller: _tabController,
             children: [
-              // All Records Tab
               _buildRecordsTab(allRecords),
-              
-              // Statistics Tab
               _buildStatisticsTab(),
             ],
           ),
@@ -619,13 +579,11 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
   Widget _buildRecordsTab(List<Map<String, dynamic>> allRecords) {
     return Column(
       children: [
-        // Search and Filter Bar
         Container(
           padding: const EdgeInsets.all(16),
           color: Colors.white,
           child: Column(
             children: [
-              // Search Field
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.bgSecondary,
@@ -646,8 +604,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                 ),
               ),
               const SizedBox(height: 12),
-              
-              // Filter and Sort Row
               Row(
                 children: [
                   Expanded(
@@ -700,8 +656,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
             ],
           ),
         ),
-
-        // Records List
         Expanded(
           child: allRecords.isEmpty
               ? Center(
@@ -849,16 +803,13 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
   }
 
   Widget _buildStatisticsTab() {
-    // Calculate statistics
     final totalUltrasounds = _ultrasounds.length;
     final totalLabTests = _labTests.length;
     final totalRecords = totalUltrasounds + totalLabTests;
     
-    // Get latest records
     final allRecords = _getFilteredAndSortedRecords();
     final latestRecord = allRecords.isNotEmpty ? allRecords.first : null;
     
-    // Count by month (last 6 months)
     final now = DateTime.now();
     final last6Months = List.generate(6, (i) {
       return DateTime(now.year, now.month - i, 1);
@@ -888,7 +839,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Summary Cards
           Row(
             children: [
               Expanded(
@@ -935,7 +885,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
 
           const SizedBox(height: 24),
 
-          // Latest Record
           if (latestRecord != null) ...[
             const Text(
               'LATEST RECORD',
@@ -1036,7 +985,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
 
           const SizedBox(height: 24),
 
-          // Records by Month
           const Text(
             'RECORDS BY MONTH',
             style: TextStyle(
@@ -1109,7 +1057,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
 
           const SizedBox(height: 24),
 
-          // Quick Actions
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

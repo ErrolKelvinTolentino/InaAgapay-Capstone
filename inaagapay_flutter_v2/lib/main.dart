@@ -1,4 +1,4 @@
-﻿// lib/main.dart (updated section for routes)
+﻿// lib/main.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -28,36 +28,24 @@ import 'screens/midwife/midwife_children_screen.dart';
 import 'screens/midwife/midwife_schedules_screen.dart';
 import 'screens/midwife/midwife_add_mother_screen.dart';
 import 'models/due_date_mode.dart';
-import 'models/analyzer_args.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables
   try {
     await dotenv.load(fileName: ".env");
-    if (kDebugMode) {
-      print('Environment variables loaded successfully');
-    }
   } catch (e) {
-    if (kDebugMode) {
-      print('Error loading .env file: $e');
-    }
+    if (kDebugMode) print('Could not load .env: $e');
   }
 
-  // Initialize Supabase
   try {
     await Supabase.initialize(
       url: 'https://buvseyqcdacctlupznya.supabase.co',
-      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw',
+      anonKey:
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw',
     );
-    if (kDebugMode) {
-      print('Supabase initialized successfully');
-    }
   } catch (e) {
-    if (kDebugMode) {
-      print('Supabase initialization error: $e');
-    }
+    if (kDebugMode) print('Supabase init error: $e');
   }
 
   runApp(const InaagapayApp());
@@ -68,18 +56,15 @@ class InaagapayApp extends StatelessWidget {
 
   Future<Widget> _determineStartScreen() async {
     final isLoggedIn = await AuthStorage.isLoggedIn();
-    
-    if (!isLoggedIn) {
-      return const LoginScreen();
-    }
-    
+    if (!isLoggedIn) return const LoginScreen();
+
     final role = await AuthStorage.getUserRole();
     final profileComplete = await AuthStorage.isProfileComplete();
-    
+
     if (role == 'mother' && !profileComplete) {
       return const CompleteProfileScreen();
     }
-    
+
     switch (role) {
       case 'mother':
         return const MotherDashboardShell();
@@ -98,12 +83,13 @@ class InaagapayApp extends StatelessWidget {
       future: _determineStartScreen(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return MaterialApp(
+          return const MaterialApp(
             debugShowCheckedModeBanner: false,
             home: Scaffold(
               body: Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(const Color(0xFFFF68A5)),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(Color(0xFFFF68A5)),
                 ),
               ),
             ),
@@ -136,20 +122,23 @@ class InaagapayApp extends StatelessWidget {
             // Authentication Routes
             '/login': (context) => const LoginScreen(),
             '/register': (context) => const MotherRegistrationScreen(),
-            '/verify-registration': (context) => const AccountVerificationRegistration(),
+            '/verify-registration': (context) =>
+                const AccountVerificationRegistration(),
             '/forgot-password': (context) => const ForgotPasswordScreen(),
-            '/forgot-password-verify': (context) => const ForgotPasswordVerificationScreen(),
-            '/change-forgot-password': (context) => const ChangeForgotPasswordScreen(),
-            
+            '/forgot-password-verify': (context) =>
+                const ForgotPasswordVerificationScreen(),
+            '/change-forgot-password': (context) =>
+                const ChangeForgotPasswordScreen(),
+
             // Mother Onboarding Routes
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
-            
+
             // Dashboard Routes
             '/mother-dashboard': (context) => const MotherDashboardShell(),
             '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
-            
+
             // Mother Feature Routes
             '/mother-profile': (context) {
               final args = ModalRoute.of(context)!.settings.arguments;
@@ -161,7 +150,7 @@ class InaagapayApp extends StatelessWidget {
             '/mother-records': (context) => const RecordsScreen(),
             '/mother-journal': (context) => const MotherJournalScreen(),
             '/mother-children': (context) => const MotherChildrenScreen(),
-            
+
             // Midwife Feature Routes
             '/midwife-mothers': (context) => const MidwifeMothersScreen(),
             '/midwife-children': (context) => const MidwifeChildrenScreen(),
@@ -175,22 +164,21 @@ class InaagapayApp extends StatelessWidget {
                 builder: (_) => CongratsPage(mode: mode),
               );
             }
-            // Handle analyzer screens with arguments
             if (settings.name == '/ultrasound-analyzer') {
-              final args = settings.arguments as AnalyzerArgs;
+              final args = settings.arguments as Map<String, int>;
               return MaterialPageRoute(
                 builder: (_) => UltrasoundAnalyzerScreen(
-                  motherId: args.motherId,
-                  pregnancyId: args.pregnancyId,
+                  motherId: args['motherId']!,
+                  pregnancyId: args['pregnancyId']!,
                 ),
               );
             }
             if (settings.name == '/lab-test-analyzer') {
-              final args = settings.arguments as AnalyzerArgs;
+              final args = settings.arguments as Map<String, int>;
               return MaterialPageRoute(
                 builder: (_) => LabTestAnalyzerScreen(
-                  motherId: args.motherId,
-                  pregnancyId: args.pregnancyId,
+                  motherId: args['motherId']!,
+                  pregnancyId: args['pregnancyId']!,
                 ),
               );
             }
