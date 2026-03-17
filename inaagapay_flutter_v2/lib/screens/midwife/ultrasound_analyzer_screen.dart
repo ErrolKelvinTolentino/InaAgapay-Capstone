@@ -351,25 +351,28 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       }
 
       // 3. Create ultrasound record with all the fields
-      final ultrasoundResponse = await Supabase.instance.client
-          .from('ultrasounds')
-          .insert({
-            'pregnancy_id': _pregnancyId,
-            'ultrasound_date': _ultrasoundDate!.toIso8601String().split('T')[0],
-            'ultrasound_location': _locationController.text.trim().isEmpty 
-                ? 'Mobile Upload' 
-                : _locationController.text.trim(),
-            'ultrasound_image': _uploadedImageUrls.isNotEmpty ? _uploadedImageUrls.first : null,
-            'remarks': _healthSummaryController.text, // Store full AI analysis
-            'health_worker_name': _healthWorkerNameController.text.trim(),
-            'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
-                ? null 
-                : _healthWorkerInstitutionController.text.trim(),
-            'health_worker_profession': _healthWorkerProfessionController.text.trim(),
-            'created_at': DateTime.now().toIso8601String(),
-          })
-          .select('ultrasound_id')
-          .single();
+     // 3. Create ultrasound record with all the fields
+final ultrasoundResponse = await Supabase.instance.client
+    .from('ultrasounds')
+    .insert({
+      'pregnancy_id': _pregnancyId,
+      'ultrasound_date': _ultrasoundDate!.toIso8601String().split('T')[0],
+      'ultrasound_location': _locationController.text.trim().isEmpty 
+          ? 'Mobile Upload' 
+          : _locationController.text.trim(),
+      'ultrasound_image': _uploadedImageUrls.isNotEmpty 
+          ? _uploadedImageUrls.join(',')  // Store all URLs as comma-separated string
+          : null,
+      'remarks': _healthSummaryController.text,
+      'health_worker_name': _healthWorkerNameController.text.trim(),
+      'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
+          ? null 
+          : _healthWorkerInstitutionController.text.trim(),
+      'health_worker_profession': _healthWorkerProfessionController.text.trim(),
+      'created_at': DateTime.now().toIso8601String(),
+    })
+    .select('ultrasound_id')
+    .single();
 
       final ultrasoundId = ultrasoundResponse['ultrasound_id'] as int;
 

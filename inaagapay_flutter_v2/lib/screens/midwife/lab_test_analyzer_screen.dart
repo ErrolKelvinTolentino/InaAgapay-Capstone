@@ -360,26 +360,29 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       }
 
       // 3. Create lab test record with all the fields
-      final labTestResponse = await Supabase.instance.client
-          .from('lab_tests')
-          .insert({
-            'pregnancy_id': _pregnancyId,
-            'lab_test_type': labTestType,
-            'lab_test_date': _labTestDate!.toIso8601String().split('T')[0],
-            'lab_test_location': _locationController.text.trim().isEmpty 
-                ? 'Mobile Upload' 
-                : _locationController.text.trim(),
-            'lab_test_image': _uploadedImageUrls.isNotEmpty ? _uploadedImageUrls.first : null,
-            'remarks': _healthSummaryController.text, // Store full AI analysis
-            'health_worker_name': _healthWorkerNameController.text.trim(),
-            'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
-                ? null 
-                : _healthWorkerInstitutionController.text.trim(),
-            'health_worker_profession': _healthWorkerProfessionController.text.trim(),
-            'created_at': DateTime.now().toIso8601String(),
-          })
-          .select('lab_test_id')
-          .single();
+      // 3. Create lab test record with all the fields
+final labTestResponse = await Supabase.instance.client
+    .from('lab_tests')
+    .insert({
+      'pregnancy_id': _pregnancyId,
+      'lab_test_type': labTestType,
+      'lab_test_date': _labTestDate!.toIso8601String().split('T')[0],
+      'lab_test_location': _locationController.text.trim().isEmpty 
+          ? 'Mobile Upload' 
+          : _locationController.text.trim(),
+      'lab_test_image': _uploadedImageUrls.isNotEmpty 
+          ? _uploadedImageUrls.join(',')  // Store all URLs as comma-separated string
+          : null,
+      'remarks': _healthSummaryController.text,
+      'health_worker_name': _healthWorkerNameController.text.trim(),
+      'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
+          ? null 
+          : _healthWorkerInstitutionController.text.trim(),
+      'health_worker_profession': _healthWorkerProfessionController.text.trim(),
+      'created_at': DateTime.now().toIso8601String(),
+    })
+    .select('lab_test_id')
+    .single();
 
       final labTestId = labTestResponse['lab_test_id'] as int;
 

@@ -1,4 +1,5 @@
 // lib/screens/mother/mother_profile_page.dart
+// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -14,9 +15,9 @@ import '../../widgets/main_button.dart';
 import '../../widgets/secondary_button.dart';
 import '../../widgets/overview_info.dart';
 import '../../widgets/risk_panel.dart';
-import '../../widgets/main_header.dart';
 import '../../services/risk_engine.dart';
 import '../../models/add_mother_form_data.dart';
+import '../../widgets/full_screen_image_viewer.dart'; // Add this import
 
 class MotherProfilePage extends StatefulWidget {
   final int motherId;
@@ -340,13 +341,26 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     return buffer.toString();
   }
 
+// Show full screen image
+void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => FullScreenImageViewer(
+        imageUrls: imageUrls,
+        initialIndex: initialIndex,
+      ),
+    ),
+  );
+}
+
   // Show record details modal
   void _showRecordDetails({
     required String title,
     required List<MapEntry<String, String>> rows,
     IconData icon = Icons.receipt_long,
     String? subtitle,
-    String? imageUrl,
+    List<String>? imageUrls,
     String? aiAnalysis,
   }) {
     showModalBottomSheet(
@@ -417,57 +431,91 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
                     ),
                     const SizedBox(height: 16),
 
-                    // Image if available
-                    if (imageUrl != null && imageUrl.isNotEmpty) ...[
-                      Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: 200,
-                            errorBuilder: (_, __, ___) => Container(
-                              height: 200,
-                              color: AppColors.bgSecondary,
-                              child: const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.broken_image, size: 48, color: Colors.grey),
-                                    SizedBox(height: 8),
-                                    Text('Image not available'),
-                                  ],
+                    // Image Gallery if available
+                    if (imageUrls != null && imageUrls.isNotEmpty) ...[
+                      SizedBox(
+                        height: 200,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: imageUrls.length,
+                          itemBuilder: (context, index) {
+                            return GestureDetector(
+                              onTap: () => _showFullScreenImage(imageUrls, index),
+                              child: Container(
+                                width: 200,
+                                margin: const EdgeInsets.only(right: 12),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey.shade300),
                                 ),
-                              ),
-                            ),
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                height: 200,
-                                color: AppColors.bgSecondary,
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Stack(
+                                    fit: StackFit.expand,
                                     children: [
-                                      const CircularProgressIndicator(
-                                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                                      Image.network(
+                                        imageUrls[index],
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Container(
+                                          color: AppColors.bgSecondary,
+                                          child: const Center(
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.broken_image, size: 32, color: Colors.grey),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                  'Image not available',
+                                                  style: TextStyle(fontSize: 10),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return Container(
+                                            color: AppColors.bgSecondary,
+                                            child: const Center(
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Loading image...',
-                                        style: TextStyle(color: Colors.grey.shade600),
-                                      ),
+                                      // Image counter overlay
+                                      if (imageUrls.length > 1 && index == 0)
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(0.6),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              '+${imageUrls.length - 1} more',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
-                              );
-                            },
-                          ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -2501,80 +2549,108 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     );
   }
 
-  Widget _buildUltrasoundCard(Map<String, dynamic> ultrasound) {
-    final date = _formatDate(ultrasound['ultrasound_date']);
-    
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.purple.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.photo, color: Colors.purple, size: 20),
+Widget _buildUltrasoundCard(Map<String, dynamic> ultrasound) {
+  final date = _formatDate(ultrasound['ultrasound_date']);
+  
+  return Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.purple.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
         ),
-        title: Text('Ultrasound', style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(date),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        onTap: () {
-          _showRecordDetails(
-            title: 'Ultrasound',
-            subtitle: date,
-            icon: Icons.monitor_heart,
-            imageUrl: ultrasound['ultrasound_image'],
-            rows: [
-              MapEntry('Date', _formatDate(ultrasound['ultrasound_date'])),
-              MapEntry('Location', _formatValue(ultrasound['ultrasound_location'])),
-              MapEntry('Health Worker', _formatValue(ultrasound['health_worker_name'])),
-              MapEntry('Institution', _formatValue(ultrasound['health_worker_institution'])),
-              MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
-            ],
-            aiAnalysis: _generateUltrasoundAIInsights(ultrasound),
-          );
-        },
+        child: const Icon(Icons.photo, color: Colors.purple, size: 20),
       ),
-    );
-  }
+      title: Text('Ultrasound', style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(date),
+      trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+      onTap: () {
+        // Get all image URLs
+        List<String> imageUrls = [];
+        
+        if (ultrasound['ultrasound_image'] != null) {
+          final imageField = ultrasound['ultrasound_image'].toString();
+          if (imageField.contains(',')) {
+            // Multiple URLs separated by commas
+            imageUrls = imageField.split(',').map((url) => url.trim()).toList();
+          } else if (imageField.isNotEmpty) {
+            // Single URL
+            imageUrls = [imageField];
+          }
+        }
+        
+        _showRecordDetails(
+          title: 'Ultrasound',
+          subtitle: date,
+          icon: Icons.monitor_heart,
+          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+          rows: [
+            MapEntry('Date', _formatDate(ultrasound['ultrasound_date'])),
+            MapEntry('Location', _formatValue(ultrasound['ultrasound_location'])),
+            MapEntry('Health Worker', _formatValue(ultrasound['health_worker_name'])),
+            MapEntry('Institution', _formatValue(ultrasound['health_worker_institution'])),
+            MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
+          ],
+          aiAnalysis: _generateUltrasoundAIInsights(ultrasound),
+        );
+      },
+    ),
+  );
+}
 
-  Widget _buildLabTestCard(Map<String, dynamic> labTest) {
-    final date = _formatDate(labTest['lab_test_date']);
-    final type = labTest['lab_test_type'] ?? 'Lab Test';
-    
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.science, color: Colors.orange, size: 20),
+Widget _buildLabTestCard(Map<String, dynamic> labTest) {
+  final date = _formatDate(labTest['lab_test_date']);
+  final type = labTest['lab_test_type'] ?? 'Lab Test';
+  
+  return Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
         ),
-        title: Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(date),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        onTap: () {
-          _showRecordDetails(
-            title: type,
-            subtitle: date,
-            icon: Icons.science,
-            imageUrl: labTest['lab_test_image'],
-            rows: [
-              MapEntry('Type', type),
-              MapEntry('Date', _formatDate(labTest['lab_test_date'])),
-              MapEntry('Location', _formatValue(labTest['lab_test_location'])),
-              MapEntry('Health Worker', _formatValue(labTest['health_worker_name'])),
-              MapEntry('Remarks', _formatValue(labTest['remarks'])),
-            ],
-            aiAnalysis: _generateLabTestAIInsights(labTest),
-          );
-        },
+        child: const Icon(Icons.science, color: Colors.orange, size: 20),
       ),
-    );
-  }
+      title: Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(date),
+      trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+      onTap: () {
+        // Get all image URLs
+        List<String> imageUrls = [];
+        
+        if (labTest['lab_test_image'] != null) {
+          final imageField = labTest['lab_test_image'].toString();
+          if (imageField.contains(',')) {
+            // Multiple URLs separated by commas
+            imageUrls = imageField.split(',').map((url) => url.trim()).toList();
+          } else if (imageField.isNotEmpty) {
+            // Single URL
+            imageUrls = [imageField];
+          }
+        }
+        
+        _showRecordDetails(
+          title: type,
+          subtitle: date,
+          icon: Icons.science,
+          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+          rows: [
+            MapEntry('Type', type),
+            MapEntry('Date', _formatDate(labTest['lab_test_date'])),
+            MapEntry('Location', _formatValue(labTest['lab_test_location'])),
+            MapEntry('Health Worker', _formatValue(labTest['health_worker_name'])),
+            MapEntry('Remarks', _formatValue(labTest['remarks'])),
+          ],
+          aiAnalysis: _generateLabTestAIInsights(labTest),
+        );
+      },
+    ),
+  );
+}
 
   // Helper methods
   List<Map<String, dynamic>> _sortByDate(List list, String field, String order) {
