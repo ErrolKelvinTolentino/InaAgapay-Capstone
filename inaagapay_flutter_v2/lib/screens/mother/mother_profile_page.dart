@@ -8,7 +8,6 @@ import '../../services/auth_storage.dart';
 import '../midwife/ultrasound_analyzer_screen.dart';
 import '../midwife/lab_test_analyzer_screen.dart';
 import '../midwife/add_prenatal_checkup_screen.dart';
-import '../../models/analyzer_args.dart';
 import '../../widgets/headline.dart';
 import '../../widgets/page_title.dart';
 import '../../widgets/main_button.dart';
