@@ -1,5 +1,4 @@
 // lib/screens/mother/mother_profile_page.dart
-// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +7,7 @@ import '../../services/mother_profile_service.dart';
 import '../../services/auth_storage.dart';
 import '../midwife/ultrasound_analyzer_screen.dart';
 import '../midwife/lab_test_analyzer_screen.dart';
+import '../midwife/add_prenatal_checkup_screen.dart';
 import '../../models/analyzer_args.dart';
 import '../../widgets/headline.dart';
 import '../../widgets/page_title.dart';
@@ -17,7 +17,7 @@ import '../../widgets/overview_info.dart';
 import '../../widgets/risk_panel.dart';
 import '../../services/risk_engine.dart';
 import '../../models/add_mother_form_data.dart';
-import '../../widgets/full_screen_image_viewer.dart'; // Add this import
+import '../../widgets/full_screen_image_viewer.dart';
 
 class MotherProfilePage extends StatefulWidget {
   final int motherId;
@@ -144,29 +144,103 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     }
   }
 
-  // Generate risk assessment
-  RiskAssessment _generateRiskAssessment(Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
-    // Create a form data object for risk engine
+  // Build risk assessment from DB-stored values (preferred) with local engine fallback.
+  // Reads `pregnancy_risk_level` from the pregnancies row and risk factors from
+  // the most recent checkup that has stored risk_factors.
+  RiskAssessment _buildRiskAssessmentFromDb(
+      Map<String, dynamic> profile,
+      Map<String, dynamic>? pregnancy) {
+    if (pregnancy == null) {
+      return RiskAssessment(
+        level: 'low',
+        score: 0,
+        factors: ['No ongoing pregnancy'],
+        note: 'No ongoing pregnancy to assess.',
+      );
+    }
+
+    // ── 1. Try to use the stored DB risk level ──────────────────────────────
+    final dbLevel = (pregnancy['pregnancy_risk_level'] as String?)?.toLowerCase();
+
+    // ── 2. Collect risk factors from stored checkup risk assessments ────────
+    final checkups = (pregnancy['checkups'] as List?) ?? [];
+    final List<String> dbFactors = [];
+    String? dbAiNote;
+
+    // Walk checkups newest-first to find the most recent one with risk data
+    final sortedCheckups = List<Map<String, dynamic>>.from(
+        checkups.whereType<Map<String, dynamic>>())
+      ..sort((a, b) {
+        final da = DateTime.tryParse(a['checkup_datetime'] ?? '');
+        final db = DateTime.tryParse(b['checkup_datetime'] ?? '');
+        if (da == null || db == null) return 0;
+        return db.compareTo(da); // newest first
+      });
+
+    for (final checkup in sortedCheckups) {
+      final factors = checkup['risk_factors'] as List?;
+      if (factors != null && factors.isNotEmpty) {
+        for (final f in factors) {
+          final fMap = f as Map<String, dynamic>;
+          final factor = fMap['factor']?.toString() ?? '';
+          if (factor.isNotEmpty) dbFactors.add(factor);
+        }
+        // Also grab the AI response text if available
+        final aiResp = checkup['risk_ai_response'] as Map<String, dynamic>?;
+        if (aiResp != null) {
+          final resp = aiResp['response']?.toString();
+          if (resp != null && resp.isNotEmpty) dbAiNote = resp;
+        }
+        break; // Only use the most recent checkup's risk data
+      }
+    }
+
+    // ── 3. If we have DB data, return that ──────────────────────────────────
+    if (dbLevel != null && dbLevel.isNotEmpty) {
+      final level = (dbLevel == 'high' || dbLevel == 'medium' || dbLevel == 'low')
+          ? dbLevel
+          : 'low';
+
+      String note;
+      switch (level) {
+        case 'high':
+          note = dbAiNote ??
+              'High-risk pregnancy. Close monitoring required. Consult with specialist.';
+          break;
+        case 'medium':
+          note = dbAiNote ?? 'Moderate risk factors present. Regular monitoring recommended.';
+          break;
+        default:
+          note = dbAiNote ?? 'No significant risk factors identified.';
+      }
+
+      return RiskAssessment(
+        level: level,
+        score: level == 'high'
+            ? 60
+            : level == 'medium'
+                ? 30
+                : 5,
+        factors: dbFactors.isNotEmpty
+            ? dbFactors
+            : ['No risk factors recorded yet'],
+        note: note,
+      );
+    }
+
+    // ── 4. Fallback to local rule-based engine if no DB risk data yet ───────
     final formData = AddMotherFormData();
-    
-    // Set age
     if (profile['birthdate'] != null) {
       try {
         formData.birthdate = DateTime.parse(profile['birthdate']);
-      } catch (e) {
-        // Ignore parsing errors
-      }
+      } catch (_) {}
     }
-    
-    // Set BMI
     if (profile['height'] != null && profile['weight'] != null) {
       formData.heightCm = (profile['height'] as num?)?.toDouble();
       formData.weightKg = (profile['weight'] as num?)?.toDouble();
     }
-    
-    // Add medical conditions
     final conditions = profile['medical_conditions'] as List? ?? [];
-    for (var condition in conditions) {
+    for (final condition in conditions) {
       formData.medicalConditions.add(
         MedicalConditionEntry(
           conditionName: condition['condition_name'] ?? '',
@@ -174,21 +248,18 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
         )..diagnosisDate = DateTime.tryParse(condition['diagnosis_date'] ?? ''),
       );
     }
-    
-    // Add past pregnancies
     final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
-    for (var pregnancy in pastPregnancies) {
-      final date = DateTime.tryParse(pregnancy['outcome_date'] ?? '');
+    for (final pg in pastPregnancies) {
+      final date = DateTime.tryParse(pg['outcome_date'] ?? '');
       if (date != null) {
         formData.pregnancyHistory.add(
           PregnancyHistoryEntry(
-            outcome: pregnancy['outcome'] ?? 'live_birth',
+            outcome: pg['outcome'] ?? 'live_birth',
             outcomeDate: date,
           ),
         );
       }
     }
-    
     return RiskEngine.evaluate(formData);
   }
 
@@ -1427,7 +1498,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     List children,
     Map<String, dynamic>? currentPregnancy,
   ) {
-    final riskAssessment = _generateRiskAssessment(profile, currentPregnancy);
+    final riskAssessment = _buildRiskAssessmentFromDb(profile, currentPregnancy);
     
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -1928,7 +1999,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     final daysToEdd = edd != null ? edd.difference(now).inDays : null;
 
     // Generate risk assessment
-    final riskAssessment = _generateRiskAssessment(profile, pregnancy);
+    final riskAssessment = _buildRiskAssessmentFromDb(profile, pregnancy);
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -2065,8 +2136,22 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                           'Add Checkup',
                           Icons.add,
                           AppColors.brandPrimary,
-                          () {
-                            // Navigate to add prenatal checkup
+                          () async {
+                            final pregnancyId = pregnancy['pregnancy_id'];
+                            if (pregnancyId == null) return;
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AddPrenatalCheckupScreen(
+                                  motherId: widget.motherId,
+                                  pregnancyId: pregnancyId as int,
+                                  lmp: DateTime.tryParse(
+                                      pregnancy['last_menstrual_period'] ?? ''),
+                                  motherWeight: _toDouble(profile['weight']),
+                                ),
+                              ),
+                            );
+                            _refresh();
                           },
                         ),
                       ),
