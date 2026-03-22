@@ -690,6 +690,7 @@ class SupabaseService {
     List<Map<String, dynamic>> medicalConditions = const [],
     List<Map<String, dynamic>> allergies = const [],
     List<Map<String, dynamic>> pastPregnancies = const [],
+    int fetalCount = 1,
   }) async {
     try {
       // 1. Verify email is not already taken
@@ -773,6 +774,7 @@ class SupabaseService {
             .from('pregnancies')
             .insert({
               'mother_id': motherId,
+              'fetal_count': fetalCount,
               'last_menstrual_period': lmp.toIso8601String().split('T')[0],
               'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
               'status': 'ongoing',
@@ -789,26 +791,37 @@ class SupabaseService {
             .insert({
               'mother_id': motherId,
               'status': 'ended',
-              'outcome': pp['outcome'],
-              'outcome_date': pp['outcome_date'],
-              'is_outcome_date_estimated':
-                  pp['is_outcome_date_estimated'] ?? false,
+              'fetal_count': pp['fetal_count'] ?? 1,
               'gestational_age_at_end': pp['gestational_age_at_end'],
             })
             .select('pregnancy_id')
             .single();
 
         final pastPregId = pastPregRow['pregnancy_id'] as int;
+        
+        final outcomes = pp['outcomes'] as List<dynamic>? ?? [];
+        for (int i = 0; i < outcomes.length; i++) {
+          final outcome = outcomes[i] as Map<String, dynamic>;
+          final fetusNumber = i + 1;
 
-        if (pp['place_of_delivery'] != null || pp['delivery_method'] != null) {
-          await client.from('deliveries').insert({
+          await client.from('pregnancy_outcomes').insert({
             'pregnancy_id': pastPregId,
-            'delivery_date': pp['outcome_date'],
-            'is_delivery_date_estimated':
-                pp['is_outcome_date_estimated'] ?? false,
-            'place_of_delivery': pp['place_of_delivery'],
-            'delivery_method': pp['delivery_method'],
+            'fetus_number': fetusNumber,
+            'outcome': outcome['outcome'],
+            'outcome_date': outcome['outcome_date'],
+            'is_outcome_date_estimated': outcome['is_outcome_date_estimated'] ?? false,
           });
+
+          if (outcome['place_of_delivery'] != null || outcome['delivery_method'] != null) {
+            await client.from('deliveries').insert({
+              'pregnancy_id': pastPregId,
+              'fetus_number': fetusNumber,
+              'delivery_date': outcome['outcome_date'],
+              'is_delivery_date_estimated': outcome['is_outcome_date_estimated'] ?? false,
+              'place_of_delivery': outcome['place_of_delivery'],
+              'delivery_method': outcome['delivery_method'],
+            });
+          }
         }
       }
 

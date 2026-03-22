@@ -77,23 +77,97 @@ class _Allergy {
       };
 }
 
-class _PastPregnancy {
+class _PastFetalOutcome {
   String outcome;
   DateTime outcomeDate;
   bool isEstimated = false;
-  double? gestationalAgeAtEnd;
   String? placeOfDelivery;
   String? deliveryMethod;
 
-  _PastPregnancy({required this.outcome, required this.outcomeDate});
+  _PastFetalOutcome({required this.outcome, required this.outcomeDate});
 
   Map<String, dynamic> toMap() => {
         'outcome': outcome,
         'outcome_date': outcomeDate.toIso8601String().split('T')[0],
         'is_outcome_date_estimated': isEstimated,
-        'gestational_age_at_end': gestationalAgeAtEnd,
         'place_of_delivery': placeOfDelivery,
         'delivery_method': deliveryMethod,
+      };
+}
+
+class _PastPregnancy {
+  int fetalCount = 1;
+  double? gestationalAgeAtEnd;
+  List<_PastFetalOutcome> outcomes = [];
+
+  _PastPregnancy({String? outcome, DateTime? outcomeDate}) {
+    if (outcome != null && outcomeDate != null) {
+      outcomes = [
+        _PastFetalOutcome(outcome: outcome, outcomeDate: outcomeDate),
+      ];
+    }
+  }
+
+  _PastFetalOutcome _ensurePrimaryOutcome() {
+    if (outcomes.isEmpty) {
+      outcomes.add(
+        _PastFetalOutcome(outcome: 'live_birth', outcomeDate: DateTime.now()),
+      );
+    }
+    return outcomes.first;
+  }
+
+  _PastFetalOutcome _latestOutcomeRef() {
+    final primary = _ensurePrimaryOutcome();
+    if (outcomes.length == 1) return primary;
+    return outcomes.reduce(
+      (a, b) => a.outcomeDate.isAfter(b.outcomeDate) ? a : b,
+    );
+  }
+
+  DateTime get earliestOutcomeDate {
+    if (outcomes.isEmpty) return DateTime.now();
+    return outcomes
+        .map((o) => o.outcomeDate)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+  }
+
+  DateTime get latestOutcomeDate {
+    if (outcomes.isEmpty) return DateTime.now();
+    return outcomes
+        .map((o) => o.outcomeDate)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  String get primaryOutcome =>
+      outcomes.isNotEmpty ? _latestOutcomeRef().outcome : 'live_birth';
+  DateTime get primaryOutcomeDate => latestOutcomeDate;
+
+  // Backward-compatible aliases used throughout this screen.
+  String get outcome => primaryOutcome;
+  set outcome(String value) => _latestOutcomeRef().outcome = value;
+
+  DateTime get outcomeDate => primaryOutcomeDate;
+  set outcomeDate(DateTime value) => _latestOutcomeRef().outcomeDate = value;
+
+  bool get isEstimated =>
+      outcomes.isNotEmpty ? _latestOutcomeRef().isEstimated : false;
+  set isEstimated(bool value) => _latestOutcomeRef().isEstimated = value;
+
+  String? get placeOfDelivery =>
+      outcomes.isNotEmpty ? _latestOutcomeRef().placeOfDelivery : null;
+  set placeOfDelivery(String? value) =>
+      _latestOutcomeRef().placeOfDelivery = value;
+
+  String? get deliveryMethod =>
+      outcomes.isNotEmpty ? _latestOutcomeRef().deliveryMethod : null;
+  set deliveryMethod(String? value) =>
+      _latestOutcomeRef().deliveryMethod = value;
+
+  Map<String, dynamic> toMap() => {
+        'fetal_count': fetalCount,
+        'gestational_age_at_end': gestationalAgeAtEnd,
+        'outcomes': outcomes.map((o) => o.toMap()).toList(),
       };
 }
 
@@ -180,6 +254,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   final _eddCtrl = TextEditingController();
   final _aogWeeksCtrl = TextEditingController();
   final _aogDaysCtrl = TextEditingController();
+  final _fetalCountCtrl = TextEditingController(text: '1');
   DateTime? _lmp;
   DateTime? _edd;
 
@@ -220,6 +295,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       _eddCtrl,
       _aogWeeksCtrl,
       _aogDaysCtrl,
+      _fetalCountCtrl,
     ]) {
       c.dispose();
     }
@@ -798,9 +874,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     if (r.pastPregnancies.isNotEmpty) {
       section('Past Pregnancies (${r.pastPregnancies.length})');
       for (final p in r.pastPregnancies) {
+        final parsedDate = DateTime.tryParse(p.outcomeDate);
         rows.add(_ocrFieldRow(
           _outcomeLabel(p.outcome),
-          '${p.outcomeDate}${p.placeOfDelivery != null ? ' · ${p.placeOfDelivery}' : ''}',
+          parsedDate != null ? _dateFmt.format(parsedDate) : p.outcomeDate,
         ));
       }
     }
@@ -972,16 +1049,19 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
       // Step 6 — Pregnancy History
       for (final p in r.pastPregnancies) {
-        if (p.outcomeDate.isEmpty) continue;
+        if (p.outcomeDate.trim().isEmpty) continue;
         final date = DateTime.tryParse(p.outcomeDate);
         if (date == null) continue;
-        _pastPregnancies.add(
-          _PastPregnancy(outcome: p.outcome, outcomeDate: date)
+        final imported = _PastPregnancy()
+          ..fetalCount = 1
+          ..gestationalAgeAtEnd = p.gestationalAgeAtEnd;
+        imported.outcomes.add(
+          _PastFetalOutcome(outcome: p.outcome, outcomeDate: date)
             ..isEstimated = p.isEstimated
-            ..gestationalAgeAtEnd = p.gestationalAgeAtEnd
             ..placeOfDelivery = p.placeOfDelivery
             ..deliveryMethod = p.deliveryMethod,
         );
+        _pastPregnancies.add(imported);
       }
       if (_pastPregnancies.isNotEmpty) _hasPastPregnancy = true;
 
@@ -1162,7 +1242,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     const minGapDays = 42;
     for (int i = 0; i < _pastPregnancies.length; i++) {
       if (i == excludeIndex) continue;
-      final gap = date.difference(_pastPregnancies[i].outcomeDate).inDays.abs();
+      final gap =
+          date.difference(_pastPregnancies[i].latestOutcomeDate).inDays.abs();
       if (gap < minGapDays) {
         return 'Only ${gap}d from another record (minimum: $minGapDays days)';
       }
@@ -1248,34 +1329,54 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         if (_hasPastPregnancy && _pastPregnancies.isEmpty) {
           msg = 'Add at least one past pregnancy or disable the toggle.';
         } else {
-          for (final p in _pastPregnancies) {
+          for (int pIndex = 0; pIndex < _pastPregnancies.length; pIndex++) {
+            final p = _pastPregnancies[pIndex];
+            if (p.outcomes.isEmpty) {
+              msg = 'Past pregnancy #${pIndex + 1} has no fetal outcomes.';
+              break;
+            }
+            if (p.fetalCount != p.outcomes.length) {
+              msg =
+                  'Past pregnancy #${pIndex + 1} has fetal count (${p.fetalCount}) that does not match recorded outcomes (${p.outcomes.length}).';
+              break;
+            }
             if (p.gestationalAgeAtEnd == null) {
               msg =
                   'Gestational age at outcome is required for every past pregnancy record.';
               break;
             }
-            final gaErr = _gaConstraintErrorFor(
-              p.outcome,
-              p.gestationalAgeAtEnd!.toInt(),
-            );
-            if (gaErr != null) {
-              msg = '${_outcomeLabel(p.outcome)}: $gaErr';
-              break;
+            for (int oIndex = 0; oIndex < p.outcomes.length; oIndex++) {
+              final o = p.outcomes[oIndex];
+              final gaErr = _gaConstraintErrorFor(
+                o.outcome,
+                p.gestationalAgeAtEnd!.toInt(),
+              );
+              if (gaErr != null) {
+                final where = p.outcomes.length > 1
+                    ? 'Pregnancy #${pIndex + 1}, Fetus ${oIndex + 1}'
+                    : 'Pregnancy #${pIndex + 1}';
+                msg = '$where (${_outcomeLabel(o.outcome)}): $gaErr';
+                break;
+              }
+              if ((o.outcome == 'live_birth' || o.outcome == 'stillbirth') &&
+                  (o.placeOfDelivery == null || o.deliveryMethod == null)) {
+                final where = p.outcomes.length > 1
+                    ? 'Pregnancy #${pIndex + 1}, Fetus ${oIndex + 1}'
+                    : 'Pregnancy #${pIndex + 1}';
+                msg =
+                    '$where requires delivery place and delivery method for live birth or stillbirth outcomes.';
+                break;
+              }
             }
-            if ((p.outcome == 'live_birth' || p.outcome == 'stillbirth') &&
-                (p.placeOfDelivery == null || p.deliveryMethod == null)) {
-              msg =
-                  'Provide delivery place & method for live birth / stillbirth records.';
-              break;
-            }
+            if (msg != null) break;
           }
           if (msg == null && _pastPregnancies.length > 1) {
-            final sorted = [..._pastPregnancies]
-              ..sort((a, b) => a.outcomeDate.compareTo(b.outcomeDate));
+            final sorted = [..._pastPregnancies]..sort(
+                (a, b) => a.latestOutcomeDate.compareTo(b.latestOutcomeDate));
             for (int i = 0; i < sorted.length - 1; i++) {
               final gap = sorted[i + 1]
-                  .outcomeDate
-                  .difference(sorted[i].outcomeDate)
+                  .latestOutcomeDate
+                  .difference(sorted[i].latestOutcomeDate)
                   .inDays;
               if (gap < 42) {
                 msg =
@@ -1307,10 +1408,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           }
           // Pregnancy interval check against the most recent past pregnancy
           if (msg == null && _pastPregnancies.isNotEmpty) {
-            final sorted = [..._pastPregnancies]
-              ..sort((a, b) => b.outcomeDate.compareTo(a.outcomeDate));
+            final sorted = [..._pastPregnancies]..sort(
+                (a, b) => b.latestOutcomeDate.compareTo(a.latestOutcomeDate));
             final last = sorted.first;
-            final interval = _lmp!.difference(last.outcomeDate).inDays;
+            final interval = _lmp!.difference(last.latestOutcomeDate).inDays;
             // Impossible thresholds per outcome (anything below = biologically impossible)
             const impossibleThresholds = {
               'live_birth': 1,
@@ -1319,13 +1420,19 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               'abortion': 20,
               'ectopic': 20,
             };
-            final threshold = impossibleThresholds[last.outcome] ?? 30;
+            final threshold = last.outcomes
+                .map((o) => impossibleThresholds[o.outcome] ?? 30)
+                .reduce(max);
+            final lastOutcomeLabel = last.outcomes
+                .map((o) => _outcomeLabel(o.outcome))
+                .toSet()
+                .join(', ');
             if (interval < 0) {
               msg =
                   'LMP date is before the last recorded past pregnancy end date. Please verify your dates.';
             } else if (interval < threshold) {
               msg =
-                  'Pregnancy interval of $interval days after the last ${_outcomeLabel(last.outcome)} is biologically impossible (minimum: $threshold days).';
+                  'Pregnancy interval of $interval days after the last $lastOutcomeLabel record is biologically impossible (minimum: $threshold days).';
             }
           }
         }
@@ -1414,6 +1521,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         medicalConditions: _medicalConditions.map((m) => m.toMap()).toList(),
         allergies: _allergies.map((a) => a.toMap()).toList(),
         pastPregnancies: _pastPregnancies.map((p) => p.toMap()).toList(),
+        fetalCount: int.tryParse(_fetalCountCtrl.text.trim()) ?? 1,
       );
 
       if (!mounted) return;
@@ -2217,12 +2325,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               final p = e.value;
               return _itemCard(
                 leading: _iconAvatar(Icons.pregnant_woman_outlined),
-                title: _outcomeLabel(p.outcome),
-                subtitle: [
-                  _dateFmt.format(p.outcomeDate),
-                  if (p.placeOfDelivery != null) p.placeOfDelivery!,
-                  if (p.deliveryMethod != null) p.deliveryMethod!,
-                ].join(' - '),
+                title: _pastPregnancyTitle(p),
+                subtitle: _pastPregnancySubtitle(p),
                 onDelete: () =>
                     setState(() => _pastPregnancies.removeAt(e.key)),
               );
@@ -2342,6 +2446,16 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               ),
             ],
           ),
+        const SizedBox(height: 20),
+        _sectionLabel('Fetal Details'),
+        AppInputField(
+          hintText: 'Fetal Count (e.g., 1 for single, 2 for twins)',
+          controller: _fetalCountCtrl,
+          keyboardType: TextInputType.number,
+          isRequired: true,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onChanged: (_) {},
+        ),
         const SizedBox(height: 20),
         _sectionLabel('Computed Values'),
         _derivedRow(
@@ -2753,109 +2867,67 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   }
 
   Future<void> _showAddPastPregnancy() async {
-    String outcome = 'live_birth';
-    DateTime? outcomeDate;
-    bool isEstimated = false;
+    int fetalCount = 1;
     final gaCtrl = TextEditingController();
-    final placeCtrl = TextEditingController();
-    String? deliveryMethod;
-    String? intervalError;
+
+    // Using lists to track states per fetus
+    List<String> outcomes = ['live_birth'];
+    List<DateTime?> outcomeDates = [null];
+    List<bool> isEstimatedList = [false];
+    List<TextEditingController> placeCtrls = [TextEditingController()];
+    List<String?> deliveryMethods = [null];
+    List<String?> intervalErrors = [null];
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setS) {
-          final needsDelivery =
-              outcome == 'live_birth' || outcome == 'stillbirth';
           final gaWeeks = int.tryParse(gaCtrl.text.trim());
           final gaEntered = gaCtrl.text.trim().isNotEmpty;
-          final gaError = !gaEntered
+
+          bool allValid = gaEntered && gaWeeks != null;
+          String? gaError = !gaEntered
               ? 'Gestational age is required'
-              : (gaWeeks != null
-                  ? _gaConstraintErrorFor(outcome, gaWeeks)
-                  : 'Enter a whole number of weeks');
-          final constraint = _outcomeGaConstraint(outcome);
-          final isValid = outcomeDate != null &&
-              intervalError == null &&
-              gaError == null &&
-              (!needsDelivery ||
-                  (placeCtrl.text.trim().isNotEmpty && deliveryMethod != null));
+              : (gaWeeks == null ? 'Enter a whole number of weeks' : null);
+
+          // Check gaError against all outcomes if format is valid
+          if (gaError == null && gaWeeks != null) {
+            for (int i = 0; i < fetalCount; i++) {
+              final err = _gaConstraintErrorFor(outcomes[i], gaWeeks);
+              if (err != null) {
+                gaError = err; // showing the first matching error
+                allValid = false;
+                break;
+              }
+            }
+          }
+
+          // Check individual outcomes
+          for (int i = 0; i < fetalCount; i++) {
+            final needsDelivery =
+                outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth';
+            final hasOutcomeDate = outcomeDates[i] != null;
+            final noIntervalError = intervalErrors[i] == null;
+            final hasDeliveryInfo = !needsDelivery ||
+                (placeCtrls[i].text.trim().isNotEmpty &&
+                    deliveryMethods[i] != null);
+
+            if (!hasOutcomeDate || !noIntervalError || !hasDeliveryInfo) {
+              allValid = false;
+            }
+          }
 
           return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Past Pregnancy'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _modalDropdown(
-                    ctx,
-                    label: 'Outcome',
-                    value: outcome,
-                    items: const {
-                      'live_birth': 'Live Birth',
-                      'stillbirth': 'Stillbirth',
-                      'miscarriage': 'Miscarriage',
-                      'abortion': 'Abortion',
-                      'ectopic': 'Ectopic',
-                    },
-                    onChanged: (v) => setS(() => outcome = v ?? 'live_birth'),
-                  ),
-                  _modalDateTile(
-                    ctx,
-                    label: outcomeDate == null
-                        ? 'Outcome Date *'
-                        : _dateFmt.format(outcomeDate!),
-                    onTap: () async {
-                      final d = await showDatePicker(
-                        context: ctx,
-                        initialDate: outcomeDate ?? DateTime.now(),
-                        firstDate: DateTime(1900),
-                        lastDate: DateTime.now(),
-                      );
-                      if (d != null) {
-                        setS(() {
-                          outcomeDate = d;
-                          intervalError = _computeIntervalError(d);
-                        });
-                      }
-                    },
-                  ),
-                  if (intervalError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 8),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline,
-                              size: 13, color: AppColors.error),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              intervalError!,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.error,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: isEstimated,
-                    onChanged: (v) => setS(() => isEstimated = v ?? false),
-                    title: const Text(
-                      'Date is estimated',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    activeColor: AppColors.brandPrimary,
-                  ),
                   _modalField(
-                    'Gestational age at outcome (weeks)',
+                    'Gestational age at outcome (weeks) *',
                     gaCtrl,
                     keyboard: TextInputType.number,
                     inputFormatters: [
@@ -2865,46 +2937,155 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     onChanged: (_) => setS(() {}),
                     errorText: gaError,
                   ),
-                  if (constraint != null)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 8),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline,
-                              size: 13, color: AppColors.brandAccent),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              constraint.hint,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
+                  const SizedBox(height: 8),
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: AppColors.borderPrimary),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('Fetal Count:',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary)),
+                        const Spacer(),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.remove_circle_outline,
+                              color: AppColors.brandPrimary),
+                          onPressed: () {
+                            if (fetalCount > 1) {
+                              setS(() {
+                                fetalCount--;
+                                outcomes.removeLast();
+                                outcomeDates.removeLast();
+                                isEstimatedList.removeLast();
+                                placeCtrls.removeLast();
+                                deliveryMethods.removeLast();
+                                intervalErrors.removeLast();
+                              });
+                            }
+                          },
+                        ),
+                        Text('$fetalCount',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.add_circle_outline,
+                              color: AppColors.brandPrimary),
+                          onPressed: () {
+                            if (fetalCount < 5) {
+                              setS(() {
+                                fetalCount++;
+                                outcomes.add('live_birth');
+                                outcomeDates.add(null);
+                                isEstimatedList.add(false);
+                                placeCtrls.add(TextEditingController());
+                                deliveryMethods.add(null);
+                                intervalErrors.add(null);
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  for (int i = 0; i < fetalCount; i++) ...[
+                    if (fetalCount > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 4),
+                        child: Text('Fetus ${i + 1}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.brandPrimary)),
                       ),
-                    ),
-                  if (needsDelivery) ...[
-                    _modalField(
-                      'Place of delivery *',
-                      placeCtrl,
-                      onChanged: (_) => setS(() {}),
-                    ),
                     _modalDropdown(
                       ctx,
-                      label: 'Delivery method *',
-                      value: deliveryMethod,
+                      label: 'Outcome',
+                      value: outcomes[i],
                       items: const {
-                        'Normal Spontaneous Vaginal Delivery':
-                            'Normal Spontaneous Vaginal Delivery',
-                        'Cesarean Section': 'Cesarean Section',
-                        'Assisted Vaginal Delivery':
-                            'Assisted Vaginal Delivery',
-                        'Other': 'Other',
+                        'live_birth': 'Live Birth',
+                        'stillbirth': 'Stillbirth',
+                        'miscarriage': 'Miscarriage',
+                        'abortion': 'Abortion',
+                        'ectopic': 'Ectopic',
                       },
-                      onChanged: (v) => setS(() => deliveryMethod = v),
+                      onChanged: (v) =>
+                          setS(() => outcomes[i] = v ?? 'live_birth'),
                     ),
+                    _modalDateTile(
+                      ctx,
+                      label: outcomeDates[i] == null
+                          ? 'Outcome Date *'
+                          : _dateFmt.format(outcomeDates[i]!),
+                      onTap: () async {
+                        final d = await showDatePicker(
+                          context: ctx,
+                          initialDate: outcomeDates[i] ?? DateTime.now(),
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime.now(),
+                        );
+                        if (d != null) {
+                          setS(() {
+                            outcomeDates[i] = d;
+                            intervalErrors[i] = _computeIntervalError(d);
+                          });
+                        }
+                      },
+                    ),
+                    if (intervalErrors[i] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline,
+                                size: 13, color: AppColors.error),
+                            const SizedBox(width: 4),
+                            Expanded(
+                                child: Text(intervalErrors[i]!,
+                                    style: const TextStyle(
+                                        fontSize: 11, color: AppColors.error))),
+                          ],
+                        ),
+                      ),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: isEstimatedList[i],
+                      onChanged: (v) =>
+                          setS(() => isEstimatedList[i] = v ?? false),
+                      title: const Text('Date is estimated',
+                          style: TextStyle(fontSize: 13)),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      activeColor: AppColors.brandPrimary,
+                    ),
+                    if (outcomes[i] == 'live_birth' ||
+                        outcomes[i] == 'stillbirth') ...[
+                      _modalField(
+                        'Place of delivery *',
+                        placeCtrls[i],
+                        onChanged: (_) => setS(() {}),
+                      ),
+                      _modalDropdown(
+                        ctx,
+                        label: 'Delivery method *',
+                        value: deliveryMethods[i],
+                        items: const {
+                          'Normal Spontaneous Vaginal Delivery':
+                              'Normal Spontaneous Vaginal Delivery',
+                          'Cesarean Section': 'Cesarean Section',
+                          'Assisted Vaginal Delivery':
+                              'Assisted Vaginal Delivery',
+                          'Other': 'Other',
+                        },
+                        onChanged: (v) => setS(() => deliveryMethods[i] = v),
+                      ),
+                    ],
+                    if (i < fetalCount - 1) const Divider(height: 32),
                   ],
                 ],
               ),
@@ -2915,14 +3096,13 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: isValid ? () => Navigator.pop(ctx, true) : null,
+                onPressed: allValid ? () => Navigator.pop(ctx, true) : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brandPrimary,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
                 ),
                 child: const Text('Add'),
               ),
@@ -2932,13 +3112,19 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       ),
     );
 
-    if (confirmed == true && outcomeDate != null) {
-      final pp = _PastPregnancy(outcome: outcome, outcomeDate: outcomeDate!)
-        ..isEstimated = isEstimated
-        ..gestationalAgeAtEnd = double.tryParse(gaCtrl.text.trim())
-        ..placeOfDelivery =
-            placeCtrl.text.trim().isEmpty ? null : placeCtrl.text.trim()
-        ..deliveryMethod = deliveryMethod;
+    if (confirmed == true && outcomeDates.every((d) => d != null)) {
+      final pp = _PastPregnancy()
+        ..fetalCount = fetalCount
+        ..gestationalAgeAtEnd = double.tryParse(gaCtrl.text.trim());
+      for (int i = 0; i < fetalCount; i++) {
+        pp.outcomes.add(_PastFetalOutcome(
+            outcome: outcomes[i], outcomeDate: outcomeDates[i]!)
+          ..isEstimated = isEstimatedList[i]
+          ..placeOfDelivery = placeCtrls[i].text.trim().isEmpty
+              ? null
+              : placeCtrls[i].text.trim()
+          ..deliveryMethod = deliveryMethods[i]);
+      }
       setState(() => _pastPregnancies.add(pp));
     }
   }
@@ -2953,6 +3139,43 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         'ectopic' => 'Ectopic',
         _ => outcome,
       };
+
+  String _pastPregnancyTitle(_PastPregnancy p) {
+    if (p.outcomes.isEmpty) return 'Past Pregnancy';
+    if (p.outcomes.length == 1) return _outcomeLabel(p.outcomes.first.outcome);
+    return '${p.outcomes.length} fetal outcomes';
+  }
+
+  String _pastPregnancySubtitle(_PastPregnancy p) {
+    if (p.outcomes.isEmpty) return 'No outcomes recorded';
+
+    final dateText = p.earliestOutcomeDate == p.latestOutcomeDate
+        ? _dateFmt.format(p.latestOutcomeDate)
+        : '${_dateFmt.format(p.earliestOutcomeDate)} to ${_dateFmt.format(p.latestOutcomeDate)}';
+
+    final outcomeText = p.outcomes
+        .asMap()
+        .entries
+        .map(
+          (e) => p.outcomes.length > 1
+              ? 'F${e.key + 1}: ${_outcomeLabel(e.value.outcome)}'
+              : _outcomeLabel(e.value.outcome),
+        )
+        .join(' | ');
+
+    final hasMissingDelivery = p.outcomes.any(
+      (o) =>
+          (o.outcome == 'live_birth' || o.outcome == 'stillbirth') &&
+          ((o.placeOfDelivery == null || o.placeOfDelivery!.isEmpty) ||
+              (o.deliveryMethod == null || o.deliveryMethod!.isEmpty)),
+    );
+
+    return [
+      dateText,
+      outcomeText,
+      if (hasMissingDelivery) 'Incomplete delivery details',
+    ].join(' - ');
+  }
 
   /// Inline risk/warning chip displayed under input fields.
   /// [isError] = red (impossible), false = amber (high-risk warning).

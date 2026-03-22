@@ -204,6 +204,12 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   final _ferrousQtyCtrl = TextEditingController();
   final _calciumQtyCtrl = TextEditingController();
 
+  int _fetalCount = 1;
+  int _originalFetalCount = 1;
+  final _fetalCountReasonCtrl = TextEditingController();
+  bool _loadingFetalCount = true;
+  String? _fetalCountError;
+
   final List<_MedicationPlanEntry> _medicationPlans = [];
   final List<_GivenMedicationEntry> _givenMedications = [];
   final List<_SymptomEntry> _symptoms = [];
@@ -286,6 +292,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     _loadMidwifeId();
     _loadSymptomTypes();
     _loadMotherRiskContext();
+    _loadFetalCount();
     _weightCtrl.addListener(_validateWeightInline);
     _sysCtrl.addListener(_validateBpInline);
     _diaCtrl.addListener(_validateBpInline);
@@ -358,6 +365,29 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     final v = int.tryParse(t);
     setState(() => _calciumError =
         (v == null || v < 1 || v > 365) ? '1 – 365 tablets' : null);
+  }
+
+  Future<void> _loadFetalCount() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('pregnancies')
+          .select('fetal_count')
+          .eq('pregnancy_id', widget.pregnancyId)
+          .maybeSingle();
+      if (res != null && res['fetal_count'] != null) {
+        if (mounted) {
+          setState(() {
+            _originalFetalCount = res['fetal_count'] as int;
+            _fetalCount = _originalFetalCount;
+            _loadingFetalCount = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _loadingFetalCount = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingFetalCount = false);
+    }
   }
 
   Future<void> _loadMidwifeId() async {
@@ -440,10 +470,36 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       final pastPregnancies = await client
           .from('pregnancies')
           .select(
-              'pregnancy_id, outcome, outcome_date, gestational_age_at_end, status')
+              'pregnancy_id, fetal_count, outcome, outcome_date, gestational_age_at_end, status, created_at')
           .eq('mother_id', widget.motherId)
           .neq('pregnancy_id', widget.pregnancyId)
           .order('created_at', ascending: false);
+
+      final pastPregnancyIds = (pastPregnancies as List)
+          .map((p) => p['pregnancy_id'])
+          .whereType<int>()
+          .toList();
+
+      List<dynamic> pastPregnancyOutcomes = const [];
+      if (pastPregnancyIds.isNotEmpty) {
+        try {
+          pastPregnancyOutcomes = await client
+              .from('pregnancy_outcomes')
+              .select('''
+                pregnancy_id,
+                outcome,
+                outcome_date,
+                is_outcome_date_estimated,
+                gestational_age_at_end,
+                place_of_delivery,
+                delivery_method
+              ''')
+              .inFilter('pregnancy_id', pastPregnancyIds)
+              .order('outcome_date', ascending: false);
+        } catch (_) {
+          // Optional table in some deployments; keep fallback logic.
+        }
+      }
 
       final previousCheckups = await client
           .from('prenatal_checkups')
@@ -470,6 +526,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           'medical_conditions': medicalConditions,
           'allergies': allergies,
           'past_pregnancies': pastPregnancies,
+          'past_pregnancy_outcomes': pastPregnancyOutcomes,
           'previous_checkups': previousCheckups,
         };
       });
@@ -487,11 +544,6 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   int? _ageFromBirthdate(DateTime? birthdate) {
     if (birthdate == null) return null;
     return (DateTime.now().difference(birthdate).inDays / 365.25).floor();
-  }
-
-  String _riskLevelFromScore(double score) {
-    if (score >= 40) return 'high';
-    return 'low';
   }
 
   Color _riskLevelColor(String level) {
@@ -515,6 +567,9 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   String _currentRiskSignature() {
     return [
       _checkupDateTime.toIso8601String(),
+      _fetalCount.toString(),
+      _originalFetalCount.toString(),
+      _fetalCountReasonCtrl.text.trim(),
       _weightCtrl.text.trim(),
       _sysCtrl.text.trim(),
       _diaCtrl.text.trim(),
@@ -538,6 +593,9 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           .toString(),
       (_motherRiskContext?['allergies'] as List? ?? const []).length.toString(),
       (_motherRiskContext?['past_pregnancies'] as List? ?? const [])
+          .length
+          .toString(),
+      (_motherRiskContext?['past_pregnancy_outcomes'] as List? ?? const [])
           .length
           .toString(),
     ].join('||');
@@ -610,6 +668,7 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
     final actions = <String>[];
 
     final mother = _motherRiskContext?['mother'] as Map<String, dynamic>?;
+    final pregnancy = _motherRiskContext?['pregnancy'] as Map<String, dynamic>?;
     final conditions =
         (_motherRiskContext?['medical_conditions'] as List? ?? const [])
             .cast<dynamic>();
@@ -618,9 +677,40 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
     final pastPregnancies =
         (_motherRiskContext?['past_pregnancies'] as List? ?? const [])
             .cast<dynamic>();
+    final pastPregnancyOutcomes =
+        (_motherRiskContext?['past_pregnancy_outcomes'] as List? ?? const [])
+            .cast<dynamic>();
     final previousCheckups =
         (_motherRiskContext?['previous_checkups'] as List? ?? const [])
             .cast<dynamic>();
+
+    final currentLmp =
+        _tryDate(pregnancy?['last_menstrual_period']) ?? widget.lmp;
+    final today = DateTime.now();
+
+    final Map<int, List<Map<String, dynamic>>> outcomesByPregnancy = {};
+    for (final row in pastPregnancyOutcomes) {
+      if (row is! Map<String, dynamic>) continue;
+      final pid = row['pregnancy_id'] as int?;
+      if (pid == null) continue;
+      outcomesByPregnancy
+          .putIfAbsent(pid, () => <Map<String, dynamic>>[])
+          .add(row);
+    }
+
+    int recurrentLossCount = 0;
+    int stillbirthCount = 0;
+    int ectopicCount = 0;
+    int pretermCount = 0;
+    int priorMultifetalCount = 0;
+    DateTime? latestHistoricalOutcome;
+    final historicalOutcomes = <String>[];
+
+    final systolic = int.tryParse(_sysCtrl.text.trim());
+    final diastolic = int.tryParse(_diaCtrl.text.trim());
+    final fetalBeat = int.tryParse(_fetalBeatCtrl.text.trim());
+    final gaCurrent =
+        currentLmp != null ? today.difference(currentLmp).inDays ~/ 7 : null;
 
     final age = _ageFromBirthdate(_tryDate(mother?['birthdate']));
     if (age != null) {
@@ -645,6 +735,14 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
         ));
         actions.add(
             'Monitor blood pressure and fetal growth more closely due to age-related risk.');
+      } else if (age >= 30) {
+        score += 6;
+        factors.add(_RiskFactorItem(
+          factor: 'Age 30-34 years (moderate baseline obstetric risk)',
+          influence: 'low',
+          sourceTable: 'mothers',
+          sourceId: widget.motherId,
+        ));
       }
     }
 
@@ -671,6 +769,42 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
           sourceTable: 'mothers',
           sourceId: widget.motherId,
         ));
+      } else if (bmi >= 25) {
+        score += 8;
+        factors.add(_RiskFactorItem(
+          factor: 'Overweight BMI (25-29.9)',
+          influence: 'low',
+          sourceTable: 'mothers',
+          sourceId: widget.motherId,
+        ));
+      }
+    }
+
+    if (_fetalCount > 1) {
+      // Multifetal gestation is treated as an automatic high-risk baseline.
+      score = score < 40 ? 40 : score + 24;
+      factors.add(_RiskFactorItem(
+        factor: 'Current multifetal gestation (fetal count: $_fetalCount)',
+        influence: 'high',
+        sourceTable: 'pregnancies',
+        sourceId: widget.pregnancyId,
+      ));
+      notable.add('Current pregnancy fetal count: $_fetalCount');
+      actions.add(
+          'Use closer surveillance for preterm labor, hypertensive disorders, and fetal growth in multifetal pregnancy.');
+    }
+
+    if (gaCurrent != null) {
+      notable.add('Current gestational age estimate: $gaCurrent weeks');
+      if (gaCurrent < 8) {
+        score += 5;
+        factors.add(_RiskFactorItem(
+          factor:
+              'Very early gestation (<8 weeks) with limited clinical trend data',
+          influence: 'low',
+          sourceTable: 'pregnancies',
+          sourceId: widget.pregnancyId,
+        ));
       }
     }
 
@@ -685,7 +819,10 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
       if (lower.contains('hypertension') ||
           lower.contains('diabetes') ||
           lower.contains('heart') ||
-          lower.contains('kidney')) {
+          lower.contains('kidney') ||
+          lower.contains('lupus') ||
+          lower.contains('epilepsy') ||
+          lower.contains('thyroid')) {
         conditionScore = 24;
         influence = 'high';
       } else if (lower.contains('anemia') || lower.contains('asthma')) {
@@ -701,29 +838,175 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
       ));
     }
 
-    if (allergies.where((a) => (a['status'] ?? '') == 'active').isNotEmpty) {
-      notable.add(
-          'Has active allergies (${allergies.where((a) => (a['status'] ?? '') == 'active').length})');
+    final activeConditionCount = conditions.where((row) {
+      final map = row as Map<String, dynamic>;
+      return (map['status'] ?? '').toString().toLowerCase() == 'active';
+    }).length;
+    if (activeConditionCount >= 2) {
+      score += 10;
+      factors.add(_RiskFactorItem(
+        factor: 'Multiple active chronic conditions ($activeConditionCount)',
+        influence: 'high',
+        sourceTable: 'medical_conditions',
+        sourceId: widget.motherId,
+      ));
+      actions.add(
+          'Coordinate integrated management plan for multiple comorbidities with physician review.');
+    }
+
+    final activeAllergies = allergies.where((row) {
+      final map = row as Map<String, dynamic>;
+      return (map['status'] ?? '').toString().toLowerCase() == 'active';
+    }).toList();
+    if (activeAllergies.isNotEmpty) {
+      final severeAllergy = activeAllergies.any((row) {
+        final map = row as Map<String, dynamic>;
+        final allergen = (map['allergen'] ?? '').toString().toLowerCase();
+        return allergen.contains('anaphyl') ||
+            allergen.contains('penicillin') ||
+            allergen.contains('drug') ||
+            allergen.contains('antibiotic');
+      });
+      score += severeAllergy ? 10 : 4;
+      factors.add(_RiskFactorItem(
+        factor:
+            'Active allergy history (${activeAllergies.length})${severeAllergy ? ' with potential severe trigger' : ''}',
+        influence: severeAllergy ? 'high' : 'low',
+        sourceTable: 'allergies',
+        sourceId: widget.motherId,
+      ));
+      notable.add('Has active allergies (${activeAllergies.length})');
+      actions.add(
+          'Verify medication allergies before prescribing supplements or antibiotics.');
     }
 
     for (final row in pastPregnancies) {
       final map = row as Map<String, dynamic>;
-      final outcome = (map['outcome'] ?? '').toString();
-      if (outcome == 'stillbirth' ||
-          outcome == 'miscarriage' ||
-          outcome == 'ectopic') {
-        score += 18;
-        factors.add(_RiskFactorItem(
-          factor: 'History of $outcome pregnancy outcome',
-          influence: 'high',
-          sourceTable: 'pregnancies',
-          sourceId: map['pregnancy_id'] as int?,
-        ));
+      final pid = map['pregnancy_id'] as int?;
+      final fetalCount = (map['fetal_count'] as num?)?.toInt() ?? 1;
+      if (fetalCount > 1) {
+        priorMultifetalCount++;
+      }
+
+      final outcomeRows = <Map<String, dynamic>>[];
+      if (pid != null && outcomesByPregnancy.containsKey(pid)) {
+        outcomeRows.addAll(outcomesByPregnancy[pid]!);
+      }
+      if (outcomeRows.isEmpty && map['outcome'] != null) {
+        outcomeRows.add({
+          'pregnancy_id': pid,
+          'outcome': map['outcome'],
+          'outcome_date': map['outcome_date'],
+          'gestational_age_at_end': map['gestational_age_at_end'],
+        });
+      }
+
+      for (final o in outcomeRows) {
+        final outcome = (o['outcome'] ?? '').toString();
+        final lower = outcome.toLowerCase();
+        final outcomeDate = _tryDate(o['outcome_date']);
+        final gaEnd = (o['gestational_age_at_end'] as num?)?.toDouble() ??
+            (map['gestational_age_at_end'] as num?)?.toDouble();
+
+        if (outcomeDate != null) {
+          if (latestHistoricalOutcome == null ||
+              outcomeDate.isAfter(latestHistoricalOutcome!)) {
+            latestHistoricalOutcome = outcomeDate;
+          }
+        }
+
+        historicalOutcomes.add(
+            '$outcome${outcomeDate != null ? ' (${DateFormat('yyyy-MM-dd').format(outcomeDate)})' : ''}');
+
+        if (lower == 'miscarriage' || lower == 'abortion') recurrentLossCount++;
+        if (lower == 'stillbirth') stillbirthCount++;
+        if (lower == 'ectopic') ectopicCount++;
+        if ((lower == 'live_birth' || lower == 'stillbirth') &&
+            gaEnd != null &&
+            gaEnd < 37) {
+          pretermCount++;
+        }
+
+        if (lower == 'stillbirth' ||
+            lower == 'miscarriage' ||
+            lower == 'ectopic') {
+          score += 18;
+          factors.add(_RiskFactorItem(
+            factor: 'History of $lower pregnancy outcome',
+            influence: 'high',
+            sourceTable: 'pregnancies',
+            sourceId: pid,
+          ));
+        }
+
+        if (currentLmp != null && outcomeDate != null) {
+          final daysGap = currentLmp.difference(outcomeDate).inDays;
+          if (daysGap > 0 && daysGap < 180) {
+            score += 20;
+            factors.add(_RiskFactorItem(
+              factor: 'Short interpregnancy interval (${daysGap} days)',
+              influence: 'high',
+              sourceTable: 'pregnancies',
+              sourceId: pid,
+            ));
+          } else if (daysGap >= 180 && daysGap < 365) {
+            score += 10;
+            factors.add(_RiskFactorItem(
+              factor:
+                  'Interpregnancy interval under 12 months (${daysGap} days)',
+              influence: 'low',
+              sourceTable: 'pregnancies',
+              sourceId: pid,
+            ));
+          }
+        }
       }
     }
 
-    final systolic = int.tryParse(_sysCtrl.text.trim());
-    final diastolic = int.tryParse(_diaCtrl.text.trim());
+    if (historicalOutcomes.isNotEmpty) {
+      notable
+          .add('Historical outcomes: ${historicalOutcomes.take(8).join(', ')}');
+    }
+    if (recurrentLossCount >= 2) {
+      score += 22;
+      factors.add(_RiskFactorItem(
+        factor: 'Recurrent pregnancy loss history ($recurrentLossCount)',
+        influence: 'high',
+        sourceTable: 'pregnancies',
+        sourceId: widget.motherId,
+      ));
+      actions.add(
+          'Assess recurrent loss workup history and monitor early-pregnancy viability closely.');
+    }
+    if (stillbirthCount >= 1) {
+      actions.add(
+          'Plan closer fetal surveillance due to prior stillbirth history.');
+    }
+    if (ectopicCount >= 1) {
+      actions.add(
+          'Confirm pregnancy location and dating details if early-gestation uncertainty exists.');
+    }
+    if (pretermCount >= 1) {
+      score += 14;
+      factors.add(_RiskFactorItem(
+        factor: 'History of preterm delivery/preterm fetal loss',
+        influence: 'high',
+        sourceTable: 'pregnancies',
+        sourceId: widget.motherId,
+      ));
+      actions.add(
+          'Strengthen preterm labor counseling and symptom monitoring plan.');
+    }
+    if (priorMultifetalCount >= 1) {
+      score += 8;
+      factors.add(_RiskFactorItem(
+        factor: 'Prior multifetal pregnancy history',
+        influence: 'low',
+        sourceTable: 'pregnancies',
+        sourceId: widget.motherId,
+      ));
+    }
+
     if (systolic != null && diastolic != null) {
       notable.add('Current BP: $systolic/$diastolic mmHg');
       if (systolic >= 160 || diastolic >= 110) {
@@ -742,6 +1025,8 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
           influence: 'high',
           sourceTable: 'prenatal_checkups',
         ));
+        actions.add(
+            'Check urine protein and preeclampsia warning signs due to hypertensive range BP.');
       } else if (systolic >= 130 || diastolic >= 80) {
         score += 12;
         factors.add(_RiskFactorItem(
@@ -752,7 +1037,6 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
       }
     }
 
-    final fetalBeat = int.tryParse(_fetalBeatCtrl.text.trim());
     if (fetalBeat != null) {
       notable.add('Fetal heart rate: $fetalBeat bpm');
       if (fetalBeat < 110 || fetalBeat > 160) {
@@ -765,6 +1049,15 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
         actions.add(
             'Repeat fetal heart monitoring and correlate with fetal movement.');
       }
+    } else if (gaCurrent != null && gaCurrent >= 20) {
+      score += 8;
+      factors.add(_RiskFactorItem(
+        factor: 'Missing fetal heart rate at >=20 weeks gestation',
+        influence: 'low',
+        sourceTable: 'prenatal_checkups',
+      ));
+      actions.add(
+          'Document fetal heart rate in this checkup to complete fetal surveillance.');
     }
 
     if (_edema == 'moderate' || _edema == 'severe') {
@@ -774,6 +1067,20 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
         influence: _edema == 'severe' ? 'high' : 'low',
         sourceTable: 'prenatal_checkups',
       ));
+    }
+
+    if ((systolic != null && diastolic != null) &&
+        (systolic >= 140 || diastolic >= 90) &&
+        (_edema == 'moderate' || _edema == 'severe')) {
+      score += 16;
+      factors.add(_RiskFactorItem(
+        factor:
+            'Hypertension with edema pattern (possible preeclampsia warning)',
+        influence: 'high',
+        sourceTable: 'prenatal_checkups',
+      ));
+      actions.add(
+          'Escalate preeclampsia screening today (repeat BP, urine protein, severe symptom check).');
     }
 
     final warningSymptomsFiltered =
@@ -816,6 +1123,19 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
           'Prioritize immediate danger sign protocol and referral if persistent.');
     }
 
+    final dangerSymptomCount = dangerSymptomsFiltered.length;
+    if (dangerSymptomCount >= 2) {
+      score += 12;
+      factors.add(_RiskFactorItem(
+        factor:
+            'Multiple danger symptoms in current visit ($dangerSymptomCount)',
+        influence: 'high',
+        sourceTable: 'pregnancy_symptoms',
+      ));
+      actions.add(
+          'Consider urgent physician review due to multiple concurrent danger symptoms.');
+    }
+
     if (previousCheckups.isNotEmpty) {
       final latest = previousCheckups.first as Map<String, dynamic>;
       final prevSys = latest['blood_pressure_systolic'] as int?;
@@ -838,9 +1158,93 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
               'Compare with previous checkup trends and reinforce BP warning signs.');
         }
       }
+
+      final highBpHistoryCount = previousCheckups.where((row) {
+        final map = row as Map<String, dynamic>;
+        final s = map['blood_pressure_systolic'] as int?;
+        final d = map['blood_pressure_diastolic'] as int?;
+        if (s == null || d == null) return false;
+        return s >= 140 || d >= 90;
+      }).length;
+      final highBpTotal = highBpHistoryCount +
+          (((systolic != null && diastolic != null) &&
+                  (systolic >= 140 || diastolic >= 90))
+              ? 1
+              : 0);
+      if (highBpTotal >= 2) {
+        score += 16;
+        factors.add(_RiskFactorItem(
+          factor:
+              'Repeated hypertensive readings across visits ($highBpTotal episodes)',
+          influence: 'high',
+          sourceTable: 'prenatal_checkups',
+          sourceId: latest['prenatal_checkup_id'] as int?,
+        ));
+        actions.add(
+            'Treat as persistent BP risk pattern and increase follow-up frequency.');
+      }
+
+      final priorFhrAbnormal = previousCheckups.where((row) {
+        final map = row as Map<String, dynamic>;
+        final fhr = map['fetal_heart_beat'] as int?;
+        return fhr != null && (fhr < 110 || fhr > 160);
+      }).length;
+      if (priorFhrAbnormal >= 1 &&
+          fetalBeat != null &&
+          (fetalBeat < 110 || fetalBeat > 160)) {
+        score += 14;
+        factors.add(_RiskFactorItem(
+          factor: 'Recurrent abnormal fetal heart rate trend',
+          influence: 'high',
+          sourceTable: 'prenatal_checkups',
+          sourceId: latest['prenatal_checkup_id'] as int?,
+        ));
+      }
+
+      final previousWeight = (latest['checkup_weight'] as num?)?.toDouble();
+      final currentWeight = double.tryParse(_weightCtrl.text.trim());
+      if (previousWeight != null && currentWeight != null) {
+        final delta = currentWeight - previousWeight;
+        if (delta >= 3.0) {
+          score += 10;
+          factors.add(_RiskFactorItem(
+            factor:
+                'Rapid weight gain since last checkup (+${delta.toStringAsFixed(1)} kg)',
+            influence: 'low',
+            sourceTable: 'prenatal_checkups',
+            sourceId: latest['prenatal_checkup_id'] as int?,
+          ));
+        }
+      }
     }
 
-    final level = _riskLevelFromScore(score);
+    if (latestHistoricalOutcome != null) {
+      notable.add(
+          'Most recent prior pregnancy outcome: ${DateFormat('yyyy-MM-dd').format(latestHistoricalOutcome!)}');
+    }
+
+    if (_weightCtrl.text.trim().isEmpty ||
+        _sysCtrl.text.trim().isEmpty ||
+        _diaCtrl.text.trim().isEmpty) {
+      score += 8;
+      factors.add(_RiskFactorItem(
+        factor: 'Missing key vitals in current draft (weight/BP)',
+        influence: 'low',
+        sourceTable: 'prenatal_checkups',
+      ));
+      actions.add(
+          'Complete missing vitals before finalizing risk interpretation.');
+    }
+
+    final highRiskTriggerCount =
+        factors.where((f) => f.influence == 'high').length;
+    final lowRiskMonitorCount =
+        factors.where((f) => f.influence == 'low').length;
+    final level = highRiskTriggerCount > 0 ? 'high' : 'low';
+    score = highRiskTriggerCount.toDouble();
+
+    notable.add('High-risk triggers: $highRiskTriggerCount');
+    notable.add('Monitoring factors: $lowRiskMonitorCount');
     final dedupedActions = <String>[];
     for (final action in actions) {
       final normalized = action.trim().toLowerCase();
@@ -853,7 +1257,8 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
     }
 
     final fallbackAiText = 'Risk level: ${_riskLevelLabel(level)}. '
-        'Assessment is based on current checkup values, maternal demographics, pregnancy history, and prior checkups.';
+        'Classification follows trigger-based DOH-style screening: any high-risk trait marks the pregnancy as high risk. '
+        'Assessment is based on current checkup values, maternal demographics, full obstetric history, multifetal context, and prior checkup trends.';
 
     return _RiskSnapshot(
       level: level,
@@ -873,12 +1278,27 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
     final conditions =
         (_motherRiskContext?['medical_conditions'] as List? ?? const [])
             .cast<dynamic>();
+    final allergies =
+        (_motherRiskContext?['allergies'] as List? ?? const []).cast<dynamic>();
     final pastPregnancies =
         (_motherRiskContext?['past_pregnancies'] as List? ?? const [])
+            .cast<dynamic>();
+    final pastPregnancyOutcomes =
+        (_motherRiskContext?['past_pregnancy_outcomes'] as List? ?? const [])
             .cast<dynamic>();
     final previousCheckups =
         (_motherRiskContext?['previous_checkups'] as List? ?? const [])
             .cast<dynamic>();
+
+    final Map<int, List<Map<String, dynamic>>> outcomesByPregnancy = {};
+    for (final row in pastPregnancyOutcomes) {
+      if (row is! Map<String, dynamic>) continue;
+      final pid = row['pregnancy_id'] as int?;
+      if (pid == null) continue;
+      outcomesByPregnancy
+          .putIfAbsent(pid, () => <Map<String, dynamic>>[])
+          .add(row);
+    }
 
     final activeConditionLines = conditions
         .where((c) => (c['status'] ?? '').toString().toLowerCase() == 'active')
@@ -888,11 +1308,38 @@ ${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActio
       return diagnosis.isEmpty ? '- $name' : '- $name (diagnosed: $diagnosis)';
     }).toList();
 
+    final activeAllergyLines = allergies
+        .where((a) => (a['status'] ?? '').toString().toLowerCase() == 'active')
+        .map((a) {
+      final name = (a['allergen'] ?? 'Unknown allergen').toString();
+      final diagnosis = (a['diagnosis_date'] ?? '').toString();
+      return diagnosis.isEmpty ? '- $name' : '- $name (noted: $diagnosis)';
+    }).toList();
+
     final pastPregnancyLines = pastPregnancies.map((p) {
+      final pid = p['pregnancy_id'] as int?;
+      final fetalCount = p['fetal_count']?.toString() ?? '1';
+      final linkedOutcomes = pid == null
+          ? <Map<String, dynamic>>[]
+          : (outcomesByPregnancy[pid] ?? <Map<String, dynamic>>[]);
+
+      if (linkedOutcomes.isNotEmpty) {
+        final details = linkedOutcomes.asMap().entries.map((e) {
+          final o = e.value;
+          final outcome = (o['outcome'] ?? 'unknown').toString();
+          final date = (o['outcome_date'] ?? 'unknown').toString();
+          final ga = o['gestational_age_at_end']?.toString() ??
+              p['gestational_age_at_end']?.toString();
+          final method = (o['delivery_method'] ?? '').toString();
+          return 'F${e.key + 1}: $outcome on $date${ga == null ? '' : ', GA end: $ga weeks'}${method.isEmpty ? '' : ', method: $method'}';
+        }).join(' | ');
+        return '- pregnancy ${pid ?? 'unknown'} (fetal_count: $fetalCount): $details';
+      }
+
       final outcome = (p['outcome'] ?? 'unknown').toString();
       final date = (p['outcome_date'] ?? 'unknown').toString();
       final ga = p['gestational_age_at_end']?.toString();
-      return '- outcome: $outcome, date: $date${ga == null ? '' : ', GA end: $ga weeks'}';
+      return '- pregnancy ${pid ?? 'unknown'} (fetal_count: $fetalCount): $outcome on $date${ga == null ? '' : ', GA end: $ga weeks'}';
     }).toList();
 
     final previousCheckupLines = previousCheckups.map((c) {
@@ -915,6 +1362,7 @@ You are assisting a barangay midwife in the Philippines.
 Generate a detailed prenatal risk assessment using ONLY the provided data.
 Do not diagnose. Use supportive and safe language suitable for clinical handoff.
 State uncertainty clearly when data is missing.
+You must consider ALL records together: demographics, comorbidities, allergies, complete past pregnancy history, multifetal history, and prior prenatal trends.
 
 Return plain text with exactly these sections:
 RISK LEVEL:
@@ -924,9 +1372,11 @@ SUGGESTIVE ACTIONS:
 AI SUMMARY:
 
 Output rules:
-- In RISK FACTORS: provide at least 5 bullet points, each tied to specific values/history.
-- In SUGGESTIVE ACTIONS: provide 5 to 8 numbered actions, prioritized and concrete.
-- In AI SUMMARY: write a 3-5 sentence synthesis referencing the strongest risk drivers and immediate monitoring priorities.
+- In RISK FACTORS: provide at least 8 bullet points, each tied to specific values/history.
+- In SUGGESTIVE ACTIONS: provide 6 to 10 numbered actions, prioritized and concrete.
+- In AI SUMMARY: write a 5-8 sentence synthesis referencing the strongest risk drivers, trend concerns, and immediate monitoring priorities.
+- Explicitly mention multifetal implications when fetal_count > 1 in current or prior records.
+- Explicitly mention recurrent pattern risks (repeated high BP, repeated danger symptoms, recurrent losses) when present.
 - Never invent data; only use what is present below.
 
 PATIENT CONTEXT
@@ -936,8 +1386,11 @@ PATIENT CONTEXT
 - Maternal height: ${mother?['height'] ?? 'unknown'} cm
 - Maternal weight baseline: ${mother?['weight'] ?? 'unknown'} kg
 - Blood type: ${mother?['blood_type'] ?? 'unknown'}
+- Current pregnancy fetal count: $_fetalCount
 - Active medical conditions:
 ${activeConditionLines.isEmpty ? '- none recorded' : activeConditionLines.join('\n')}
+- Active allergies:
+${activeAllergyLines.isEmpty ? '- none recorded' : activeAllergyLines.join('\n')}
 - Past pregnancy records:
 ${pastPregnancyLines.isEmpty ? '- none recorded' : pastPregnancyLines.join('\n')}
 - Previous prenatal checkups:
@@ -960,8 +1413,10 @@ ${symptomLines.isEmpty ? '- none recorded' : symptomLines.join('\n')}
 
 RULE BASED PRE-ASSESSMENT
 - Level: ${draft.level}
-- Score: ${draft.score.toStringAsFixed(1)}
+- High-risk trigger count: ${draft.score.toStringAsFixed(0)}
+- Trigger rule: any high-risk trait => High Risk
 - Factors: ${draft.factors.map((f) => '${f.factor} [${f.influence}]').join('; ')}
+- Notable records: ${draft.notableRecords.join('; ')}
 - Suggested actions: ${draft.suggestedActions.join('; ')}
 
 Make the response practical, accurate, and suitable for a midwife handoff note.
@@ -1342,6 +1797,13 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
     }
 
     if (_step == 1) {
+      if (_fetalCount != _originalFetalCount &&
+          _fetalCountReasonCtrl.text.trim().isEmpty) {
+        setState(
+            () => _fetalCountError = 'Required because fetal count changed');
+        _showMessage('Please provide a reason for the fetal count change.');
+        return false;
+      }
       final fetalBeatText = _fetalBeatCtrl.text.trim();
       if (fetalBeatText.isNotEmpty) {
         final fetalBeat = int.tryParse(fetalBeatText);
@@ -2161,6 +2623,24 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
 
       final prenatalCheckupId = checkup['prenatal_checkup_id'] as int;
 
+      if (_fetalCount != _originalFetalCount) {
+        await Supabase.instance.client
+            .from('pregnancies')
+            .update({'fetal_count': _fetalCount}).eq(
+                'pregnancy_id', widget.pregnancyId);
+
+        await Supabase.instance.client.from('audit_trail').insert({
+          'action': 'UPDATE',
+          'table_name': 'pregnancies',
+          'row_id': widget.pregnancyId,
+          'old_data': {'fetal_count': _originalFetalCount},
+          'new_data': {'fetal_count': _fetalCount},
+          'changed_by': _accountId,
+          'description':
+              'Midwife modified fetal count during checkup. Reason: ${_fetalCountReasonCtrl.text.trim()}',
+        });
+      }
+
       await _insertSymptomRecords(prenatalCheckupId);
 
       await _insertMedicationRecords();
@@ -2382,6 +2862,99 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _sectionCard(
+          title: 'Fetal Count',
+          child: _loadingFetalCount
+              ? const SizedBox(
+                  height: 48,
+                  child:
+                      Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.remove_circle_outline,
+                              color: AppColors.brandPrimary),
+                          onPressed: () {
+                            if (_fetalCount > 1) {
+                              setState(() {
+                                _fetalCount--;
+                                _fetalCountError = null;
+                              });
+                            }
+                          },
+                        ),
+                        Expanded(
+                          child: Text(
+                            '$_fetalCount Fetus${_fetalCount > 1 ? 'es' : ''}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.add_circle_outline,
+                              color: AppColors.brandPrimary),
+                          onPressed: () {
+                            if (_fetalCount < 5) {
+                              setState(() {
+                                _fetalCount++;
+                                _fetalCountError = null;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    if (_fetalCount != _originalFetalCount) ...[
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Reason for change *',
+                        style: TextStyle(
+                            fontSize: 13, color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _fetalCountReasonCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'E.g., Vanishing twin, Demise',
+                          errorText: _fetalCountError,
+                          border: OutlineInputBorder(
+                            borderSide: const BorderSide(
+                                color: AppColors.borderPrimary),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(
+                                color: AppColors.borderPrimary),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide:
+                                const BorderSide(color: AppColors.brandPrimary),
+                          ),
+                          contentPadding: const EdgeInsets.all(12),
+                        ),
+                        onChanged: (_) {
+                          if (_fetalCountError != null)
+                            setState(() => _fetalCountError = null);
+                        },
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'This change will be logged in the audit trail.',
+                        style:
+                            TextStyle(fontSize: 11, color: AppColors.warning),
+                      ),
+                    ],
+                  ],
+                ),
+        ),
+        const SizedBox(height: 12),
         _sectionCard(
           title: 'Fetal Position',
           child: DropdownButtonFormField<String>(
@@ -3282,7 +3855,38 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
         ? (_riskSnapshot?.aiAssessment ?? '')
         : _aiAssessmentCtrl.text.trim();
     final lineCount = '\n'.allMatches(content).length + 1;
-    final editorLines = (lineCount + 2).clamp(4, 22) as int;
+    final editorLines = (lineCount + 2).clamp(4, 22);
+
+    Widget statPill({
+      required IconData icon,
+      required String label,
+      Color? color,
+    }) {
+      final fg = color ?? AppColors.textSecondary;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: fg.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: fg.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: fg,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3314,52 +3918,50 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
           ),
         ),
         _sectionCard(
-          title: 'AI Risk Assessment',
+          title: 'Risk Decision Workspace',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (_riskSnapshot != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _riskLevelColor(_riskSnapshot!.level)
-                            .withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: _riskLevelColor(_riskSnapshot!.level)
-                              .withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Text(
-                        _riskLevelLabel(_riskSnapshot!.level),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: _riskLevelColor(_riskSnapshot!.level),
-                        ),
-                      ),
+                    statPill(
+                      icon: Icons.flag_outlined,
+                      label: _riskLevelLabel(_riskSnapshot!.level),
+                      color: _riskLevelColor(_riskSnapshot!.level),
                     )
                   else
-                    const Text(
-                      'Risk pending',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    statPill(
+                      icon: Icons.hourglass_empty_rounded,
+                      label: 'Risk Pending',
                     ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _loadingRiskPreview
-                        ? null
-                        : () => _refreshRiskPreview(force: true),
-                    icon: const Icon(Icons.refresh, size: 15),
-                    label: const Text('Refresh AI'),
+                  if (_riskSnapshot != null)
+                    statPill(
+                      icon: Icons.speed_rounded,
+                      label:
+                          'High-risk triggers ${_riskSnapshot!.score.toStringAsFixed(0)}',
+                      color: AppColors.brandPrimary,
+                    ),
+                  statPill(
+                    icon: Icons.fact_check_outlined,
+                    label: 'Factors ${_editableRiskFactors.length}',
+                    color: AppColors.brandAccent,
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _loadingRiskPreview
+                      ? null
+                      : () => _refreshRiskPreview(force: true),
+                  icon: const Icon(Icons.refresh, size: 15),
+                  label: const Text('Refresh AI Assessment'),
+                ),
               ),
               if (_loadingRiskPreview)
                 const Padding(
@@ -3381,18 +3983,15 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
               if (_riskSnapshot != null) ...[
                 _buildAssessmentPhaseChip(),
                 const SizedBox(height: 6),
-                _summaryRow(
-                    'Risk score', _riskSnapshot!.score.toStringAsFixed(1)),
-                const SizedBox(height: 6),
                 const Text(
-                  'System Risk (Editable)',
+                  'Triage Override',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -3423,116 +4022,158 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Detected by System',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSecondary,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderPrimary),
                   ),
-                ),
-                const SizedBox(height: 4),
-                if (_riskSnapshot!.notableRecords.isEmpty)
-                  const Text(
-                    'No notable records detected.',
-                    style:
-                        TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                  )
-                else
-                  ..._riskSnapshot!.notableRecords.map(
-                    (r) => Padding(
-                      padding: const EdgeInsets.only(bottom: 3),
-                      child: Text(
-                        '\u2022 $r',
-                        style: const TextStyle(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Clinical Signals',
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.textPrimary,
-                          height: 1.35,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textSecondary,
                         ),
                       ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                if (_editableRiskFactors.isEmpty)
-                  const Text(
-                    'No major risk factors identified from current records.',
-                    style:
-                        TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                  )
-                else
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _editableRiskFactors.asMap().entries.map((e) {
-                      final f = e.value;
-                      final idx = e.key;
-                      final isHigh = f.influence == 'high';
-                      return InputChip(
-                        label: Text('${f.factor} (${f.influence})'),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          color:
-                              isHigh ? AppColors.error : AppColors.textPrimary,
+                      const SizedBox(height: 6),
+                      if (_riskSnapshot!.notableRecords.isEmpty)
+                        const Text(
+                          'No notable records detected.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: _riskSnapshot!.notableRecords.map((r) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border:
+                                    Border.all(color: AppColors.borderPrimary),
+                              ),
+                              child: Text(
+                                r,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
-                        selected: isHigh,
-                        selectedColor: isHigh
-                            ? AppColors.error.withValues(alpha: 0.14)
-                            : AppColors.bgSecondary,
-                        checkmarkColor: AppColors.error,
-                        deleteIconColor:
-                            isHigh ? AppColors.error : AppColors.textSecondary,
-                        onPressed: _isEditingAiAssessment
-                            ? () => setState(() {
-                                  _editableRiskFactors[idx] = _RiskFactorItem(
-                                    factor: f.factor,
-                                    influence: isHigh ? 'low' : 'high',
-                                    sourceTable: f.sourceTable,
-                                    sourceId: f.sourceId,
-                                  );
-                                  _aiResponseApproved = false;
-                                })
-                            : null,
-                        onDeleted: _isEditingAiAssessment
-                            ? () => setState(() {
-                                  _editableRiskFactors.removeAt(idx);
-                                  _aiResponseApproved = false;
-                                })
-                            : null,
-                      );
-                    }).toList(),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Risk Factors',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (_editableRiskFactors.isEmpty)
+                        const Text(
+                          'No major risk factors identified from current records.',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
+                        )
+                      else
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children:
+                              _editableRiskFactors.asMap().entries.map((e) {
+                            final f = e.value;
+                            final idx = e.key;
+                            final isHigh = f.influence == 'high';
+                            return InputChip(
+                              label: Text('${f.factor} (${f.influence})'),
+                              labelStyle: TextStyle(
+                                fontSize: 12,
+                                color: isHigh
+                                    ? AppColors.error
+                                    : AppColors.textPrimary,
+                              ),
+                              selected: isHigh,
+                              selectedColor: isHigh
+                                  ? AppColors.error.withValues(alpha: 0.14)
+                                  : Colors.white,
+                              checkmarkColor: AppColors.error,
+                              deleteIconColor: isHigh
+                                  ? AppColors.error
+                                  : AppColors.textSecondary,
+                              onPressed: _isEditingAiAssessment
+                                  ? () => setState(() {
+                                        _editableRiskFactors[idx] =
+                                            _RiskFactorItem(
+                                          factor: f.factor,
+                                          influence: isHigh ? 'low' : 'high',
+                                          sourceTable: f.sourceTable,
+                                          sourceId: f.sourceId,
+                                        );
+                                        _aiResponseApproved = false;
+                                      })
+                                  : null,
+                              onDeleted: _isEditingAiAssessment
+                                  ? () => setState(() {
+                                        _editableRiskFactors.removeAt(idx);
+                                        _aiResponseApproved = false;
+                                      })
+                                  : null,
+                            );
+                          }).toList(),
+                        ),
+                      if (_isEditingAiAssessment) ...[
+                        const SizedBox(height: 4),
+                        TextButton.icon(
+                          onPressed: () => _openAddRiskFactorDialog(),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Add Risk Factor'),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Suggested Actions',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ..._riskSnapshot!.suggestedActions.asMap().entries.map(
+                            (entry) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                '${entry.key + 1}. ${entry.value}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textPrimary,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ),
+                    ],
                   ),
+                ),
                 if (_isEditingAiAssessment) ...[
-                  const SizedBox(height: 6),
-                  TextButton.icon(
-                    onPressed: () => _openAddRiskFactorDialog(),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Risk Factor Chip'),
-                  ),
-                ],
-                const SizedBox(height: 8),
-                const Text(
-                  'Suggestive Actions',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                ..._riskSnapshot!.suggestedActions.map(
-                  (a) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      '- $a',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textPrimary,
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 8),
+                ] else
+                  const SizedBox(height: 12),
                 const Text(
                   'Final Risk Assessment',
                   style: TextStyle(
@@ -3586,90 +4227,83 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                     ),
                   ),
                 const SizedBox(height: 6),
-                if (!_isEditingAiAssessment)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _aiAssessmentEditCtrl.text = _aiAssessmentCtrl.text;
-                          _isEditingAiAssessment = true;
-                          _aiResponseApproved = false;
-                        });
-                      },
-                      icon: const Icon(Icons.edit_outlined, size: 16),
-                      label: const Text('Edit'),
-                    ),
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            setState(() {
-                              _aiAssessmentEditCtrl.text =
-                                  _aiAssessmentCtrl.text;
-                              _editableRiskLevel = _riskSnapshot!.level;
-                              _editableRiskFactors = List<_RiskFactorItem>.from(
-                                  _riskSnapshot!.factors);
-                              _isEditingAiAssessment = false;
-                            });
-                          },
-                          child: const Text('Discard'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () {
-                            final nextText = _aiAssessmentEditCtrl.text.trim();
-                            if (nextText.isEmpty) {
-                              _showMessage(
-                                  'Risk assessment text cannot be empty.');
-                              return;
-                            }
-                            setState(() {
-                              _aiAssessmentCtrl.text = nextText;
-                              _aiAssessmentEdited =
-                                  _aiAssessmentCtrl.text.trim() !=
-                                      (_aiOriginalAssessment ?? '').trim();
-                              _aiResponseApproved = false;
-                              _isEditingAiAssessment = false;
-                            });
-                          },
-                          child: const Text('Save'),
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 6),
                 Row(
                   children: [
                     Expanded(
-                      child: FilledButton.icon(
-                        onPressed: (_riskSnapshot == null ||
-                                _aiAssessmentCtrl.text.trim().isEmpty ||
-                                _isEditingAiAssessment)
-                            ? null
-                            : () {
-                                setState(() => _aiResponseApproved = true);
-                                _showMessage(
-                                    'AI response approved. You can now save the checkup.');
+                      child: !_isEditingAiAssessment
+                          ? OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _aiAssessmentEditCtrl.text =
+                                      _aiAssessmentCtrl.text;
+                                  _isEditingAiAssessment = true;
+                                  _aiResponseApproved = false;
+                                });
                               },
-                        icon: Icon(_aiResponseApproved
-                            ? Icons.verified_rounded
-                            : Icons.check_circle_outline_rounded),
-                        label: Text(_aiResponseApproved
-                            ? 'Approved'
-                            : 'Approve AI Response'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _aiResponseApproved
-                              ? AppColors.success
-                              : AppColors.brandPrimary,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text('Edit Note'),
+                            )
+                          : OutlinedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _aiAssessmentEditCtrl.text =
+                                      _aiAssessmentCtrl.text;
+                                  _editableRiskLevel = _riskSnapshot!.level;
+                                  _editableRiskFactors =
+                                      List<_RiskFactorItem>.from(
+                                          _riskSnapshot!.factors);
+                                  _isEditingAiAssessment = false;
+                                });
+                              },
+                              child: const Text('Discard Changes'),
+                            ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _isEditingAiAssessment
+                          ? FilledButton(
+                              onPressed: () {
+                                final nextText =
+                                    _aiAssessmentEditCtrl.text.trim();
+                                if (nextText.isEmpty) {
+                                  _showMessage(
+                                      'Risk assessment text cannot be empty.');
+                                  return;
+                                }
+                                setState(() {
+                                  _aiAssessmentCtrl.text = nextText;
+                                  _aiAssessmentEdited =
+                                      _aiAssessmentCtrl.text.trim() !=
+                                          (_aiOriginalAssessment ?? '').trim();
+                                  _aiResponseApproved = false;
+                                  _isEditingAiAssessment = false;
+                                });
+                              },
+                              child: const Text('Save Note'),
+                            )
+                          : FilledButton.icon(
+                              onPressed: (_riskSnapshot == null ||
+                                      _aiAssessmentCtrl.text.trim().isEmpty ||
+                                      _isEditingAiAssessment)
+                                  ? null
+                                  : () {
+                                      setState(
+                                          () => _aiResponseApproved = true);
+                                      _showMessage(
+                                          'AI response approved. You can now save the checkup.');
+                                    },
+                              icon: Icon(_aiResponseApproved
+                                  ? Icons.verified_rounded
+                                  : Icons.check_circle_outline_rounded),
+                              label: Text(
+                                  _aiResponseApproved ? 'Approved' : 'Approve'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: _aiResponseApproved
+                                    ? AppColors.success
+                                    : AppColors.brandPrimary,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
                     ),
                   ],
                 ),

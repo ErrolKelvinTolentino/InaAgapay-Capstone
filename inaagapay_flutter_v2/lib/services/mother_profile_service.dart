@@ -86,7 +86,14 @@ class MotherProfileService {
               delivery_id,
               delivery_date,
               place_of_delivery,
-              delivery_method
+              delivery_method,
+              fetus_number
+            ),
+            outcomes:pregnancy_outcomes (
+              outcome_id,
+              fetus_number,
+              outcome,
+              outcome_date
             )
           ''').eq('mother_id', motherId).order('created_at', ascending: false);
 
@@ -329,24 +336,33 @@ class MotherProfileService {
 
   // Conclude pregnancy
   static Future<bool> concludePregnancy(
-      int pregnancyId, Map<String, dynamic> data) async {
+      int pregnancyId,
+      double? gestationalAgeAtEnd,
+      List<Map<String, dynamic>> fetalOutcomes) async {
     try {
       await client.from('pregnancies').update({
         'status': 'ended',
-        'outcome': data['outcome'],
-        'outcome_date': data['outcome_date'],
-        'gestational_age_at_end': data['gestational_age_at_end'],
+        'gestational_age_at_end': gestationalAgeAtEnd,
         'ended_at': DateTime.now().toIso8601String(),
       }).eq('pregnancy_id', pregnancyId);
 
-      // If live birth or stillbirth, add delivery record
-      if (data['outcome'] == 'live_birth' || data['outcome'] == 'stillbirth') {
-        await client.from('deliveries').insert({
+      for (var f in fetalOutcomes) {
+        await client.from('pregnancy_outcomes').insert({
           'pregnancy_id': pregnancyId,
-          'delivery_date': data['delivery_date'],
-          'place_of_delivery': data['place_of_delivery'],
-          'delivery_method': data['delivery_method'],
+          'fetus_number': f['fetus_number'],
+          'outcome': f['outcome'],
+          'outcome_date': f['outcome_date'],
         });
+
+        if (f['outcome'] == 'live_birth' || f['outcome'] == 'stillbirth') {
+          await client.from('deliveries').insert({
+            'pregnancy_id': pregnancyId,
+            'fetus_number': f['fetus_number'],
+            'delivery_date': f['delivery_date'],
+            'place_of_delivery': f['place_of_delivery'],
+            'delivery_method': f['delivery_method'],
+          });
+        }
       }
 
       return true;

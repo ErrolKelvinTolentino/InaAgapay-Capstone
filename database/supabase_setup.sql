@@ -173,6 +173,7 @@ CREATE TABLE prenatal_checkups (
     checkup_datetime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     next_schedule DATE
 );
+
 CREATE TABLE ultrasounds (
     ultrasound_id BIGSERIAL PRIMARY KEY,
     pregnancy_id BIGINT NOT NULL REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
@@ -645,7 +646,36 @@ ALTER TABLE pregnancies
 ALTER TABLE deliveries DROP CONSTRAINT IF EXISTS deliveries_pregnancy_id_key;
 ALTER TABLE deliveries ADD COLUMN fetus_number INT DEFAULT 1;
 
--- 4. Create indexes and disable RLS for the new table
+-- 4. Create indexes and disable RLS for the new tables
 CREATE INDEX idx_pregnancy_outcomes_pregnancy ON pregnancy_outcomes(pregnancy_id);
 ALTER TABLE pregnancy_outcomes DISABLE ROW LEVEL SECURITY;
+*/
+
+-- =====================================================
+-- ROLLBACK SCRIPT (UNDO ALTER STATEMENTS)
+-- Use these to revert the database to its previous state
+-- =====================================================
+/*
+-- 1. Restore deliveries table constraints and remove new column
+ALTER TABLE deliveries DROP COLUMN IF EXISTS fetus_number;
+ALTER TABLE deliveries ADD CONSTRAINT deliveries_pregnancy_id_key UNIQUE (pregnancy_id);
+
+-- 2. Restore old columns to pregnancies table and remove new column
+ALTER TABLE pregnancies
+    ADD COLUMN outcome VARCHAR(20) CHECK (
+        outcome IN (
+            'live_birth',
+            'stillbirth',
+            'miscarriage',
+            'abortion',
+            'ectopic'
+        )
+    ),
+    ADD COLUMN outcome_date DATE,
+    ADD COLUMN is_outcome_date_estimated BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE pregnancies DROP COLUMN IF EXISTS fetal_count;
+
+-- 3. Drop the new pregnancy_outcomes table (this automatically drops its index and RLS rule)
+DROP TABLE IF EXISTS pregnancy_outcomes CASCADE;
 */

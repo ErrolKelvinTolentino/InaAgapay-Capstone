@@ -20,7 +20,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     with SingleTickerProviderStateMixin {
   late Future<Map<String, dynamic>> _profileFuture;
   late TabController _tabController;
-  bool _riskExpanded = false;
 
   // Sort states
   String _checkupSort = 'desc';
@@ -380,16 +379,19 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   // Show conclude pregnancy dialog
   Future<void> _showConcludePregnancyDialog(
       Map<String, dynamic> pregnancy) async {
-    String outcome = 'live_birth';
-    DateTime? outcomeDate = DateTime.now();
-    DateTime? deliveryDate;
-    String? placeOfDelivery;
-    String? deliveryMethod;
-    double? gestationalAge;
+    final int fetalCount = pregnancy['fetal_count'] as int? ?? 1;
 
+    List<String> outcomes = List.filled(fetalCount, 'live_birth');
+    List<DateTime> outcomeDates = List.filled(fetalCount, DateTime.now());
+    List<DateTime?> deliveryDates = List.filled(fetalCount, null);
+    List<String?> placesOfDelivery = List.filled(fetalCount, null);
+    List<String?> deliveryMethods = List.filled(fetalCount, null);
+
+    double? gestationalAge;
     final lmpDate = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
     final gestAgeController = TextEditingController();
-    final placeController = TextEditingController();
+    final placeControllers =
+        List.generate(fetalCount, (_) => TextEditingController());
 
     if (lmpDate != null) {
       final weeks = DateTime.now().difference(lmpDate).inDays / 7;
@@ -414,160 +416,180 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
                 top: 16,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.flag, color: AppColors.brandPrimary),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Conclude Pregnancy',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Outcome dropdown
-                  DropdownButtonFormField<String>(
-                    value: outcome,
-                    decoration: const InputDecoration(labelText: 'Outcome'),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'live_birth', child: Text('Live Birth')),
-                      DropdownMenuItem(
-                          value: 'stillbirth', child: Text('Stillbirth')),
-                      DropdownMenuItem(
-                          value: 'miscarriage', child: Text('Miscarriage')),
-                      DropdownMenuItem(
-                          value: 'abortion', child: Text('Abortion')),
-                      DropdownMenuItem(
-                          value: 'ectopic', child: Text('Ectopic')),
-                    ],
-                    onChanged: (v) => setModal(() => outcome = v ?? outcome),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Outcome date
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Outcome Date'),
-                    subtitle:
-                        Text(DateFormat('MMM d, yyyy').format(outcomeDate!)),
-                    trailing: const Icon(Icons.calendar_today),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: outcomeDate!,
-                        firstDate: DateTime(1900),
-                        lastDate: DateTime.now(),
-                      );
-                      if (picked != null) {
-                        setModal(() {
-                          outcomeDate = picked;
-                          if (outcome == 'live_birth' ||
-                              outcome == 'stillbirth') {
-                            deliveryDate = picked;
-                          }
-                        });
-                      }
-                    },
-                  ),
-
-                  // Delivery details for live birth/stillbirth
-                  if (outcome == 'live_birth' || outcome == 'stillbirth') ...[
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: placeController,
-                      decoration:
-                          const InputDecoration(labelText: 'Place of Delivery'),
-                      onChanged: (v) => placeOfDelivery = v,
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: deliveryMethod,
-                      decoration:
-                          const InputDecoration(labelText: 'Delivery Method'),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'NSD',
-                            child: Text('Normal Spontaneous Delivery')),
-                        DropdownMenuItem(
-                            value: 'CS', child: Text('Cesarean Section')),
-                        DropdownMenuItem(
-                            value: 'Instrumental', child: Text('Instrumental')),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.flag, color: AppColors.brandPrimary),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Conclude Pregnancy',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
                       ],
-                      onChanged: (v) => setModal(() => deliveryMethod = v),
                     ),
-                  ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: gestAgeController,
+                      decoration: const InputDecoration(
+                          labelText: 'Gestational Age at End (weeks)'),
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) => gestationalAge = double.tryParse(v),
+                    ),
+                    const SizedBox(height: 16),
+                    for (int i = 0; i < fetalCount; i++) ...[
+                      if (fetalCount > 1)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: Text(
+                            'Fetus ${i + 1} Outcome',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ),
+                      DropdownButtonFormField<String>(
+                        value: outcomes[i],
+                        decoration: const InputDecoration(labelText: 'Outcome'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'live_birth', child: Text('Live Birth')),
+                          DropdownMenuItem(
+                              value: 'stillbirth', child: Text('Stillbirth')),
+                          DropdownMenuItem(
+                              value: 'miscarriage', child: Text('Miscarriage')),
+                          DropdownMenuItem(
+                              value: 'abortion', child: Text('Abortion')),
+                          DropdownMenuItem(
+                              value: 'ectopic', child: Text('Ectopic')),
+                        ],
+                        onChanged: (v) =>
+                            setModal(() => outcomes[i] = v ?? outcomes[i]),
+                      ),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Outcome Date'),
+                        subtitle: Text(
+                            DateFormat('MMM d, yyyy').format(outcomeDates[i])),
+                        trailing: const Icon(Icons.calendar_today),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: outcomeDates[i],
+                            firstDate: DateTime(1900),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setModal(() {
+                              outcomeDates[i] = picked;
+                              if (outcomes[i] == 'live_birth' ||
+                                  outcomes[i] == 'stillbirth') {
+                                deliveryDates[i] = picked;
+                              }
+                            });
+                          }
+                        },
+                      ),
+                      if (outcomes[i] == 'live_birth' ||
+                          outcomes[i] == 'stillbirth') ...[
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: placeControllers[i],
+                          decoration: const InputDecoration(
+                              labelText: 'Place of Delivery'),
+                          onChanged: (v) => placesOfDelivery[i] = v,
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          value: deliveryMethods[i],
+                          decoration: const InputDecoration(
+                              labelText: 'Delivery Method'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'NSD',
+                                child: Text('Normal Spontaneous Delivery')),
+                            DropdownMenuItem(
+                                value: 'CS', child: Text('Cesarean Section')),
+                            DropdownMenuItem(
+                                value: 'Instrumental',
+                                child: Text('Instrumental')),
+                          ],
+                          onChanged: (v) =>
+                              setModal(() => deliveryMethods[i] = v),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      if (i < fetalCount - 1) const Divider(),
+                    ],
+                    ElevatedButton(
+                      onPressed: () async {
+                        for (int i = 0; i < fetalCount; i++) {
+                          if (outcomes[i] == 'live_birth' ||
+                              outcomes[i] == 'stillbirth') {
+                            if (deliveryMethods[i] == null) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content: Text(
+                                        'Please select delivery method for Fetus ${i + 1}')),
+                              );
+                              return;
+                            }
+                          }
+                        }
 
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: gestAgeController,
-                    decoration: const InputDecoration(
-                        labelText: 'Gestational Age at End (weeks)'),
-                    keyboardType: TextInputType.number,
-                    onChanged: (v) => gestationalAge = double.tryParse(v),
-                  ),
-                  const SizedBox(height: 16),
+                        final fetalOutcomes = <Map<String, dynamic>>[];
+                        for (int i = 0; i < fetalCount; i++) {
+                          fetalOutcomes.add({
+                            'fetus_number': i + 1,
+                            'outcome': outcomes[i],
+                            'outcome_date':
+                                outcomeDates[i].toIso8601String().split('T')[0],
+                            'delivery_date': deliveryDates[i]
+                                ?.toIso8601String()
+                                .split('T')[0],
+                            'place_of_delivery':
+                                placesOfDelivery[i] ?? placeControllers[i].text,
+                            'delivery_method': deliveryMethods[i],
+                          });
+                        }
 
-                  // Submit button
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (outcome == 'live_birth' || outcome == 'stillbirth') {
-                        if (deliveryMethod == null) {
+                        final success =
+                            await MotherProfileService.concludePregnancy(
+                          pregnancy['pregnancy_id'],
+                          gestationalAge,
+                          fetalOutcomes,
+                        );
+
+                        if (success && mounted) {
+                          Navigator.pop(ctx);
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                                content: Text('Please select delivery method')),
+                                content:
+                                    Text('Pregnancy concluded successfully')),
                           );
-                          return;
+                          _refresh();
                         }
-                      }
-
-                      final success =
-                          await MotherProfileService.concludePregnancy(
-                        pregnancy['pregnancy_id'],
-                        {
-                          'outcome': outcome,
-                          'outcome_date':
-                              outcomeDate?.toIso8601String().split('T')[0],
-                          'delivery_date':
-                              deliveryDate?.toIso8601String().split('T')[0],
-                          'place_of_delivery':
-                              placeOfDelivery ?? placeController.text,
-                          'delivery_method': deliveryMethod,
-                          'gestational_age_at_end': gestationalAge,
-                        },
-                      );
-
-                      if (success && mounted) {
-                        Navigator.pop(ctx);
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content:
-                                  Text('Pregnancy concluded successfully')),
-                        );
-                        _refresh();
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 48),
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                      child: const Text('Conclude Pregnancy'),
                     ),
-                    child: const Text('Conclude Pregnancy'),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -576,7 +598,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
 
     gestAgeController.dispose();
-    placeController.dispose();
+    for (final pc in placeControllers) pc.dispose();
   }
 
   Future<void> _startNewPregnancy({String? motherName}) async {
@@ -1354,7 +1376,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         itemCount: pastPregnancies.length,
         itemBuilder: (context, index) {
           final p = pastPregnancies[index] as Map<String, dynamic>;
-          final delivery = p['delivery'] as Map<String, dynamic>?;
+          final deliveries =
+              (p['delivery'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+                  [];
+          final outcomesList =
+              (p['outcomes'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+                  [];
+
+          final primaryOutcomeStr = outcomesList.isNotEmpty
+              ? outcomesList
+                  .map((o) => _formatOutcome(o['outcome'] as String?))
+                  .join(', ')
+              : '—';
+          final primaryOutcomeDate = outcomesList.isNotEmpty
+              ? _formatDate(outcomesList.first['outcome_date'] as String?)
+              : '—';
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -1364,29 +1400,57 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 child: const Icon(Icons.pregnant_woman,
                     color: AppColors.brandPrimary),
               ),
-              title: Text(_formatOutcome(p['outcome'])),
-              subtitle: Text('Ended: ${_formatDate(p['outcome_date'])}'),
+              title: Text(primaryOutcomeStr),
+              subtitle: Text('Ended: $primaryOutcomeDate'),
               children: [
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildInfoRow('Outcome', _formatOutcome(p['outcome'])),
-                      _buildInfoRow('Date', _formatDate(p['outcome_date'])),
                       _buildInfoRow(
                           'Gestational Age',
                           p['gestational_age_at_end'] != null
                               ? '${p['gestational_age_at_end']} weeks'
                               : '—'),
-                      if (delivery != null) ...[
-                        const SizedBox(height: 8),
-                        const Text('Delivery Details',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      for (int i = 0; i < outcomesList.length; i++) ...[
+                        if (outcomesList.length > 1)
+                          Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Text(
+                                  'Fetus ${outcomesList[i]['fetus_number'] ?? (i + 1)}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold))),
                         _buildInfoRow(
-                            'Place', delivery['place_of_delivery'] ?? '—'),
+                            'Outcome',
+                            _formatOutcome(
+                                outcomesList[i]['outcome'] as String?)),
                         _buildInfoRow(
-                            'Method', delivery['delivery_method'] ?? '—'),
+                            'Date',
+                            _formatDate(
+                                outcomesList[i]['outcome_date'] as String?)),
+                        ...() {
+                          final deliveryList = deliveries
+                              .where((d) =>
+                                  d['fetus_number'] ==
+                                  outcomesList[i]['fetus_number'])
+                              .toList();
+                          if (deliveryList.isNotEmpty) {
+                            final delivery = deliveryList.first;
+                            return [
+                              _buildInfoRow(
+                                  'Place',
+                                  delivery['place_of_delivery']?.toString() ??
+                                      '—'),
+                              _buildInfoRow(
+                                  'Method',
+                                  delivery['delivery_method']?.toString() ??
+                                      '—'),
+                            ];
+                          }
+                          return <Widget>[];
+                        }()
                       ],
                     ],
                   ),

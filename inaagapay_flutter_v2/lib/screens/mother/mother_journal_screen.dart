@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 // Change these:
 import '../../theme/app_colors.dart';
-import '../../services/auth_storage.dart';
 
 class MotherJournalScreen extends StatefulWidget {
   const MotherJournalScreen({super.key});
@@ -30,12 +29,14 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
         _entries.addAll([
           {
             'title': 'First Ultrasound',
-            'content': 'Saw the baby for the first time! Heartbeat was strong at 142 bpm.',
+            'content':
+                'Saw the baby for the first time! Heartbeat was strong at 142 bpm.',
             'created_at': DateTime.now().subtract(const Duration(days: 2)),
           },
           {
             'title': 'Feeling Kicks',
-            'content': 'Felt the baby kick for the first time today! Such an amazing feeling.',
+            'content':
+                'Felt the baby kick for the first time today! Such an amazing feeling.',
             'created_at': DateTime.now().subtract(const Duration(days: 5)),
           },
         ]);

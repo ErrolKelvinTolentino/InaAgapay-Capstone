@@ -3,18 +3,15 @@ import '../theme/app_colors.dart';
 import '../models/vaccine_schedule.dart';
 import 'status_indicator.dart';
 
-
 class VaccineList extends StatelessWidget {
   final Map<String, VaccineStatus> statuses;
   final int childAgeInWeeks;
-
 
   const VaccineList({
     super.key,
     required this.statuses,
     required this.childAgeInWeeks,
   });
-
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +26,11 @@ class VaccineList extends StatelessWidget {
     );
   }
 }
+
 class _VaccineGroupCard extends StatelessWidget {
   final VaccineAgeGroup group;
   final Map<String, VaccineStatus> statuses;
   final int childAgeInWeeks;
-
 
   const _VaccineGroupCard({
     required this.group,
@@ -41,27 +38,18 @@ class _VaccineGroupCard extends StatelessWidget {
     required this.childAgeInWeeks,
   });
 
-
   @override
   Widget build(BuildContext context) {
     // 🧠 determine if age is reached
     final bool ageReached = childAgeInWeeks >= group.week;
-
 
     // 🧠 determine vaccine completion
     final bool allDone = group.vaccines.every(
       (v) => statuses[v.key] == VaccineStatus.done,
     );
 
-
-    final bool someDone = group.vaccines.any(
-      (v) => statuses[v.key] == VaccineStatus.done,
-    );
-
-
     Color headerColor;
     IconData headerIcon;
-
 
     if (!ageReached) {
       headerColor = AppColors.brandPrimary;
@@ -73,7 +61,6 @@ class _VaccineGroupCard extends StatelessWidget {
       headerColor = AppColors.warning;
       headerIcon = Icons.circle;
     }
-
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -109,17 +96,12 @@ class _VaccineGroupCard extends StatelessWidget {
               ],
             ),
 
-
             const SizedBox(height: 12),
-
 
             // 💉 VACCINES
             ...group.vaccines.map((vaccine) {
               final status = statuses[vaccine.key] ??
-                  (ageReached
-                      ? VaccineStatus.pending
-                      : VaccineStatus.locked);
-
+                  (ageReached ? VaccineStatus.pending : VaccineStatus.locked);
 
               return _VaccineRow(
                 name: vaccine.name,
@@ -132,22 +114,20 @@ class _VaccineGroupCard extends StatelessWidget {
     );
   }
 }
+
 class _VaccineRow extends StatelessWidget {
   final String name;
   final VaccineStatus status;
-
 
   const _VaccineRow({
     required this.name,
     required this.status,
   });
 
-
   @override
   Widget build(BuildContext context) {
     Color color;
     Widget trailing;
-
 
     switch (status) {
       case VaccineStatus.done:
@@ -158,25 +138,20 @@ class _VaccineRow extends StatelessWidget {
         );
         break;
 
-
       case VaccineStatus.pending:
         color = AppColors.warning;
         trailing = Container(
           child: const StatusIndicator(
             status: StatusIndicatorType.pending,
           ),
-
-
         );
         break;
-
 
       case VaccineStatus.locked:
         color = AppColors.brandPrimary;
         trailing = const SizedBox();
         break;
     }
-
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -205,6 +180,3 @@ class _VaccineRow extends StatelessWidget {
     );
   }
 }
-
-
-
