@@ -29,7 +29,8 @@ class MainButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.brandPrimary,
           foregroundColor: Colors.white,
-          elevation: 0,
+          elevation: 4,
+          shadowColor: AppColors.brandPrimary.withValues(alpha: 0.4),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(28),
           ),

@@ -7,6 +7,7 @@ import '../../widgets/main_button.dart';
 import '../../widgets/clickable_text.dart';
 import '../../services/supabase_service.dart';
 import '../../services/auth_storage.dart';
+import '../../widgets/validation_message.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -23,6 +24,12 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _hasError = false;
   String _errorMessage = '';
+
+  bool get _isEmailValid {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return true;
+    return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
+  }
 
   @override
   void initState() {
@@ -44,6 +51,14 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _hasError = true;
         _errorMessage = 'Please fill in all fields';
+      });
+      return;
+    }
+
+    if (!_isEmailValid) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Please enter a valid email address';
       });
       return;
     }
@@ -163,9 +178,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 keyboardType: TextInputType.emailAddress,
                 leadingIcon: Icons.email_outlined,
                 onChanged: (_) {
+                  setState(() {});
                   if (_hasError) setState(() => _hasError = false);
                 },
               ),
+
+              if (_emailController.text.isNotEmpty && !_isEmailValid) ...[
+                const SizedBox(height: 8),
+                const ValidationMessage(
+                  message: 'Please enter a valid email address',
+                  type: ValidationType.error,
+                ),
+              ],
 
               const SizedBox(height: 20),
 
@@ -187,10 +211,9 @@ class _LoginScreenState extends State<LoginScreen> {
               // Error message
               if (_hasError) ...[
                 const SizedBox(height: 12),
-                Text(
-                  _errorMessage,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: AppColors.error),
+                ValidationMessage(
+                  message: _errorMessage,
+                  type: ValidationType.error,
                 ),
               ],
 

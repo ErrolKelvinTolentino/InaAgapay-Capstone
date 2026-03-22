@@ -24,19 +24,12 @@ class PageTitle extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (leadingIcon != null) ...[
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.brandAccent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              leadingIcon,
-              color: AppColors.brandAccent,
-              size: 20,
-            ),
+          Icon(
+            leadingIcon,
+            color: textColor,
+            size: 24,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
         ],
         Text(
           title.toUpperCase(),
@@ -47,19 +40,14 @@ class PageTitle extends StatelessWidget {
             letterSpacing: 0.5,
           ),
         ),
-        if (trailingIcon != null)
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              trailingIcon,
-              color: AppColors.success,
-              size: 18,
-            ),
+        if (trailingIcon != null) ...[
+          const SizedBox(width: 8),
+          Icon(
+            trailingIcon,
+            color: textColor,
+            size: 24,
           ),
+        ],
       ],
     );
   }
