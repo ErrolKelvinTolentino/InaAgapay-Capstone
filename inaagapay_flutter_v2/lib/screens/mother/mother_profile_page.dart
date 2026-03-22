@@ -17,7 +17,6 @@ import '../../widgets/risk_panel.dart';
 import '../../services/risk_engine.dart';
 import '../../models/add_mother_form_data.dart';
 import '../../widgets/full_screen_image_viewer.dart';
-import '../../widgets/risk_summary_card.dart';
 
 class MotherProfilePage extends StatefulWidget {
   final int motherId;
@@ -1625,7 +1624,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
 
             // Risk Panel
             if (currentPregnancy != null)
-              RiskSummaryCard(assessment: riskAssessment),
+              RiskPanel(assessment: riskAssessment),
 
             const SizedBox(height: 16),
 
