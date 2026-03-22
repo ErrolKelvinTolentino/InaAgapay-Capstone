@@ -35,8 +35,8 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
   String sex = 'male';
 
   bool get isFormValid =>
-      firstNameCtrl.text.isNotEmpty &&
-      lastNameCtrl.text.isNotEmpty;
+      firstNameCtrl.text.trim().isNotEmpty &&
+      lastNameCtrl.text.trim().isNotEmpty;
 
   @override
   void dispose() {
@@ -96,7 +96,7 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                   child: Column(
                     children: [
                       AppInputField(
-                        hintText: 'First Name',
+                        hintText: 'First Name *',
                         controller: firstNameCtrl,
                         isRequired: true,
                         onChanged: (_) => setState(() {}),
@@ -104,7 +104,7 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                       const SizedBox(height: 16),
 
                       AppInputField(
-                        hintText: 'Last Name',
+                        hintText: 'Last Name *',
                         controller: lastNameCtrl,
                         isRequired: true,
                         onChanged: (_) => setState(() {}),
@@ -137,7 +137,7 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Sex',
+                              'Sex *',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -267,8 +267,6 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                       child: MainButton(
                         label: 'Continue',
                         onPressed: isFormValid ? () {
-                          if (!_formKey.currentState!.validate()) return;
-
                           Navigator.push(
                             context,
                             MaterialPageRoute(

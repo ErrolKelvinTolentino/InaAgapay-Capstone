@@ -9,7 +9,6 @@ import '../../widgets/main_button.dart';
 import '../../widgets/small_description.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/app_input_field.dart';
-import 'midwife_children_screen.dart';
 
 class AddChildStep4Birth extends StatefulWidget {
   final int motherId;
@@ -49,12 +48,15 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
   DateTime? selectedBirthdate;
 
-  bool get isFormValid =>
-      birthdateCtrl.text.isNotEmpty &&
-      birthWeightCtrl.text.isNotEmpty &&
-      birthLengthCtrl.text.isNotEmpty &&
-      provinceCtrl.text.isNotEmpty &&
-      cityCtrl.text.isNotEmpty;
+  bool get isFormValid {
+    final birthdateValid = birthdateCtrl.text.isNotEmpty;
+    final birthWeightValid = birthWeightCtrl.text.isNotEmpty && double.tryParse(birthWeightCtrl.text) != null;
+    final birthLengthValid = birthLengthCtrl.text.isNotEmpty && double.tryParse(birthLengthCtrl.text) != null;
+    final provinceValid = provinceCtrl.text.isNotEmpty;
+    final cityValid = cityCtrl.text.isNotEmpty;
+    
+    return birthdateValid && birthWeightValid && birthLengthValid && provinceValid && cityValid;
+  }
 
   Future<void> _pickBirthdate() async {
     final picked = await showDatePicker(
@@ -112,6 +114,7 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
       if (!mounted) return;
 
+      // Show success dialog and then pop back to children screen (preserving navigation)
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -122,13 +125,11 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
             content: 'The child has been successfully registered.',
             buttonText: 'OK',
             onPressed: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const MidwifeChildrenScreen(),
-                ),
-                (route) => false,
-              );
+              // Pop all the way back to the children screen (preserves navigation stack)
+              Navigator.popUntil(context, (route) => route.isFirst);
+              // Then pop again to go back to the screen before the add flow started
+              // Since the children screen is part of the shell, we need to navigate back properly
+              Navigator.pop(context);
             },
           );
         },
@@ -218,7 +219,7 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                           children: [
                             // Birth Date
                             AppInputField(
-                              hintText: 'Birth Date',
+                              hintText: 'Birth Date *',
                               controller: birthdateCtrl,
                               isRequired: true,
                               readOnly: true,
@@ -230,19 +231,21 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
                             // Birth Weight
                             AppInputField(
-                              hintText: 'Birth Weight (kg)',
+                              hintText: 'Birth Weight (kg) *',
                               controller: birthWeightCtrl,
                               isRequired: true,
                               keyboardType: TextInputType.number,
+                              onChanged: (_) => setState(() {}),
                             ),
                             const SizedBox(height: 16),
 
                             // Birth Length
                             AppInputField(
-                              hintText: 'Birth Length (cm)',
+                              hintText: 'Birth Length (cm) *',
                               controller: birthLengthCtrl,
                               isRequired: true,
                               keyboardType: TextInputType.number,
+                              onChanged: (_) => setState(() {}),
                             ),
                             const SizedBox(height: 16),
 
@@ -256,17 +259,19 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
                             // Birth Province
                             AppInputField(
-                              hintText: 'Birth Province',
+                              hintText: 'Birth Province *',
                               controller: provinceCtrl,
                               isRequired: true,
+                              onChanged: (_) => setState(() {}),
                             ),
                             const SizedBox(height: 16),
 
                             // Birth City
                             AppInputField(
-                              hintText: 'Birth City/Municipality',
+                              hintText: 'Birth City/Municipality *',
                               controller: cityCtrl,
                               isRequired: true,
+                              onChanged: (_) => setState(() {}),
                             ),
                             const SizedBox(height: 16),
 

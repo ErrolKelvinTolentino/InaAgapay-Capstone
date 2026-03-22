@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_colors.dart';
-import '../../widgets/main_header.dart';
 import '../../widgets/small_description.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/child_card.dart';
@@ -22,7 +21,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
   List<Map<String, dynamic>> _allChildren = [];
   List<Map<String, dynamic>> _filteredChildren = [];
   bool _isLoading = true;
-  String _sortBy = 'recent'; // 'recent' or 'name'
+  String _sortBy = 'recent';
 
   @override
   void initState() {
@@ -34,7 +33,8 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await Supabase.instance.client
+      // First, fetch all children with mother info
+      final childrenResponse = await Supabase.instance.client
           .from('children')
           .select('''
             child_id,
@@ -49,19 +49,32 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
               account:account_id (
                 first_name,
                 last_name
-              ),
-              birth_details (
-                birthdate
               )
             )
           ''')
           .order('added_at', ascending: false);
 
-      final List<Map<String, dynamic>> children = List<Map<String, dynamic>>.from(response);
+      final List<Map<String, dynamic>> children = List<Map<String, dynamic>>.from(childrenResponse);
+      
+      // Then fetch birth details for each child separately
+      final List<Map<String, dynamic>> enrichedChildren = [];
+      
+      for (var child in children) {
+        final birthDetailsResponse = await Supabase.instance.client
+            .from('birth_details')
+            .select('birthdate')
+            .eq('child_id', child['child_id'])
+            .maybeSingle();
+        
+        enrichedChildren.add({
+          ...child,
+          'birthdate': birthDetailsResponse?['birthdate'],
+        });
+      }
       
       setState(() {
-        _allChildren = children;
-        _filteredChildren = children;
+        _allChildren = enrichedChildren;
+        _filteredChildren = enrichedChildren;
         _isLoading = false;
       });
     } catch (e) {
@@ -109,16 +122,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     return '$firstName $lastName'.trim();
   }
 
-  String? getBirthdate(Map<String, dynamic> child) {
-    final mother = child['mother'] as Map<String, dynamic>?;
-    if (mother == null) return null;
-    final birthDetailsList = mother['birth_details'] as List?;
-    if (birthDetailsList == null || birthDetailsList.isEmpty) return null;
-    final birthDetails = birthDetailsList.first as Map<String, dynamic>?;
-    if (birthDetails == null) return null;
-    return birthDetails['birthdate']?.toString();
-  }
-
   void _filterChildren(String query) {
     final searchLower = query.toLowerCase();
     setState(() {
@@ -128,7 +131,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         return fullName.contains(searchLower) || motherName.contains(searchLower);
       }).toList();
 
-      // Apply sorting
       if (_sortBy == 'name') {
         _filteredChildren.sort((a, b) {
           final nameA = '${a['last_name']}${a['first_name']}'.toLowerCase();
@@ -171,19 +173,18 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(72),
-        child: MainHeader(title: 'CHILDREN'),
-      ),
       body: SafeArea(
+        top: false,
+        bottom: false,
         child: RefreshIndicator(
           onRefresh: _loadChildren,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Top Info Card
                 Container(
                   height: 96,
                   decoration: BoxDecoration(
@@ -229,6 +230,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                 ),
                 const SizedBox(height: 20),
 
+                // Search and Filter Container
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -293,12 +295,14 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const SmallDescription(
-                  text: 'Tap a child to view health records',
+                const Text(
+                  'Tap a child to view health records',
                   textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 20),
 
+                // Child List
                 if (_isLoading)
                   const Center(
                     child: Padding(
@@ -319,25 +323,23 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                     ),
                   )
                 else
-                  Column(
-                    children: _filteredChildren.map((child) {
-                      final birthdate = getBirthdate(child);
-                      final age = calculateAge(birthdate);
-                      final fullName = '${child['first_name']} ${child['last_name']}'.trim();
-                      final motherName = getMotherName(child);
+                  ..._filteredChildren.map((child) {
+                    final birthdate = child['birthdate']?.toString();
+                    final age = calculateAge(birthdate);
+                    final fullName = '${child['first_name']} ${child['last_name']}'.trim();
+                    final motherName = getMotherName(child);
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: ChildCard(
-                          fullName: fullName,
-                          ageText: age,
-                          motherName: motherName,
-                          image: null,
-                          onTap: () => _openChildProfile(child),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: ChildCard(
+                        fullName: fullName,
+                        ageText: age,
+                        motherName: motherName,
+                        image: null,
+                        onTap: () => _openChildProfile(child),
+                      ),
+                    );
+                  }).toList(),
                 const SizedBox(height: 24),
               ],
             ),
