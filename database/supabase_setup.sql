@@ -128,22 +128,34 @@ CREATE TABLE pregnancies (
     ),
     last_menstrual_period DATE,
     expected_date_of_delivery DATE,
+    fetal_count INT DEFAULT 1,
     status VARCHAR(10) NOT NULL CHECK (status IN ('ongoing', 'ended')),
+    gestational_age_at_end DECIMAL(4, 1),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP
+);
+CREATE TABLE pregnancy_outcomes (
+    outcome_id BIGSERIAL PRIMARY KEY,
+    pregnancy_id BIGINT NOT NULL REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
+    fetus_number INT DEFAULT 1,
     outcome VARCHAR(20) CHECK (
         outcome IN (
             'live_birth',
             'stillbirth',
             'miscarriage',
             'abortion',
-            'ectopic'
+            'ectopic',
+            'fetal_loss',
+            'vanishing_twin'
         )
     ),
     outcome_date DATE,
     is_outcome_date_estimated BOOLEAN DEFAULT FALSE,
     gestational_age_at_end DECIMAL(4, 1),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    ended_at TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+
 CREATE TABLE prenatal_checkups (
     prenatal_checkup_id BIGSERIAL PRIMARY KEY,
     pregnancy_id BIGINT NOT NULL REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
@@ -188,7 +200,8 @@ CREATE TABLE lab_tests (
 );
 CREATE TABLE deliveries (
     delivery_id BIGSERIAL PRIMARY KEY,
-    pregnancy_id BIGINT NOT NULL UNIQUE REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
+    pregnancy_id BIGINT NOT NULL REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
+    fetus_number INT DEFAULT 1,
     delivery_date DATE,
     is_delivery_date_estimated BOOLEAN DEFAULT FALSE,
     place_of_delivery VARCHAR(255),
@@ -511,6 +524,8 @@ CREATE INDEX idx_mothers_account ON mothers(account_id);
 CREATE INDEX idx_mothers_bhc ON mothers(assigned_bhc_id);
 CREATE INDEX idx_pregnancies_mother ON pregnancies(mother_id);
 CREATE INDEX idx_pregnancies_status ON pregnancies(status);
+CREATE INDEX idx_pregnancy_outcomes_pregnancy ON pregnancy_outcomes(pregnancy_id);
+CREATE INDEX idx_deliveries_pregnancy ON deliveries(pregnancy_id);
 CREATE INDEX idx_children_mother ON children(mother_id);
 CREATE INDEX idx_prenatal_pregnancy ON prenatal_checkups(pregnancy_id);
 CREATE INDEX idx_immunization_child ON immunization_record(child_id);
@@ -565,6 +580,7 @@ ALTER TABLE medical_conditions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE allergies DISABLE ROW LEVEL SECURITY;
 ALTER TABLE mothers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pregnancy_outcomes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE deliveries DISABLE ROW LEVEL SECURITY;
 ALTER TABLE prenatal_checkups DISABLE ROW LEVEL SECURITY;
 ALTER TABLE mother_medications DISABLE ROW LEVEL SECURITY;
@@ -578,3 +594,58 @@ ALTER TABLE ai_responses DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_edit_history DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancy_risk_assessments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancy_risk_factors DISABLE ROW LEVEL SECURITY;
+
+-- TO DO: 
+-- 1. Separate outcomes from pregnancies table, 
+-- 2. Modify pregnancy table to remove outcome-related columns
+-- 3. Modify pregnancy table to track fetal count
+-- 4. Fetal count must be changeable to adapt cases such as vanishing twin or fetal loss. Reasons are needed for changing.
+-- 5. Deliveries and outcomes must adapt to multiple fetuses
+
+-- =====================================================
+-- MIGRATION SCRIPT (ALTER STATEMENTS)
+-- Use these to update an already running database instead of dropping and recreating
+-- =====================================================
+/*
+-- 1. Create pregnancy_outcomes table to separate outcomes
+CREATE TABLE pregnancy_outcomes (
+    outcome_id BIGSERIAL PRIMARY KEY,
+    pregnancy_id BIGINT NOT NULL REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
+    fetus_number INT DEFAULT 1,
+    outcome VARCHAR(20) CHECK (
+        outcome IN (
+            'live_birth',
+            'stillbirth',
+            'miscarriage',
+            'abortion',
+            'ectopic',
+            'fetal_loss',
+            'vanishing_twin'
+        )
+    ),
+    outcome_date DATE,
+    is_outcome_date_estimated BOOLEAN DEFAULT FALSE,
+    gestational_age_at_end DECIMAL(4, 1),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- (Optional) Copy existing outcome data securely before dropping
+-- INSERT INTO pregnancy_outcomes (pregnancy_id, outcome, outcome_date, is_outcome_date_estimated, gestational_age_at_end) 
+-- SELECT pregnancy_id, outcome, outcome_date, is_outcome_date_estimated, gestational_age_at_end FROM pregnancies WHERE outcome IS NOT NULL;
+
+-- 2. Modify pregnancies table to track fetal count and remove old columns
+ALTER TABLE pregnancies ADD COLUMN fetal_count INT DEFAULT 1;
+
+ALTER TABLE pregnancies
+    DROP COLUMN outcome,
+    DROP COLUMN outcome_date,
+    DROP COLUMN is_outcome_date_estimated;
+
+-- 3. Modify deliveries table to adapt to multiple fetuses
+ALTER TABLE deliveries DROP CONSTRAINT IF EXISTS deliveries_pregnancy_id_key;
+ALTER TABLE deliveries ADD COLUMN fetus_number INT DEFAULT 1;
+
+-- 4. Create indexes and disable RLS for the new table
+CREATE INDEX idx_pregnancy_outcomes_pregnancy ON pregnancy_outcomes(pregnancy_id);
+ALTER TABLE pregnancy_outcomes DISABLE ROW LEVEL SECURITY;
+*/
