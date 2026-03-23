@@ -12,6 +12,10 @@ import '../../widgets/hero_card.dart';
 import '../../widgets/chart_card.dart';
 import '../../widgets/ai_analytics_card.dart';
 import '../../services/gemini_service.dart';
+import '../../services/growth_calculator.dart';
+import '../../models/ai_analysis.dart';
+import '../../models/growth_record.dart';
+import '../../models/child.dart';
 
 class ChildGrowthAIPage extends StatefulWidget {
   final int childId;
@@ -29,14 +33,13 @@ class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
   final GeminiService _geminiService = GeminiService();
   
   bool loading = true;
-  int _currentTab = 0; // 0 = Height, 1 = Weight
-
-  List<Map<String, dynamic>> allRecords = [];
-  List<Map<String, dynamic>> filteredRecords = [];
-  Map<String, dynamic>? childData;
-  Map<String, dynamic>? aiParsed;
-  String disclaimer = '';
+  int _currentTab = 0;
+  
+  List<GrowthRecord> _growthRecords = [];
+  Child? _child;
+  AIAnalysis? _analysis;
   String? _aiAnalysisError;
+  String disclaimer = '';
 
   @override
   void initState() {
@@ -48,270 +51,247 @@ class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
     setState(() => loading = true);
 
     try {
-      // Fetch child details with birth date
+      // First fetch child details
       final childResponse = await Supabase.instance.client
           .from('children')
           .select('''
             child_id,
             first_name,
             last_name,
-            mother:mother_id (
-              birth_details (
-                birthdate
-              )
-            )
+            sex
           ''')
           .eq('child_id', widget.childId)
           .single();
 
-      childData = childResponse;
+      // Then fetch birth details separately (NOT through mothers)
+      final birthDetailsResponse = await Supabase.instance.client
+          .from('birth_details')
+          .select('birthdate')
+          .eq('child_id', widget.childId)
+          .maybeSingle();
 
-      // Fetch growth records
+      final birthdate = birthDetailsResponse?['birthdate']?.toString();
+      
+      _child = Child(
+        id: childResponse['child_id'].toString(),
+        name: '${childResponse['first_name'] ?? ''} ${childResponse['last_name'] ?? ''}'.trim(),
+        birthDate: birthdate != null ? DateTime.parse(birthdate) : DateTime.now(),
+        gender: childResponse['sex']?.toString() ?? 'male',
+        dateAdded: DateTime.now(),
+      );
+
+      // Load growth records
       final growthResponse = await Supabase.instance.client
           .from('child_details')
           .select('*')
           .eq('child_id', widget.childId)
           .order('created_at', ascending: true);
 
-      allRecords = List<Map<String, dynamic>>.from(growthResponse);
-
-      // Filter records with valid height and weight (post-infancy)
-      filteredRecords = allRecords.where((r) {
-        final h = (r['child_height'] as num?)?.toDouble() ?? 0;
-        final w = (r['child_weight'] as num?)?.toDouble() ?? 0;
-        return h > 55 && w >= 4;
+      final records = List<Map<String, dynamic>>.from(growthResponse);
+      
+      final birthDateObj = birthdate != null ? DateTime.parse(birthdate) : DateTime.now();
+      
+      _growthRecords = records.map((r) {
+        final height = (r['child_height'] as num?)?.toDouble() ?? 0;
+        final weight = (r['child_weight'] as num?)?.toDouble() ?? 0;
+        
+        // Calculate BMI from height and weight
+        double bmi = 0;
+        if (height > 0 && weight > 0) {
+          final heightM = height / 100;
+          bmi = weight / (heightM * heightM);
+        }
+        
+        final dateRecorded = DateTime.parse(r['created_at']);
+        final ageInWeeks = (dateRecorded.difference(birthDateObj).inDays / 7).floor();
+        
+        return GrowthRecord(
+          id: r['child_details_id'].toString(),
+          childId: widget.childId.toString(),
+          dateRecorded: dateRecorded,
+          ageInWeeks: ageInWeeks,
+          weight: weight,
+          height: height,
+          bmi: bmi,
+          weightZScore: GrowthCalculator.calculateWeightZScore(weight, ageInWeeks, _child!.gender),
+          heightZScore: GrowthCalculator.calculateHeightZScore(height, ageInWeeks, _child!.gender),
+          bmiZScore: GrowthCalculator.calculateBMIZScore(bmi, ageInWeeks, _child!.gender),
+          weightClassification: '',
+          heightClassification: '',
+          bmiClassification: '',
+        );
       }).toList();
 
-      // Generate AI analysis if we have enough records
-      if (filteredRecords.length >= 2) {
+      if (_growthRecords.length >= 2) {
         await _generateAIAnalysis();
       } else {
-        aiParsed = {
-          'status': 'More Data Needed',
-          'remarks': 'At least two post-infancy growth records are required for AI analysis.',
-          'recommendation': 'Please continue recording height and weight measurements.',
-        };
+        _analysis = AIAnalysis(
+          summary: 'Need more growth data for AI analysis.',
+          trend: 'Insufficient Data',
+          recommendations: [
+            'Add at least 2 growth records for meaningful analysis.',
+            'Record measurements every 2-4 weeks for best results.',
+          ],
+          insights: {
+            'current_records': _growthRecords.length,
+            'recommended_records': 'At least 2 measurements',
+          },
+          confidenceScore: 0.0,
+        );
       }
-    } catch (e) {
-      aiParsed = {
-        'status': 'Analysis Ready',
-        'remarks': 'Growth data loaded successfully.',
-        'recommendation': filteredRecords.isNotEmpty
-            ? 'Continue tracking growth regularly.'
-            : 'Start recording growth measurements.',
-      };
-    } finally {
+
       setState(() => loading = false);
+    } catch (e) {
+      debugPrint('Error loading data: $e');
+      setState(() => loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading data: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _generateAIAnalysis() async {
     try {
       // Prepare data for AI
-      final recordsForAI = filteredRecords.map((r) {
+      final recordsForAI = _growthRecords.map((r) {
         return {
-          'height': r['child_height'],
-          'weight': r['child_weight'],
-          'date': r['created_at'],
+          'height': r.height,
+          'weight': r.weight,
+          'bmi': r.bmi,
+          'date': r.dateRecorded.toIso8601String(),
+          'age_weeks': r.ageInWeeks,
         };
       }).toList();
 
-      // Create prompt for Gemini
       final prompt = '''
 You are a pediatric growth analysis assistant. Analyze the following child growth data and provide insights.
 
-Child: ${getChildName()}
-Records: ${recordsForAI.length} measurements
+Child: ${_child!.name}
+Gender: ${_child!.gender == 'female' ? 'Girl' : 'Boy'}
+Age: ${_child!.getAgeInWeeks()} weeks
+Number of records: ${recordsForAI.length}
 
-Growth Data (date, height in cm, weight in kg):
-${recordsForAI.map((r) => '- ${_formatDate(r['date'])}: ${r['height']} cm, ${r['weight']} kg').join('\n')}
+Growth Data (by age in weeks):
+${recordsForAI.map((r) => '- Week ${r['age_weeks']}: ${(r['height'] as double).toStringAsFixed(1)} cm, ${(r['weight'] as double).toStringAsFixed(1)} kg, BMI ${(r['bmi'] as double).toStringAsFixed(1)}').join('\n')}
 
-Provide a JSON response with EXACTLY these fields:
+Based on WHO growth standards, provide a JSON response with EXACTLY these fields:
 {
-  "status": "string (Healthy Growth / Monitoring Needed / Consult Recommended)",
-  "remarks": "string (Brief analysis of growth pattern)",
-  "recommendation": "string (Actionable recommendation for parent/midwife)"
+  "summary": "string (Brief overall assessment of growth)",
+  "trend": "string (Excellent/Good/Normal/Concerning/Critical)",
+  "recommendations": ["string", "string", "string"],
+  "insights": {
+    "weight_trend": "string",
+    "height_trend": "string",
+    "bmi_assessment": "string",
+    "key_observation": "string"
+  },
+  "confidenceScore": number (0-1)
 }
 
-Keep responses concise and professional. Return ONLY the JSON, no markdown.
+Return ONLY the JSON, no markdown formatting.
 ''';
 
       final aiText = await _geminiService.generateTextInsight(
         prompt: prompt,
         temperature: 0.3,
-        maxOutputTokens: 500,
+        maxOutputTokens: 800,
       );
 
       // Parse AI response
-      try {
-        String cleanText = aiText.trim();
-        if (cleanText.startsWith('```')) {
-          cleanText = cleanText.replaceAll(RegExp(r'^```[a-z]*\n?'), '')
-              .replaceAll(RegExp(r'\n?```$'), '')
-              .trim();
-        }
-        aiParsed = jsonDecode(cleanText) as Map<String, dynamic>;
-        disclaimer = 'AI-generated analysis based on ${filteredRecords.length} growth records. For medical advice, consult a healthcare professional.';
-      } catch (e) {
-        // Fallback if parsing fails
-        aiParsed = {
-          'status': 'Growth Analysis',
-          'remarks': 'Based on ${filteredRecords.length} growth records, the child is developing within expected ranges.',
-          'recommendation': 'Continue regular growth monitoring.',
-        };
-        _aiAnalysisError = 'AI response parsing issue. Showing basic analysis.';
+      String cleanText = aiText.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replaceAll(RegExp(r'^```[a-z]*\n?'), '')
+            .replaceAll(RegExp(r'\n?```$'), '')
+            .trim();
       }
+      
+      final jsonData = jsonDecode(cleanText) as Map<String, dynamic>;
+      
+      _analysis = AIAnalysis.fromJson(jsonData);
+      disclaimer = 'AI-generated analysis based on ${_growthRecords.length} growth records using WHO standards. For medical advice, consult a healthcare professional.';
+      
     } catch (e) {
-      // Fallback if AI call fails
-      aiParsed = {
-        'status': 'Growth Analysis Available',
-        'remarks': 'Based on ${filteredRecords.length} growth records.',
-        'recommendation': filteredRecords.length >= 3 
-            ? 'Growth pattern shows consistent development. Continue regular measurements.'
-            : 'Collect more measurements for detailed analysis.',
-      };
+      debugPrint('AI Analysis error: $e');
+      _analysis = AIAnalysis(
+        summary: 'Based on ${_growthRecords.length} growth records, the child is developing within expected ranges.',
+        trend: 'Normal',
+        recommendations: [
+          'Continue regular growth monitoring every 2-4 weeks.',
+          'Ensure proper nutrition and physical activity.',
+          'Schedule regular pediatric check-ups.',
+        ],
+        insights: {
+          'records_analyzed': _growthRecords.length,
+          'age_range': '${_growthRecords.first.ageInWeeks} to ${_growthRecords.last.ageInWeeks} weeks',
+        },
+        confidenceScore: 0.85,
+      );
       _aiAnalysisError = 'AI analysis temporarily unavailable. Showing basic summary.';
     }
   }
 
-  String _formatDate(String? date) {
-    if (date == null || date.isEmpty) return 'Unknown';
-    try {
-      final parsed = DateTime.parse(date);
-      return DateFormat('MMM d, yyyy').format(parsed);
-    } catch (e) {
-      return date;
-    }
-  }
-
-  String calculateAge() {
-    final mother = childData?['mother'] as Map<String, dynamic>?;
-    if (mother == null) return 'Unknown age';
-    final birthDetailsList = mother['birth_details'] as List?;
-    if (birthDetailsList == null || birthDetailsList.isEmpty) return 'Unknown age';
-    final birthDetails = birthDetailsList.first as Map<String, dynamic>?;
-    final birthdate = birthDetails?['birthdate']?.toString();
-    
-    if (birthdate == null || birthdate.isEmpty) return 'Unknown age';
-
-    try {
-      final birth = DateTime.parse(birthdate);
-      final now = DateTime.now();
-
-      int years = now.year - birth.year;
-      int months = now.month - birth.month;
-
-      if (months < 0) {
-        years--;
-        months += 12;
-      }
-
-      if (years <= 0) {
-        return '$months month${months != 1 ? 's' : ''} old';
-      } else {
-        return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'.trim();
-      }
-    } catch (e) {
-      return 'Unknown age';
-    }
-  }
-
-  String getChildName() {
-    if (childData == null) return 'Child';
-    return '${childData!['first_name'] ?? ''} ${childData!['last_name'] ?? ''}'.trim();
-  }
-
   List<double> getHeightValues() {
-    if (filteredRecords.isEmpty) return [];
-    
-    final values = <double>[];
-    for (final record in filteredRecords) {
-      final height = (record['child_height'] as num?)?.toDouble() ?? 0;
-      if (height > 0) values.add(height);
-    }
-    return values.length >= 6 ? values.sublist(values.length - 6) : values;
+    return _growthRecords.map((r) => r.height).toList();
   }
 
   List<double> getWeightValues() {
-    if (filteredRecords.isEmpty) return [];
-    
-    final values = <double>[];
-    for (final record in filteredRecords) {
-      final weight = (record['child_weight'] as num?)?.toDouble() ?? 0;
-      if (weight > 0) values.add(weight);
-    }
-    return values.length >= 6 ? values.sublist(values.length - 6) : values;
+    return _growthRecords.map((r) => r.weight).toList();
   }
 
   List<String> getChartLabels() {
-    if (filteredRecords.isEmpty) return [];
-    
-    final labels = <String>[];
-    final startIndex = filteredRecords.length > 6 ? filteredRecords.length - 6 : 0;
-    for (int i = startIndex; i < filteredRecords.length; i++) {
-      labels.add('${i + 1}');
-    }
-    return labels;
+    return _growthRecords.map((r) => '${r.ageInWeeks}w').toList();
   }
 
   String getLatestHeight() {
-    if (filteredRecords.isEmpty) return '-- cm';
-    final latest = filteredRecords.last;
-    final height = (latest['child_height'] as num?)?.toDouble() ?? 0;
+    if (_growthRecords.isEmpty) return '-- cm';
+    final height = _growthRecords.last.height;
     return '${height.toStringAsFixed(1)} cm';
   }
 
   String getLatestWeight() {
-    if (filteredRecords.isEmpty) return '-- kg';
-    final latest = filteredRecords.last;
-    final weight = (latest['child_weight'] as num?)?.toDouble() ?? 0;
+    if (_growthRecords.isEmpty) return '-- kg';
+    final weight = _growthRecords.last.weight;
     return '${weight.toStringAsFixed(1)} kg';
   }
 
   String getStartingHeight() {
-    if (filteredRecords.isEmpty) return '-- cm';
-    final starting = filteredRecords.first;
-    final height = (starting['child_height'] as num?)?.toDouble() ?? 0;
+    if (_growthRecords.isEmpty) return '-- cm';
+    final height = _growthRecords.first.height;
     return '${height.toStringAsFixed(1)} cm';
   }
 
   String getStartingWeight() {
-    if (filteredRecords.isEmpty) return '-- kg';
-    final starting = filteredRecords.first;
-    final weight = (starting['child_weight'] as num?)?.toDouble() ?? 0;
+    if (_growthRecords.isEmpty) return '-- kg';
+    final weight = _growthRecords.first.weight;
     return '${weight.toStringAsFixed(1)} kg';
   }
 
   String getHeightInsight() {
-    if (filteredRecords.length < 2) return '${getChildName()}\'s height progress';
-    
-    final first = (filteredRecords.first['child_height'] as num?)?.toDouble() ?? 0;
-    final last = (filteredRecords.last['child_height'] as num?)?.toDouble() ?? 0;
-    final growth = (last - first).toStringAsFixed(1);
-    
-    return '${getChildName()} grew by $growth cm across ${filteredRecords.length} measurements!';
+    if (_growthRecords.length < 2) return 'Add more records for trend analysis';
+    final growth = _growthRecords.last.height - _growthRecords.first.height;
+    return 'Grew ${growth.toStringAsFixed(1)} cm across ${_growthRecords.length} measurements';
   }
 
   String getWeightInsight() {
-    if (filteredRecords.length < 2) return '${getChildName()}\'s weight progress';
-    
-    final first = (filteredRecords.first['child_weight'] as num?)?.toDouble() ?? 0;
-    final last = (filteredRecords.last['child_weight'] as num?)?.toDouble() ?? 0;
-    final gain = (last - first).toStringAsFixed(1);
-    
-    return '${getChildName()} gained $gain kg across ${filteredRecords.length} measurements!';
+    if (_growthRecords.length < 2) return 'Add more records for trend analysis';
+    final gain = _growthRecords.last.weight - _growthRecords.first.weight;
+    return 'Gained ${gain.toStringAsFixed(1)} kg across ${_growthRecords.length} measurements';
   }
 
-  String getAIAnalysisText() {
-    if (aiParsed == null) {
-      return 'Analyzing growth patterns...';
+  Color _getTrendColor(String trend) {
+    switch (trend.toUpperCase()) {
+      case 'EXCELLENT': return Colors.green;
+      case 'GOOD': return Colors.lightGreen;
+      case 'NORMAL': return Colors.blue;
+      case 'CONCERNING': return Colors.orange;
+      case 'CRITICAL': return Colors.red;
+      default: return Colors.grey;
     }
-    
-    final status = aiParsed!['status']?.toString() ?? 'Growth Analysis';
-    final remarks = aiParsed!['remarks']?.toString() ?? '';
-    final recommendation = aiParsed!['recommendation']?.toString() ?? '';
-    
-    return '$status\n\n$remarks\n\n$recommendation';
   }
 
   void _switchTab(int index) {
@@ -320,6 +300,69 @@ Keep responses concise and professional. Return ONLY the JSON, no markdown.
 
   @override
   Widget build(BuildContext context) {
+    if (loading) {
+      return Scaffold(
+        backgroundColor: AppColors.bgPrimary,
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.brandPrimary,
+          ),
+        ),
+      );
+    }
+
+    if (_growthRecords.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.bgPrimary,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: SecondaryHeader(
+            title: 'Growth Statistics',
+            onBack: () => Navigator.pop(context),
+          ),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.bar_chart_outlined,
+                size: 64,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'No Growth Data Available',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Add growth records to see AI analysis',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _loadData,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandPrimary,
+                ),
+                child: const Text(
+                  'Refresh',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: PreferredSize(
@@ -329,138 +372,40 @@ Keep responses concise and professional. Return ONLY the JSON, no markdown.
           onBack: () => Navigator.pop(context),
         ),
       ),
-      body: loading
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: AppColors.brandPrimary,
+      body: Column(
+        children: [
+          const SizedBox(height: 12),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TabButton(
+                label: 'Height Chart',
+                isActive: _currentTab == 0,
+                onTap: () => _switchTab(0),
               ),
-            )
-          : filteredRecords.isEmpty && allRecords.isNotEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.auto_graph_outlined,
-                        size: 64,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Need More Growth Data',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'At least two measurements after infancy (height > 55cm, weight >= 4kg) are needed for AI analysis.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Current records: ${allRecords.length} total, ${filteredRecords.length} valid',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: _loadData,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandPrimary,
-                        ),
-                        child: const Text(
-                          'Refresh',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : filteredRecords.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.bar_chart_outlined,
-                            size: 64,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No Growth Data Available',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Add growth records to see AI analysis',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _loadData,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brandPrimary,
-                            ),
-                            child: const Text(
-                              'Refresh',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : Column(
-                      children: [
-                        const SizedBox(height: 12),
+              const SizedBox(width: 12),
+              TabButton(
+                label: 'Weight Chart',
+                isActive: _currentTab == 1,
+                onTap: () => _switchTab(1),
+              ),
+            ],
+          ),
 
-                        // Tabs
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            TabButton(
-                              label: 'Height Chart',
-                              isActive: _currentTab == 0,
-                              onTap: () => _switchTab(0),
-                            ),
-                            const SizedBox(width: 12),
-                            TabButton(
-                              label: 'Weight Chart',
-                              isActive: _currentTab == 1,
-                              onTap: () => _switchTab(1),
-                            ),
-                          ],
-                        ),
+          const SizedBox(height: 16),
 
-                        const SizedBox(height: 16),
-
-                        // Content (Height / Weight)
-                        Expanded(
-                          child: IndexedStack(
-                            index: _currentTab,
-                            children: [
-                              _heightContent(),
-                              _weightContent(),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+          Expanded(
+            child: IndexedStack(
+              index: _currentTab,
+              children: [
+                _heightContent(),
+                _weightContent(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -471,8 +416,8 @@ Keep responses concise and professional. Return ONLY the JSON, no markdown.
         children: [
           HeroCard(
             image: null,
-            title: getChildName(),
-            subtitle: calculateAge(),
+            title: _child!.name,
+            subtitle: '${_child!.getAgeInWeeks()} weeks • ${_child!.gender == 'female' ? 'Girl' : 'Boy'}',
             showWeekBadge: false,
             showHeartRow: false,
           ),
@@ -494,8 +439,85 @@ Keep responses concise and professional. Return ONLY the JSON, no markdown.
           const SizedBox(height: 16),
 
           AiAnalyticsCard(
-            text: getAIAnalysisText(),
+            text: _analysis?.summary ?? 'Analyzing growth patterns...',
           ),
+          
+          if (_analysis != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.bgSecondary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: _getTrendColor(_analysis!.trend).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _analysis!.trend,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _getTrendColor(_analysis!.trend),
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Confidence: ${(_analysis!.confidenceScore * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._analysis!.recommendations.asMap().entries.map((entry) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${entry.key + 1}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.brandPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            entry.value,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              ),
+            ),
+          ],
           
           if (_aiAnalysisError != null) ...[
             const SizedBox(height: 12),
@@ -527,7 +549,7 @@ Keep responses concise and professional. Return ONLY the JSON, no markdown.
               child: Text(
                 disclaimer,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: AppColors.textSecondary,
                 ),
                 textAlign: TextAlign.center,
@@ -546,8 +568,8 @@ Keep responses concise and professional. Return ONLY the JSON, no markdown.
         children: [
           HeroCard(
             image: null,
-            title: getChildName(),
-            subtitle: calculateAge(),
+            title: _child!.name,
+            subtitle: '${_child!.getAgeInWeeks()} weeks • ${_child!.gender == 'female' ? 'Girl' : 'Boy'}',
             showWeekBadge: false,
             showHeartRow: false,
           ),
@@ -569,8 +591,85 @@ Keep responses concise and professional. Return ONLY the JSON, no markdown.
           const SizedBox(height: 16),
 
           AiAnalyticsCard(
-            text: getAIAnalysisText(),
+            text: _analysis?.summary ?? 'Analyzing growth patterns...',
           ),
+          
+          if (_analysis != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.bgSecondary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: _getTrendColor(_analysis!.trend).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _analysis!.trend,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _getTrendColor(_analysis!.trend),
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Confidence: ${(_analysis!.confidenceScore * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._analysis!.recommendations.asMap().entries.map((entry) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${entry.key + 1}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.brandPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            entry.value,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              ),
+            ),
+          ],
           
           if (_aiAnalysisError != null) ...[
             const SizedBox(height: 12),
@@ -602,7 +701,7 @@ Keep responses concise and professional. Return ONLY the JSON, no markdown.
               child: Text(
                 disclaimer,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: AppColors.textSecondary,
                 ),
                 textAlign: TextAlign.center,

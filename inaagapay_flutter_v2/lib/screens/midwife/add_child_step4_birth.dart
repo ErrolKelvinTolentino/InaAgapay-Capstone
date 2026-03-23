@@ -1,3 +1,5 @@
+// lib/screens/midwife/add_child_step4_birth.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,6 +11,7 @@ import '../../widgets/main_button.dart';
 import '../../widgets/small_description.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/app_input_field.dart';
+import 'midwife_children_screen.dart';
 
 class AddChildStep4Birth extends StatefulWidget {
   final int motherId;
@@ -114,7 +117,7 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
       if (!mounted) return;
 
-      // Show success dialog and then pop back to children screen (preserving navigation)
+      // Show success dialog and then navigate back
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -125,11 +128,14 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
             content: 'The child has been successfully registered.',
             buttonText: 'OK',
             onPressed: () {
-              // Pop all the way back to the children screen (preserves navigation stack)
+              // Pop all the way back to the children screen
+              // This preserves the bottom navigation
               Navigator.popUntil(context, (route) => route.isFirst);
-              // Then pop again to go back to the screen before the add flow started
-              // Since the children screen is part of the shell, we need to navigate back properly
-              Navigator.pop(context);
+              // Then navigate to the children screen
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const MidwifeChildrenScreen()),
+              );
             },
           );
         },

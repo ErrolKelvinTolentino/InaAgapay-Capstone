@@ -1,8 +1,8 @@
+// lib/widgets/status_indicator.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-
-/// All supported statuses
 enum StatusIndicatorType {
   normal,
   underweight,
@@ -15,18 +15,14 @@ enum StatusIndicatorType {
   ongoing,
 }
 
-
 class StatusIndicator extends StatelessWidget {
   final StatusIndicatorType status;
 
-
   const StatusIndicator({super.key, required this.status});
-
 
   @override
   Widget build(BuildContext context) {
     final _StatusStyle style = _statusStyle(status);
-
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -55,8 +51,6 @@ class StatusIndicator extends StatelessWidget {
   }
 }
 
-
-/// 🎨 Centralized styling logic
 _StatusStyle _statusStyle(StatusIndicatorType status) {
   switch (status) {
     case StatusIndicatorType.normal:
@@ -66,14 +60,12 @@ _StatusStyle _statusStyle(StatusIndicatorType status) {
         icon: Icons.check_circle_rounded,
       );
 
-
     case StatusIndicatorType.onTime:
       return _StatusStyle(
         label: 'On Time',
         backgroundColor: AppColors.success,
         icon: Icons.schedule_rounded,
       );
-
 
     case StatusIndicatorType.underweight:
       return _StatusStyle(
@@ -82,14 +74,12 @@ _StatusStyle _statusStyle(StatusIndicatorType status) {
         icon: Icons.trending_down_rounded,
       );
 
-
     case StatusIndicatorType.overweight:
       return _StatusStyle(
         label: 'Overweight',
         backgroundColor: AppColors.warning,
         icon: Icons.trending_up_rounded,
       );
-
 
     case StatusIndicatorType.obese:
       return _StatusStyle(
@@ -98,14 +88,12 @@ _StatusStyle _statusStyle(StatusIndicatorType status) {
         icon: Icons.warning_rounded,
       );
 
-
     case StatusIndicatorType.overdue:
       return _StatusStyle(
         label: 'Overdue',
         backgroundColor: AppColors.error,
         icon: Icons.error_rounded,
       );
-
 
     case StatusIndicatorType.late:
       return _StatusStyle(
@@ -114,15 +102,13 @@ _StatusStyle _statusStyle(StatusIndicatorType status) {
         icon: Icons.schedule_rounded,
       );
 
-
-      case StatusIndicatorType.pending:
+    case StatusIndicatorType.pending:
       return _StatusStyle(
         label: 'Pending',
         backgroundColor: AppColors.warning,
       );
 
-
-      case StatusIndicatorType.ongoing:
+    case StatusIndicatorType.ongoing:
       return _StatusStyle(
         label: 'Ongoing',
         backgroundColor: AppColors.warning,
@@ -130,13 +116,10 @@ _StatusStyle _statusStyle(StatusIndicatorType status) {
   }
 }
 
-
-/// 🔒 Internal style model
 class _StatusStyle {
   final String label;
   final Color backgroundColor;
   final IconData? icon;
-
 
   const _StatusStyle({
     required this.label,
@@ -144,6 +127,3 @@ class _StatusStyle {
     this.icon,
   });
 }
-
-
-
