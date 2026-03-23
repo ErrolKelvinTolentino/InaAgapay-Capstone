@@ -21,7 +21,7 @@ class MidwifeHistoryCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
-        color: AppColors.bgPrimary,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderPrimary),
       ),
@@ -31,16 +31,12 @@ class MidwifeHistoryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: const [
-              Icon(
-                Icons.history,
-                size: 20,
-                color: AppColors.brandPrimary,
-              ),
+              Icon(Icons.access_time, color: AppColors.brandPrimary, size: 22),
               SizedBox(width: 8),
               Text(
                 'Recent Visits',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSecondary,
                 ),

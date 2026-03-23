@@ -4,19 +4,20 @@ import '../widgets/growth_line_chart.dart';
 
 class ChartCard extends StatelessWidget {
   final String title;
-  final IconData headerIcon;
+  final IconData? headerIcon;
 
   // Chart
   final List<double> values;
   final List<String> labels;
   final String unit;
   final Color lineColor;
+  final Color? titleColor;
 
-  // Records
-  final String startingLabel;
-  final String startingValue;
-  final String latestLabel;
-  final String latestValue;
+  // Records (optional)
+  final String? startingLabel;
+  final String? startingValue;
+  final String? latestLabel;
+  final String? latestValue;
 
   // Insight text
   final String insightText;
@@ -24,15 +25,16 @@ class ChartCard extends StatelessWidget {
   const ChartCard({
     super.key,
     required this.title,
-    required this.headerIcon,
+    this.headerIcon,
+    this.titleColor,
     required this.values,
     required this.labels,
     required this.unit,
     required this.lineColor,
-    required this.startingLabel,
-    required this.startingValue,
-    required this.latestLabel,
-    required this.latestValue,
+    this.startingLabel,
+    this.startingValue,
+    this.latestLabel,
+    this.latestValue,
     required this.insightText,
   });
 
@@ -57,14 +59,16 @@ class ChartCard extends StatelessWidget {
           // 🏷 HEADER
           Row(
             children: [
-              Icon(headerIcon, color: AppColors.brandPrimary, size: 20),
-              const SizedBox(width: 8),
+              if (headerIcon != null) ...[
+                Icon(headerIcon, color: AppColors.brandPrimary, size: 20),
+                const SizedBox(width: 8),
+              ],
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  color: titleColor ?? AppColors.textPrimary,
                 ),
               ),
             ],
@@ -73,48 +77,59 @@ class ChartCard extends StatelessWidget {
           const SizedBox(height: 14),
 
           // 📈 CHART
-          SizedBox(
-            height: 160,
-            child: GrowthLineChart(
-              values: values,
-              labels: labels,
-              unit: unit,
-              lineColor: lineColor,
-            ),
-          ),
+          Center(
+  child: ConstrainedBox(
+    constraints: const BoxConstraints(
+      maxWidth: 400, // 👈 keeps chart centered on big screens
+    ),
+    child: AspectRatio(
+      aspectRatio: 1.8, // 👈 adjust if needed (1.6–2.0 range is nice)
+      child: GrowthLineChart(
+        values: values,
+        labels: labels,
+        unit: unit,
+        lineColor: lineColor,
+      ),
+    ),
+  ),
+),
 
           const SizedBox(height: 16),
 
           // 📌 STARTING RECORD
-          _RecordPill(
-            icon: Icons.flag,
-            label: startingLabel,
-            value: startingValue,
-          ),
-
-          const SizedBox(height: 10),
+          if (startingLabel != null && startingValue != null) ...[
+            _RecordPill(
+              icon: Icons.flag,
+              label: startingLabel!,
+              value: startingValue!,
+            ),
+            const SizedBox(height: 10),
+          ],
 
           // 📌 LATEST RECORD
-          _RecordPill(
-            icon: Icons.trending_up,
-            label: latestLabel,
-            value: latestValue,
-          ),
-
-          const SizedBox(height: 14),
+          if (latestLabel != null && latestValue != null) ...[
+            _RecordPill(
+              icon: Icons.trending_up,
+              label: latestLabel!,
+              value: latestValue!,
+            ),
+            const SizedBox(height: 14),
+          ],
 
           // 💡 INSIGHT
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(
                 Icons.lightbulb_outline,
                 size: 18,
                 color: AppColors.textSecondary,
               ),
-              const SizedBox(width: 8),
-              Expanded(
+              const SizedBox(width: 6),
+              Flexible(
                 child: Text(
                   insightText,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,

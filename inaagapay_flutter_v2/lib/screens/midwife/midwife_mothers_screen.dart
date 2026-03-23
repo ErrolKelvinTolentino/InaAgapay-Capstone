@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_input_field.dart';
 import '../../services/auth_storage.dart';
 import '../../services/supabase_service.dart';
 import 'midwife_add_mother_screen.dart';
@@ -57,7 +58,10 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
               city_municipality, 
               province, 
               status,
-              pregnancies(count)
+              pregnancies(
+                status,
+                last_menstrual_period
+              )
             )
           ''')
           .eq('account_type', 'mother')
@@ -70,13 +74,36 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         final motherData = mother['mothers'] as Map<String, dynamic>? ?? {};
         final pregnancies = motherData['pregnancies'] as List? ?? [];
         
+        final activePregnancies = pregnancies.where((p) => p['status'] == 'active').toList();
+        final pregnancyCount = activePregnancies.length;
+        final String? lmpString = pregnancyCount > 0 ? activePregnancies.first['last_menstrual_period'] : null;
+        
+        int? age;
+        final birthdateStr = motherData['birthdate']?.toString();
+        if (birthdateStr != null && birthdateStr.isNotEmpty) {
+          final birthdate = DateTime.tryParse(birthdateStr);
+          if (birthdate != null) {
+            age = (DateTime.now().difference(birthdate).inDays / 365).floor();
+          }
+        }
+        
+        int? gestWeeks;
+        if (lmpString != null && lmpString.isNotEmpty) {
+          final lmpDate = DateTime.tryParse(lmpString);
+          if (lmpDate != null) {
+            gestWeeks = (DateTime.now().difference(lmpDate).inDays / 7).floor();
+          }
+        }
+        
         return {
           ...mother,
           'full_name': [
             mother['first_name'],
             mother['last_name']
           ].where((e) => e != null && e.toString().trim().isNotEmpty).join(' '),
-          'pregnancy_count': pregnancies.length,
+          'pregnancy_count': pregnancyCount,
+          'age': age,
+          'gest_weeks': gestWeeks,
           'mother_id': motherData['mother_id'],
           'barangay': motherData['barangay'],
           'city': motherData['city_municipality'],
@@ -126,70 +153,90 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         bottom: false,
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search by name, phone, email, or barangay...',
-                  hintStyle: const TextStyle(color: AppColors.textSecondary),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: AppColors.textSecondary,
-                  ),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () {
-                            _searchController.clear();
-                            _onSearch();
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.borderPrimary),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.borderPrimary),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: AppColors.brandPrimary,
-                      width: 1.5,
+            // 1. Header Banner
+            Container(
+              width: double.infinity,
+              height: 110,
+              margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                image: const DecorationImage(
+                  image: AssetImage('assets/images/pinkbg.png'),
+                  fit: BoxFit.cover,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    top: 0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
+                      child: Image.asset(
+                        'assets/images/pregnant1.png',
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
-                ),
+                  Positioned(
+                    left: 24,
+                    top: 0,
+                    bottom: 0,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'There are',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        Text(
+                          '${_mothers.length} Mothers!', // Count based on actual mothers
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.brandPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
 
+            // 2. Search Bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                children: [
-                  Text(
-                    '${_filtered.length} mother${_filtered.length != 1 ? 's' : ''}',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (_searchController.text.isNotEmpty)
-                    Text(
-                      ' (filtered)',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                ],
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: AppInputField(
+                hintText: 'Search Mother',
+                controller: _searchController,
+                trailingIcon: _searchController.text.isNotEmpty ? Icons.clear : Icons.search,
+                onTrailingTap: _searchController.text.isNotEmpty 
+                    ? () {
+                        _searchController.clear();
+                        _onSearch();
+                      }
+                    : null,
+              ),
+            ),
+
+            // 3. Helper Text
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+              child: Text(
+                'Tap a mother to view health records',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
 
@@ -327,166 +374,84 @@ class _MotherCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fullName = mother['full_name']?.toString() ?? 'Unnamed';
-    final phone = mother['phone_number']?.toString() ?? 'No phone number';
-    final email = mother['email_address']?.toString();
-    final barangay = mother['barangay']?.toString();
-    final city = mother['city']?.toString();
-    final pregnancyCount = mother['pregnancy_count'] ?? 0;
-    
-    final locationParts = [
-      if (barangay != null && barangay.isNotEmpty) barangay,
-      if (city != null && city.isNotEmpty) city,
-    ];
-    final location = locationParts.isNotEmpty ? locationParts.join(', ') : null;
+    final pregnancyCount = mother['pregnancy_count'] as int? ?? 0;
+    final age = mother['age'] as int?;
+    final gestWeeks = mother['gest_weeks'] as int?;
 
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.borderPrimary),
-            borderRadius: BorderRadius.circular(14),
+    String subtitleText = '';
+    if (age != null) {
+      subtitleText += '$age Years old';
+    } else {
+      subtitleText += 'Age unknown';
+    }
+
+    if (pregnancyCount > 0 && gestWeeks != null) {
+      subtitleText += ' - $gestWeeks weeks pregnant';
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.brandPrimary.withOpacity(0.15),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  _getInitials(fullName),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(30),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(30),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 20, 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: const BoxDecoration(
                     color: AppColors.brandPrimary,
-                    fontSize: 18,
+                    shape: BoxShape.circle,
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      fullName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        color: AppColors.textPrimary,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fullName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.phone_outlined,
-                          size: 13,
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitleText,
+                        style: const TextStyle(
+                          fontSize: 13,
                           color: AppColors.textSecondary,
                         ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            phone,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    
-                    if (location != null) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on_outlined,
-                            size: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              location,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
                       ),
                     ],
-                    
-                    if (pregnancyCount > 0) ...[
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.brandPrimary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.pregnant_woman,
-                              size: 10,
-                              color: AppColors.brandPrimary,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '$pregnancyCount pregnancy${pregnancyCount != 1 ? 'ies' : ''}',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: AppColors.brandPrimary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Icon(
-                    Icons.chevron_right,
-                    color: AppColors.textSecondary,
-                    size: 20,
                   ),
-                  if (email != null && email.isNotEmpty)
-                    Tooltip(
-                      message: email,
-                      child: const Icon(
-                        Icons.email_outlined,
-                        size: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                ],
-              ),
-            ],
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.brandPrimary,
+                  size: 24,
+                ),
+              ],
+            ),
           ),
         ),
       ),

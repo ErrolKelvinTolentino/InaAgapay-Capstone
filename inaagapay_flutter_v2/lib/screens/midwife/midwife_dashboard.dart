@@ -42,6 +42,9 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
   List<double> _bhcVisitValues = [0, 0, 0, 0, 0, 0, 0];
   final List<String> _bhcVisitDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   
+  // Computed RHU Visits this week
+  int get _rhuVisitsThisWeek => _bhcVisitValues.fold(0, (sum, val) => sum + val.toInt());
+
   // Midwife info
   String _midwifeName = 'Midwife';
   String _bhcName = 'Loading...';
@@ -300,14 +303,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
   }
 
   String _getWelcomeMessage() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) {
-      return 'Good Morning, $_midwifeName! 🌅';
-    } else if (hour < 18) {
-      return 'Good Afternoon, $_midwifeName! ☀️';
-    } else {
-      return 'Good Evening, $_midwifeName! 🌙';
-    }
+    return 'Welcome, ${_midwifeName.split(' ').first}! \u{1F338}';
   }
 
   String _getChartInsight() {
@@ -330,6 +326,52 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
     } else {
       return '$bestDay had the most prenatal visits ($maxValue visits) this week!';
     }
+  }
+
+  Widget _buildStatCard({required int value, required String label, required IconData iconData}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            iconData,
+            color: AppColors.brandPrimary,
+            size: 28,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value.toString(),
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              height: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -409,65 +451,94 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                         children: [
                           const SizedBox(height: 16),
                           
-                          // Hero Card with dynamic data
-                          HeroCard(
-                            image: null,
-                            title: _getWelcomeMessage(),
-                            subtitle: _bhcName,
-                            showWeekBadge: false,
-                            showHeartRow: false,
+                          // Hero Card
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.04),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Container(
+                                  height: 110,
+                                  width: 110,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color(0xFFFFF0F5),
+                                  ),
+                                  child: ClipOval(
+                                    child: Image.asset(
+                                      'assets/images/midwife.png',
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                          const Icon(Icons.person, size: 60, color: AppColors.brandPrimary),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _getWelcomeMessage(),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.brandPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _bhcName,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
 
-                          // Quick Overview - Children and Mothers
+                          // Health Center Overview Title
                           Row(
-                            children: [
-                              Expanded(
-                                child: OverviewInfo(
-                                  value: _registeredChildren,
-                                  label: 'Registered\nChildren',
-                                  icon: Icons.child_care_rounded,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: OverviewInfo(
-                                  value: _registeredMothers,
-                                  label: 'Registered\nMothers',
-                                  icon: Icons.pregnant_woman,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.local_hospital, color: AppColors.brandPrimary, size: 22),
+                              SizedBox(width: 8),
+                              Text(
+                                'Health Center Overview',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
                             ],
                           ),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
 
-                          // Medication Statistics
+                          // Quick Overview - Children, Mothers, RHU Visits
                           Row(
                             children: [
                               Expanded(
-                                child: OverviewInfo(
-                                  value: _ferrousGiven,
-                                  label: 'Ferrous FA\ngiven',
-                                  icon: Icons.medication,
-                                ),
+                                child: _buildStatCard(value: _registeredChildren, label: 'Registered\nChildren', iconData: Icons.child_care),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: OverviewInfo(
-                                  value: _calciumGiven,
-                                  label: 'Calcium\ngiven',
-                                  icon: Icons.local_pharmacy,
-                                ),
+                                child: _buildStatCard(value: _registeredMothers, label: 'Registered\nMothers', iconData: Icons.pregnant_woman),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: OverviewInfo(
-                                  value: _tdDosesGiven,
-                                  label: 'TD Vaccine\ndoses given',
-                                  icon: Icons.vaccines,
-                                ),
+                                child: _buildStatCard(value: _rhuVisitsThisWeek, label: 'RHU Visits\nThis week', iconData: Icons.medical_services),
                               ),
                             ],
                           ),
@@ -483,6 +554,24 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                           ),
 
                           const SizedBox(height: 20),
+                          // Medication Statistics moved here
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildStatCard(value: _ferrousGiven, label: 'Ferrous FA\ngiven', iconData: Icons.medication),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildStatCard(value: _calciumGiven, label: 'Calcium\ngiven', iconData: Icons.local_pharmacy),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildStatCard(value: _tdDosesGiven, label: 'TD Vaccine\ndoses given', iconData: Icons.vaccines),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
 
                           // Recent Visits with real data
                           if (_recentVisits.isNotEmpty)
@@ -505,7 +594,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                               child: const Column(
                                 children: [
                                   Icon(
-                                    Icons.history,
+                                    Icons.access_time,
                                     size: 48,
                                     color: AppColors.textSecondary,
                                   ),
@@ -536,16 +625,17 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                           // BHC Visits Chart with real data
                           if (_bhcVisitValues.any((v) => v > 0))
                             ChartCard(
-                              title: 'BHC Daily Visits (Last 7 Days)',
-                              headerIcon: Icons.show_chart_rounded,
+                              title: 'BHC Visits Chart',
+                              titleColor: AppColors.brandPrimary,
+                              headerIcon: null,
                               values: _bhcVisitValues,
                               labels: _bhcVisitDays,
                               unit: 'visits',
                               lineColor: AppColors.brandPrimary,
-                              startingLabel: 'Lowest',
-                              startingValue: '${_bhcVisitValues.reduce((a, b) => a < b ? a : b).toInt()} visits',
-                              latestLabel: 'Highest',
-                              latestValue: '${_bhcVisitValues.reduce((a, b) => a > b ? a : b).toInt()} visits',
+                              startingLabel: null,
+                              startingValue: null,
+                              latestLabel: null,
+                              latestValue: null,
                               insightText: _getChartInsight(),
                             )
                           else
@@ -584,6 +674,51 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                 ],
                               ),
                             ),
+
+                          const SizedBox(height: 24),
+
+                          // Action Buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () {},
+                                  icon: const Icon(Icons.pregnant_woman, size: 22),
+                                  label: const Text('Register Mother', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.brandPrimary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 18),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () {},
+                                  icon: const Icon(Icons.child_care, size: 22),
+                                  label: const Text('Register Child', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.brandPrimary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 18),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
 
                           const SizedBox(height: 32),
                         ],
