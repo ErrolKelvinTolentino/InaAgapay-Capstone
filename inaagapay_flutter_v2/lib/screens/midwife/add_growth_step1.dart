@@ -43,6 +43,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   double? _bmiZScore;
   
   StatusIndicatorType _bmiStatus = StatusIndicatorType.normal;
+  String _bmiCategoryText = 'Normal';
+  Color _bmiCategoryColor = AppColors.success;
   
   bool _isFormValid = false;
   String? _validationMessage;
@@ -52,32 +54,32 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   void initState() {
     super.initState();
     _loadChildData();
-    _heightController.addListener(_updateBMI);
-    _weightController.addListener(_updateBMI);
+    _heightController.addListener(_onMeasurementChanged);
+    _weightController.addListener(_onMeasurementChanged);
   }
 
   Future<void> _loadChildData() async {
     try {
+      // First fetch child details
       final childResponse = await Supabase.instance.client
           .from('children')
           .select('''
             child_id,
             first_name,
             last_name,
-            sex,
-            mother:mother_id (
-              birth_details (
-                birthdate
-              )
-            )
+            sex
           ''')
           .eq('child_id', widget.childId)
           .single();
 
-      final mother = childResponse['mother'] as Map<String, dynamic>?;
-      final birthDetailsList = mother?['birth_details'] as List?;
-      final birthDetails = birthDetailsList?.first as Map<String, dynamic>?;
-      final birthdate = birthDetails?['birthdate']?.toString();
+      // Then fetch birth details separately
+      final birthDetailsResponse = await Supabase.instance.client
+          .from('birth_details')
+          .select('birthdate')
+          .eq('child_id', widget.childId)
+          .maybeSingle();
+
+      final birthdate = birthDetailsResponse?['birthdate']?.toString();
       
       if (birthdate != null) {
         final birth = DateTime.parse(birthdate);
@@ -91,22 +93,46 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
         _childData = childResponse;
         _loading = false;
       });
+      
+      // After loading, trigger an initial calculation if there are values
+      _onMeasurementChanged();
     } catch (e) {
-      setState(() => _loading = false);
       debugPrint('Error loading child data: $e');
+      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading child data: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
-  void _updateBMI() {
+  void _onMeasurementChanged() {
+    _updateBMIAndStatus();
+    _validateForm();
+  }
+
+  void _updateBMIAndStatus() {
     final double? heightCm = double.tryParse(_heightController.text);
     final double? weightKg = double.tryParse(_weightController.text);
 
-    if (heightCm == null || weightKg == null || heightCm == 0) {
+    debugPrint('=== REAL-TIME BMI CALCULATION ===');
+    debugPrint('Height: ${_heightController.text} cm');
+    debugPrint('Weight: ${_weightController.text} kg');
+    debugPrint('Age in weeks: $_ageInWeeks');
+    debugPrint('Gender: $_gender');
+
+    if (heightCm == null || weightKg == null || heightCm == 0 || weightKg == 0) {
+      debugPrint('Invalid height or weight, resetting BMI');
       setState(() {
         _bmiController.text = '';
         _bmiZScore = null;
         _bmiStatus = StatusIndicatorType.normal;
-        _validateForm();
+        _bmiCategoryText = 'Normal';
+        _bmiCategoryColor = AppColors.success;
       });
       return;
     }
@@ -114,14 +140,60 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     final double heightM = heightCm / 100;
     final double bmi = weightKg / (heightM * heightM);
     
-    if (_ageInWeeks > 0 && _gender.isNotEmpty) {
-      _bmiZScore = GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
-      _bmiStatus = _getBMICategoryFromZScore(_bmiZScore!);
-    }
-
+    debugPrint('Calculated BMI: $bmi');
+    
     setState(() {
       _bmiController.text = bmi.toStringAsFixed(1);
-      _validateForm();
+    });
+    
+    if (_ageInWeeks > 0 && _gender.isNotEmpty) {
+      // Calculate BMI Z-score
+      _bmiZScore = GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
+      
+      debugPrint('BMI Z-Score: $_bmiZScore');
+      
+      // Update status based on Z-score
+      _updateBMICategory(_bmiZScore!);
+    } else {
+      debugPrint('Cannot calculate Z-score: Age in weeks=$_ageInWeeks, Gender=$_gender');
+    }
+  }
+
+  void _updateBMICategory(double zScore) {
+    debugPrint('Updating BMI category for Z-Score: $zScore');
+    
+    setState(() {
+      if (zScore < -2) {
+        _bmiStatus = StatusIndicatorType.underweight;
+        _bmiCategoryText = 'Underweight';
+        _bmiCategoryColor = AppColors.warning;
+        debugPrint('Category: Underweight (zScore < -2)');
+      } else if (zScore < -1) {
+        _bmiStatus = StatusIndicatorType.normal;
+        _bmiCategoryText = 'Mildly Underweight';
+        _bmiCategoryColor = Colors.orange;
+        debugPrint('Category: Mildly Underweight (-2 < zScore < -1)');
+      } else if (zScore <= 1) {
+        _bmiStatus = StatusIndicatorType.normal;
+        _bmiCategoryText = 'Normal';
+        _bmiCategoryColor = AppColors.success;
+        debugPrint('Category: Normal (-1 <= zScore <= 1)');
+      } else if (zScore <= 2) {
+        _bmiStatus = StatusIndicatorType.overweight;
+        _bmiCategoryText = 'Overweight';
+        _bmiCategoryColor = Colors.orange;
+        debugPrint('Category: Overweight (1 < zScore <= 2)');
+      } else if (zScore <= 3) {
+        _bmiStatus = StatusIndicatorType.obese;
+        _bmiCategoryText = 'Obese';
+        _bmiCategoryColor = AppColors.error;
+        debugPrint('Category: Obese (2 < zScore <= 3)');
+      } else {
+        _bmiStatus = StatusIndicatorType.obese;
+        _bmiCategoryText = 'Severely Obese';
+        _bmiCategoryColor = AppColors.error;
+        debugPrint('Category: Severely Obese (zScore > 3)');
+      }
     });
   }
 
@@ -140,15 +212,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     
     if (bmi != null && _ageInWeeks > 0 && _gender.isNotEmpty) {
       _bmiZScore = GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
-      _bmiStatus = _getBMICategoryFromZScore(_bmiZScore!);
+      _updateBMICategory(_bmiZScore!);
     }
-  }
-
-  StatusIndicatorType _getBMICategoryFromZScore(double zScore) {
-    if (zScore < -1) return StatusIndicatorType.underweight;
-    if (zScore <= 1) return StatusIndicatorType.normal;
-    if (zScore <= 2) return StatusIndicatorType.overweight;
-    return StatusIndicatorType.obese;
   }
 
   void _validateForm() {
@@ -190,7 +255,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     try {
       final height = double.parse(_heightController.text);
       final weight = double.parse(_weightController.text);
-      final bmi = double.parse(_bmiController.text);
+      // BMI and remarks are NOT saved to database
 
       await Supabase.instance.client
           .from('child_details')
@@ -198,8 +263,6 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
             'child_id': widget.childId,
             'child_height': height,
             'child_weight': weight,
-            'bmi': bmi,
-            'remarks': _remarksController.text.trim().isEmpty ? null : _remarksController.text.trim(),
             'created_at': DateTime.now().toIso8601String(),
           });
 
@@ -267,6 +330,17 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     if (zScore > 3) return '> +3';
     if (zScore < -3) return '< -3';
     return zScore.toStringAsFixed(2);
+  }
+
+  @override
+  void dispose() {
+    _heightController.removeListener(_onMeasurementChanged);
+    _weightController.removeListener(_onMeasurementChanged);
+    _heightController.dispose();
+    _weightController.dispose();
+    _bmiController.dispose();
+    _remarksController.dispose();
+    super.dispose();
   }
 
   @override
@@ -385,7 +459,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
                       ],
-                      onChanged: (_) => _updateBMI(),
+                      onChanged: (_) => _onMeasurementChanged(),
                       isRequired: true,
                     ),
                     
@@ -414,7 +488,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
                       ],
-                      onChanged: (_) => _updateBMI(),
+                      onChanged: (_) => _onMeasurementChanged(),
                       isRequired: true,
                     ),
                     
@@ -434,40 +508,69 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                     
                     const SizedBox(height: 16),
 
-                    // BMI Display with Z-Score
+                    // BMI Display with Real-time Status (calculated in app, NOT saved)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
+                        color: _bmiCategoryColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _bmiCategoryColor.withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
                       ),
                       child: Column(
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.calculate, color: AppColors.brandAccent),
+                              Icon(
+                                Icons.calculate, 
+                                color: _bmiCategoryColor,
+                                size: 22,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   _bmiController.text.isEmpty
                                       ? 'BMI: ---'
                                       : 'BMI: ${_bmiController.text}',
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    color: AppColors.textPrimary,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: _bmiController.text.isEmpty 
+                                        ? AppColors.textSecondary
+                                        : _bmiCategoryColor,
                                   ),
                                 ),
                               ),
-                              StatusIndicator(status: _bmiStatus),
+                              if (_bmiController.text.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: _bmiCategoryColor.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    _bmiCategoryText,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: _bmiCategoryColor,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
-                          if (_bmiZScore != null) ...[
+                          if (_bmiZScore != null && _bmiController.text.isNotEmpty) ...[
                             const SizedBox(height: 8),
-                            Text(
-                              'Z-Score: ${_formatZScore(_bmiZScore)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                'Z-Score: ${_formatZScore(_bmiZScore)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: _bmiCategoryColor.withValues(alpha: 0.7),
+                                ),
                               ),
                             ),
                           ],
@@ -476,7 +579,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Remarks
+                    // Remarks Field (UI only, NOT saved to DB)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
@@ -489,7 +592,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                         maxLines: 3,
                         minLines: 1,
                         decoration: const InputDecoration(
-                          hintText: 'Remarks (optional)',
+                          hintText: 'Remarks (optional - not saved)',
                           border: InputBorder.none,
                           icon: Icon(Icons.notes_rounded, color: AppColors.brandPrimary),
                         ),

@@ -69,7 +69,7 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
 
     try {
       final formattedDate = DateFormat('yyyy-MM-dd').format(date);
-      final midwifeIdValue = _midwifeId!; // Use ! since we already checked it's not null
+      final midwifeIdValue = _midwifeId!;
 
       // Fetch prenatal checkups for this date
       final checkupsResponse = await Supabase.instance.client
@@ -266,154 +266,154 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
-
-      /// 🔝 HEADER
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(72),
-        child: MainHeader(
-          title: 'SCHEDULES',
-        ),
-      ),
-
-      /// 🔽 BODY
       body: SafeArea(
-        child: Column(
-          children: [
-            /// 📅 CALENDAR SECTION
-            Container(
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: TableCalendar(
-                firstDay: DateTime.now().subtract(const Duration(days: 365)),
-                lastDay: DateTime.now().add(const Duration(days: 365)),
-                focusedDay: _focusedDay,
-                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                onDaySelected: (selectedDay, focusedDay) {
-                  setState(() {
-                    _selectedDay = selectedDay;
-                    _focusedDay = focusedDay;
-                    _refreshSchedules();
-                  });
-                },
-                calendarStyle: CalendarStyle(
-                  todayDecoration: BoxDecoration(
-                    color: AppColors.brandPrimary.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  selectedDecoration: BoxDecoration(
-                    color: AppColors.brandPrimary,
-                    shape: BoxShape.circle,
-                  ),
-                  weekendTextStyle: const TextStyle(color: Colors.black87),
-                  outsideTextStyle: const TextStyle(color: Colors.grey),
-                  defaultTextStyle: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  selectedTextStyle: const TextStyle(
+        top: false,
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            _refreshSchedules();
+            return Future.value();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                /// 📅 CALENDAR SECTION
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
                     color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  todayTextStyle: const TextStyle(
-                    color: AppColors.brandPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                headerStyle: HeaderStyle(
-                  formatButtonVisible: false,
-                  titleCentered: true,
-                  titleTextStyle: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  leftChevronIcon: Icon(
-                    Icons.chevron_left,
-                    color: AppColors.brandPrimary,
-                  ),
-                  rightChevronIcon: Icon(
-                    Icons.chevron_right,
-                    color: AppColors.brandPrimary,
-                  ),
-                  headerPadding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                daysOfWeekStyle: const DaysOfWeekStyle(
-                  weekdayStyle: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  weekendStyle: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-
-            /// 📋 SELECTED DATE HEADER
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    DateFormat('EEEE, MMMM d').format(_selectedDay),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.brandText,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: _refreshSchedules,
-                        icon: const Icon(Icons.refresh),
-                        color: AppColors.brandPrimary,
-                      ),
-                      IconButton(
-                        onPressed: () {
-                          setState(() {
-                            _selectedDay = DateTime.now();
-                            _focusedDay = DateTime.now();
-                            _refreshSchedules();
-                          });
-                        },
-                        icon: const Icon(Icons.today),
-                        color: AppColors.brandPrimary,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
+                  child: TableCalendar(
+                    firstDay: DateTime.now().subtract(const Duration(days: 365)),
+                    lastDay: DateTime.now().add(const Duration(days: 365)),
+                    focusedDay: _focusedDay,
+                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                    onDaySelected: (selectedDay, focusedDay) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                        _refreshSchedules();
+                      });
+                    },
+                    calendarStyle: CalendarStyle(
+                      todayDecoration: BoxDecoration(
+                        color: AppColors.brandPrimary.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      selectedDecoration: BoxDecoration(
+                        color: AppColors.brandPrimary,
+                        shape: BoxShape.circle,
+                      ),
+                      weekendTextStyle: const TextStyle(color: Colors.black87),
+                      outsideTextStyle: const TextStyle(color: Colors.grey),
+                      defaultTextStyle: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      selectedTextStyle: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      todayTextStyle: const TextStyle(
+                        color: AppColors.brandPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    headerStyle: HeaderStyle(
+                      formatButtonVisible: false,
+                      titleCentered: true,
+                      titleTextStyle: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      leftChevronIcon: Icon(
+                        Icons.chevron_left,
+                        color: AppColors.brandPrimary,
+                      ),
+                      rightChevronIcon: Icon(
+                        Icons.chevron_right,
+                        color: AppColors.brandPrimary,
+                      ),
+                      headerPadding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    daysOfWeekStyle: const DaysOfWeekStyle(
+                      weekdayStyle: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      weekendStyle: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
 
-            const SizedBox(height: 8),
+                const SizedBox(height: 16),
 
-            /// 📋 SCHEDULE LIST
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () async {
-                  _refreshSchedules();
-                  return Future.value();
-                },
-                child: FutureBuilder<List<Map<String, dynamic>>>(
+                /// 📋 SELECTED DATE HEADER
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        DateFormat('EEEE, MMMM d').format(_selectedDay),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandText,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: _refreshSchedules,
+                            icon: const Icon(Icons.refresh),
+                            color: AppColors.brandPrimary,
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedDay = DateTime.now();
+                                _focusedDay = DateTime.now();
+                                _refreshSchedules();
+                              });
+                            },
+                            icon: const Icon(Icons.today),
+                            color: AppColors.brandPrimary,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                /// 📋 SCHEDULE LIST
+                FutureBuilder<List<Map<String, dynamic>>>(
                   future: _schedulesFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.brandPrimary,
+                        child: Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: CircularProgressIndicator(
+                            color: AppColors.brandPrimary,
+                          ),
                         ),
                       );
                     }
@@ -456,58 +456,60 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
 
                     if (schedules.isEmpty) {
                       return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            /// 📅 NO SCHEDULES ILLUSTRATION
-                            Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              /// 📅 NO SCHEDULES ILLUSTRATION
+                              Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.calendar_today,
+                                  size: 50,
+                                  color: AppColors.brandPrimary.withValues(alpha: 0.5),
+                                ),
                               ),
-                              child: Icon(
-                                Icons.calendar_today,
-                                size: 60,
-                                color: AppColors.brandPrimary.withValues(alpha: 0.5),
+                              const SizedBox(height: 16),
+                              Text(
+                                DateFormat('EEEE, MMMM d').format(_selectedDay),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.brandText,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 24),
-                            Text(
-                              DateFormat('EEEE, MMMM d').format(_selectedDay),
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.brandText,
+                              const SizedBox(height: 8),
+                              const Text(
+                                'No scheduled appointments',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 14,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'No scheduled appointments',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 16,
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Enjoy your free time! 🎉',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Enjoy your free time! 🎉',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       );
                     }
 
                     return ListView.separated(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       itemCount: schedules.length,
                       separatorBuilder: (context, index) =>
                           const SizedBox(height: 12),
@@ -528,9 +530,9 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                     );
                   },
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

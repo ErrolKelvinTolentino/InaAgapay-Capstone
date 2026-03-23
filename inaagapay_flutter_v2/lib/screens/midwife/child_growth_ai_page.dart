@@ -51,27 +51,26 @@ class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
     setState(() => loading = true);
 
     try {
-      // Load child data
+      // First fetch child details
       final childResponse = await Supabase.instance.client
           .from('children')
           .select('''
             child_id,
             first_name,
             last_name,
-            sex,
-            mother:mother_id (
-              birth_details (
-                birthdate
-              )
-            )
+            sex
           ''')
           .eq('child_id', widget.childId)
           .single();
 
-      final mother = childResponse['mother'] as Map<String, dynamic>?;
-      final birthDetailsList = mother?['birth_details'] as List?;
-      final birthDetails = birthDetailsList?.first as Map<String, dynamic>?;
-      final birthdate = birthDetails?['birthdate']?.toString();
+      // Then fetch birth details separately (NOT through mothers)
+      final birthDetailsResponse = await Supabase.instance.client
+          .from('birth_details')
+          .select('birthdate')
+          .eq('child_id', widget.childId)
+          .maybeSingle();
+
+      final birthdate = birthDetailsResponse?['birthdate']?.toString();
       
       _child = Child(
         id: childResponse['child_id'].toString(),
@@ -95,7 +94,13 @@ class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
       _growthRecords = records.map((r) {
         final height = (r['child_height'] as num?)?.toDouble() ?? 0;
         final weight = (r['child_weight'] as num?)?.toDouble() ?? 0;
-        final bmi = (r['bmi'] as num?)?.toDouble() ?? 0;
+        
+        // Calculate BMI from height and weight
+        double bmi = 0;
+        if (height > 0 && weight > 0) {
+          final heightM = height / 100;
+          bmi = weight / (heightM * heightM);
+        }
         
         final dateRecorded = DateTime.parse(r['created_at']);
         final ageInWeeks = (dateRecorded.difference(birthDateObj).inDays / 7).floor();

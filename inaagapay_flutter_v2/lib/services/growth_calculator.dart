@@ -1,6 +1,7 @@
 // lib/services/growth_calculator.dart
 
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 
 class GrowthCalculator {
   // Weight data for girls (WHO standards) - Weeks 0-13
@@ -111,32 +112,62 @@ class GrowthCalculator {
     {'week': 13, 'l': 0.0652, 'm': 16.3531, 's': 0.09255, 'sd3neg': 12.4, 'sd2neg': 13.6, 'sd1neg': 14.9, 'sd0': 16.4, 'sd1': 17.9, 'sd2': 19.7, 'sd3': 21.5},
   ];
 
-  // Get weight data for specific week and gender
+  // Get weight data for specific week (handles weeks beyond data range)
   static Map<String, dynamic>? getWeightData(int week, String gender) {
     final dataList = gender.toLowerCase() == 'female' ? _weightGirlsData : _weightBoysData;
+    
+    int adjustedWeek = week;
+    if (week > 13) {
+      adjustedWeek = 13;
+      if (kDebugMode) {
+        debugPrint('Week $week exceeds data range (0-13), using week 13 data as approximation');
+      }
+    } else if (week < 0) {
+      adjustedWeek = 0;
+    }
+    
     try {
-      return dataList.firstWhere((item) => item['week'] == week);
+      return dataList.firstWhere((item) => item['week'] == adjustedWeek);
     } catch (e) {
+      debugPrint('No weight data found for week $adjustedWeek, gender $gender');
       return null;
     }
   }
 
-  // Get height data for specific week and gender
+  // Get height data for specific week (handles weeks beyond data range)
   static Map<String, dynamic>? getHeightData(int week, String gender) {
     final dataList = gender.toLowerCase() == 'female' ? _heightGirlsData : _heightBoysData;
+    
+    int adjustedWeek = week;
+    if (week > 13) {
+      adjustedWeek = 13;
+    } else if (week < 0) {
+      adjustedWeek = 0;
+    }
+    
     try {
-      return dataList.firstWhere((item) => item['week'] == week);
+      return dataList.firstWhere((item) => item['week'] == adjustedWeek);
     } catch (e) {
+      debugPrint('No height data found for week $adjustedWeek, gender $gender');
       return null;
     }
   }
 
-  // Get BMI data for specific week and gender
+  // Get BMI data for specific week (handles weeks beyond data range)
   static Map<String, dynamic>? getBMIData(int week, String gender) {
     final dataList = gender.toLowerCase() == 'female' ? _bmiGirlsData : _bmiBoysData;
+    
+    int adjustedWeek = week;
+    if (week > 13) {
+      adjustedWeek = 13;
+    } else if (week < 0) {
+      adjustedWeek = 0;
+    }
+    
     try {
-      return dataList.firstWhere((item) => item['week'] == week);
+      return dataList.firstWhere((item) => item['week'] == adjustedWeek);
     } catch (e) {
+      debugPrint('No BMI data found for week $adjustedWeek, gender $gender');
       return null;
     }
   }
@@ -173,19 +204,34 @@ class GrowthCalculator {
     }
   }
 
-  // Calculate Z-score for BMI using LMS method
+  // Calculate Z-score for BMI using LMS method with better error handling
   static double calculateBMIZScore(double bmi, int week, String gender) {
     final data = getBMIData(week, gender);
-    if (data == null) return 0.0;
+    if (data == null) {
+      debugPrint('⚠️ No BMI data for week $week, gender $gender');
+      return 0.0;
+    }
 
     final l = data['l'] as double;
     final m = data['m'] as double;
     final s = data['s'] as double;
+    
+    debugPrint('📊 BMI Reference Data: L=$l, M=$m, S=$s, Week=$week, Gender=$gender');
+    debugPrint('📊 Input BMI: $bmi');
 
-    if (l == 0) {
-      return (math.log(bmi / m)) / s;
-    } else {
-      return (math.pow(bmi / m, l) - 1) / (l * s);
+    double zScore;
+    try {
+      if (l == 0) {
+        zScore = (math.log(bmi / m)) / s;
+      } else {
+        final powValue = math.pow(bmi / m, l);
+        zScore = (powValue - 1) / (l * s);
+      }
+      debugPrint('📊 Calculated Z-Score: $zScore');
+      return zScore;
+    } catch (e) {
+      debugPrint('❌ Error calculating BMI Z-score: $e');
+      return 0.0;
     }
   }
 }
