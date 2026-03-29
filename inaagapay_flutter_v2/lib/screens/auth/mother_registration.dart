@@ -171,27 +171,33 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             children: [
-              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 32),
+
+              // Logo
+              Image.asset('assets/images/logo.png', height: 100),
+
+              const SizedBox(height: 12),
 
               // App Name
-              const Text(
-                'Inaagapay',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFFF68A5),
-                ),
+              Image.asset(
+                'assets/images/inaagapay_name.png',
+                width: 210,
+                fit: BoxFit.contain,
               ),
 
               const SizedBox(height: 24),
 
               const PageTitle(
                 title: 'Create Account',
-                leadingIcon: Icons.person,
-                trailingIcon: Icons.check,
+                leadingIcon: Icons.account_circle,
+                trailingIcon: Icons.keyboard_arrow_down,
+                color: AppColors.brandText,
               ),
 
               const SizedBox(height: 24),
@@ -201,7 +207,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                 hintText: 'Enter Email Address',
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                leadingIcon: Icons.email_outlined,
+                leadingIcon: Icons.email,
                 isRequired: true,
                 onChanged: (_) => setState(() {}),
               ),
@@ -224,13 +230,22 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
               ),
 
               const SizedBox(height: 16),
+                  ],
+                ),
+              ),
 
-              // Password
-              AppInputField(
+              Container(
+                width: double.infinity,
+                color: AppColors.brandSecondary,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: Column(
+                  children: [
+                    // Password
+                    AppInputField(
                 hintText: 'Create Password',
                 controller: _passwordController,
                 obscureText: _obscurePassword,
-                leadingIcon: Icons.lock_outline,
+                leadingIcon: Icons.lock,
                 isRequired: true,
                 trailingIcon: _obscurePassword
                     ? Icons.visibility_off
@@ -273,7 +288,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                       hintText: 'Confirm Password',
                       controller: _confirmPasswordController,
                       obscureText: _obscureConfirmPassword,
-                      leadingIcon: Icons.lock_outline,
+                      leadingIcon: Icons.lock,
                       isRequired: true,
                       trailingIcon: _obscureConfirmPassword
                           ? Icons.visibility_off
@@ -301,9 +316,17 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                 ),
               ),
 
-              const SizedBox(height: 32),
+                  ],
+                ),
+              ),
 
-              MainButton(
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 32),
+
+                    MainButton(
                 label: _isLoading ? 'Creating Account...' : 'Create Account',
                 showIcons: false,
                 onPressed: _canSubmit ? _handleSubmit : null,
@@ -332,7 +355,43 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                 ],
               ),
 
-              const SizedBox(height: 24),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'By proceeding, you are acknowledging the',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ClickableText(
+                          text: 'Terms of Use',
+                          fontSize: 11,
+                          color: AppColors.brandPrimary,
+                          onTap: () {},
+                        ),
+                        const Text(
+                          ' and ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        ClickableText(
+                          text: 'Privacy Policy',
+                          fontSize: 11,
+                          color: AppColors.brandPrimary,
+                          onTap: () {},
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

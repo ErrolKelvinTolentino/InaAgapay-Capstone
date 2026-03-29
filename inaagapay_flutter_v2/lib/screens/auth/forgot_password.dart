@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'; // Remove the foundation import
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/page_title.dart';
 import '../../services/supabase_service.dart';
+
+// Rest of the file remains the same
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -18,16 +20,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Future<void> _handleSubmit() async {
     if (_emailController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter your email')));
       return;
     }
 
     setState(() => _isLoading = true);
 
-    final result =
-        await SupabaseService.resetPassword(_emailController.text.trim());
+    final result = await SupabaseService.resetPassword(
+      _emailController.text.trim(),
+    );
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -48,8 +51,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(result['message'] as String? ?? 'Failed to send reset code'),
+          content: Text(
+            result['message'] as String? ?? 'Failed to send reset code',
+          ),
           backgroundColor: AppColors.error,
         ),
       );

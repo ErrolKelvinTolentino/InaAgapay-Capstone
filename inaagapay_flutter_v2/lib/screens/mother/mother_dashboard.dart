@@ -1,16 +1,15 @@
 // lib/screens/mother/mother_dashboard.dart
+
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
-import '../../services/auth_storage.dart';
-import '../../widgets/main_header.dart';
 import '../../widgets/headline.dart';
-import '../../widgets/small_description.dart';
 import '../../widgets/hero_card.dart';
 import '../../widgets/small_info_box.dart';
 import '../../widgets/long_info_box.dart';
 import '../../widgets/comparison_card.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/secondary_button.dart';
+import '../../widgets/small_description.dart';
 import '../../models/baby_growth_model.dart';
 
 class MotherDashboard extends StatelessWidget {
@@ -28,46 +27,26 @@ class MotherDashboard extends StatelessWidget {
     final String trimester = _getTrimester(week);
     final babyGrowth = BabyGrowthData.getForWeek(week);
 
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(72),
-        child: MainHeader(
-          title: 'HOME',
-          onViewProfile: () => Navigator.pushNamed(context, '/profile'),
-          onSettings: () => Navigator.pushNamed(context, '/settings'),
-          onHelp: () => Navigator.pushNamed(context, '/help'),
-          onLogout: () async {
-            await AuthStorage.clearAll();
-            if (context.mounted) {
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/login',
-                (route) => false,
-              );
-            }
-          },
-        ),
-      ),
-      body: SafeArea(
+    return Container(
+      color: AppColors.bgPrimary,
+      child: SafeArea(
+        top: false,
+        bottom: false,
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Welcome
               Center(
                 child: Column(
                   children: [
                     const Headline(
-                      text: 'Welcome, [First Name]! ðŸŒ¸',
-                      textAlign: TextAlign.center,
+                      text: 'Welcome, Nanay! 🌸',
                     ),
                     const SizedBox(height: 8),
                     SmallDescription(
                       icon: Icons.calendar_today,
-                      text: 'Week $week â€¢ $trimester',
-                      textAlign: TextAlign.center,
+                      text: 'Week $week • $trimester',
                     ),
                   ],
                 ),
@@ -84,7 +63,6 @@ class MotherDashboard extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // Baby stats
               Row(
                 children: [
                   SmallInfoBox(
@@ -103,7 +81,6 @@ class MotherDashboard extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // Due date
               const LongInfoBox(
                 icon: Icons.calendar_month,
                 text: [
@@ -115,7 +92,7 @@ class MotherDashboard extends StatelessWidget {
                     ),
                   ),
                   TextSpan(
-                    text: 'Month Day, Year\n',
+                    text: 'October 15, 2026\n',
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                   TextSpan(
@@ -123,7 +100,7 @@ class MotherDashboard extends StatelessWidget {
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                   TextSpan(
-                    text: 'X Weeks away',
+                    text: '12 Weeks away',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: AppColors.brandPrimary,
@@ -142,7 +119,6 @@ class MotherDashboard extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // Next check-up
               const LongInfoBox(
                 icon: Icons.notifications,
                 borderColor: AppColors.borderPrimary,
@@ -156,7 +132,7 @@ class MotherDashboard extends StatelessWidget {
                     ),
                   ),
                   TextSpan(
-                    text: 'Month Day, Year â€“ Day',
+                    text: 'June 15, 2026 – Monday',
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                 ],
@@ -167,7 +143,7 @@ class MotherDashboard extends StatelessWidget {
               MainButton(
                 label: 'More Info',
                 showIcons: true,
-                leadingIcon: Icons.info_outline,
+                leftIcon: Icons.info_outline,
                 onPressed: () {},
               ),
 

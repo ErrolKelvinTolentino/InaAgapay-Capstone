@@ -24,7 +24,25 @@ class GrowthLineChart extends StatelessWidget {
       aspectRatio: 1.6,
       child: LineChart(
         LineChartData(
-          gridData: const FlGridData(show: true),
+          gridData: FlGridData(
+  show: true,
+  drawVerticalLine: true,
+  horizontalInterval: 1,
+  getDrawingHorizontalLine: (value) {
+    return FlLine(
+      strokeWidth: 1,
+      color: Colors.grey.withOpacity(0.2),
+      dashArray: [5, 5],
+    );
+  },
+  getDrawingVerticalLine: (value) {
+    return FlLine(
+      strokeWidth: 1,
+      color: Colors.grey.withOpacity(0.2),
+      dashArray: [5, 5],
+    );
+  },
+),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
             leftTitles: const AxisTitles(
@@ -34,23 +52,29 @@ class GrowthLineChart extends StatelessWidget {
               ),
             ),
             bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) {
-                  final index = value.toInt();
-                  if (index < 0 || index >= labels.length) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      labels[index],
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  );
-                },
-              ),
-            ),
+  sideTitles: SideTitles(
+    showTitles: true,
+    interval: 1, // 👈 VERY IMPORTANT
+    getTitlesWidget: (value, meta) {
+      if (value % 1 != 0) {
+        return const SizedBox.shrink(); // 👈 skip decimals
+      }
+
+      final index = value.toInt();
+      if (index < 0 || index >= labels.length) {
+        return const SizedBox.shrink();
+      }
+
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          labels[index],
+          style: const TextStyle(fontSize: 10),
+        ),
+      );
+    },
+  ),
+),
             topTitles: const AxisTitles(
               sideTitles: SideTitles(showTitles: false),
             ),

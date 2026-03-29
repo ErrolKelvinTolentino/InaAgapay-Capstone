@@ -1,11 +1,160 @@
 // lib/screens/midwife/midwife_records.dart
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
 import 'ultrasound_analyzer_screen.dart';
 import 'lab_test_analyzer_screen.dart';
+import '../../services/supabase_service.dart';
 
-class MidwifeRecords extends StatelessWidget {
+class MidwifeRecords extends StatefulWidget {
   const MidwifeRecords({super.key});
+
+  @override
+  State<MidwifeRecords> createState() => _MidwifeRecordsState();
+}
+
+class _MidwifeRecordsState extends State<MidwifeRecords> {
+  List<Map<String, dynamic>> _mothers = [];
+  bool _loadingMothers = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMothers();
+  }
+
+  Future<void> _loadMothers() async {
+    setState(() {
+      _loadingMothers = true;
+    });
+
+    try {
+      final response = await SupabaseService.client
+          .from('mothers')
+          .select('''
+            mother_id,
+            account:account_id (
+              first_name,
+              last_name
+            ),
+            pregnancies!inner (
+              pregnancy_id,
+              status
+            )
+          ''')
+          .eq('pregnancies.status', 'ongoing');
+
+      final mothers = List<Map<String, dynamic>>.from(response);
+      
+      setState(() {
+        _mothers = mothers;
+        _loadingMothers = false;
+      });
+    } catch (e) {
+      setState(() {
+        _loadingMothers = false;
+      });
+      if (kDebugMode) {
+        print('Error loading mothers: $e');
+      }
+    }
+  }
+
+  Future<void> _showMotherSelectionDialog({
+    required Function(int motherId, int pregnancyId) onSelected,
+  }) async {
+    if (_mothers.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No mothers with ongoing pregnancies found'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.6,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select Mother',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_loadingMothers)
+              const Center(
+                child: CircularProgressIndicator(),
+              )
+            else if (_mothers.isEmpty)
+              const Center(
+                child: Text('No mothers available'),
+              )
+            else
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _mothers.length,
+                  itemBuilder: (context, index) {
+                    final mother = _mothers[index];
+                    final account = mother['account'] as Map<String, dynamic>?;
+                    final firstName = account?['first_name'] as String? ?? '';
+                    final lastName = account?['last_name'] as String? ?? '';
+                    final name = '$firstName $lastName'.trim();
+                    final displayName = name.isNotEmpty ? name : 'Mother ${mother['mother_id']}';
+                    
+                    final pregnancies = mother['pregnancies'] as List? ?? [];
+                    final pregnancyId = pregnancies.isNotEmpty
+                        ? pregnancies.first['pregnancy_id'] as int
+                        : null;
+
+                    if (pregnancyId == null) return const SizedBox.shrink();
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
+                          child: Text(
+                            displayName[0].toUpperCase(),
+                            style: const TextStyle(
+                              color: AppColors.brandPrimary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        title: Text(displayName),
+                        subtitle: Text('Pregnancy ID: $pregnancyId'),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          onSelected(mother['mother_id'], pregnancyId);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +166,6 @@ class MidwifeRecords extends StatelessWidget {
           children: [
             const SizedBox(height: 10),
             
-            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -46,7 +194,6 @@ class MidwifeRecords extends StatelessWidget {
             ),
             const SizedBox(height: 30),
 
-            // AI Analysis Tools Section
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -92,11 +239,19 @@ class MidwifeRecords extends StatelessWidget {
                           Icons.photo,
                           Colors.purple,
                           () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const UltrasoundAnalyzerScreen(),
-                              ),
+                            _showMotherSelectionDialog(
+                              onSelected: (motherId, pregnancyId) {
+                                if (!mounted) return;
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UltrasoundAnalyzerScreen(
+                                      motherId: motherId,
+                                      pregnancyId: pregnancyId,
+                                    ),
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -109,11 +264,19 @@ class MidwifeRecords extends StatelessWidget {
                           Icons.science,
                           Colors.orange,
                           () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const LabTestAnalyzerScreen(),
-                              ),
+                            _showMotherSelectionDialog(
+                              onSelected: (motherId, pregnancyId) {
+                                if (!mounted) return;
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => LabTestAnalyzerScreen(
+                                      motherId: motherId,
+                                      pregnancyId: pregnancyId,
+                                    ),
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -126,7 +289,6 @@ class MidwifeRecords extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // Recent Ultrasound Records
             _buildSectionHeader('Recent Ultrasound Records', Icons.photo),
             const SizedBox(height: 15),
             _buildUltrasoundRecord(
@@ -155,7 +317,6 @@ class MidwifeRecords extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // Recent Lab Test Records
             _buildSectionHeader('Recent Lab Test Records', Icons.science),
             const SizedBox(height: 15),
             _buildLabTestRecord(
@@ -184,7 +345,6 @@ class MidwifeRecords extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // Pending Reviews
             _buildSectionHeader('Pending Reviews', Icons.pending_actions),
             const SizedBox(height: 15),
             Container(

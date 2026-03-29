@@ -1,8 +1,13 @@
+// lib/screens/mother/mother_dashboard_shell.dart
+
 import 'package:flutter/material.dart';
-// Change these:
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
+import 'mother_dashboard.dart';
+import 'mother_journal_screen.dart';
+import 'mother_children_screen.dart';
 import 'records_screen.dart';
+import 'mother_profile_page.dart';
 
 class MotherDashboardShell extends StatefulWidget {
   const MotherDashboardShell({super.key});
@@ -14,465 +19,418 @@ class MotherDashboardShell extends StatefulWidget {
 class _MotherDashboardShellState extends State<MotherDashboardShell> {
   int _currentIndex = 0;
 
+  final List<Widget> _screens = [
+    const MotherDashboard(),
+    const MotherJournalScreen(),
+    const MotherChildrenScreen(),
+    const RecordsScreen(),
+  ];
+
+  final List<String> _titles = [
+    'HOME',
+    'JOURNAL',
+    'CHILDREN',
+    'RECORDS',
+  ];
+
   Future<void> _logout() async {
     await AuthStorage.clearAll();
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        title: const Text(
-          'Inaagapay',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+  void _showProfileMenu(BuildContext context) {
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          GestureDetector(
+            onTap: () => entry.remove(),
+            child: Container(
+              color: Colors.black.withOpacity(0.35),
+            ),
           ),
-        ),
-        backgroundColor: AppColors.brandAccent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: const [
-          DashboardScreen(),
-          RecordsScreen(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: AppColors.brandAccent,
-        unselectedItemColor: AppColors.textSecondary,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.folder_outlined),
-            activeIcon: Icon(Icons.folder),
-            label: 'Records',
+          Positioned(
+            top: 90,
+            right: 16,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 200,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    _MenuItem(
+                      icon: Icons.person_outline,
+                      label: 'View Profile',
+                      onTap: () {
+                        entry.remove();
+                        AuthStorage.getMotherId().then((motherId) {
+                          if (motherId != null && mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MotherProfilePage(motherId: motherId),
+                              ),
+                            );
+                          }
+                        });
+                      },
+                    ),
+                    _MenuItem(
+                      icon: Icons.settings_outlined,
+                      label: 'Settings',
+                      onTap: () {
+                        entry.remove();
+                        Navigator.pushNamed(context, '/settings');
+                      },
+                    ),
+                    _MenuItem(
+                      icon: Icons.help_outline,
+                      label: 'Help',
+                      onTap: () {
+                        entry.remove();
+                        Navigator.pushNamed(context, '/help');
+                      },
+                    ),
+                    const Divider(height: 8),
+                    _MenuItem(
+                      icon: Icons.logout_rounded,
+                      label: 'Log out',
+                      isDanger: true,
+                      onTap: () {
+                        entry.remove();
+                        _confirmLogout(context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
-  }
-}
 
-class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({super.key});
+    overlay.insert(entry);
+  }
+
+  void _confirmLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  size: 32,
+                  color: Colors.red,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Log out',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Are you sure you want to log out of your account?',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _logout();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: const Text('Log out'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
-            // Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Welcome back,',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Nanay! 👋',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brandAccent,
-                      ),
-                    ),
-                  ],
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.brandAccent, width: 2),
-                  ),
-                  child: const CircleAvatar(
-                    radius: 25,
-                    backgroundColor: Colors.white,
-                    child: Icon(
-                      Icons.person,
-                      size: 30,
-                      color: AppColors.brandAccent,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-
-            // Pregnancy Progress Card
+            // Custom Header
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.brandAccent,
-                    AppColors.brandAccent.withValues(alpha: 0.8)
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.brandAccent.withValues(alpha: 0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Your Pregnancy',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    '24 Weeks',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Expected: October 15, 2026',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  LinearProgressIndicator(
-                    value: 0.6,
-                    backgroundColor: Colors.white.withValues(alpha: 0.3),
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '16 weeks done',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        '24 weeks left',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 30),
-
-            // Quick Stats
-            const Text(
-              'Quick Overview',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 15),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Checkups',
-                    '4',
-                    Icons.calendar_today,
-                    Colors.blue,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Ultrasounds',
-                    '2',
-                    Icons.photo,
-                    Colors.purple,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Lab Tests',
-                    '3',
-                    Icons.science,
-                    Colors.orange,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Next Visit',
-                    'In 3 days',
-                    Icons.event,
-                    Colors.green,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-
-            // Recent Activity
-            const Text(
-              'Recent Activity',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 15),
-            _buildActivityItem(
-              'Ultrasound Scan',
-              '2 days ago',
-              Icons.photo,
-              Colors.purple.shade100,
-              Colors.purple,
-            ),
-            const SizedBox(height: 10),
-            _buildActivityItem(
-              'Lab Test Results',
-              '5 days ago',
-              Icons.science,
-              Colors.orange.shade100,
-              Colors.orange,
-            ),
-            const SizedBox(height: 10),
-            _buildActivityItem(
-              'Prenatal Checkup',
-              '1 week ago',
-              Icons.medical_services,
-              Colors.blue.shade100,
-              Colors.blue,
-            ),
-            const SizedBox(height: 30),
-
-            // Upcoming Appointments
-            const Text(
-              'Upcoming',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 15),
-            Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandAccent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.event,
-                      color: AppColors.brandAccent,
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      height: 36,
+                      errorBuilder: (context, error, stackTrace) => 
+                        const Icon(Icons.favorite, color: AppColors.brandPrimary, size: 30),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Prenatal Checkup',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Jun 15, 2026 at 10:00 AM',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    _titles[_currentIndex],
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brandText,
+                      letterSpacing: 0.4,
                     ),
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(20),
+                  const Spacer(),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () {},
+                    icon: const Icon(
+                      Icons.notifications_none_rounded,
+                      size: 24,
+                      color: AppColors.textPrimary,
                     ),
-                    child: Text(
-                      'Confirmed',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green.shade700,
-                        fontWeight: FontWeight.w500,
+                  ),
+                  const SizedBox(width: 14),
+                  GestureDetector(
+                    onTap: () => _showProfileMenu(context),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.brandPrimary,
+                      ),
+                      child: const Icon(
+                        Icons.person,
+                        size: 20,
+                        color: Colors.white,
                       ),
                     ),
                   ),
                 ],
               ),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: _currentIndex,
+                children: _screens,
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: Container(
+        height: 70,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _NavItem(
+              icon: Icons.home_outlined,
+              activeIcon: Icons.home,
+              label: 'Home',
+              isActive: _currentIndex == 0,
+              onTap: () => setState(() => _currentIndex = 0),
+            ),
+            _NavItem(
+              icon: Icons.menu_book_outlined,
+              activeIcon: Icons.menu_book,
+              label: 'Journal',
+              isActive: _currentIndex == 1,
+              onTap: () => setState(() => _currentIndex = 1),
+            ),
+            _NavItem(
+              icon: Icons.child_care_outlined,
+              activeIcon: Icons.child_care,
+              label: 'Children',
+              isActive: _currentIndex == 2,
+              onTap: () => setState(() => _currentIndex = 2),
+            ),
+            _NavItem(
+              icon: Icons.folder_outlined,
+              activeIcon: Icons.folder,
+              label: 'Records',
+              isActive: _currentIndex == 3,
+              onTap: () => setState(() => _currentIndex = 3),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildStatCard(
-      String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = isActive ? AppColors.brandPrimary : AppColors.textSecondary;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
+          Icon(
+            isActive ? activeIcon : icon,
+            size: 26,
+            color: color,
           ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: color,
             ),
           ),
+          const SizedBox(height: 4),
+          if (isActive)
+            Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary,
+                shape: BoxShape.circle,
+              ),
+            ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildActivityItem(String title, String time, IconData icon,
-      Color bgColor, Color iconColor) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(10),
+class _MenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isDanger;
+
+  const _MenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDanger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDanger ? Colors.redAccent : AppColors.textPrimary;
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
             ),
-            child: Icon(icon, color: iconColor, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  time,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.arrow_forward_ios,
-              size: 14, color: AppColors.textSecondary),
-        ],
+          ],
+        ),
       ),
     );
   }

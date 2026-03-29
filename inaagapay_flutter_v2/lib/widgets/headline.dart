@@ -1,15 +1,15 @@
+// lib/widgets/headline.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class Headline extends StatelessWidget {
   final String text;
-  final TextAlign textAlign;
   final double fontSize;
 
   const Headline({
     super.key,
     required this.text,
-    this.textAlign = TextAlign.center,
     this.fontSize = 22,
   });
 
@@ -17,7 +17,7 @@ class Headline extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      textAlign: textAlign,
+      textAlign: TextAlign.center,
       style: TextStyle(
         fontSize: fontSize,
         fontWeight: FontWeight.w600,

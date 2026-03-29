@@ -1,3 +1,5 @@
+// lib/widgets/comparison_card.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -9,67 +11,48 @@ class ComparisonCard extends StatelessWidget {
     required this.week,
   });
 
-  // 🧠 CENTRALIZED DATA SOURCE
+  // Data source
   static const Map<int, Map<String, String>> _comparisonData = {
-    // 🌱 Early weeks (same styling, same layout)
-    1: {
-      'label': 'Baby will soon be as small as',
-      'name': 'A Rice Grain',
-      'image': 'rice.png',
-    },
-    2: {
-      'label': 'Baby will soon be as small as',
-      'name': 'A Rice Grain',
-      'image': 'rice.png',
-    },
-    3: {
-      'label': 'Baby will soon be as small as',
-      'name': 'A Rice Grain',
-      'image': 'rice.png',
-    },
-    4: {
-      'label': 'Baby is as small as',
-      'name': 'A Rice Grain',
-      'image': 'rice.png',
-    },
-
-    // 🌸 Growing weeks
-    5:  {'label': 'Baby is about as big as', 'name': 'A Green Pea', 'image': 'pea.png'},
-    6:  {'label': 'Baby is about as big as', 'name': 'A Coffee Bean', 'image': 'coffee.png'},
-    7:  {'label': 'Baby is now as big as',   'name': 'A Blueberry', 'image': 'blueberry.png'},
-    8:  {'label': 'Baby is now as big as',   'name': 'A Raspberry', 'image': 'raspberry.png'},
-    9:  {'label': 'Baby is now as big as',   'name': 'A Cherry', 'image': 'cherry.png'},
-    10: {'label': 'Baby is now as big as',   'name': 'A Strawberry', 'image': 'strawberry.png'},
-    11: {'label': 'Baby is about as big as', 'name': 'A Lime', 'image': 'lime.png'},
-    12: {'label': 'Baby is about as big as', 'name': 'A Plum', 'image': 'plum.png'},
-    13: {'label': 'Baby is about as big as', 'name': 'A Lemon', 'image': 'lemon.png'},
-    14: {'label': 'Baby is about as big as', 'name': 'A Peach', 'image': 'peach.png'},
-    15: {'label': 'Baby is about as big as', 'name': 'An Apple', 'image': 'apple.png'},
-    16: {'label': 'Baby is about as big as', 'name': 'An Avocado', 'image': 'avocado.png'},
-    17: {'label': 'Baby is about as big as', 'name': 'A Pear', 'image': 'pear.png'},
-    18: {'label': 'Baby is about as big as', 'name': 'A Bell Pepper', 'image': 'pepper.png'},
-    19: {'label': 'Baby is about as big as', 'name': 'A Mango', 'image': 'mango.png'},
-    20: {'label': 'Baby is about as big as', 'name': 'A Banana', 'image': 'banana.png'},
-    21: {'label': 'Baby is about as big as', 'name': 'A Carrot', 'image': 'carrot.png'},
-    22: {'label': 'Baby is about as big as', 'name': 'An Orange', 'image': 'orange.png'},
-    23: {'label': 'Baby is about as big as', 'name': 'A Pomelo', 'image': 'pomelo.png'},
-    24: {'label': 'Baby is about as big as', 'name': 'An Ear of Corn', 'image': 'corn.png'},
-    25: {'label': 'Baby is about as big as', 'name': 'A Cucumber', 'image': 'cucumber.png'},
-    26: {'label': 'Baby is about as big as', 'name': 'An Eggplant', 'image': 'eggplant.png'},
-    27: {'label': 'Baby is about as big as', 'name': 'A Cauliflower', 'image': 'cauliflower.png'},
-    28: {'label': 'Baby is about as big as', 'name': 'A Large Carrot', 'image': 'largecarrot.png'},
-    29: {'label': 'Baby is about as big as', 'name': 'A Sweet Potato', 'image': 'potato.png'},
-    30: {'label': 'Baby is about as big as', 'name': 'A Cabbage', 'image': 'cabbage.png'},
-    31: {'label': 'Baby is about as big as', 'name': 'A Coconut', 'image': 'coconut.png'},
-    32: {'label': 'Baby is about as big as', 'name': 'A Large White Onion', 'image': 'onion.png'},
-    33: {'label': 'Baby is about as big as', 'name': 'A Pineapple', 'image': 'pineapple.png'},
-    34: {'label': 'Baby is about as big as', 'name': 'A Melon', 'image': 'melon.png'},
-    35: {'label': 'Baby is about as big as', 'name': 'A Large Melon', 'image': 'melon.png'},
-    36: {'label': 'Baby is about as big as', 'name': 'A Kabocha Squash', 'image': 'kabocha.png'},
-    37: {'label': 'Baby is about as big as', 'name': 'A Taro (Gabi)', 'image': 'taro.png'},
-    38: {'label': 'Baby is about as big as', 'name': 'A Beetroot', 'image': 'beetroot.png'},
-    39: {'label': 'Baby is about as big as', 'name': 'A Mini Watermelon', 'image': 'watermelon.png'},
-    40: {'label': 'Baby is about as big as', 'name': 'A Small Pumpkin', 'image': 'pumpkin.png'},
+    1: {'label': 'Baby will soon be as small as', 'name': 'A Rice Grain'},
+    2: {'label': 'Baby will soon be as small as', 'name': 'A Rice Grain'},
+    3: {'label': 'Baby will soon be as small as', 'name': 'A Rice Grain'},
+    4: {'label': 'Baby is as small as', 'name': 'A Rice Grain'},
+    5: {'label': 'Baby is about as big as', 'name': 'A Green Pea'},
+    6: {'label': 'Baby is about as big as', 'name': 'A Coffee Bean'},
+    7: {'label': 'Baby is now as big as', 'name': 'A Blueberry'},
+    8: {'label': 'Baby is now as big as', 'name': 'A Raspberry'},
+    9: {'label': 'Baby is now as big as', 'name': 'A Cherry'},
+    10: {'label': 'Baby is now as big as', 'name': 'A Strawberry'},
+    11: {'label': 'Baby is about as big as', 'name': 'A Lime'},
+    12: {'label': 'Baby is about as big as', 'name': 'A Plum'},
+    13: {'label': 'Baby is about as big as', 'name': 'A Lemon'},
+    14: {'label': 'Baby is about as big as', 'name': 'A Peach'},
+    15: {'label': 'Baby is about as big as', 'name': 'An Apple'},
+    16: {'label': 'Baby is about as big as', 'name': 'An Avocado'},
+    17: {'label': 'Baby is about as big as', 'name': 'A Pear'},
+    18: {'label': 'Baby is about as big as', 'name': 'A Bell Pepper'},
+    19: {'label': 'Baby is about as big as', 'name': 'A Mango'},
+    20: {'label': 'Baby is about as big as', 'name': 'A Banana'},
+    21: {'label': 'Baby is about as big as', 'name': 'A Carrot'},
+    22: {'label': 'Baby is about as big as', 'name': 'An Orange'},
+    23: {'label': 'Baby is about as big as', 'name': 'A Pomelo'},
+    24: {'label': 'Baby is about as big as', 'name': 'An Ear of Corn'},
+    25: {'label': 'Baby is about as big as', 'name': 'A Cucumber'},
+    26: {'label': 'Baby is about as big as', 'name': 'An Eggplant'},
+    27: {'label': 'Baby is about as big as', 'name': 'A Cauliflower'},
+    28: {'label': 'Baby is about as big as', 'name': 'A Large Carrot'},
+    29: {'label': 'Baby is about as big as', 'name': 'A Sweet Potato'},
+    30: {'label': 'Baby is about as big as', 'name': 'A Cabbage'},
+    31: {'label': 'Baby is about as big as', 'name': 'A Coconut'},
+    32: {'label': 'Baby is about as big as', 'name': 'A Large White Onion'},
+    33: {'label': 'Baby is about as big as', 'name': 'A Pineapple'},
+    34: {'label': 'Baby is about as big as', 'name': 'A Melon'},
+    35: {'label': 'Baby is about as big as', 'name': 'A Large Melon'},
+    36: {'label': 'Baby is about as big as', 'name': 'A Kabocha Squash'},
+    37: {'label': 'Baby is about as big as', 'name': 'A Taro (Gabi)'},
+    38: {'label': 'Baby is about as big as', 'name': 'A Beetroot'},
+    39: {'label': 'Baby is about as big as', 'name': 'A Mini Watermelon'},
+    40: {'label': 'Baby is about as big as', 'name': 'A Small Pumpkin'},
   };
 
   @override
@@ -81,11 +64,7 @@ class ComparisonCard extends StatelessWidget {
       height: 96,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        image: const DecorationImage(
-          image: AssetImage('assets/images/pinkbg.png'),
-          fit: BoxFit.cover,
-          opacity: 0.5,
-        ),
+        color: AppColors.bgSecondary.withOpacity(0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
@@ -117,11 +96,14 @@ class ComparisonCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-            Image.asset(
-              'assets/images/${data['image']}',
-              height: 80,
+            Container(
               width: 72,
-              fit: BoxFit.fitHeight,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.food_bank, color: AppColors.brandPrimary),
             ),
           ],
         ),

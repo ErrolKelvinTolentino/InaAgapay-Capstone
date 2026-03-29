@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-import '../widgets/confirmation_dialog_box.dart';
+import 'confirmation_dialog_box.dart';
 
 class MainHeader extends StatelessWidget {
   final String title;
@@ -31,12 +31,15 @@ class MainHeader extends StatelessWidget {
     entry = OverlayEntry(
       builder: (_) => Stack(
         children: [
+          /// FULLSCREEN OVERLAY
           GestureDetector(
             onTap: () => entry.remove(),
             child: Container(
               color: Colors.black.withOpacity(0.35),
             ),
           ),
+
+          /// PROFILE MENU
           Positioned(
             top: 80,
             right: 16,
@@ -100,10 +103,8 @@ class MainHeader extends StatelessWidget {
             Image.asset(
               'assets/images/logo.png',
               height: 40,
-              errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.favorite,
-                  color: AppColors.brandPrimary,
-                  size: 30),
+              errorBuilder: (context, error, stackTrace) => 
+                const Icon(Icons.favorite, color: AppColors.brandPrimary, size: 30),
             ),
 
             const SizedBox(width: 12),

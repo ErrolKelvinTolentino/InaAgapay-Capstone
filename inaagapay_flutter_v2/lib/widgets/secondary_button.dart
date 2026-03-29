@@ -1,30 +1,25 @@
+// lib/widgets/secondary_button.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-
 
 class SecondaryButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
-
-
-  /// Icon control
   final bool showIcons;
-  final IconData? leadingIcon; // ✅ NEW (optional)
-
+  final IconData? leadingIcon;
 
   const SecondaryButton({
     super.key,
     required this.label,
     required this.onPressed,
     this.showIcons = true,
-    this.leadingIcon, // ✅ optional
+    this.leadingIcon,
   });
-
 
   @override
   Widget build(BuildContext context) {
     final IconData icon = leadingIcon ?? Icons.arrow_forward;
-
 
     return SizedBox(
       height: 52,
@@ -63,6 +58,3 @@ class SecondaryButton extends StatelessWidget {
     );
   }
 }
-
-
-

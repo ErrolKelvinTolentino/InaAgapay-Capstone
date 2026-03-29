@@ -40,7 +40,7 @@ class _ConstraintItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = isValid ? AppColors.success : AppColors.error;
+    final Color color = isValid ? AppColors.success : AppColors.brandPrimary.withValues(alpha: 0.5);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

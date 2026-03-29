@@ -1,9 +1,11 @@
+// lib/widgets/long_info_box.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class LongInfoBox extends StatelessWidget {
   final IconData icon;
-  final List<InlineSpan> text; // 👈 fully dynamic
+  final List<InlineSpan> text;
   final Color? borderColor;
   final Color? iconColor;
 
@@ -30,7 +32,7 @@ class LongInfoBox extends StatelessWidget {
         children: [
           Icon(
             icon,
-            size: 36, // 👈 prototype weight
+            size: 36,
             color: iconColor ?? AppColors.brandPrimary,
           ),
           const SizedBox(width: 12),

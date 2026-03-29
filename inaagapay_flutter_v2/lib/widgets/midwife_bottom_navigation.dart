@@ -1,3 +1,5 @@
+// lib/widgets/midwife_bottom_navigation.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -16,19 +18,18 @@ class MidwifeBottomNavigation extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        height: 70,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
           ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.08),
               blurRadius: 20,
-              offset: const Offset(0, -6),
+              offset: const Offset(0, -4),
             ),
           ],
         ),
@@ -36,25 +37,29 @@ class MidwifeBottomNavigation extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _NavItem(
-              icon: Icons.home_filled,
+              icon: Icons.home_outlined,
+              activeIcon: Icons.home,
               label: 'Home',
               isActive: currentIndex == 0,
               onTap: () => onTabSelected(0),
             ),
             _NavItem(
-              icon: Icons.pregnant_woman_rounded,
+              icon: Icons.pregnant_woman_outlined,
+              activeIcon: Icons.pregnant_woman,
               label: 'Mothers',
               isActive: currentIndex == 1,
               onTap: () => onTabSelected(1),
             ),
             _NavItem(
               icon: Icons.child_care_outlined,
+              activeIcon: Icons.child_care,
               label: 'Children',
               isActive: currentIndex == 2,
               onTap: () => onTabSelected(2),
             ),
             _NavItem(
-              icon: Icons.calendar_today_rounded,
+              icon: Icons.calendar_today_outlined,
+              activeIcon: Icons.calendar_today,
               label: 'Schedules',
               isActive: currentIndex == 3,
               onTap: () => onTabSelected(3),
@@ -68,12 +73,14 @@ class MidwifeBottomNavigation extends StatelessWidget {
 
 class _NavItem extends StatelessWidget {
   final IconData icon;
+  final IconData activeIcon;
   final String label;
   final bool isActive;
   final VoidCallback onTap;
 
   const _NavItem({
     required this.icon,
+    required this.activeIcon,
     required this.label,
     required this.isActive,
     required this.onTap,
@@ -81,8 +88,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color =
-        isActive ? AppColors.brandPrimary : AppColors.textSecondary;
+    final Color color = isActive ? AppColors.brandPrimary : AppColors.textSecondary;
 
     return GestureDetector(
       onTap: onTap,
@@ -91,7 +97,7 @@ class _NavItem extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            icon,
+            isActive ? activeIcon : icon,
             size: 26,
             color: color,
           ),
@@ -99,17 +105,17 @@ class _NavItem extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
               color: color,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           if (isActive)
             Container(
-              width: 6,
-              height: 6,
-              decoration: const BoxDecoration(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
                 color: AppColors.brandPrimary,
                 shape: BoxShape.circle,
               ),

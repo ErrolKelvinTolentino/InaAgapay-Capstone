@@ -23,7 +23,7 @@ class MidwifeStatisticsCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
-        color: AppColors.bgPrimary,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderPrimary),
       ),
@@ -33,9 +33,9 @@ class MidwifeStatisticsCard extends StatelessWidget {
           Text(
             totalPregnancies.toString(),
             style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w600,
-              color: AppColors.brandText,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandPrimary,
             ),
           ),
 
@@ -45,16 +45,12 @@ class MidwifeStatisticsCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: const [
-              Icon(
-                Icons.circle,
-                size: 12,
-                color: AppColors.brandPrimary,
-              ),
+              Icon(Icons.pregnant_woman, color: AppColors.brandPrimary, size: 22),
               SizedBox(width: 8),
               Text(
                 'Active Pregnancies',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSecondary,
                 ),
@@ -71,6 +67,7 @@ class MidwifeStatisticsCard extends StatelessWidget {
                 child: _TrimesterCard(
                   value: firstTrimester,
                   title: '1st\nTrimester',
+                  backgroundColor: const Color(0xFFFFF0F5),
                 ),
               ),
               const SizedBox(width: 12),
@@ -78,7 +75,7 @@ class MidwifeStatisticsCard extends StatelessWidget {
                 child: _TrimesterCard(
                   value: secondTrimester,
                   title: '2nd\nTrimester',
-                  backgroundColor: AppColors.brandSecondary,
+                  backgroundColor: const Color(0xFFFFF0F5),
                 ),
               ),
               const SizedBox(width: 12),
@@ -86,7 +83,7 @@ class MidwifeStatisticsCard extends StatelessWidget {
                 child: _TrimesterCard(
                   value: thirdTrimester,
                   title: '3rd\nTrimester',
-                  backgroundColor: AppColors.faintWhite,
+                  backgroundColor: const Color(0xFFFFF0F5),
                 ),
               ),
             ],
@@ -113,14 +110,11 @@ class _TrimesterCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(
         vertical: 18,
-        horizontal: 16,
+        horizontal: 8,
       ),
       decoration: BoxDecoration(
         color: backgroundColor ?? AppColors.bgSecondary,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.borderPrimary,
-        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -128,9 +122,9 @@ class _TrimesterCard extends StatelessWidget {
           Text(
             value.toString(),
             style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: AppColors.brandText,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandPrimary,
             ),
           ),
           const SizedBox(height: 6),
@@ -138,7 +132,7 @@ class _TrimesterCard extends StatelessWidget {
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               height: 1.3,
               color: AppColors.textSecondary,
             ),

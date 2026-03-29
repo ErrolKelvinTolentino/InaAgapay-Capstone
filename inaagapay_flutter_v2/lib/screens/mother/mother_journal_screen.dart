@@ -1,267 +1,101 @@
-// lib/screens/mother_journal_screen.dart
-import 'package:flutter/material.dart';
-// Change these:
-import '../../theme/app_colors.dart';
+// lib/screens/mother/mother_journal_screen.dart
 
-class MotherJournalScreen extends StatefulWidget {
+import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/headline.dart';
+
+class MotherJournalScreen extends StatelessWidget {
   const MotherJournalScreen({super.key});
 
   @override
-  State<MotherJournalScreen> createState() => _MotherJournalScreenState();
-}
-
-class _MotherJournalScreenState extends State<MotherJournalScreen> {
-  final List<Map<String, dynamic>> _entries = [];
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadEntries();
-  }
-
-  Future<void> _loadEntries() async {
-    setState(() => _isLoading = true);
-    // TODO: Load from Supabase
-    await Future.delayed(const Duration(seconds: 1));
-    if (mounted) {
-      setState(() {
-        _entries.addAll([
-          {
-            'title': 'First Ultrasound',
-            'content':
-                'Saw the baby for the first time! Heartbeat was strong at 142 bpm.',
-            'created_at': DateTime.now().subtract(const Duration(days: 2)),
-          },
-          {
-            'title': 'Feeling Kicks',
-            'content':
-                'Felt the baby kick for the first time today! Such an amazing feeling.',
-            'created_at': DateTime.now().subtract(const Duration(days: 5)),
-          },
-        ]);
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _addEntry() async {
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (context) => _JournalEntryDialog(),
-    );
-
-    if (result != null && mounted) {
-      setState(() {
-        _entries.insert(0, {
-          'title': result['title'],
-          'content': result['content'],
-          'created_at': DateTime.now(),
-        });
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        title: const Text(
-          'My Journal',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        backgroundColor: AppColors.brandAccent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
-            onPressed: _addEntry,
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _entries.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.auto_stories_outlined,
-                        size: 64,
-                        color: AppColors.textSecondary.withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No journal entries yet',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tap + to write your first entry',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: _addEntry,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Write Entry'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _entries.length,
-                  itemBuilder: (context, index) {
-                    final entry = _entries[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  entry['title'] ?? 'Untitled',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                _formatDate(entry['created_at']),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            entry['content'] ?? '',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays == 0) {
-      return 'Today';
-    } else if (difference.inDays == 1) {
-      return 'Yesterday';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
-    } else {
-      return '${date.month}/${date.day}/${date.year}';
-    }
-  }
-}
-
-class _JournalEntryDialog extends StatefulWidget {
-  @override
-  State<_JournalEntryDialog> createState() => _JournalEntryDialogState();
-}
-
-class _JournalEntryDialogState extends State<_JournalEntryDialog> {
-  final _titleController = TextEditingController();
-  final _contentController = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+    return Container(
+      color: AppColors.bgPrimary,
+      child: Center(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
-              'New Journal Entry',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.menu_book,
+                size: 64,
+                color: AppColors.brandPrimary,
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                border: OutlineInputBorder(),
-              ),
+            const SizedBox(height: 24),
+            const Headline(
+              text: 'Journal',
+              fontSize: 28,
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _contentController,
-              decoration: const InputDecoration(
-                labelText: 'What\'s on your mind?',
-                border: OutlineInputBorder(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'Document your pregnancy journey, track your feelings, and capture precious moments.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
               ),
-              maxLines: 5,
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    if (_titleController.text.isNotEmpty &&
-                        _contentController.text.isNotEmpty) {
-                      Navigator.pop(context, {
-                        'title': _titleController.text,
-                        'content': _contentController.text,
-                      });
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandAccent,
-                    foregroundColor: Colors.white,
+            const SizedBox(height: 32),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.hourglass_empty,
+                      size: 16,
+                      color: Colors.white,
+                    ),
                   ),
-                  child: const Text('Save'),
-                ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Coming Soon',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildFeatureChip(Icons.favorite, 'Mood Tracker'),
+                const SizedBox(width: 8),
+                _buildFeatureChip(Icons.photo, 'Photo Gallery'),
+                const SizedBox(width: 8),
+                _buildFeatureChip(Icons.event, 'Milestones'),
               ],
             ),
           ],
@@ -270,10 +104,29 @@ class _JournalEntryDialogState extends State<_JournalEntryDialog> {
     );
   }
 
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _contentController.dispose();
-    super.dispose();
+  Widget _buildFeatureChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppColors.brandPrimary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

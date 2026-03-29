@@ -1,3 +1,5 @@
+// lib/widgets/small_info_box.dart
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
