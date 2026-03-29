@@ -602,42 +602,26 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   }
 
   String _buildMergedAssessmentText(_RiskSnapshot snapshot, String? aiText) {
-    final systemFactors = snapshot.factors
-        .map((f) => '- ${f.factor} (${f.influence})')
-        .join('\n');
-    final systemActions =
-        snapshot.suggestedActions.map((a) => '- $a').join('\n');
-    final systemNotable = snapshot.notableRecords.map((n) => '- $n').join('\n');
-
     if (snapshot.aiGenerated && aiText != null && aiText.trim().isNotEmpty) {
-      return '''
-${aiText.trim()}
-
-SYSTEM-DETECTED RISK LEVEL: ${_riskLevelLabel(snapshot.level)}
-
-SYSTEM-DETECTED NOTABLE RECORDS:
-${systemNotable.isEmpty ? '- None recorded' : systemNotable}
-
-SYSTEM-DETECTED RISK FACTORS:
-${systemFactors.isEmpty ? '- No major factors detected' : systemFactors}
-
-SYSTEM-DETECTED SUGGESTIVE ACTIONS:
-${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActions}
-''';
+      return aiText.trim();
     }
 
-    return '''
-RISK LEVEL: ${_riskLevelLabel(snapshot.level)}
+    final highFactors = snapshot.factors
+        .where((f) => f.influence == 'high')
+        .map((f) => f.factor)
+        .take(3)
+        .toList();
+    final keyAction = snapshot.suggestedActions.isNotEmpty
+        ? snapshot.suggestedActions.first
+        : 'Continue routine prenatal follow-up and monitor for new warning signs.';
 
-NOTABLE RECORDS:
-${systemNotable.isEmpty ? '- None recorded' : systemNotable}
+    final focusText = highFactors.isEmpty
+        ? 'No high-risk trigger is currently detected from available records.'
+        : 'Main concern(s): ${highFactors.join(', ')}.';
 
-RISK FACTORS:
-${systemFactors.isEmpty ? '- No major factors detected' : systemFactors}
-
-SUGGESTIVE ACTIONS:
-${systemActions.isEmpty ? '- Continue routine prenatal follow-up.' : systemActions}
-''';
+    return 'AI insight fallback: ${_riskLevelLabel(snapshot.level)}. '
+        '$focusText '
+        'Priority action: $keyAction';
   }
 
   void _syncEditableRiskState(_RiskSnapshot snapshot, String mergedText) {
@@ -1364,17 +1348,13 @@ Do not diagnose. Use supportive and safe language suitable for clinical handoff.
 State uncertainty clearly when data is missing.
 You must consider ALL records together: demographics, comorbidities, allergies, complete past pregnancy history, multifetal history, and prior prenatal trends.
 
-Return plain text with exactly these sections:
-RISK LEVEL:
-NOTABLE RECORDS:
-RISK FACTORS:
-SUGGESTIVE ACTIONS:
-AI SUMMARY:
+Return plain text with exactly one section:
+AI INSIGHTS:
 
 Output rules:
-- In RISK FACTORS: provide at least 8 bullet points, each tied to specific values/history.
-- In SUGGESTIVE ACTIONS: provide 6 to 10 numbered actions, prioritized and concrete.
-- In AI SUMMARY: write a 5-8 sentence synthesis referencing the strongest risk drivers, trend concerns, and immediate monitoring priorities.
+- In AI INSIGHTS: provide 4 to 8 concise bullets focused on interpretation, trend meaning, and immediate monitoring priorities.
+- Include a final bullet that starts with "Priority next step:".
+- Do not repeat full lists of risk factors, notable records, or actions already shown by the system UI.
 - Explicitly mention multifetal implications when fetal_count > 1 in current or prior records.
 - Explicitly mention recurrent pattern risks (repeated high BP, repeated danger symptoms, recurrent losses) when present.
 - Never invent data; only use what is present below.
@@ -4175,7 +4155,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                 ] else
                   const SizedBox(height: 12),
                 const Text(
-                  'Final Risk Assessment',
+                  'AI Insights (Editable)',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -4215,7 +4195,8 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                       minLines: editorLines,
                       maxLines: editorLines,
                       decoration: const InputDecoration(
-                        hintText: 'Edit the final merged risk assessment note.',
+                        hintText:
+                            'Edit AI insights only (no duplicate system lists).',
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.all(12),
                       ),
@@ -4241,7 +4222,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                                 });
                               },
                               icon: const Icon(Icons.edit_outlined, size: 16),
-                              label: const Text('Edit Note'),
+                              label: const Text('Edit Insights'),
                             )
                           : OutlinedButton(
                               onPressed: () {
@@ -4266,8 +4247,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                                 final nextText =
                                     _aiAssessmentEditCtrl.text.trim();
                                 if (nextText.isEmpty) {
-                                  _showMessage(
-                                      'Risk assessment text cannot be empty.');
+                                  _showMessage('AI insights cannot be empty.');
                                   return;
                                 }
                                 setState(() {
@@ -4279,7 +4259,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                                   _isEditingAiAssessment = false;
                                 });
                               },
-                              child: const Text('Save Note'),
+                              child: const Text('Save Insights'),
                             )
                           : FilledButton.icon(
                               onPressed: (_riskSnapshot == null ||
