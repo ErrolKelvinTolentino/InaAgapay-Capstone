@@ -1,14 +1,17 @@
-﻿import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/app_input_field.dart';
-import '../widgets/main_button.dart';
-import '../widgets/clickable_text.dart';
-import '../widgets/page_title.dart';
-import '../widgets/password_constraints.dart';
-import '../widgets/password_strength_indicator.dart';
-import '../widgets/dialog_box.dart';
-import '../services/supabase_service.dart';
-import '../models/password_strength.dart';
+﻿// lib/screens/auth/mother_registration.dart
+
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/clickable_text.dart';
+import '../../widgets/page_title.dart';
+import '../../widgets/password_constraints.dart';
+import '../../widgets/password_strength_indicator.dart';
+import '../../widgets/dialog_box.dart';
+import '../../services/supabase_service.dart';
+import '../../models/password_strength.dart';
 
 class MotherRegistrationScreen extends StatefulWidget {
   const MotherRegistrationScreen({super.key});
@@ -20,9 +23,9 @@ class MotherRegistrationScreen extends StatefulWidget {
 
 class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     with SingleTickerProviderStateMixin {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -34,6 +37,9 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
   @override
   void initState() {
     super.initState();
+    if (kDebugMode) {
+      debugPrint('=== REGISTRATION SCREEN INITIALIZED ===');
+    }
 
     _passwordController.addListener(() => setState(() {}));
     _confirmPasswordController.addListener(() => setState(() {}));
@@ -100,57 +106,58 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
     setState(() => _isLoading = true);
 
-    final res = await SupabaseService.register(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
+    try {
+      // ✅ CHANGED: Use registerWithOTP instead of register
+      final result = await SupabaseService.registerWithOTP(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
 
-    setState(() => _isLoading = false);
-    if (!mounted) return;
+      setState(() => _isLoading = false);
+      
+      if (!mounted) return;
 
-    if (!res['success']) {
+      if (result['success'] == true) {
+        // Show success dialog
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => DialogBox(
+            title: 'Verification Code Sent',
+            content: 'A 6-digit verification code has been sent to ${_emailController.text.trim()}',
+            buttonText: 'Continue',
+            type: DialogType.success,
+            onPressed: () => Navigator.pop(context),
+          ),
+        );
+
+        if (mounted) {
+          // Navigate to verification screen
+          Navigator.pushNamed(
+            context,
+            '/verify-registration',
+            arguments: _emailController.text.trim(),
+          );
+        }
+      } else {
+        // Show error
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Registration failed'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      
+      if (!mounted) return;
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(res['message'] ?? 'Registration failed'),
+          content: Text('Error: ${e.toString()}'),
           backgroundColor: AppColors.error,
         ),
-      );
-      return;
-    }
-
-    if (res['email_failed'] == true) {
-      await showDialog(
-        context: context,
-        builder: (_) => DialogBox(
-          title: 'Warning',
-          content:
-              "Account created but we couldn't send the verification email. "
-              'Please use "Resend Code" on the next screen.',
-          buttonText: 'Continue',
-          type: DialogType.warning,
-          onPressed: () => Navigator.pop(context),
-        ),
-      );
-    } else {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => DialogBox(
-          title: 'Verification Code Sent',
-          content:
-              'A 6-digit verification code has been sent to ${_emailController.text.trim()}',
-          buttonText: 'Continue',
-          type: DialogType.success,
-          onPressed: () => Navigator.pop(context),
-        ),
-      );
-    }
-
-    if (mounted) {
-      Navigator.pushNamed(
-        context,
-        '/verify-registration',
-        arguments: _emailController.text.trim(),
       );
     }
   }
@@ -164,162 +171,216 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             children: [
-              const SizedBox(height: 32),
-
-              Image.asset('assets/images/logo.png', height: 110),
-              const SizedBox(height: 16),
-              Image.asset('assets/images/inaagapay_name.png', width: 240),
-
-              const SizedBox(height: 24),
-
-              const PageTitle(
-                title: 'Create Account',
-                leadingIcon: Icons.person,
-                trailingIcon: Icons.check,
-              ),
-
-              const SizedBox(height: 24),
-
-              // Email
-              AppInputField(
-                hintText: 'Enter Email Address',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                leadingIcon: Icons.email_outlined,
-                isRequired: true,
-                onChanged: (_) => setState(() {}),
-              ),
-
-              const SizedBox(height: 8),
-
               Padding(
-                padding: const EdgeInsets.only(left: 20),
-                child: Builder(
-                  builder: (_) {
-                    if (_emailController.text.isEmpty) {
-                      return const SizedBox.shrink();
-                    }
-                    if (!_isEmailValid) {
-                      return _errorRow('Enter a valid email address');
-                    }
-                    return _successRow('Email looks good');
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Password
-              AppInputField(
-                hintText: 'Create Password',
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                leadingIcon: Icons.lock_outline,
-                isRequired: true,
-                trailingIcon: _obscurePassword
-                    ? Icons.visibility_off
-                    : Icons.visibility,
-                onTrailingTap: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
-                onChanged: (_) => setState(() {}),
-              ),
-
-              const SizedBox(height: 8),
-
-              Padding(
-                padding: const EdgeInsets.only(right: 20),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: PasswordStrengthIndicator(strength: strength),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              Padding(
-                padding: const EdgeInsets.only(left: 20),
-                child: PasswordConstraints(password: password),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Confirm password + shake animation on error
-              AnimatedBuilder(
-                animation: _shakeAnimation,
-                builder: (context, child) => Transform.translate(
-                  offset: Offset(_shakeAnimation.value, 0),
-                  child: child,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const SizedBox(height: 32),
+
+                    // Logo
+                    Image.asset('assets/images/logo.png', height: 100),
+                    const SizedBox(height: 12),
+
+                    // App Name
+                    Image.asset(
+                      'assets/images/inaagapay_name.png',
+                      width: 210,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 24),
+
+                    const PageTitle(
+                      title: 'Create Account',
+                      leadingIcon: Icons.account_circle,
+                      trailingIcon: Icons.keyboard_arrow_down,
+                      color: AppColors.brandText,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Email
                     AppInputField(
-                      hintText: 'Confirm Password',
-                      controller: _confirmPasswordController,
-                      obscureText: _obscureConfirmPassword,
-                      leadingIcon: Icons.lock_outline,
+                      hintText: 'Enter Email Address',
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      leadingIcon: Icons.email,
                       isRequired: true,
-                      trailingIcon: _obscureConfirmPassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                      onTrailingTap: () => setState(
-                          () => _obscureConfirmPassword = !_obscureConfirmPassword),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 8),
+
                     Padding(
                       padding: const EdgeInsets.only(left: 20),
                       child: Builder(
-                        builder: (_) {
-                          if (_passwordsDoNotMatch) {
-                            return _errorRow('Passwords do not match');
+                        builder: (context) {
+                          if (_emailController.text.isEmpty) {
+                            return const SizedBox.shrink();
                           }
-                          if (_passwordsMatch) {
-                            return _successRow('Passwords match');
+                          if (!_isEmailValid) {
+                            return _errorRow('Enter a valid email address');
                           }
-                          return const SizedBox.shrink();
+                          return _successRow('Email looks good');
                         },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+
+              Container(
+                width: double.infinity,
+                color: AppColors.brandSecondary,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: Column(
+                  children: [
+                    // Password
+                    AppInputField(
+                      hintText: 'Create Password',
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      leadingIcon: Icons.lock,
+                      isRequired: true,
+                      trailingIcon: _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      onTrailingTap: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 8),
+
+                    Padding(
+                      padding: const EdgeInsets.only(right: 20),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: PasswordStrengthIndicator(strength: strength),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    Padding(
+                      padding: const EdgeInsets.only(left: 20),
+                      child: PasswordConstraints(password: password),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Confirm password + shake animation on error
+                    AnimatedBuilder(
+                      animation: _shakeAnimation,
+                      builder: (context, child) => Transform.translate(
+                        offset: Offset(_shakeAnimation.value, 0),
+                        child: child,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AppInputField(
+                            hintText: 'Confirm Password',
+                            controller: _confirmPasswordController,
+                            obscureText: _obscureConfirmPassword,
+                            leadingIcon: Icons.lock,
+                            isRequired: true,
+                            trailingIcon: _obscureConfirmPassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            onTrailingTap: () => setState(
+                                () => _obscureConfirmPassword = !_obscureConfirmPassword),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 20),
+                            child: Builder(
+                              builder: (context) {
+                                if (_passwordsDoNotMatch) {
+                                  return _errorRow('Passwords do not match');
+                                }
+                                if (_passwordsMatch && _confirmPasswordController.text.isNotEmpty) {
+                                  return _successRow('Passwords match');
+                                }
+                                return const SizedBox.shrink();
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 32),
 
-              MainButton(
-                label: _isLoading ? 'Sending...' : 'Send Verification Code',
-                showIcons: false,
-                onPressed: _canSubmit ? _handleSubmit : null,
-              ),
-
-              const SizedBox(height: 24),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'Already have an account? ',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textPrimary,
+                    MainButton(
+                      label: _isLoading ? 'Creating Account...' : 'Create Account',
+                      showIcons: false,
+                      onPressed: _canSubmit ? _handleSubmit : null,
                     ),
-                  ),
-                  ClickableText(
-                    text: 'Sign in Here',
-                    onTap: () => Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/login',
-                      (route) => false,
-                    ),
-                  ),
-                ],
-              ),
+                    const SizedBox(height: 24),
 
-              const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Already have an account? ',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        ClickableText(
+                          text: 'Sign in Here',
+                          onTap: () => Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            '/login',
+                            (route) => false,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'By proceeding, you are acknowledging the',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ClickableText(
+                          text: 'Terms of Use',
+                          fontSize: 11,
+                          color: AppColors.brandPrimary,
+                          onTap: () {},
+                        ),
+                        const Text(
+                          ' and ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        ClickableText(
+                          text: 'Privacy Policy',
+                          fontSize: 11,
+                          color: AppColors.brandPrimary,
+                          onTap: () {},
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -332,7 +393,12 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       children: [
         const Icon(Icons.cancel, size: 16, color: AppColors.error),
         const SizedBox(width: 6),
-        Text(text, style: const TextStyle(fontSize: 13, color: AppColors.error)),
+        Expanded(
+          child: Text(
+            text, 
+            style: const TextStyle(fontSize: 13, color: AppColors.error),
+          ),
+        ),
       ],
     );
   }
@@ -342,7 +408,12 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       children: [
         const Icon(Icons.check_circle, size: 16, color: AppColors.success),
         const SizedBox(width: 6),
-        Text(text, style: const TextStyle(fontSize: 13, color: AppColors.success)),
+        Expanded(
+          child: Text(
+            text, 
+            style: const TextStyle(fontSize: 13, color: AppColors.success),
+          ),
+        ),
       ],
     );
   }

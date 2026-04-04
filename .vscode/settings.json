@@ -2,5 +2,6 @@
   "dart.analysisExcludedFolders": [
     "inaagapay_flutter_v1 (old work for reference)",
     "inaagapay_flutter_v2/build"
-  ]
+  ],
+  "deno.enable": true
 }

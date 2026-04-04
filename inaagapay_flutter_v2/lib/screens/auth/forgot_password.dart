@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart'; // Remove the foundation import
+// lib/screens/auth/forgot_password.dart
+
+import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/page_title.dart';
 import '../../services/supabase_service.dart';
-
-// Rest of the file remains the same
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -19,41 +19,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _isLoading = false;
 
   Future<void> _handleSubmit() async {
-    if (_emailController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please enter your email')));
-      return;
-    }
+    if (_emailController.text.isEmpty) return;
 
     setState(() => _isLoading = true);
 
-    final result = await SupabaseService.resetPassword(
-      _emailController.text.trim(),
-    );
+    // Use the correct method name: forgotPassword (not resetPassword)
+    final result = await SupabaseService.forgotPassword(_emailController.text.trim());
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (result['success'] as bool? ?? false) {
+    if (result['success']) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message'] as String? ?? 'Reset code sent'),
+          content: Text(result['message']),
           backgroundColor: AppColors.success,
         ),
       );
-
       Navigator.pushNamed(
         context,
-        '/forgot-password-verify',
+        '/reset-password-verify',
         arguments: _emailController.text.trim(),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            result['message'] as String? ?? 'Failed to send reset code',
-          ),
+          content: Text(result['message']),
           backgroundColor: AppColors.error,
         ),
       );
@@ -70,8 +61,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           child: Column(
             children: [
               const SizedBox(height: 40),
-
-              // App Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
@@ -80,9 +69,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   color: Color(0xFFFF68A5),
                 ),
               ),
-
               const SizedBox(height: 40),
-
               const PageTitle(
                 title: 'Reset Password',
                 leadingIcon: Icons.lock_reset,
@@ -103,7 +90,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               const SizedBox(height: 32),
               MainButton(
                 label: _isLoading ? 'Sending...' : 'Send Reset Code',
-                showIcons: false,
                 onPressed: _isLoading ? null : _handleSubmit,
               ),
               const SizedBox(height: 16),
