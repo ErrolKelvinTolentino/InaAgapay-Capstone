@@ -15,6 +15,19 @@ class SupabaseService {
     return (100000 + random.nextInt(900000)).toString();
   }
 
+  // Generate random secure password
+  static String _generateSecurePassword() {
+    const length = 12;
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$%&*';
+    final random = Random.secure();
+    return String.fromCharCodes(
+      Iterable.generate(
+        length,
+        (_) => chars.codeUnitAt(random.nextInt(chars.length))
+      )
+    );
+  }
+
   // Hash password using bcrypt
   static String _hashPassword(String password) {
     return BCrypt.hashpw(password, BCrypt.gensalt());
@@ -42,9 +55,45 @@ class SupabaseService {
     }
   }
 
-  // ============================================================
-  // NEW: Send OTP email via EmailService
-  // ============================================================
+  // Update password
+  static Future<bool> updatePassword(int accountId, String newPassword) async {
+    try {
+      final hashedPassword = _hashPassword(newPassword);
+      
+      await client
+          .from('accounts')
+          .update({
+            'password_hash': hashedPassword,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('account_id', accountId);
+      
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Update password error: $e');
+      return false;
+    }
+  }
+
+  // Clear temporary password flag
+  static Future<bool> clearTemporaryPasswordFlag(int accountId) async {
+    try {
+      await client
+          .from('accounts')
+          .update({
+            'is_temporary_password': false,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('account_id', accountId);
+      
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Clear temporary password flag error: $e');
+      return false;
+    }
+  }
+
+  // Send OTP email
   static Future<bool> sendOTPEmail(String email, String code, String type) async {
     try {
       if (kDebugMode) debugPrint('Sending OTP email to: $email with code: $code');
@@ -61,9 +110,7 @@ class SupabaseService {
     }
   }
 
-  // ============================================================
-  // NEW: Register with email OTP
-  // ============================================================
+  // Register with OTP
   static Future<Map<String, dynamic>> registerWithOTP(
     String email,
     String password,
@@ -130,9 +177,7 @@ class SupabaseService {
     }
   }
 
-  // ============================================================
-  // NEW: Forgot Password - Send reset code
-  // ============================================================
+  // Forgot Password
   static Future<Map<String, dynamic>> forgotPassword(String email) async {
     try {
       if (kDebugMode) debugPrint('Sending password reset email to: $email');
@@ -175,9 +220,7 @@ class SupabaseService {
     }
   }
 
-  // ============================================================
-  // NEW: Verify reset code
-  // ============================================================
+  // Verify reset code
   static Future<bool> verifyResetCode(String email, String code) async {
     try {
       final account = await client
@@ -199,9 +242,7 @@ class SupabaseService {
     }
   }
 
-  // ============================================================
-  // NEW: Reset password with new password
-  // ============================================================
+  // Reset password with new password
   static Future<Map<String, dynamic>> resetPasswordWithNew(String email, String newPassword) async {
     try {
       final newHash = _hashPassword(newPassword);
@@ -218,10 +259,7 @@ class SupabaseService {
     }
   }
 
-  // ============================================================
-  // EXISTING METHODS
-  // ============================================================
-
+  // Login
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       if (kDebugMode) debugPrint('Attempting login for: $email');
@@ -245,7 +283,9 @@ class SupabaseService {
             middle_name,
             last_name,
             extension_name,
-            phone_number
+            phone_number,
+            created_at,
+            is_temporary_password
           ''').eq('email_address', email).maybeSingle();
 
       if (kDebugMode) debugPrint('Account query response: $accountResponse');
@@ -275,6 +315,8 @@ class SupabaseService {
 
       Map<String, dynamic>? motherData;
       bool profileComplete = false;
+      int? motherId;
+      bool needsPasswordChange = false;
 
       if (accountResponse['account_type'] == 'mother') {
         try {
@@ -298,9 +340,19 @@ class SupabaseService {
           if (kDebugMode) debugPrint('Mother data: $motherData');
 
           if (motherData != null) {
+            motherId = motherData['mother_id'] as int?;
+            
             profileComplete = accountResponse['first_name'] != null &&
                 accountResponse['last_name'] != null &&
                 motherData['birthdate'] != null;
+            
+            // Check if this is a temporary password account
+            needsPasswordChange = accountResponse['is_temporary_password'] == true;
+            
+            if (kDebugMode) {
+              debugPrint('is_temporary_password: ${accountResponse['is_temporary_password']}');
+              debugPrint('Needs password change: $needsPasswordChange');
+            }
           }
         } catch (e) {
           if (kDebugMode) debugPrint('Error fetching mother data: $e');
@@ -325,7 +377,12 @@ class SupabaseService {
 
       if (accountResponse['account_type'] == 'mother') {
         userData['profile_complete'] = profileComplete;
-        userData['mother_id'] = motherData?['mother_id'];
+        userData['mother_id'] = motherId;
+        userData['needs_password_change'] = needsPasswordChange;
+        if (kDebugMode) {
+          debugPrint('Including mother_id in login response: $motherId');
+          debugPrint('Needs password change: $needsPasswordChange');
+        }
       }
 
       return {
@@ -364,6 +421,7 @@ class SupabaseService {
     }
   }
 
+  // Resend verification code
   static Future<Map<String, dynamic>> resendVerificationCode(String email) async {
     try {
       final code = _generateOTP();
@@ -394,6 +452,7 @@ class SupabaseService {
     }
   }
 
+  // Verify code
   static Future<bool> verifyCode(String email, String code) async {
     try {
       final account = await client
@@ -422,6 +481,7 @@ class SupabaseService {
     }
   }
 
+  // Complete mother profile
   static Future<Map<String, dynamic>> completeMotherProfile(
     int accountId,
     Map<String, dynamic> profileData,
@@ -492,6 +552,7 @@ class SupabaseService {
     }
   }
 
+  // Get greeting
   static Future<Map<String, dynamic>> getGreeting(int accountId, String role) async {
     try {
       final accountResponse = await client.from('accounts').select('''
@@ -555,64 +616,7 @@ class SupabaseService {
     }
   }
 
-  static Future<Map<String, dynamic>> createMotherByMidwife({
-    required String firstName,
-    required String lastName,
-    required String email,
-    required String password,
-    String? phoneNumber,
-  }) async {
-    try {
-      final existing = await client
-          .from('accounts')
-          .select('account_id')
-          .eq('email_address', email)
-          .maybeSingle();
-
-      if (existing != null) {
-        return {
-          'success': false,
-          'message': 'An account with this email already exists.',
-        };
-      }
-
-      final inserted = await client
-          .from('accounts')
-          .insert({
-            'email_address': email,
-            'password_hash': _hashPassword(password),
-            'account_type': 'mother',
-            'first_name': firstName,
-            'last_name': lastName,
-            'phone_number': phoneNumber,
-            'is_verified': true,
-            'status': 'active',
-            'created_at': DateTime.now().toIso8601String(),
-          })
-          .select('account_id')
-          .single();
-
-      final accountId = inserted['account_id'] as int;
-
-      await client.from('mothers').insert({
-        'account_id': accountId,
-        'status': 'active',
-      });
-
-      return {
-        'success': true,
-        'message': 'Mother account created successfully.',
-        'account_id': accountId,
-      };
-    } catch (e) {
-      if (kDebugMode) debugPrint('createMotherByMidwife error: $e');
-      return {
-        'success': false,
-        'message': 'Failed to create account: ${e.toString()}',
-      };
-    }
-  }
-
+  // Get midwife context
   static Future<Map<String, dynamic>> getMidwifeContext(int accountId) async {
     try {
       if (kDebugMode) {
@@ -638,6 +642,7 @@ class SupabaseService {
     }
   }
 
+  // Check if email is available
   static Future<bool> isEmailAvailable(String email) async {
     try {
       final result = await client
@@ -651,11 +656,11 @@ class SupabaseService {
     }
   }
 
-  static Future<Map<String, dynamic>> addMotherFullByMidwife({
+  // Add mother with auto-generated password
+  static Future<Map<String, dynamic>> addMotherFullByMidwifeWithAutoPassword({
     required int midwifeId,
     required int assignedBhcId,
     required String email,
-    required String password,
     required String firstName,
     String? middleName,
     required String lastName,
@@ -681,14 +686,22 @@ class SupabaseService {
     try {
       final emailFree = await isEmailAvailable(email);
       if (!emailFree) {
-        return {'success': false, 'message': 'This email is already in use.'};
+        return {
+          'success': false, 
+          'message': 'This email is already in use.'
+        };
       }
 
+      // Generate random secure password
+      final generatedPassword = _generateSecurePassword();
+      final hashedPassword = _hashPassword(generatedPassword);
+
+      // Create account with auto-generated password
       final accountRow = await client
           .from('accounts')
           .insert({
             'email_address': email,
-            'password_hash': _hashPassword(password),
+            'password_hash': hashedPassword,
             'account_type': 'mother',
             'first_name': firstName,
             'middle_name': middleName,
@@ -697,6 +710,7 @@ class SupabaseService {
             'phone_number': phone,
             'is_verified': true,
             'status': 'active',
+            'is_temporary_password': true,
             'created_at': DateTime.now().toIso8601String(),
           })
           .select('account_id')
@@ -704,6 +718,7 @@ class SupabaseService {
 
       final accountId = accountRow['account_id'] as int;
 
+      // Create mother record
       final motherRow = await client
           .from('mothers')
           .insert({
@@ -725,6 +740,7 @@ class SupabaseService {
 
       final motherId = motherRow['mother_id'] as int;
 
+      // Insert emergency contacts
       if (emergencyContacts.isNotEmpty) {
         await client.from('emergency_contacts').insert(
               emergencyContacts
@@ -733,6 +749,7 @@ class SupabaseService {
             );
       }
 
+      // Insert medical conditions
       if (medicalConditions.isNotEmpty) {
         await client.from('medical_conditions').insert(
               medicalConditions
@@ -741,12 +758,14 @@ class SupabaseService {
             );
       }
 
+      // Insert allergies
       if (allergies.isNotEmpty) {
         await client.from('allergies').insert(
               allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
             );
       }
 
+      // Create pregnancy if LMP provided
       int? pregnancyId;
       if (lmp != null && edd != null) {
         final pregRow = await client
@@ -763,6 +782,7 @@ class SupabaseService {
         pregnancyId = pregRow['pregnancy_id'] as int;
       }
 
+      // Insert past pregnancies
       for (final pp in pastPregnancies) {
         final pastPregRow = await client
             .from('pregnancies')
@@ -803,14 +823,27 @@ class SupabaseService {
         }
       }
 
+      // Send email with generated password
+      final emailSent = await EmailService.sendAccountCredentials(
+        email: email,
+        password: generatedPassword,
+        firstName: firstName,
+        lastName: lastName,
+      );
+
       return {
         'success': true,
         'mother_id': motherId,
         'pregnancy_id': pregnancyId,
         'account_id': accountId,
+        'generated_password': generatedPassword,
+        'email_sent': emailSent,
+        'message': emailSent 
+            ? 'Mother account created. Credentials sent to $email'
+            : 'Mother account created but email failed to send. Please provide the password manually.',
       };
     } catch (e) {
-      if (kDebugMode) debugPrint('addMotherFullByMidwife error: $e');
+      if (kDebugMode) debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');
       return {
         'success': false,
         'message': 'Failed to add mother: ${e.toString()}',

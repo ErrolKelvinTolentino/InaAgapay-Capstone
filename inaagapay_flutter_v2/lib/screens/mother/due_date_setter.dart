@@ -1,3 +1,5 @@
+// lib/screens/mother/due_date_setter.dart
+
 import 'package:flutter/material.dart';
 // Change these:
 import '../../theme/app_colors.dart';
@@ -25,6 +27,48 @@ class _DueDateSetterState extends State<DueDateSetter> {
     super.dispose();
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    // Fix: Use proper date range
+    final DateTime now = DateTime.now();
+    final DateTime minDate = now;
+    final DateTime maxDate = now.add(const Duration(days: 365));
+    
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? minDate.add(const Duration(days: 280)),
+      firstDate: minDate,
+      lastDate: maxDate,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.brandPrimary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.textPrimary,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null && mounted) {
+      setState(() {
+        _selectedDate = picked;
+        _dateController.text = _formatDate(picked);
+      });
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -48,28 +92,20 @@ class _DueDateSetterState extends State<DueDateSetter> {
                 leadingIcon: Icons.calendar_today,
               ),
               const SizedBox(height: 32),
-              AppInputField(
-                hintText: 'Select Date',
-                controller: _dateController,
-                leadingIcon: Icons.calendar_today,
-                readOnly: true,
-                onTap: () async {
-                  final pickedDate = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.now().add(const Duration(days: 280)),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                  );
-                  
-                  if (pickedDate != null) {
-                    setState(() {
-                      _selectedDate = pickedDate;
-                      _dateController.text =
-                          '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
-                    });
-                  }
-                },
+              
+              // Fix: Make the input field tappable and remove readOnly issue
+              GestureDetector(
+                onTap: () => _selectDate(context),
+                child: AbsorbPointer(
+                  child: AppInputField(
+                    hintText: 'Select Date',
+                    controller: _dateController,
+                    leadingIcon: Icons.calendar_today,
+                    readOnly: true,
+                  ),
+                ),
               ),
+              
               const SizedBox(height: 16),
               Text(
                 'You can always update this later',

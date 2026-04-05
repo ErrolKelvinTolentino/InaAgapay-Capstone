@@ -1,6 +1,7 @@
 // lib/services/auth_storage.dart
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthStorage {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
@@ -39,11 +40,24 @@ class AuthStorage {
 
   // Mother ID
   static Future<void> saveMotherId(int motherId) async {
+    if (kDebugMode) {
+      debugPrint('=== SAVING MOTHER ID ===');
+      debugPrint('Mother ID: $motherId');
+    }
     await _storage.write(key: 'mother_id', value: motherId.toString());
+    
+    final saved = await _storage.read(key: 'mother_id');
+    if (kDebugMode) {
+      debugPrint('Verified saved mother ID: $saved');
+    }
   }
 
   static Future<int?> getMotherId() async {
     final value = await _storage.read(key: 'mother_id');
+    if (kDebugMode) {
+      debugPrint('=== GETTING MOTHER ID ===');
+      debugPrint('Retrieved value: $value');
+    }
     return value != null ? int.tryParse(value) : null;
   }
 
@@ -59,6 +73,22 @@ class AuthStorage {
   static Future<bool> isProfileComplete() async {
     final value = await _storage.read(key: 'profile_complete');
     return value == 'true';
+  }
+
+  // Temporary Password Changed
+  static const String _tempPasswordChangedKey = 'temp_password_changed';
+
+  static Future<void> saveTemporaryPasswordChanged(bool changed) async {
+    await _storage.write(key: _tempPasswordChangedKey, value: changed.toString());
+  }
+
+  static Future<bool> isTemporaryPasswordChanged() async {
+    final value = await _storage.read(key: _tempPasswordChangedKey);
+    return value == 'true';
+  }
+
+  static Future<void> clearTemporaryPasswordFlag() async {
+    await _storage.delete(key: _tempPasswordChangedKey);
   }
 
   // Login Status

@@ -14,6 +14,7 @@ import '../../services/supabase_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/progressive_step_indicator.dart';
+import '../../widgets/dialog_box.dart';
 import 'add_prenatal_checkup_screen.dart';
 
 // ──────────────── Enums & Data Models ────────────────
@@ -143,7 +144,6 @@ class _PastPregnancy {
       outcomes.isNotEmpty ? _latestOutcomeRef().outcome : 'live_birth';
   DateTime get primaryOutcomeDate => latestOutcomeDate;
 
-  // Backward-compatible aliases used throughout this screen.
   String get outcome => primaryOutcome;
   set outcome(String value) => _latestOutcomeRef().outcome = value;
 
@@ -203,9 +203,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   final _extNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
-  bool _obscurePassword = true;
-  final _passwordFocus = FocusNode();
   String? _phoneError, _emailError;
   bool _emailChecking = false, _emailExists = false;
   Timer? _emailTimer;
@@ -266,7 +263,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   @override
   void initState() {
     super.initState();
-    _passwordFocus.addListener(() => setState(() {}));
     _loadContext();
   }
 
@@ -274,7 +270,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   void dispose() {
     _pageController.dispose();
     _emailTimer?.cancel();
-    _passwordFocus.dispose();
     for (final c in [
       _firstNameCtrl,
       _middleNameCtrl,
@@ -282,7 +277,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       _extNameCtrl,
       _phoneCtrl,
       _emailCtrl,
-      _passwordCtrl,
       _houseCtrl,
       _streetCtrl,
       _barangayCtrl,
@@ -328,22 +322,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
   // ── OCR methods ─────────────────────────────────────
 
-  /// Entry point – shown when the user taps the OCR button in the AppBar.
   Future<void> _startOcrFlow() async {
-    // Step 1: choose camera vs gallery
     final source = await _showOcrSourcePicker();
     if (source == null || !mounted) return;
 
-    // Step 2: pick the image
     final file =
         await ImagePicker().pickImage(source: source, imageQuality: 85);
     if (file == null || !mounted) return;
 
-    // Step 3: upload + review dialog
     await _showOcrProcessDialog(file);
   }
 
-  /// Bottom sheet that returns the chosen [ImageSource] (or null if dismissed).
   Future<ImageSource?> _showOcrSourcePicker() {
     return showModalBottomSheet<ImageSource>(
       context: context,
@@ -401,17 +390,15 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     );
   }
 
-  /// Full upload→review dialog.
-  /// Starts OCR immediately while the dialog is visible.
   Future<void> _showOcrProcessDialog(XFile imageFile) async {
     var dialogState = _OcrDialogState.loading;
     OcrResult? ocrResult;
     String? ocrError;
-    StateSetter? _setS;
+    StateSetter? setS;
 
     void startOcr() {
       _geminiService.extractMotherRegistrationData(imageFile).then((r) {
-        _setS?.call(() {
+        setS?.call(() {
           if (!r.hasAnyValue) {
             ocrError = 'No recognisable patient data found in the image.\n'
                 'Try a clearer or higher-quality photo.';
@@ -422,7 +409,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           }
         });
       }).catchError((dynamic e) {
-        _setS?.call(() {
+        setS?.call(() {
           ocrError = e.toString().replaceFirst('Exception: ', '');
           dialogState = _OcrDialogState.error;
         });
@@ -435,8 +422,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) {
-          _setS = setS;
+        builder: (ctx, setStateCallback) {
+          setS = setStateCallback;
           return Dialog(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -445,7 +432,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ── Header ─────────────────────────────────────────────
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
@@ -514,7 +500,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     ],
                   ),
                 ),
-                // ── Body ───────────────────────────────────────────────
                 Flexible(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
@@ -525,7 +510,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     },
                   ),
                 ),
-                // ── Footer ─────────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   decoration: const BoxDecoration(
@@ -592,7 +576,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: () {
-                                setS(() {
+                                setStateCallback(() {
                                   dialogState = _OcrDialogState.loading;
                                   ocrError = null;
                                 });
@@ -640,7 +624,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   Widget _ocrLoadingBody(XFile imageFile) => Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Image preview
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: FutureBuilder<Uint8List>(
@@ -1127,20 +1110,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     );
   }
 
-  // ── Password ─────────────────────────────────────────
-
-  void _generatePassword() {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#';
-    final rng = Random.secure();
-    final pw =
-        List.generate(12, (_) => chars[rng.nextInt(chars.length)]).join();
-    setState(() {
-      _passwordCtrl.text = pw;
-      _obscurePassword = false;
-    });
-  }
-
   // ── Address ──────────────────────────────────────────
 
   void _applyBhcAddress() {
@@ -1274,11 +1243,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         } else if (_emailError != null) {
           issues.add('Email (invalid)');
         }
-        if (_passwordCtrl.text.isEmpty) {
-          issues.add('Password');
-        } else if (_passwordCtrl.text.length < 8) {
-          issues.add('Password (min 8 chars)');
-        }
         if (issues.isNotEmpty) msg = 'Please fix: ${issues.join(', ')}.';
         break;
 
@@ -1400,19 +1364,16 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         } else if (_lmp == null || _edd == null) {
           msg = 'Unable to compute LMP and EDD. Please re-enter.';
         } else {
-          // GA > 42 weeks is biologically impossible
           final gaWeeks = DateTime.now().difference(_lmp!).inDays ~/ 7;
           if (gaWeeks > 42) {
             msg =
                 'Gestational age ($gaWeeks weeks) exceeds 42 weeks — biologically impossible. Please verify the LMP date.';
           }
-          // Pregnancy interval check against the most recent past pregnancy
           if (msg == null && _pastPregnancies.isNotEmpty) {
             final sorted = [..._pastPregnancies]..sort(
                 (a, b) => b.latestOutcomeDate.compareTo(a.latestOutcomeDate));
             final last = sorted.first;
             final interval = _lmp!.difference(last.latestOutcomeDate).inDays;
-            // Impossible thresholds per outcome (anything below = biologically impossible)
             const impossibleThresholds = {
               'live_birth': 1,
               'stillbirth': 30,
@@ -1488,12 +1449,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   Future<void> _submit() async {
     if (!_validateStep(8)) return;
     setState(() => _submitting = true);
+    
     try {
-      final result = await SupabaseService.addMotherFullByMidwife(
+      final result = await SupabaseService.addMotherFullByMidwifeWithAutoPassword(
         midwifeId: _midwifeId!,
         assignedBhcId: _assignedBhcId!,
         email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
         firstName: _firstNameCtrl.text.trim(),
         middleName: _middleNameCtrl.text.trim().isEmpty
             ? null
@@ -1529,39 +1490,53 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       if (result['success'] == true) {
         final motherId = result['mother_id'] as int?;
         final pregnancyId = result['pregnancy_id'] as int?;
+        final emailSent = result['email_sent'] == true;
+        final generatedPassword = result['generated_password'] as String?;
+
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => DialogBox(
+            type: DialogType.success,
+            title: 'Mother Account Created',
+            content: emailSent
+                ? 'Mother account created successfully!\n\nA temporary password has been sent to ${_emailCtrl.text.trim()}.\n\nThe mother will be prompted to change her password on first login.'
+                : 'Mother account created but email failed to send.\n\nPlease provide the temporary password to the mother manually:\n\nPassword: $generatedPassword',
+            buttonText: 'OK',
+            onPressed: () => Navigator.pop(context),
+          ),
+        );
 
         if (motherId != null && pregnancyId != null) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddPrenatalCheckupScreen(
-                motherId: motherId,
-                pregnancyId: pregnancyId,
-                lmp: _lmp,
-                motherWeight: double.tryParse(_weightCtrl.text.trim()),
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AddPrenatalCheckupScreen(
+                  motherId: motherId,
+                  pregnancyId: pregnancyId,
+                  lmp: _lmp,
+                  motherWeight: double.tryParse(_weightCtrl.text.trim()),
+                ),
               ),
-            ),
-          );
+            );
+          }
           return;
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('Mother saved, but first checkup route is unavailable.'),
-            backgroundColor: AppColors.warning,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        Navigator.pop(context, true);
+        if (mounted) {
+          Navigator.pop(context, true);
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Failed to save.'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Failed to save.'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1683,8 +1658,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 hintText: 'Ext. (Jr., III)',
                 controller: _extNameCtrl,
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(
-                      RegExp(r'[a-zA-Z\s\-\.\,]')),
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s\-\.\,]')),
                   LengthLimitingTextInputFormatter(20),
                 ],
               ),
@@ -1739,90 +1713,44 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             ),
           ),
         ],
-        const SizedBox(height: 12),
-        // Password field
+        const SizedBox(height: 16),
         Container(
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(
-              color: _passwordFocus.hasFocus
-                  ? AppColors.brandPrimary
-                  : Colors.transparent,
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
+            color: AppColors.info.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
-              const Icon(
-                Icons.lock_outline,
-                color: AppColors.brandAccent,
-                size: 20,
-              ),
+              Icon(Icons.email_outlined, color: AppColors.info, size: 20),
               const SizedBox(width: 12),
               Expanded(
-                child: TextField(
-                  controller: _passwordCtrl,
-                  focusNode: _passwordFocus,
-                  obscureText: _obscurePassword,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    hintText: 'Temporary Password *',
-                    hintStyle: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 14,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Password will be auto-generated',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.info,
+                      ),
                     ),
-                  ),
+                    SizedBox(height: 4),
+                    Text(
+                      'A secure temporary password will be sent to the mother\'s email address.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.auto_fix_high_rounded,
-                  color: AppColors.brandAccent,
-                  size: 20,
-                ),
-                tooltip: 'Auto-generate password',
-                onPressed: _generatePassword,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 4),
-        if (_passwordCtrl.text.isNotEmpty)
-          _passwordStrengthBar()
-        else
-          const Padding(
-            padding: EdgeInsets.only(left: 16),
-            child: Text(
-              'Tap the wand icon to auto-generate a secure password.',
-              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-            ),
-          ),
       ],
     );
   }
@@ -1833,7 +1761,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // BHC info banner
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
@@ -1906,7 +1833,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        // Barangay: read-only pill when BHC, dropdown when custom
         if (_addressSameAsBhc)
           AppInputField(
             hintText: 'Barangay',
@@ -2096,7 +2022,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               ],
             ),
           ),
-          // Height risk hint
           if (h != null && (h < 100 || h > 220))
             _riskHint(
               'Height (${h.toStringAsFixed(0)} cm) is outside the possible range (100–220 cm).',
@@ -2104,7 +2029,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             )
           else if (h != null && h < 140)
             _riskHint('Unusually short height (<140 cm) — verify entry.'),
-          // Weight risk hint
           if (w != null && (w < 30 || w > 200))
             _riskHint(
               'Weight (${w.toStringAsFixed(0)} kg) is outside the possible range (30–200 kg).',
@@ -2870,7 +2794,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     int fetalCount = 1;
     final gaCtrl = TextEditingController();
 
-    // Using lists to track states per fetus
     List<String> outcomes = ['live_birth'];
     List<DateTime?> outcomeDates = [null];
     List<bool> isEstimatedList = [false];
@@ -2890,19 +2813,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               ? 'Gestational age is required'
               : (gaWeeks == null ? 'Enter a whole number of weeks' : null);
 
-          // Check gaError against all outcomes if format is valid
           if (gaError == null && gaWeeks != null) {
             for (int i = 0; i < fetalCount; i++) {
               final err = _gaConstraintErrorFor(outcomes[i], gaWeeks);
               if (err != null) {
-                gaError = err; // showing the first matching error
+                gaError = err;
                 allValid = false;
                 break;
               }
             }
           }
 
-          // Check individual outcomes
           for (int i = 0; i < fetalCount; i++) {
             final needsDelivery =
                 outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth';
@@ -3177,8 +3098,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     ].join(' - ');
   }
 
-  /// Inline risk/warning chip displayed under input fields.
-  /// [isError] = red (impossible), false = amber (high-risk warning).
   Widget _riskHint(String text, {bool isError = false}) => Padding(
         padding: const EdgeInsets.only(left: 16, top: 3),
         child: Row(
@@ -3201,58 +3120,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ],
         ),
       );
-
-  int _passwordStrengthLevel() {
-    final pw = _passwordCtrl.text;
-    if (pw.isEmpty) return 0;
-    if (pw.length < 8) return 1;
-    int score = 1;
-    if (RegExp(r'[A-Z]').hasMatch(pw)) score++;
-    if (RegExp(r'[0-9]').hasMatch(pw)) score++;
-    if (RegExp(r'[^a-zA-Z0-9]').hasMatch(pw)) score++;
-    return score.clamp(1, 3);
-  }
-
-  Widget _passwordStrengthBar() {
-    final level = _passwordStrengthLevel();
-    const labels = ['', 'Weak', 'Fair', 'Strong'];
-    final colors = [
-      Colors.transparent,
-      AppColors.error,
-      AppColors.warning,
-      const Color(0xFF4CAF50),
-    ];
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 4),
-      child: Row(
-        children: [
-          ...List.generate(
-            3,
-            (i) => Expanded(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                height: 3,
-                margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
-                decoration: BoxDecoration(
-                  color: i < level ? colors[level] : AppColors.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            labels[level],
-            style: TextStyle(
-              fontSize: 11,
-              color: colors[level],
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _bmiTag(double bmi) {
     final String label;
@@ -3865,7 +3732,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       ),
       body: Column(
         children: [
-          // Linear progress bar
           LinearProgressIndicator(
             value: (_step + 1) / _totalSteps,
             backgroundColor: AppColors.borderPrimary,
@@ -3874,7 +3740,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             ),
             minHeight: 3,
           ),
-          // Step header
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: Column(
@@ -3913,7 +3778,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          // Step pages
           Expanded(
             child: PageView.builder(
               controller: _pageController,
@@ -3924,7 +3788,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ),
         ],
       ),
-      // Fixed bottom navigation
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,

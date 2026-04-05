@@ -1,4 +1,5 @@
 // lib/screens/auth/login.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
@@ -84,8 +85,17 @@ class _LoginScreenState extends State<LoginScreen> {
         await AuthStorage.saveUserId(response['user']['id']);
 
         if (response['user']['role'] == 'mother') {
-          if (response['user']['mother_id'] != null) {
-            await AuthStorage.saveMotherId(response['user']['mother_id']);
+          final motherId = response['user']['mother_id'];
+          if (motherId != null) {
+            await AuthStorage.saveMotherId(motherId);
+            if (kDebugMode) {
+              debugPrint('Mother ID saved during login: $motherId');
+            }
+          } else {
+            if (kDebugMode) {
+              debugPrint('WARNING: mother_id is null in login response');
+              debugPrint('Response user data: ${response['user']}');
+            }
           }
           await AuthStorage.saveProfileComplete(
             response['user']['profile_complete'] == true,
@@ -94,15 +104,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
         final role = response['user']['role'];
         final profileComplete = response['user']['profile_complete'] == true;
+        final needsPasswordChange = response['user']['needs_password_change'] ?? false;
 
         if (!mounted) return;
 
         if (role == 'mother') {
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            profileComplete ? '/mother-dashboard' : '/complete-profile',
-            (route) => false,
-          );
+          if (needsPasswordChange) {
+            // Force password change for midwife-created accounts
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              '/change-password',
+              (route) => false,
+            );
+          } else {
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              profileComplete ? '/mother-dashboard' : '/complete-profile',
+              (route) => false,
+            );
+          }
         } else if (role == 'midwife') {
           Navigator.pushNamedAndRemoveUntil(
             context,

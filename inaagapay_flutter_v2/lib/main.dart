@@ -16,6 +16,7 @@ import 'screens/mother/welcome_screen.dart';
 import 'screens/mother/congrats_page.dart';
 import 'screens/mother/mother_dashboard_shell.dart';
 import 'screens/mother/mother_profile_page.dart';
+import 'screens/mother/change_password_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/midwife/midwife_shell.dart';
 import 'screens/midwife/ultrasound_analyzer_screen.dart';
@@ -59,10 +60,13 @@ class InaagapayApp extends StatelessWidget {
     if (!isLoggedIn) return const LoginScreen();
 
     final role = await AuthStorage.getUserRole();
-    final profileComplete = await AuthStorage.isProfileComplete();
-
-    if (role == 'mother' && !profileComplete) {
-      return const CompleteProfileScreen();
+    
+    // For mothers, check if they need to complete profile
+    if (role == 'mother') {
+      final profileComplete = await AuthStorage.isProfileComplete();
+      if (!profileComplete) {
+        return const CompleteProfileScreen();
+      }
     }
 
     switch (role) {
@@ -133,6 +137,7 @@ class InaagapayApp extends StatelessWidget {
             // Mother Onboarding Routes
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
+            '/change-password': (context) => const ChangePasswordScreen(),
 
             // Dashboard Routes
             '/mother-dashboard': (context) => const MotherDashboardShell(),
