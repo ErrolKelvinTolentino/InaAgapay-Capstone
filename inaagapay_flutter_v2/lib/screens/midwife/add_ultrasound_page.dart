@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/progressive_step_indicator.dart';
 
@@ -109,13 +110,13 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
       if (image == null || !mounted) return;
       setState(() => _imageFile = image);
     } catch (e) {
-      _showMessage('Unable to pick image: $e');
+      _showMessage('Unable to pick image: $e', type: AppSnackType.error);
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+  void _showMessage(String message,
+      {AppSnackType type = AppSnackType.warning}) {
+    AppSnackbar.show(context, message, type: type);
   }
 
   void _validateLocationInline() {
@@ -353,11 +354,11 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
       }
 
       if (!mounted) return;
-      _showMessage('Ultrasound record saved.');
+      _showMessage('Ultrasound record saved.', type: AppSnackType.success);
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      _showMessage('Failed to save ultrasound: $e');
+      _showMessage('Failed to save ultrasound: $e', type: AppSnackType.error);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

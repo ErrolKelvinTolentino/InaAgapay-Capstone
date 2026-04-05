@@ -27,7 +27,8 @@ class MotherProfilePage extends StatefulWidget {
   State<MotherProfilePage> createState() => _MotherProfilePageState();
 }
 
-class _MotherProfilePageState extends State<MotherProfilePage> with SingleTickerProviderStateMixin {
+class _MotherProfilePageState extends State<MotherProfilePage>
+    with SingleTickerProviderStateMixin {
   late Future<Map<String, dynamic>> _profileFuture;
   late TabController _tabController;
 
@@ -147,8 +148,7 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
   // Reads `pregnancy_risk_level` from the pregnancies row and risk factors from
   // the most recent checkup that has stored risk_factors.
   RiskAssessment _buildRiskAssessmentFromDb(
-      Map<String, dynamic> profile,
-      Map<String, dynamic>? pregnancy) {
+      Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
     if (pregnancy == null) {
       return RiskAssessment(
         level: 'low',
@@ -159,7 +159,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     }
 
     // ── 1. Try to use the stored DB risk level ──────────────────────────────
-    final dbLevel = (pregnancy['pregnancy_risk_level'] as String?)?.toLowerCase();
+    final dbLevel =
+        (pregnancy['pregnancy_risk_level'] as String?)?.toLowerCase();
 
     // ── 2. Collect risk factors from stored checkup risk assessments ────────
     final checkups = (pregnancy['checkups'] as List?) ?? [];
@@ -196,9 +197,10 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
 
     // ── 3. If we have DB data, return that ──────────────────────────────────
     if (dbLevel != null && dbLevel.isNotEmpty) {
-      final level = (dbLevel == 'high' || dbLevel == 'medium' || dbLevel == 'low')
-          ? dbLevel
-          : 'low';
+      final level =
+          (dbLevel == 'high' || dbLevel == 'medium' || dbLevel == 'low')
+              ? dbLevel
+              : 'low';
 
       String note;
       switch (level) {
@@ -207,7 +209,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
               'High-risk pregnancy. Close monitoring required. Consult with specialist.';
           break;
         case 'medium':
-          note = dbAiNote ?? 'Moderate risk factors present. Regular monitoring recommended.';
+          note = dbAiNote ??
+              'Moderate risk factors present. Regular monitoring recommended.';
           break;
         default:
           note = dbAiNote ?? 'No significant risk factors identified.';
@@ -220,9 +223,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
             : level == 'medium'
                 ? 30
                 : 5,
-        factors: dbFactors.isNotEmpty
-            ? dbFactors
-            : ['No risk factors recorded yet'],
+        factors:
+            dbFactors.isNotEmpty ? dbFactors : ['No risk factors recorded yet'],
         note: note,
       );
     }
@@ -278,7 +280,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
         buffer.write('📉 **Low Blood Pressure** noted. '
             'Ensure adequate hydration and gradual position changes.\n\n');
       } else {
-        buffer.write('✅ **Blood Pressure** is within normal pregnancy range.\n\n');
+        buffer.write(
+            '✅ **Blood Pressure** is within normal pregnancy range.\n\n');
       }
     }
 
@@ -296,9 +299,11 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
         if (rate >= 120 && rate <= 160) {
           buffer.write('💓 **Fetal Heart Rate**: $rate bpm (Normal range)\n\n');
         } else if (rate < 120) {
-          buffer.write('⚠️ **Fetal Heart Rate**: $rate bpm (Below normal range)\n\n');
+          buffer.write(
+              '⚠️ **Fetal Heart Rate**: $rate bpm (Below normal range)\n\n');
         } else {
-          buffer.write('⚠️ **Fetal Heart Rate**: $rate bpm (Above normal range)\n\n');
+          buffer.write(
+              '⚠️ **Fetal Heart Rate**: $rate bpm (Above normal range)\n\n');
         }
       }
     }
@@ -306,7 +311,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     // Edema
     final edema = checkup['edema']?.toString().toLowerCase();
     if (edema != null && edema != 'none') {
-      buffer.write('💧 **Edema**: ${edema.toUpperCase()} - Monitor for worsening symptoms.\n\n');
+      buffer.write(
+          '💧 **Edema**: ${edema.toUpperCase()} - Monitor for worsening symptoms.\n\n');
     }
 
     // TD Vaccine
@@ -346,13 +352,17 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
 
     // Analyze remarks
     if (remarks.contains('normal') || remarks.contains('healthy')) {
-      buffer.write('✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
+      buffer.write(
+          '✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
-      buffer.write('📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
+      buffer.write(
+          '📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
     } else if (remarks.contains('concern') || remarks.contains('abnormal')) {
-      buffer.write('🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
+      buffer.write(
+          '🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
     } else {
-      buffer.write('📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
+      buffer.write(
+          '📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
     }
 
     buffer.write('💡 **Key Recommendations**:\n');
@@ -400,7 +410,8 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
         buffer.write('• Glucose levels are within normal range\n');
       } else if (remarks.contains('high')) {
         buffer.write('• Elevated glucose levels detected\n');
-        buffer.write('• May indicate need for gestational diabetes screening\n');
+        buffer
+            .write('• May indicate need for gestational diabetes screening\n');
       }
     }
 
@@ -412,17 +423,17 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
   }
 
 // Show full screen image
-void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => FullScreenImageViewer(
-        imageUrls: imageUrls,
-        initialIndex: initialIndex,
+  void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FullScreenImageViewer(
+          imageUrls: imageUrls,
+          initialIndex: initialIndex,
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // Show record details modal
   void _showRecordDetails({
@@ -488,7 +499,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                               if (subtitle != null && subtitle.isNotEmpty)
                                 Text(
                                   subtitle,
-                                  style: const TextStyle(color: AppColors.textSecondary),
+                                  style: const TextStyle(
+                                      color: AppColors.textSecondary),
                                 ),
                             ],
                           ),
@@ -510,13 +522,15 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                           itemCount: imageUrls.length,
                           itemBuilder: (context, index) {
                             return GestureDetector(
-                              onTap: () => _showFullScreenImage(imageUrls, index),
+                              onTap: () =>
+                                  _showFullScreenImage(imageUrls, index),
                               child: Container(
                                 width: 200,
                                 margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey.shade300),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
@@ -530,27 +544,36 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                           color: AppColors.bgSecondary,
                                           child: const Center(
                                             child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
                                               children: [
-                                                Icon(Icons.broken_image, size: 32, color: Colors.grey),
+                                                Icon(Icons.broken_image,
+                                                    size: 32,
+                                                    color: Colors.grey),
                                                 SizedBox(height: 4),
                                                 Text(
                                                   'Image not available',
-                                                  style: TextStyle(fontSize: 10),
+                                                  style:
+                                                      TextStyle(fontSize: 10),
                                                   textAlign: TextAlign.center,
                                                 ),
                                               ],
                                             ),
                                           ),
                                         ),
-                                        loadingBuilder: (context, child, loadingProgress) {
-                                          if (loadingProgress == null) return child;
+                                        loadingBuilder:
+                                            (context, child, loadingProgress) {
+                                          if (loadingProgress == null)
+                                            return child;
                                           return Container(
                                             color: AppColors.bgSecondary,
                                             child: const Center(
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 2,
-                                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                            Color>(
+                                                        AppColors.brandPrimary),
                                               ),
                                             ),
                                           );
@@ -567,8 +590,10 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                               vertical: 4,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.6),
-                                              borderRadius: BorderRadius.circular(12),
+                                              color:
+                                                  Colors.black.withOpacity(0.6),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                             child: Text(
                                               '+${imageUrls.length - 1} more',
@@ -601,33 +626,37 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                         border: Border.all(color: AppColors.borderPrimary),
                       ),
                       child: Column(
-                        children: rows.map((entry) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 120,
-                                child: Text(
-                                  entry.key,
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 13,
+                        children: rows
+                            .map((entry) => Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 6),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(
+                                        width: 120,
+                                        child: Text(
+                                          entry.key,
+                                          style: const TextStyle(
+                                            color: AppColors.textSecondary,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          entry.value,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  entry.value,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )).toList(),
+                                ))
+                            .toList(),
                       ),
                     ),
 
@@ -640,14 +669,17 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                         decoration: BoxDecoration(
                           color: const Color(0xFFF3E5F5),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFF7E57C2).withValues(alpha: 0.2)),
+                          border: Border.all(
+                              color: const Color(0xFF7E57C2)
+                                  .withValues(alpha: 0.2)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.psychology_rounded, color: const Color(0xFF7E57C2), size: 20),
+                                Icon(Icons.psychology_rounded,
+                                    color: const Color(0xFF7E57C2), size: 20),
                                 const SizedBox(width: 8),
                                 const Text(
                                   'AI-Powered Insights',
@@ -695,7 +727,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
   }
 
   // Show conclude pregnancy dialog
-  Future<void> _showConcludePregnancyDialog(Map<String, dynamic> pregnancy) async {
+  Future<void> _showConcludePregnancyDialog(
+      Map<String, dynamic> pregnancy) async {
     final int fetalCount = pregnancy['fetal_count'] as int? ?? 1;
 
     List<String> outcomes = List.filled(fetalCount, 'live_birth');
@@ -707,7 +740,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     double? gestationalAge;
     final lmpDate = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
     final gestAgeController = TextEditingController();
-    final placeControllers = List.generate(fetalCount, (_) => TextEditingController());
+    final placeControllers =
+        List.generate(fetalCount, (_) => TextEditingController());
 
     if (lmpDate != null) {
       final weeks = DateTime.now().difference(lmpDate).inDays / 7;
@@ -758,12 +792,14 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                   color: Colors.red.shade50,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(Icons.flag, color: Colors.red),
+                                child:
+                                    const Icon(Icons.flag, color: Colors.red),
                               ),
                               const SizedBox(width: 12),
                               const Text(
                                 'Conclude Pregnancy',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                    fontSize: 18, fontWeight: FontWeight.bold),
                               ),
                               const Spacer(),
                               IconButton(
@@ -779,11 +815,14 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: Text(
                                   'Fetus ${i + 1}',
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
                               decoration: BoxDecoration(
                                 color: AppColors.bgSecondary,
                                 borderRadius: BorderRadius.circular(12),
@@ -795,13 +834,23 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                   border: InputBorder.none,
                                 ),
                                 items: const [
-                                  DropdownMenuItem(value: 'live_birth', child: Text('Live Birth')),
-                                  DropdownMenuItem(value: 'stillbirth', child: Text('Stillbirth')),
-                                  DropdownMenuItem(value: 'miscarriage', child: Text('Miscarriage')),
-                                  DropdownMenuItem(value: 'abortion', child: Text('Abortion')),
-                                  DropdownMenuItem(value: 'ectopic', child: Text('Ectopic')),
+                                  DropdownMenuItem(
+                                      value: 'live_birth',
+                                      child: Text('Live Birth')),
+                                  DropdownMenuItem(
+                                      value: 'stillbirth',
+                                      child: Text('Stillbirth')),
+                                  DropdownMenuItem(
+                                      value: 'miscarriage',
+                                      child: Text('Miscarriage')),
+                                  DropdownMenuItem(
+                                      value: 'abortion',
+                                      child: Text('Abortion')),
+                                  DropdownMenuItem(
+                                      value: 'ectopic', child: Text('Ectopic')),
                                 ],
-                                onChanged: (v) => setModal(() => outcomes[i] = v ?? outcomes[i]),
+                                onChanged: (v) => setModal(
+                                    () => outcomes[i] = v ?? outcomes[i]),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -816,44 +865,56 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                 if (picked != null) {
                                   setModal(() {
                                     outcomeDates[i] = picked;
-                                    if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') {
+                                    if (outcomes[i] == 'live_birth' ||
+                                        outcomes[i] == 'stillbirth') {
                                       deliveryDates[i] = picked;
                                     }
                                   });
                                 }
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 16),
                                 decoration: BoxDecoration(
                                   color: AppColors.bgSecondary,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.calendar_today, size: 20, color: AppColors.textSecondary),
+                                    const Icon(Icons.calendar_today,
+                                        size: 20,
+                                        color: AppColors.textSecondary),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'Outcome Date',
-                                            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.textSecondary),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            DateFormat('MMMM d, yyyy').format(outcomeDates[i]),
-                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                            DateFormat('MMMM d, yyyy')
+                                                .format(outcomeDates[i]),
+                                            style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w500),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                                    const Icon(Icons.arrow_drop_down,
+                                        color: AppColors.textSecondary),
                                   ],
                                 ),
                               ),
                             ),
-                            if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') ...[
+                            if (outcomes[i] == 'live_birth' ||
+                                outcomes[i] == 'stillbirth') ...[
                               const SizedBox(height: 12),
                               TextField(
                                 controller: placeControllers[i],
@@ -869,7 +930,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                               ),
                               const SizedBox(height: 12),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
                                 decoration: BoxDecoration(
                                   color: AppColors.bgSecondary,
                                   borderRadius: BorderRadius.circular(12),
@@ -881,11 +943,19 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                     border: InputBorder.none,
                                   ),
                                   items: const [
-                                    DropdownMenuItem(value: 'NSD', child: Text('Normal Spontaneous Delivery')),
-                                    DropdownMenuItem(value: 'CS', child: Text('Cesarean Section')),
-                                    DropdownMenuItem(value: 'Instrumental', child: Text('Instrumental')),
+                                    DropdownMenuItem(
+                                        value: 'NSD',
+                                        child: Text(
+                                            'Normal Spontaneous Delivery')),
+                                    DropdownMenuItem(
+                                        value: 'CS',
+                                        child: Text('Cesarean Section')),
+                                    DropdownMenuItem(
+                                        value: 'Instrumental',
+                                        child: Text('Instrumental')),
                                   ],
-                                  onChanged: (v) => setModal(() => deliveryMethods[i] = v),
+                                  onChanged: (v) =>
+                                      setModal(() => deliveryMethods[i] = v),
                                 ),
                               ),
                             ],
@@ -903,19 +973,22 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                               fillColor: AppColors.bgSecondary,
                             ),
                             keyboardType: TextInputType.number,
-                            onChanged: (v) => gestationalAge = double.tryParse(v),
+                            onChanged: (v) =>
+                                gestationalAge = double.tryParse(v),
                           ),
                           const SizedBox(height: 24),
                           MainButton(
                             label: 'Conclude Pregnancy',
                             onPressed: () async {
                               for (int i = 0; i < fetalCount; i++) {
-                                if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') {
+                                if (outcomes[i] == 'live_birth' ||
+                                    outcomes[i] == 'stillbirth') {
                                   if (deliveryMethods[i] == null) {
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text('Please select delivery method for Fetus ${i + 1}'),
+                                        content: Text(
+                                            'Please select delivery method for Fetus ${i + 1}'),
                                       ),
                                     );
                                     return;
@@ -928,14 +1001,20 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                 fetalOutcomes.add({
                                   'fetus_number': i + 1,
                                   'outcome': outcomes[i],
-                                  'outcome_date': outcomeDates[i].toIso8601String().split('T')[0],
-                                  'delivery_date': deliveryDates[i]?.toIso8601String().split('T')[0],
-                                  'place_of_delivery': placesOfDelivery[i] ?? placeControllers[i].text,
+                                  'outcome_date': outcomeDates[i]
+                                      .toIso8601String()
+                                      .split('T')[0],
+                                  'delivery_date': deliveryDates[i]
+                                      ?.toIso8601String()
+                                      .split('T')[0],
+                                  'place_of_delivery': placesOfDelivery[i] ??
+                                      placeControllers[i].text,
                                   'delivery_method': deliveryMethods[i],
                                 });
                               }
 
-                              final success = await MotherProfileService.concludePregnancy(
+                              final success =
+                                  await MotherProfileService.concludePregnancy(
                                 pregnancy['pregnancy_id'],
                                 gestationalAge,
                                 fetalOutcomes,
@@ -945,12 +1024,16 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                 Navigator.pop(ctx);
                                 if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Pregnancy concluded successfully')),
+                                  const SnackBar(
+                                      content: Text(
+                                          'Pregnancy concluded successfully')),
                                 );
                                 _refresh();
                               } else if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Failed to conclude pregnancy')),
+                                  const SnackBar(
+                                      content:
+                                          Text('Failed to conclude pregnancy')),
                                 );
                               }
                             },
@@ -1006,14 +1089,16 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   decoration: BoxDecoration(
                     color: AppColors.bgSecondary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today, color: AppColors.brandPrimary),
+                      const Icon(Icons.calendar_today,
+                          color: AppColors.brandPrimary),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -1028,7 +1113,9 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              lmp == null ? 'Select date' : DateFormat('MMMM d, yyyy').format(lmp!),
+                              lmp == null
+                                  ? 'Select date'
+                                  : DateFormat('MMMM d, yyyy').format(lmp!),
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
@@ -1044,14 +1131,16 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
               if (lmp != null) ...[
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   decoration: BoxDecoration(
                     color: AppColors.bgSecondary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.event_available, color: AppColors.brandPrimary),
+                      const Icon(Icons.event_available,
+                          color: AppColors.brandPrimary),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -1093,21 +1182,25 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   Expanded(
                     child: MainButton(
                       label: 'Start',
-                      onPressed: lmp == null ? null : () async {
-                        final success = await MotherProfileService.startNewPregnancy(
-                          widget.motherId,
-                          lmp!,
-                          edd!,
-                        );
-                        if (success && mounted) {
-                          Navigator.pop(ctx);
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('New pregnancy started')),
-                          );
-                          _refresh();
-                        }
-                      },
+                      onPressed: lmp == null
+                          ? null
+                          : () async {
+                              final success =
+                                  await MotherProfileService.startNewPregnancy(
+                                widget.motherId,
+                                lmp!,
+                                edd!,
+                              );
+                              if (success && mounted) {
+                                Navigator.pop(ctx);
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('New pregnancy started')),
+                                );
+                                _refresh();
+                              }
+                            },
                     ),
                   ),
                 ],
@@ -1133,7 +1226,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 const Expanded(
                   child: Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
                     ),
                   ),
                 ),
@@ -1169,7 +1263,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                           const SizedBox(height: 8),
                           Text(
                             snapshot.error.toString(),
-                            style: const TextStyle(color: AppColors.textSecondary),
+                            style:
+                                const TextStyle(color: AppColors.textSecondary),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 24),
@@ -1198,11 +1293,14 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
           }
 
           final profile = snapshot.data!;
-          final currentPregnancy = profile['current_pregnancy'] as Map<String, dynamic>?;
+          final currentPregnancy =
+              profile['current_pregnancy'] as Map<String, dynamic>?;
           final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
-          final medicalConditions = profile['medical_conditions'] as List? ?? [];
+          final medicalConditions =
+              profile['medical_conditions'] as List? ?? [];
           final allergies = profile['allergies'] as List? ?? [];
-          final emergencyContacts = profile['emergency_contacts'] as List? ?? [];
+          final emergencyContacts =
+              profile['emergency_contacts'] as List? ?? [];
           final children = profile['children'] as List? ?? [];
 
           return Column(
@@ -1232,11 +1330,18 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                           controller: _tabController,
                           children: [
                             // OVERVIEW TAB
-                            _buildOverviewTab(profile, medicalConditions, allergies, emergencyContacts, children, currentPregnancy),
-                            
+                            _buildOverviewTab(
+                                profile,
+                                medicalConditions,
+                                allergies,
+                                emergencyContacts,
+                                children,
+                                currentPregnancy),
+
                             // CURRENT PREGNANCY TAB
-                            _buildCurrentPregnancyTab(profile, currentPregnancy),
-                            
+                            _buildCurrentPregnancyTab(
+                                profile, currentPregnancy),
+
                             // HISTORY TAB
                             _buildHistoryTab(pastPregnancies),
                           ],
@@ -1278,7 +1383,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+                  icon: const Icon(Icons.arrow_back,
+                      color: AppColors.textPrimary),
                   onPressed: () => Navigator.pop(context),
                   constraints: const BoxConstraints(
                     minWidth: 40,
@@ -1287,15 +1393,17 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   padding: EdgeInsets.zero,
                 ),
               ),
-              
+
               // Logo
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Image.asset(
                   'assets/images/logo.png',
                   height: 36,
-                  errorBuilder: (context, error, stackTrace) => 
-                    const Icon(Icons.favorite, color: AppColors.brandPrimary, size: 30),
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.favorite,
+                      color: AppColors.brandPrimary,
+                      size: 30),
                 ),
               ),
 
@@ -1510,8 +1618,9 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     List children,
     Map<String, dynamic>? currentPregnancy,
   ) {
-    final riskAssessment = _buildRiskAssessmentFromDb(profile, currentPregnancy);
-    
+    final riskAssessment =
+        _buildRiskAssessmentFromDb(profile, currentPregnancy);
+
     return RefreshIndicator(
       onRefresh: _refresh,
       color: AppColors.brandPrimary,
@@ -1547,7 +1656,11 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                     ),
                     child: Center(
                       child: Text(
-                        profile['full_name']?.toString().substring(0, 1).toUpperCase() ?? 'M',
+                        profile['full_name']
+                                ?.toString()
+                                .substring(0, 1)
+                                .toUpperCase() ??
+                            'M',
                         style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
@@ -1571,12 +1684,15 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.email_outlined, size: 14, color: AppColors.textSecondary),
+                            const Icon(Icons.email_outlined,
+                                size: 14, color: AppColors.textSecondary),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
                                 profile['email_address'] ?? '—',
-                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -1585,11 +1701,13 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            const Icon(Icons.phone_outlined, size: 14, color: AppColors.textSecondary),
+                            const Icon(Icons.phone_outlined,
+                                size: 14, color: AppColors.textSecondary),
                             const SizedBox(width: 4),
                             Text(
                               profile['phone_number'] ?? '—',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.textSecondary),
                             ),
                           ],
                         ),
@@ -1608,7 +1726,11 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 Expanded(
                   child: OverviewInfo(
                     value: profile['birthdate'] != null
-                        ? DateTime.now().difference(DateTime.parse(profile['birthdate'])).inDays ~/ 365
+                        ? DateTime.now()
+                                .difference(
+                                    DateTime.parse(profile['birthdate']))
+                                .inDays ~/
+                            365
                         : 0,
                     label: 'Age',
                     icon: Icons.cake,
@@ -1636,95 +1758,9 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
             const SizedBox(height: 16),
 
             // Risk Panel
-            if (currentPregnancy != null)
-              RiskPanel(assessment: riskAssessment),
+            if (currentPregnancy != null) RiskPanel(assessment: riskAssessment),
 
             const SizedBox(height: 16),
-
-            // AI Analysis Tools
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.brandPrimary,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'AI Analysis Tools',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Upload medical images for AI-powered analysis',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildToolCard(
-                          'Ultrasound',
-                          Icons.photo,
-                          Colors.purple,
-                          () {
-                            if (currentPregnancy != null) {
-                              _goToUltrasoundAnalyzer(currentPregnancy);
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('No ongoing pregnancy found'),
-                                  backgroundColor: Colors.orange,
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildToolCard(
-                          'Lab Test',
-                          Icons.science,
-                          Colors.orange,
-                          () {
-                            if (currentPregnancy != null) {
-                              _goToLabTestAnalyzer(currentPregnancy);
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('No ongoing pregnancy found'),
-                                  backgroundColor: Colors.orange,
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
             const SizedBox(height: 16),
 
             // Personal Information
@@ -1734,8 +1770,16 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
               [
                 _buildInfoRow('Birthdate', _formatDate(profile['birthdate'])),
                 _buildInfoRow('Blood Type', profile['blood_type'] ?? '—'),
-                _buildInfoRow('Height', profile['height'] != null ? '${profile['height']} cm' : '—'),
-                _buildInfoRow('Weight', profile['weight'] != null ? '${profile['weight']} kg' : '—'),
+                _buildInfoRow(
+                    'Height',
+                    profile['height'] != null
+                        ? '${profile['height']} cm'
+                        : '—'),
+                _buildInfoRow(
+                    'Weight',
+                    profile['weight'] != null
+                        ? '${profile['weight']} kg'
+                        : '—'),
               ],
             ),
 
@@ -1762,37 +1806,45 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
               Icons.medical_services_outlined,
               medicalConditions.isEmpty
                   ? [const Text('No medical conditions recorded')]
-                  : medicalConditions.map<Widget>((c) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: c['status'] == 'active' ? Colors.orange : Colors.green,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                  : medicalConditions
+                      .map<Widget>((c) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
                               children: [
-                                Text(
-                                  c['condition_name'] ?? '—',
-                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: c['status'] == 'active'
+                                        ? Colors.orange
+                                        : Colors.green,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                                Text(
-                                  '${c['status'] ?? 'active'} • ${_formatDate(c['diagnosis_date'])}',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        c['condition_name'] ?? '—',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                      Text(
+                                        '${c['status'] ?? 'active'} • ${_formatDate(c['diagnosis_date'])}',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-                    )).toList(),
+                          ))
+                      .toList(),
             ),
 
             const SizedBox(height: 12),
@@ -1803,37 +1855,45 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
               Icons.warning_amber_outlined,
               allergies.isEmpty
                   ? [const Text('No allergies recorded')]
-                  : allergies.map<Widget>((a) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: a['status'] == 'active' ? Colors.orange : Colors.green,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                  : allergies
+                      .map<Widget>((a) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
                               children: [
-                                Text(
-                                  a['allergen'] ?? '—',
-                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: a['status'] == 'active'
+                                        ? Colors.orange
+                                        : Colors.green,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                                Text(
-                                  '${a['status'] ?? 'active'} • ${_formatDate(a['diagnosis_date'])}',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        a['allergen'] ?? '—',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                      Text(
+                                        '${a['status'] ?? 'active'} • ${_formatDate(a['diagnosis_date'])}',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-                    )).toList(),
+                          ))
+                      .toList(),
             ),
 
             const SizedBox(height: 12),
@@ -1844,41 +1904,48 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
               Icons.contacts_outlined,
               emergencyContacts.isEmpty
                   ? [const Text('No emergency contacts')]
-                  : emergencyContacts.map<Widget>((c) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            [
-                              c['first_name'],
-                              c['middle_name'],
-                              c['last_name'],
-                              c['extension_name'],
-                            ].where((e) => e != null).join(' '),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(Icons.phone_outlined, size: 14, color: AppColors.textSecondary),
-                              const SizedBox(width: 4),
-                              Text(c['phone_number'] ?? '—'),
-                            ],
-                          ),
-                          if (c['affiliation'] != null) ...[
-                            const SizedBox(height: 2),
-                            Row(
+                  : emergencyContacts
+                      .map<Widget>((c) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.business, size: 14, color: AppColors.textSecondary),
-                                const SizedBox(width: 4),
-                                Text(c['affiliation']),
+                                Text(
+                                  [
+                                    c['first_name'],
+                                    c['middle_name'],
+                                    c['last_name'],
+                                    c['extension_name'],
+                                  ].where((e) => e != null).join(' '),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.phone_outlined,
+                                        size: 14,
+                                        color: AppColors.textSecondary),
+                                    const SizedBox(width: 4),
+                                    Text(c['phone_number'] ?? '—'),
+                                  ],
+                                ),
+                                if (c['affiliation'] != null) ...[
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.business,
+                                          size: 14,
+                                          color: AppColors.textSecondary),
+                                      const SizedBox(width: 4),
+                                      Text(c['affiliation']),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
-                          ],
-                        ],
-                      ),
-                    )).toList(),
+                          ))
+                      .toList(),
             ),
 
             const SizedBox(height: 12),
@@ -1914,35 +1981,43 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                       border: InputBorder.none,
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'recent', child: Text('Most recent')),
+                      DropdownMenuItem(
+                          value: 'recent', child: Text('Most recent')),
                       DropdownMenuItem(value: 'name', child: Text('Name A-Z')),
                     ],
-                    onChanged: (v) => setState(() => _childSort = v ?? 'recent'),
+                    onChanged: (v) =>
+                        setState(() => _childSort = v ?? 'recent'),
                   ),
                 ),
                 const SizedBox(height: 12),
                 ..._filterAndSortChildren(children).map((c) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
-                      child: Text(
-                        c['first_name']?.toString().substring(0, 1).toUpperCase() ?? 'C',
-                        style: TextStyle(color: AppColors.brandPrimary),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor:
+                              AppColors.brandPrimary.withValues(alpha: 0.1),
+                          child: Text(
+                            c['first_name']
+                                    ?.toString()
+                                    .substring(0, 1)
+                                    .toUpperCase() ??
+                                'C',
+                            style: TextStyle(color: AppColors.brandPrimary),
+                          ),
+                        ),
+                        title: Text([
+                          c['first_name'],
+                          c['middle_name'],
+                          c['last_name'],
+                        ].where((e) => e != null).join(' ')),
+                        subtitle: Text('Added: ${_formatDate(c['added_at'])}'),
+                        trailing: const Icon(Icons.chevron_right,
+                            color: AppColors.textSecondary),
+                        onTap: () {
+                          // Navigate to child profile (to be implemented)
+                        },
                       ),
-                    ),
-                    title: Text([
-                      c['first_name'],
-                      c['middle_name'],
-                      c['last_name'],
-                    ].where((e) => e != null).join(' ')),
-                    subtitle: Text('Added: ${_formatDate(c['added_at'])}'),
-                    trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-                    onTap: () {
-                      // Navigate to child profile (to be implemented)
-                    },
-                  ),
-                )),
+                    )),
               ],
             ),
           ],
@@ -1952,7 +2027,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
   }
 
   // CURRENT PREGNANCY TAB
-  Widget _buildCurrentPregnancyTab(Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
+  Widget _buildCurrentPregnancyTab(
+      Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
     if (pregnancy == null) {
       return Center(
         child: Padding(
@@ -2000,14 +2076,17 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
       final dateA = DateTime.tryParse(a['checkup_datetime'] ?? '');
       final dateB = DateTime.tryParse(b['checkup_datetime'] ?? '');
       if (dateA == null || dateB == null) return 0;
-      return _checkupSort == 'desc' ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
+      return _checkupSort == 'desc'
+          ? dateB.compareTo(dateA)
+          : dateA.compareTo(dateB);
     });
 
     // Calculate gestation
     final lmp = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
     final edd = DateTime.tryParse(pregnancy['expected_date_of_delivery'] ?? '');
     final now = DateTime.now();
-    final gestWeeks = lmp != null ? (now.difference(lmp).inDays / 7).floor() : null;
+    final gestWeeks =
+        lmp != null ? (now.difference(lmp).inDays / 7).floor() : null;
     final daysToEdd = edd != null ? edd.difference(now).inDays : null;
 
     // Generate risk assessment
@@ -2094,12 +2173,16 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   Row(
                     children: [
                       Expanded(
-                        child: _buildStatItem('Checkups', sortedCheckups.length.toString(), Icons.fact_check),
+                        child: _buildStatItem('Checkups',
+                            sortedCheckups.length.toString(), Icons.fact_check),
                       ),
                       Expanded(
                         child: _buildStatItem(
                           'Risk Level',
-                          pregnancy['pregnancy_risk_level']?.toString().toUpperCase() ?? '—',
+                          pregnancy['pregnancy_risk_level']
+                                  ?.toString()
+                                  .toUpperCase() ??
+                              '—',
                           Icons.warning,
                           color: pregnancy['pregnancy_risk_level'] == 'high'
                               ? Colors.red
@@ -2211,9 +2294,12 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
               'Pregnancy Details',
               Icons.info_outline,
               [
-                _buildInfoRow('LMP', _formatDate(pregnancy['last_menstrual_period'])),
-                _buildInfoRow('EDD', _formatDate(pregnancy['expected_date_of_delivery'])),
-                _buildInfoRow('Status', pregnancy['status']?.toString().toUpperCase() ?? '—'),
+                _buildInfoRow(
+                    'LMP', _formatDate(pregnancy['last_menstrual_period'])),
+                _buildInfoRow(
+                    'EDD', _formatDate(pregnancy['expected_date_of_delivery'])),
+                _buildInfoRow('Status',
+                    pregnancy['status']?.toString().toUpperCase() ?? '—'),
               ],
             ),
 
@@ -2227,7 +2313,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const Text('Sort:', style: TextStyle(color: AppColors.textSecondary)),
+                    const Text('Sort:',
+                        style: TextStyle(color: AppColors.textSecondary)),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -2239,10 +2326,12 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                         value: _checkupSort,
                         underline: const SizedBox(),
                         items: const [
-                          DropdownMenuItem(value: 'desc', child: Text('Newest')),
+                          DropdownMenuItem(
+                              value: 'desc', child: Text('Newest')),
                           DropdownMenuItem(value: 'asc', child: Text('Oldest')),
                         ],
-                        onChanged: (v) => setState(() => _checkupSort = v ?? 'desc'),
+                        onChanged: (v) =>
+                            setState(() => _checkupSort = v ?? 'desc'),
                       ),
                     ),
                   ],
@@ -2270,7 +2359,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const Text('Sort:', style: TextStyle(color: AppColors.textSecondary)),
+                    const Text('Sort:',
+                        style: TextStyle(color: AppColors.textSecondary)),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -2282,10 +2372,12 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                         value: _ultrasoundSort,
                         underline: const SizedBox(),
                         items: const [
-                          DropdownMenuItem(value: 'desc', child: Text('Newest')),
+                          DropdownMenuItem(
+                              value: 'desc', child: Text('Newest')),
                           DropdownMenuItem(value: 'asc', child: Text('Oldest')),
                         ],
-                        onChanged: (v) => setState(() => _ultrasoundSort = v ?? 'desc'),
+                        onChanged: (v) =>
+                            setState(() => _ultrasoundSort = v ?? 'desc'),
                       ),
                     ),
                   ],
@@ -2299,7 +2391,9 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                     ),
                   )
                 else
-                  ..._sortByDate(ultrasounds, 'ultrasound_date', _ultrasoundSort).map(
+                  ..._sortByDate(
+                          ultrasounds, 'ultrasound_date', _ultrasoundSort)
+                      .map(
                     (u) => _buildUltrasoundCard(u),
                   ),
               ],
@@ -2315,7 +2409,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const Text('Sort:', style: TextStyle(color: AppColors.textSecondary)),
+                    const Text('Sort:',
+                        style: TextStyle(color: AppColors.textSecondary)),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -2327,10 +2422,12 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                         value: _labSort,
                         underline: const SizedBox(),
                         items: const [
-                          DropdownMenuItem(value: 'desc', child: Text('Newest')),
+                          DropdownMenuItem(
+                              value: 'desc', child: Text('Newest')),
                           DropdownMenuItem(value: 'asc', child: Text('Oldest')),
                         ],
-                        onChanged: (v) => setState(() => _labSort = v ?? 'desc'),
+                        onChanged: (v) =>
+                            setState(() => _labSort = v ?? 'desc'),
                       ),
                     ),
                   ],
@@ -2429,7 +2526,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
             child: ExpansionTile(
               leading: CircleAvatar(
                 backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
-                child: Icon(Icons.pregnant_woman, color: AppColors.brandPrimary),
+                child:
+                    Icon(Icons.pregnant_woman, color: AppColors.brandPrimary),
               ),
               title: Text(primaryOutcomeStr),
               subtitle: Text('Ended: $primaryOutcomeDate'),
@@ -2459,8 +2557,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                 normalizedOutcomes[i]['outcome'] as String?)),
                         _buildInfoRow(
                             'Date',
-                            _formatDate(
-                                normalizedOutcomes[i]['outcome_date'] as String?)),
+                            _formatDate(normalizedOutcomes[i]['outcome_date']
+                                as String?)),
                         ...() {
                           final deliveryList = deliveries
                               .where((d) =>
@@ -2495,7 +2593,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
   }
 
   // Helper Widgets
-  Widget _buildToolCard(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildToolCard(
+      String label, IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -2528,7 +2627,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildActionButton(
+      String label, IconData icon, Color color, VoidCallback onTap) {
     return ElevatedButton(
       onPressed: onTap,
       style: ElevatedButton.styleFrom(
@@ -2554,7 +2654,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon, {Color? color}) {
+  Widget _buildStatItem(String label, String value, IconData icon,
+      {Color? color}) {
     return Row(
       children: [
         Icon(icon, size: 16, color: color ?? AppColors.textSecondary),
@@ -2572,7 +2673,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
             ),
             Text(
               label,
-              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+              style:
+                  const TextStyle(fontSize: 10, color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -2580,7 +2682,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  Widget _buildExpandableSection(String title, IconData icon, List<Widget> children) {
+  Widget _buildExpandableSection(
+      String title, IconData icon, List<Widget> children) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -2635,7 +2738,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
             width: 120,
             child: Text(
               label,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style:
+                  const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
           ),
           Expanded(
@@ -2653,7 +2757,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     final date = _formatDateTime(checkup['checkup_datetime']);
     final bpSys = _formatValue(checkup['blood_pressure_systolic']);
     final bpDia = _formatValue(checkup['blood_pressure_diastolic']);
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -2663,9 +2767,11 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
             color: AppColors.brandPrimary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(Icons.medical_services, color: AppColors.brandPrimary, size: 20),
+          child: const Icon(Icons.medical_services,
+              color: AppColors.brandPrimary, size: 20),
         ),
-        title: Text('Checkup', style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Text('Checkup',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2674,11 +2780,12 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
               Text('BP: $bpSys/$bpDia', style: const TextStyle(fontSize: 12)),
           ],
         ),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+        trailing:
+            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
         onTap: () {
           final aog = _formatValue(checkup['age_of_gestation']);
           final weight = _formatValue(checkup['checkup_weight']);
-          
+
           _showRecordDetails(
             title: 'Prenatal Checkup',
             subtitle: date,
@@ -2688,8 +2795,10 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
               MapEntry('Age of Gestation', aog),
               MapEntry('Weight (kg)', weight),
               MapEntry('Blood Pressure', '$bpSys/$bpDia'),
-              MapEntry('Fetal Position', _formatValue(checkup['fetal_position'])),
-              MapEntry('Fetal Heart Beat', _formatValue(checkup['fetal_heart_beat'])),
+              MapEntry(
+                  'Fetal Position', _formatValue(checkup['fetal_position'])),
+              MapEntry('Fetal Heart Beat',
+                  _formatValue(checkup['fetal_heart_beat'])),
               MapEntry('TD Vaccine', _formatValue(checkup['td_vaccine_dose'])),
               MapEntry('Edema', _formatValue(checkup['edema'])),
               MapEntry('Remarks', _formatValue(checkup['remarks'])),
@@ -2702,111 +2811,121 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-Widget _buildUltrasoundCard(Map<String, dynamic> ultrasound) {
-  final date = _formatDate(ultrasound['ultrasound_date']);
-  
-  return Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.purple.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Icon(Icons.photo, color: Colors.purple, size: 20),
-      ),
-      title: Text('Ultrasound', style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(date),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-      onTap: () {
-        // Get all image URLs
-        List<String> imageUrls = [];
-        
-        if (ultrasound['ultrasound_image'] != null) {
-          final imageField = ultrasound['ultrasound_image'].toString();
-          if (imageField.contains(',')) {
-            // Multiple URLs separated by commas
-            imageUrls = imageField.split(',').map((url) => url.trim()).toList();
-          } else if (imageField.isNotEmpty) {
-            // Single URL
-            imageUrls = [imageField];
-          }
-        }
-        
-        _showRecordDetails(
-          title: 'Ultrasound',
-          subtitle: date,
-          icon: Icons.monitor_heart,
-          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-          rows: [
-            MapEntry('Date', _formatDate(ultrasound['ultrasound_date'])),
-            MapEntry('Location', _formatValue(ultrasound['ultrasound_location'])),
-            MapEntry('Health Worker', _formatValue(ultrasound['health_worker_name'])),
-            MapEntry('Institution', _formatValue(ultrasound['health_worker_institution'])),
-            MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
-          ],
-          aiAnalysis: _generateUltrasoundAIInsights(ultrasound),
-        );
-      },
-    ),
-  );
-}
+  Widget _buildUltrasoundCard(Map<String, dynamic> ultrasound) {
+    final date = _formatDate(ultrasound['ultrasound_date']);
 
-Widget _buildLabTestCard(Map<String, dynamic> labTest) {
-  final date = _formatDate(labTest['lab_test_date']);
-  final type = labTest['lab_test_type'] ?? 'Lab Test';
-  
-  return Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.photo, color: Colors.purple, size: 20),
         ),
-        child: const Icon(Icons.science, color: Colors.orange, size: 20),
-      ),
-      title: Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(date),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-      onTap: () {
-        // Get all image URLs
-        List<String> imageUrls = [];
-        
-        if (labTest['lab_test_image'] != null) {
-          final imageField = labTest['lab_test_image'].toString();
-          if (imageField.contains(',')) {
-            // Multiple URLs separated by commas
-            imageUrls = imageField.split(',').map((url) => url.trim()).toList();
-          } else if (imageField.isNotEmpty) {
-            // Single URL
-            imageUrls = [imageField];
+        title: Text('Ultrasound',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(date),
+        trailing:
+            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+        onTap: () {
+          // Get all image URLs
+          List<String> imageUrls = [];
+
+          if (ultrasound['ultrasound_image'] != null) {
+            final imageField = ultrasound['ultrasound_image'].toString();
+            if (imageField.contains(',')) {
+              // Multiple URLs separated by commas
+              imageUrls =
+                  imageField.split(',').map((url) => url.trim()).toList();
+            } else if (imageField.isNotEmpty) {
+              // Single URL
+              imageUrls = [imageField];
+            }
           }
-        }
-        
-        _showRecordDetails(
-          title: type,
-          subtitle: date,
-          icon: Icons.science,
-          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-          rows: [
-            MapEntry('Type', type),
-            MapEntry('Date', _formatDate(labTest['lab_test_date'])),
-            MapEntry('Location', _formatValue(labTest['lab_test_location'])),
-            MapEntry('Health Worker', _formatValue(labTest['health_worker_name'])),
-            MapEntry('Remarks', _formatValue(labTest['remarks'])),
-          ],
-          aiAnalysis: _generateLabTestAIInsights(labTest),
-        );
-      },
-    ),
-  );
-}
+
+          _showRecordDetails(
+            title: 'Ultrasound',
+            subtitle: date,
+            icon: Icons.monitor_heart,
+            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+            rows: [
+              MapEntry('Date', _formatDate(ultrasound['ultrasound_date'])),
+              MapEntry(
+                  'Location', _formatValue(ultrasound['ultrasound_location'])),
+              MapEntry('Health Worker',
+                  _formatValue(ultrasound['health_worker_name'])),
+              MapEntry('Institution',
+                  _formatValue(ultrasound['health_worker_institution'])),
+              MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
+            ],
+            aiAnalysis: _generateUltrasoundAIInsights(ultrasound),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLabTestCard(Map<String, dynamic> labTest) {
+    final date = _formatDate(labTest['lab_test_date']);
+    final type = labTest['lab_test_type'] ?? 'Lab Test';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.science, color: Colors.orange, size: 20),
+        ),
+        title: Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(date),
+        trailing:
+            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+        onTap: () {
+          // Get all image URLs
+          List<String> imageUrls = [];
+
+          if (labTest['lab_test_image'] != null) {
+            final imageField = labTest['lab_test_image'].toString();
+            if (imageField.contains(',')) {
+              // Multiple URLs separated by commas
+              imageUrls =
+                  imageField.split(',').map((url) => url.trim()).toList();
+            } else if (imageField.isNotEmpty) {
+              // Single URL
+              imageUrls = [imageField];
+            }
+          }
+
+          _showRecordDetails(
+            title: type,
+            subtitle: date,
+            icon: Icons.science,
+            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+            rows: [
+              MapEntry('Type', type),
+              MapEntry('Date', _formatDate(labTest['lab_test_date'])),
+              MapEntry('Location', _formatValue(labTest['lab_test_location'])),
+              MapEntry(
+                  'Health Worker', _formatValue(labTest['health_worker_name'])),
+              MapEntry('Remarks', _formatValue(labTest['remarks'])),
+            ],
+            aiAnalysis: _generateLabTestAIInsights(labTest),
+          );
+        },
+      ),
+    );
+  }
 
   // Helper methods
-  List<Map<String, dynamic>> _sortByDate(List list, String field, String order) {
+  List<Map<String, dynamic>> _sortByDate(
+      List list, String field, String order) {
     final sorted = List<Map<String, dynamic>>.from(list);
     sorted.sort((a, b) {
       final dateA = DateTime.tryParse(a[field] ?? '');
@@ -2818,16 +2937,14 @@ Widget _buildLabTestCard(Map<String, dynamic> labTest) {
   }
 
   List<Map<String, dynamic>> _filterAndSortChildren(List children) {
-    var filtered = List<Map<String, dynamic>>.from(children)
-        .where((c) {
-          final name = [
-            c['first_name'],
-            c['middle_name'],
-            c['last_name'],
-          ].where((e) => e != null).join(' ').toLowerCase();
-          return name.contains(_childQuery.toLowerCase());
-        })
-        .toList();
+    var filtered = List<Map<String, dynamic>>.from(children).where((c) {
+      final name = [
+        c['first_name'],
+        c['middle_name'],
+        c['last_name'],
+      ].where((e) => e != null).join(' ').toLowerCase();
+      return name.contains(_childQuery.toLowerCase());
+    }).toList();
 
     if (_childSort == 'name') {
       filtered.sort((a, b) {

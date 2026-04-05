@@ -1,11 +1,7 @@
 // lib/screens/midwife/midwife_records.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
-import 'ultrasound_analyzer_screen.dart';
-import 'lab_test_analyzer_screen.dart';
-import '../../services/supabase_service.dart';
 
 class MidwifeRecords extends StatefulWidget {
   const MidwifeRecords({super.key});
@@ -15,147 +11,6 @@ class MidwifeRecords extends StatefulWidget {
 }
 
 class _MidwifeRecordsState extends State<MidwifeRecords> {
-  List<Map<String, dynamic>> _mothers = [];
-  bool _loadingMothers = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMothers();
-  }
-
-  Future<void> _loadMothers() async {
-    setState(() {
-      _loadingMothers = true;
-    });
-
-    try {
-      final response = await SupabaseService.client
-          .from('mothers')
-          .select('''
-            mother_id,
-            account:account_id (
-              first_name,
-              last_name
-            ),
-            pregnancies!inner (
-              pregnancy_id,
-              status
-            )
-          ''')
-          .eq('pregnancies.status', 'ongoing');
-
-      final mothers = List<Map<String, dynamic>>.from(response);
-      
-      setState(() {
-        _mothers = mothers;
-        _loadingMothers = false;
-      });
-    } catch (e) {
-      setState(() {
-        _loadingMothers = false;
-      });
-      if (kDebugMode) {
-        print('Error loading mothers: $e');
-      }
-    }
-  }
-
-  Future<void> _showMotherSelectionDialog({
-    required Function(int motherId, int pregnancyId) onSelected,
-  }) async {
-    if (_mothers.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No mothers with ongoing pregnancies found'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select Mother',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (_loadingMothers)
-              const Center(
-                child: CircularProgressIndicator(),
-              )
-            else if (_mothers.isEmpty)
-              const Center(
-                child: Text('No mothers available'),
-              )
-            else
-              Expanded(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _mothers.length,
-                  itemBuilder: (context, index) {
-                    final mother = _mothers[index];
-                    final account = mother['account'] as Map<String, dynamic>?;
-                    final firstName = account?['first_name'] as String? ?? '';
-                    final lastName = account?['last_name'] as String? ?? '';
-                    final name = '$firstName $lastName'.trim();
-                    final displayName = name.isNotEmpty ? name : 'Mother ${mother['mother_id']}';
-                    
-                    final pregnancies = mother['pregnancies'] as List? ?? [];
-                    final pregnancyId = pregnancies.isNotEmpty
-                        ? pregnancies.first['pregnancy_id'] as int
-                        : null;
-
-                    if (pregnancyId == null) return const SizedBox.shrink();
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
-                          child: Text(
-                            displayName[0].toUpperCase(),
-                            style: const TextStyle(
-                              color: AppColors.brandPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        title: Text(displayName),
-                        subtitle: Text('Pregnancy ID: $pregnancyId'),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          onSelected(mother['mother_id'], pregnancyId);
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -165,7 +20,6 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 10),
-            
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -193,102 +47,6 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               ],
             ),
             const SizedBox(height: 30),
-
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.brandSecondary, AppColors.brandSecondary.withValues(alpha: 0.8)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'AI Analysis Tools',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Upload patient images for AI-powered analysis',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildAIToolCard(
-                          context,
-                          'Ultrasound Analysis',
-                          Icons.photo,
-                          Colors.purple,
-                          () {
-                            _showMotherSelectionDialog(
-                              onSelected: (motherId, pregnancyId) {
-                                if (!mounted) return;
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => UltrasoundAnalyzerScreen(
-                                      motherId: motherId,
-                                      pregnancyId: pregnancyId,
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildAIToolCard(
-                          context,
-                          'Lab Test Analysis',
-                          Icons.science,
-                          Colors.orange,
-                          () {
-                            _showMotherSelectionDialog(
-                              onSelected: (motherId, pregnancyId) {
-                                if (!mounted) return;
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => LabTestAnalyzerScreen(
-                                      motherId: motherId,
-                                      pregnancyId: pregnancyId,
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
             _buildSectionHeader('Recent Ultrasound Records', Icons.photo),
             const SizedBox(height: 15),
             _buildUltrasoundRecord(
@@ -314,9 +72,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'Normal',
               Colors.green,
             ),
-
             const SizedBox(height: 30),
-
             _buildSectionHeader('Recent Lab Test Records', Icons.science),
             const SizedBox(height: 15),
             _buildLabTestRecord(
@@ -342,9 +98,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'Normal',
               Colors.green,
             ),
-
             const SizedBox(height: 30),
-
             _buildSectionHeader('Pending Reviews', Icons.pending_actions),
             const SizedBox(height: 15),
             Container(
@@ -362,7 +116,8 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
                       color: Colors.orange.shade100,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.warning, color: Colors.orange.shade700, size: 20),
+                    child: Icon(Icons.warning,
+                        color: Colors.orange.shade700, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -400,40 +155,6 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
     );
   }
 
-  Widget _buildAIToolCard(BuildContext context, String title, IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 28),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildSectionHeader(String title, IconData icon) {
     return Row(
       children: [
@@ -451,7 +172,8 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
     );
   }
 
-  Widget _buildUltrasoundRecord(String patient, String date, String weeks, String status, Color statusColor) {
+  Widget _buildUltrasoundRecord(String patient, String date, String weeks,
+      String status, Color statusColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -484,18 +206,22 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.calendar_today, size: 12, color: AppColors.textSecondary),
+                    Icon(Icons.calendar_today,
+                        size: 12, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
                     Text(
                       date,
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary),
                     ),
                     const SizedBox(width: 12),
-                    Icon(Icons.access_time, size: 12, color: AppColors.textSecondary),
+                    Icon(Icons.access_time,
+                        size: 12, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
                     Text(
                       weeks,
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -522,7 +248,8 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
     );
   }
 
-  Widget _buildLabTestRecord(String patient, String test, String date, String result, Color resultColor) {
+  Widget _buildLabTestRecord(String patient, String test, String date,
+      String result, Color resultColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -564,11 +291,13 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.calendar_today, size: 12, color: AppColors.textSecondary),
+                    Icon(Icons.calendar_today,
+                        size: 12, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
                     Text(
                       date,
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ],
                 ),

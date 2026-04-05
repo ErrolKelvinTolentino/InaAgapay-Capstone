@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_storage.dart';
 import '../../services/gemini_service.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/progressive_step_indicator.dart';
 
@@ -1567,10 +1568,9 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
     return DateFormat('MMM d, yyyy').format(value);
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+  void _showMessage(String message,
+      {AppSnackType type = AppSnackType.warning}) {
+    AppSnackbar.show(context, message, type: type);
   }
 
   // ── UI helpers ─────────────────────────────────────────────────────────
@@ -2615,7 +2615,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
           'row_id': widget.pregnancyId,
           'old_data': {'fetal_count': _originalFetalCount},
           'new_data': {'fetal_count': _fetalCount},
-          'changed_by': _accountId,
+          'account_id': _accountId,
           'description':
               'Midwife modified fetal count during checkup. Reason: ${_fetalCountReasonCtrl.text.trim()}',
         });
@@ -2628,11 +2628,12 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
       await _persistRiskAssessment(prenatalCheckupId);
 
       if (!mounted) return;
-      _showMessage('Prenatal checkup saved.');
+      _showMessage('Prenatal checkup saved.', type: AppSnackType.success);
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      _showMessage('Failed to save prenatal checkup: $e');
+      _showMessage('Failed to save prenatal checkup: $e',
+          type: AppSnackType.error);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
