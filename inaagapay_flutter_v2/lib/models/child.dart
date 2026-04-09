@@ -1,3 +1,5 @@
+// lib/models/child.dart
+
 class Child {
   final String id;
   final String name;

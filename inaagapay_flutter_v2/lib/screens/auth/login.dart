@@ -76,10 +76,20 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
+      if (!mounted) {
+        setState(() => _isLoading = false);
+        return;
+      }
+      
       setState(() => _isLoading = false);
-      if (!mounted) return;
 
-      if (response['success'] && response['token'] != null) {
+      if (kDebugMode) {
+        debugPrint('=== LOGIN RESPONSE ===');
+        debugPrint('Success: ${response['success']}');
+        debugPrint('User data: ${response['user']}');
+      }
+
+      if (response['success'] == true && response['token'] != null) {
         await AuthStorage.saveToken(response['token']);
         await AuthStorage.saveUserRole(response['user']['role']);
         await AuthStorage.saveUserId(response['user']['id']);
@@ -94,61 +104,192 @@ class _LoginScreenState extends State<LoginScreen> {
           } else {
             if (kDebugMode) {
               debugPrint('WARNING: mother_id is null in login response');
-              debugPrint('Response user data: ${response['user']}');
             }
           }
-          await AuthStorage.saveProfileComplete(
-            response['user']['profile_complete'] == true,
-          );
-        }
-
-        final role = response['user']['role'];
-        final profileComplete = response['user']['profile_complete'] == true;
-        final needsPasswordChange = response['user']['needs_password_change'] ?? false;
-
-        if (!mounted) return;
-
-        if (role == 'mother') {
-          if (needsPasswordChange) {
-            // Force password change for midwife-created accounts
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              '/change-password',
-              (route) => false,
-            );
-          } else {
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              profileComplete ? '/mother-dashboard' : '/complete-profile',
-              (route) => false,
-            );
+          
+          final needsPasswordChange = response['user']['needs_password_change'] == true;
+          final createdBy = response['user']['created_by'] as String? ?? 'self';
+          final profileCompleteFromResponse = response['user']['profile_complete'] == true;
+          
+          if (kDebugMode) {
+            debugPrint('=== ACCOUNT TYPE DETECTION ===');
+            debugPrint('createdBy: $createdBy');
+            debugPrint('needsPasswordChange: $needsPasswordChange');
+            debugPrint('profileCompleteFromResponse: $profileCompleteFromResponse');
           }
-        } else if (role == 'midwife') {
+          
+          // For midwife-created or midwife-updated accounts: skip Complete Profile
+          if (createdBy == 'midwife') {
+            if (kDebugMode) {
+              debugPrint('✅ Midwife-managed account detected - Skipping Complete Profile');
+            }
+            
+            // Mark profile as complete since midwife filled all data
+            await AuthStorage.saveProfileComplete(true);
+            
+            if (needsPasswordChange) {
+              if (kDebugMode) {
+                debugPrint('➡️ Redirecting to Change Temporary Password screen');
+              }
+              await AuthStorage.saveTemporaryPasswordChanged(false);
+              if (!mounted) return;
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/change-temporary-password',
+                (route) => false,
+              );
+            } else {
+              if (kDebugMode) {
+                debugPrint('➡️ Redirecting to Mother Dashboard');
+              }
+              if (!mounted) return;
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/mother-dashboard',
+                (route) => false,
+              );
+            }
+          } 
+          // For self-registered accounts: check if profile needs completion
+          else {
+            if (kDebugMode) {
+              debugPrint('⚠️ Self-registered account detected - Checking profile completeness');
+            }
+            
+            // Verify if profile is actually complete by checking database
+            final isActuallyComplete = await _checkProfileCompleteness(motherId);
+            
+            if (kDebugMode) {
+              debugPrint('Profile completeness result: $isActuallyComplete');
+            }
+            
+            if (!isActuallyComplete) {
+              if (kDebugMode) {
+                debugPrint('❌ Profile incomplete - Redirecting to Complete Profile');
+              }
+              await AuthStorage.saveProfileComplete(false);
+              if (!mounted) return;
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/complete-profile',
+                (route) => false,
+              );
+            } else {
+              if (kDebugMode) {
+                debugPrint('✅ Profile complete - Redirecting to Mother Dashboard');
+              }
+              await AuthStorage.saveProfileComplete(true);
+              if (!mounted) return;
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/mother-dashboard',
+                (route) => false,
+              );
+            }
+          }
+        } else if (response['user']['role'] == 'midwife') {
+          if (!mounted) return;
           Navigator.pushNamedAndRemoveUntil(
             context,
             '/midwife-dashboard',
             (route) => false,
           );
-        } else {
+        } else if (response['user']['role'] == 'admin') {
+          if (!mounted) return;
           setState(() {
             _hasError = true;
-            _errorMessage = role == 'admin'
-                ? 'Admin accounts must use the administrative web portal.'
-                : 'Unknown user role';
+            _errorMessage = 'Admin accounts must use the administrative web portal.';
+          });
+        } else {
+          if (!mounted) return;
+          setState(() {
+            _hasError = true;
+            _errorMessage = 'Unknown user role';
           });
         }
       } else {
+        if (!mounted) return;
         setState(() {
           _hasError = true;
           _errorMessage = response['message'] ?? 'Login failed';
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _hasError = true;
         _errorMessage = 'Network error. Please try again.';
       });
+    }
+  }
+
+  Future<bool> _checkProfileCompleteness(int? motherId) async {
+    if (motherId == null) return false;
+    
+    try {
+      if (kDebugMode) {
+        debugPrint('=== CHECKING PROFILE COMPLETENESS ===');
+        debugPrint('Mother ID: $motherId');
+      }
+      
+      // Check birthdate in mothers table
+      final response = await SupabaseService.client
+          .from('mothers')
+          .select('birthdate')
+          .eq('mother_id', motherId)
+          .maybeSingle();
+      
+      if (kDebugMode) {
+        debugPrint('Mother record: $response');
+      }
+      
+      final accountId = await AuthStorage.getUserId();
+      if (accountId == null) {
+        if (kDebugMode) debugPrint('Account ID is null');
+        return false;
+      }
+      
+      // Check personal info in accounts table
+      final accountResponse = await SupabaseService.client
+          .from('accounts')
+          .select('first_name, last_name, phone_number, created_by')
+          .eq('account_id', accountId)
+          .maybeSingle();
+      
+      if (kDebugMode) {
+        debugPrint('Account record: $accountResponse');
+      }
+      
+      // Check ONLY essential fields (not address fields)
+      final hasFirstName = accountResponse != null && 
+                           accountResponse['first_name'] != null && 
+                           accountResponse['first_name'].toString().isNotEmpty;
+      final hasLastName = accountResponse != null && 
+                          accountResponse['last_name'] != null && 
+                          accountResponse['last_name'].toString().isNotEmpty;
+      final hasBirthdate = response != null && response['birthdate'] != null;
+      final hasPhone = accountResponse != null && 
+                       accountResponse['phone_number'] != null && 
+                       accountResponse['phone_number'].toString().isNotEmpty;
+      
+      final isComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
+      
+      if (kDebugMode) {
+        debugPrint('Profile completeness check results:');
+        debugPrint('  hasFirstName: $hasFirstName');
+        debugPrint('  hasLastName: $hasLastName');
+        debugPrint('  hasBirthdate: $hasBirthdate');
+        debugPrint('  hasPhone: $hasPhone');
+        debugPrint('  isComplete: $isComplete');
+      }
+      
+      return isComplete;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error checking profile completeness: $e');
+      }
+      return false;
     }
   }
 

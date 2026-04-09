@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/auth_storage.dart';
+import 'services/supabase_service.dart';
 import 'screens/auth/login.dart';
 import 'screens/auth/mother_registration.dart';
 import 'screens/auth/account_verification_registration.dart';
@@ -13,10 +14,10 @@ import 'screens/auth/forgot_password_verification.dart';
 import 'screens/auth/change_forgot_password.dart';
 import 'screens/mother/complete_profile.dart';
 import 'screens/mother/welcome_screen.dart';
-import 'screens/mother/congrats_page.dart';
 import 'screens/mother/mother_dashboard_shell.dart';
 import 'screens/mother/mother_profile_page.dart';
 import 'screens/mother/change_password_screen.dart';
+import 'screens/mother/change_temporary_password.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/midwife/midwife_shell.dart';
 import 'screens/midwife/ultrasound_analyzer_screen.dart';
@@ -28,7 +29,6 @@ import 'screens/midwife/midwife_mothers_screen.dart';
 import 'screens/midwife/midwife_children_screen.dart';
 import 'screens/midwife/midwife_schedules_screen.dart';
 import 'screens/midwife/midwife_add_mother_screen.dart';
-import 'models/due_date_mode.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,22 +61,137 @@ class InaagapayApp extends StatelessWidget {
 
     final role = await AuthStorage.getUserRole();
     
-    // For mothers, check if they need to complete profile
     if (role == 'mother') {
       final profileComplete = await AuthStorage.isProfileComplete();
-      if (!profileComplete) {
-        return const CompleteProfileScreen();
+      final needsPasswordChange = await AuthStorage.isTemporaryPasswordChanged();
+      final motherId = await AuthStorage.getMotherId();
+      final accountId = await AuthStorage.getUserId();
+      
+      if (kDebugMode) {
+        debugPrint('=== STARTUP SCREEN DETERMINATION ===');
+        debugPrint('Role: $role');
+        debugPrint('profileComplete flag: $profileComplete');
+        debugPrint('needsPasswordChange flag: $needsPasswordChange');
+        debugPrint('motherId: $motherId');
+        debugPrint('accountId: $accountId');
       }
+      
+      if (motherId != null && accountId != null) {
+        try {
+          // Get the created_by field to know how account was created
+          final accountResponse = await SupabaseService.client
+              .from('accounts')
+              .select('created_by, first_name, last_name, phone_number')
+              .eq('account_id', accountId)
+              .maybeSingle();
+          
+          final createdBy = accountResponse?['created_by'] as String? ?? 'self';
+          
+          if (kDebugMode) {
+            debugPrint('Startup check - created_by: $createdBy');
+          }
+          
+          // For midwife-created or midwife-updated accounts, always skip Complete Profile
+          if (createdBy == 'midwife') {
+            if (!profileComplete) {
+              await AuthStorage.saveProfileComplete(true);
+            }
+            
+            if (kDebugMode) {
+              debugPrint('Midwife-managed account - skipping Complete Profile');
+            }
+            
+            if (needsPasswordChange) {
+              if (kDebugMode) {
+                debugPrint('Midwife account needs password change - redirecting to ChangeTemporaryPasswordScreen');
+              }
+              return const ChangeTemporaryPasswordScreen();
+            }
+            
+            if (kDebugMode) {
+              debugPrint('Midwife account ready - going to dashboard');
+            }
+            return const MotherDashboardShell();
+          }
+          
+          // For self-registered accounts, check if profile is actually complete
+          final response = await SupabaseService.client
+              .from('mothers')
+              .select('birthdate')
+              .eq('mother_id', motherId)
+              .maybeSingle();
+          
+          final hasFirstName = accountResponse?['first_name'] != null && 
+                               (accountResponse?['first_name']?.toString() ?? '').isNotEmpty;
+          final hasLastName = accountResponse?['last_name'] != null && 
+                              (accountResponse?['last_name']?.toString() ?? '').isNotEmpty;
+          final hasBirthdate = response != null && response['birthdate'] != null;
+          final hasPhone = accountResponse?['phone_number'] != null && 
+                           (accountResponse?['phone_number']?.toString() ?? '').isNotEmpty;
+          
+          final isActuallyComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
+          
+          if (kDebugMode) {
+            debugPrint('Self-registered profile completeness check:');
+            debugPrint('  hasFirstName: $hasFirstName');
+            debugPrint('  hasLastName: $hasLastName');
+            debugPrint('  hasBirthdate: $hasBirthdate');
+            debugPrint('  hasPhone: $hasPhone');
+            debugPrint('  isActuallyComplete: $isActuallyComplete');
+            debugPrint('  stored profileComplete flag: $profileComplete');
+          }
+          
+          if (isActuallyComplete && !profileComplete) {
+            await AuthStorage.saveProfileComplete(true);
+          }
+          
+          if (!isActuallyComplete && !profileComplete) {
+            if (kDebugMode) {
+              debugPrint('Self-registered account incomplete - showing CompleteProfileScreen');
+            }
+            return const CompleteProfileScreen();
+          }
+          
+          if (needsPasswordChange) {
+            if (kDebugMode) {
+              debugPrint('Self-registered account needs password change - redirecting to ChangeTemporaryPasswordScreen');
+            }
+            return const ChangeTemporaryPasswordScreen();
+          }
+          
+          if (kDebugMode) {
+            debugPrint('Self-registered account ready - going to dashboard');
+          }
+          return const MotherDashboardShell();
+        } catch (e) {
+          if (kDebugMode) {
+            print('Error checking mother profile completeness: $e');
+          }
+          return const MotherDashboardShell();
+        }
+      }
+      
+      if (kDebugMode) {
+        debugPrint('Missing motherId or accountId - defaulting to dashboard');
+      }
+      return const MotherDashboardShell();
     }
 
     switch (role) {
-      case 'mother':
-        return const MotherDashboardShell();
       case 'midwife':
+        if (kDebugMode) {
+          debugPrint('Midwife role - going to MidwifeShell');
+        }
         return const MidwifeShell();
       case 'admin':
+        if (kDebugMode) {
+          debugPrint('Admin role - going to AdminDashboard');
+        }
         return const AdminDashboard();
       default:
+        if (kDebugMode) {
+          debugPrint('Unknown role - going to LoginScreen');
+        }
         return const LoginScreen();
     }
   }
@@ -92,8 +207,7 @@ class InaagapayApp extends StatelessWidget {
             home: Scaffold(
               body: Center(
                 child: CircularProgressIndicator(
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(Color(0xFFFF68A5)),
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF68A5)),
                 ),
               ),
             ),
@@ -138,6 +252,7 @@ class InaagapayApp extends StatelessWidget {
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
             '/change-password': (context) => const ChangePasswordScreen(),
+            '/change-temporary-password': (context) => const ChangeTemporaryPasswordScreen(),
 
             // Dashboard Routes
             '/mother-dashboard': (context) => const MotherDashboardShell(),
@@ -163,12 +278,7 @@ class InaagapayApp extends StatelessWidget {
             '/midwife-add-mother': (context) => const MidwifeAddMotherScreen(),
           },
           onGenerateRoute: (settings) {
-            if (settings.name == '/congrats') {
-              final mode = settings.arguments as DueDateMode;
-              return MaterialPageRoute(
-                builder: (_) => CongratsPage(mode: mode),
-              );
-            }
+            // Handle ultrasound analyzer route
             if (settings.name == '/ultrasound-analyzer') {
               final args = settings.arguments as Map<String, int>;
               return MaterialPageRoute(
@@ -178,6 +288,7 @@ class InaagapayApp extends StatelessWidget {
                 ),
               );
             }
+            // Handle lab test analyzer route
             if (settings.name == '/lab-test-analyzer') {
               final args = settings.arguments as Map<String, int>;
               return MaterialPageRoute(
@@ -185,6 +296,14 @@ class InaagapayApp extends StatelessWidget {
                   motherId: args['motherId']!,
                   pregnancyId: args['pregnancyId']!,
                 ),
+              );
+            }
+            // Handle child profile route
+            if (settings.name == '/child-profile') {
+              final childId = settings.arguments as int;
+              return MaterialPageRoute(
+                builder: (_) => const MidwifeChildrenScreen(),
+                // Note: You'll need to pass childId to the screen
               );
             }
             return null;

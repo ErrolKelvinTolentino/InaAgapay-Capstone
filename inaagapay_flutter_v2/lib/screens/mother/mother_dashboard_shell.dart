@@ -1,8 +1,11 @@
 // lib/screens/mother/mother_dashboard_shell.dart
 
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
+import '../../services/supabase_service.dart';
 import 'mother_dashboard.dart';
 import 'mother_journal_screen.dart';
 import 'mother_children_screen.dart';
@@ -18,12 +21,15 @@ class MotherDashboardShell extends StatefulWidget {
 
 class _MotherDashboardShellState extends State<MotherDashboardShell> {
   int _currentIndex = 0;
+  String? _profilePictureUrl;
+  int? _motherId;
+  final ImagePicker _picker = ImagePicker();
 
-  final List<Widget> _screens = [
-    const MotherDashboard(),
-    const MotherJournalScreen(),
-    const MotherChildrenScreen(),
-    const RecordsScreen(),
+  final List<Widget> _screens = const [
+    MotherDashboard(),
+    MotherJournalScreen(),
+    MotherChildrenScreen(),
+    RecordsScreen(),
   ];
 
   final List<String> _titles = [
@@ -32,6 +38,24 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     'CHILDREN',
     'RECORDS',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfilePicture();
+  }
+
+  Future<void> _loadProfilePicture() async {
+    _motherId = await AuthStorage.getMotherId();
+    if (_motherId != null) {
+      final url = await SupabaseService.getProfilePictureUrl(_motherId!);
+      if (mounted) {
+        setState(() {
+          _profilePictureUrl = url;
+        });
+      }
+    }
+  }
 
   Future<void> _logout() async {
     await AuthStorage.clearAll();
@@ -74,20 +98,26 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 child: Column(
                   children: [
                     _MenuItem(
+                      icon: Icons.photo_camera_outlined,
+                      label: 'Change Profile Picture',
+                      onTap: () {
+                        entry.remove();
+                        _showChangePhotoDialog(context);
+                      },
+                    ),
+                    _MenuItem(
                       icon: Icons.person_outline,
                       label: 'View Profile',
                       onTap: () {
                         entry.remove();
-                        AuthStorage.getMotherId().then((motherId) {
-                          if (motherId != null && mounted) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => MotherProfilePage(motherId: motherId),
-                              ),
-                            );
-                          }
-                        });
+                        if (_motherId != null && mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MotherProfilePage(motherId: _motherId!),
+                            ),
+                          );
+                        }
                       },
                     ),
                     _MenuItem(
@@ -126,6 +156,118 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     );
 
     overlay.insert(entry);
+  }
+
+  void _showChangePhotoDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Change Profile Picture'),
+        content: const Text('Would you like to change your profile picture?'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showImageSourceDialog(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandPrimary,
+            ),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showImageSourceDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choose Source'),
+        content: const Text('Select where to get your photo from:'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickImage(ImageSource.gallery);
+            },
+            icon: const Icon(Icons.photo_library),
+            label: const Text('Gallery'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickImage(ImageSource.camera);
+            },
+            icon: const Icon(Icons.camera_alt),
+            label: const Text('Camera'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 500,
+        maxHeight: 500,
+        imageQuality: 85,
+      );
+
+      if (image != null && _motherId != null) {
+        // Show loading
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+
+        final bytes = await image.readAsBytes();
+        final url = await SupabaseService.uploadProfilePicture(_motherId!, bytes);
+
+        if (mounted) {
+          Navigator.pop(context); // Close loading
+          
+          if (url != null) {
+            setState(() {
+              _profilePictureUrl = url;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile picture updated!'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   void _confirmLogout(BuildContext context) {
@@ -214,7 +356,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
       body: SafeArea(
         child: Column(
           children: [
-            // Custom Header
+            // Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -267,17 +409,27 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: AppColors.brandPrimary,
+                        image: _profilePictureUrl != null
+                            ? DecorationImage(
+                                image: NetworkImage(_profilePictureUrl!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
                       ),
-                      child: const Icon(
-                        Icons.person,
-                        size: 20,
-                        color: Colors.white,
-                      ),
+                      child: _profilePictureUrl == null
+                          ? const Icon(
+                              Icons.person,
+                              size: 20,
+                              color: Colors.white,
+                            )
+                          : null,
                     ),
                   ),
                 ],
               ),
             ),
+            
+            // Content
             Expanded(
               child: IndexedStack(
                 index: _currentIndex,

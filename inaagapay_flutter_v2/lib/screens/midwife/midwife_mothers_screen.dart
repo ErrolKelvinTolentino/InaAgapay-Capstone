@@ -1,12 +1,13 @@
 // lib/screens/midwife/midwife_mothers_screen.dart
 
+import 'dart:async';  // ← ADD THIS IMPORT FOR Timer
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
-import '../../services/auth_storage.dart';
 import '../../services/supabase_service.dart';
-import 'midwife_add_mother_screen.dart';
 import '../mother/mother_profile_page.dart';
+import 'midwife_add_mother_screen.dart';
 
 class MidwifeMothersScreen extends StatefulWidget {
   const MidwifeMothersScreen({super.key});
@@ -16,132 +17,267 @@ class MidwifeMothersScreen extends StatefulWidget {
 }
 
 class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
+  // Pagination variables
   List<Map<String, dynamic>> _mothers = [];
-  List<Map<String, dynamic>> _filtered = [];
-  bool _loading = true;
+  bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMoreData = true;
+  int _currentPage = 0;
+  static const int _pageSize = 8;
   String? _error;
+  
+  // Search
   final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  Timer? _searchDebounceTimer;
+  
+  // Scroll controller for pagination
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadMothers();
-    _searchController.addListener(_onSearch);
+    _searchController.addListener(_onSearchChanged);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadMothers() async {
+  void _onSearchChanged() {
+    if (_searchDebounceTimer?.isActive ?? false) {
+      _searchDebounceTimer?.cancel();
+    }
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      setState(() {
+        _searchQuery = _searchController.text.trim().toLowerCase();
+        _currentPage = 0;
+        _mothers = [];
+        _hasMoreData = true;
+        _loadMothers(reset: true);
+      });
+    });
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (!_isLoadingMore && _hasMoreData && !_isLoading) {
+        _loadMoreMothers();
+      }
+    }
+  }
+
+  Future<void> _loadMoreMothers() async {
+    if (_isLoadingMore || !_hasMoreData) return;
+    
     setState(() {
-      _loading = true;
-      _error = null;
+      _isLoadingMore = true;
     });
     
-    try {
-      final data = await SupabaseService.client
-          .from('accounts')
-          .select('''
-            account_id, 
-            first_name, 
-            last_name, 
-            phone_number, 
-            email_address, 
-            status,
-            mothers!inner(
-              mother_id, 
-              birthdate, 
-              barangay, 
-              city_municipality, 
-              province, 
-              status,
-              pregnancies(
-                status,
-                last_menstrual_period
-              )
-            )
-          ''')
-          .eq('account_type', 'mother')
-          .eq('is_verified', true)
-          .order('first_name', ascending: true);
-
-      final list = List<Map<String, dynamic>>.from(data);
-      
-      final processedList = list.map((mother) {
-        final motherData = mother['mothers'] as Map<String, dynamic>? ?? {};
-        final pregnancies = motherData['pregnancies'] as List? ?? [];
-        
-        final activePregnancies = pregnancies.where((p) => p['status'] == 'active').toList();
-        final pregnancyCount = activePregnancies.length;
-        final String? lmpString = pregnancyCount > 0 ? activePregnancies.first['last_menstrual_period'] : null;
-        
-        int? age;
-        final birthdateStr = motherData['birthdate']?.toString();
-        if (birthdateStr != null && birthdateStr.isNotEmpty) {
-          final birthdate = DateTime.tryParse(birthdateStr);
-          if (birthdate != null) {
-            age = (DateTime.now().difference(birthdate).inDays / 365).floor();
-          }
-        }
-        
-        int? gestWeeks;
-        if (lmpString != null && lmpString.isNotEmpty) {
-          final lmpDate = DateTime.tryParse(lmpString);
-          if (lmpDate != null) {
-            gestWeeks = (DateTime.now().difference(lmpDate).inDays / 7).floor();
-          }
-        }
-        
-        return {
-          ...mother,
-          'full_name': [
-            mother['first_name'],
-            mother['last_name']
-          ].where((e) => e != null && e.toString().trim().isNotEmpty).join(' '),
-          'pregnancy_count': pregnancyCount,
-          'age': age,
-          'gest_weeks': gestWeeks,
-          'mother_id': motherData['mother_id'],
-          'barangay': motherData['barangay'],
-          'city': motherData['city_municipality'],
-        };
-      }).toList();
-
+    _currentPage++;
+    await _loadMothers(reset: false);
+    
+    if (mounted) {
       setState(() {
-        _mothers = processedList;
-        _filtered = processedList;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
+        _isLoadingMore = false;
       });
     }
   }
 
-  void _onSearch() {
-    final query = _searchController.text.toLowerCase().trim();
-    setState(() {
-      if (query.isEmpty) {
-        _filtered = List.from(_mothers);
-      } else {
-        _filtered = _mothers.where((m) {
-          final name = (m['full_name'] ?? '').toString().toLowerCase();
-          final phone = (m['phone_number'] ?? '').toString().toLowerCase();
-          final email = (m['email_address'] ?? '').toString().toLowerCase();
-          final barangay = (m['barangay'] ?? '').toString().toLowerCase();
-          
-          return name.contains(query) || 
-                 phone.contains(query) || 
-                 email.contains(query) ||
-                 barangay.contains(query);
-        }).toList();
+  Future<void> _loadMothers({bool reset = true}) async {
+    if (!mounted) return;
+    
+    if (reset) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+        _currentPage = 0;
+        _mothers = [];
+      });
+    }
+    
+    try {
+      // Calculate offset for pagination
+      final int offset = _currentPage * _pageSize;
+      
+      // Step 1: Get mother accounts with pagination
+      var query = SupabaseService.client
+          .from('accounts')
+          .select('account_id, first_name, last_name, phone_number, email_address')
+          .eq('account_type', 'mother')
+          .eq('is_verified', true);
+      
+      // Apply search filter if exists
+      if (_searchQuery.isNotEmpty) {
+        query = query.or(
+          'first_name.ilike.%$_searchQuery%,'
+          'last_name.ilike.%$_searchQuery%,'
+          'phone_number.ilike.%$_searchQuery%,'
+          'email_address.ilike.%$_searchQuery%'
+        );
       }
-    });
+      
+      // Get total count first for pagination
+      final List<dynamic> allResults = await query;
+      final int totalCount = allResults.length;
+      
+      // Apply pagination
+      final List<dynamic> accountsResponse = await query
+          .order('first_name', ascending: true)
+          .range(offset, offset + _pageSize - 1);
+      
+      if (!mounted) return;
+      
+      // Check if we have more data
+      _hasMoreData = (offset + _pageSize) < totalCount;
+      
+      // Step 2: Get all mother records for these accounts
+      final List<int> accountIds = [];
+      for (var account in accountsResponse) {
+        if (account is Map<String, dynamic>) {
+          accountIds.add(account['account_id'] as int);
+        }
+      }
+      
+      List<Map<String, dynamic>> mothersData = [];
+      if (accountIds.isNotEmpty) {
+        final mothersResponse = await SupabaseService.client
+            .from('mothers')
+            .select('mother_id, account_id, birthdate, barangay, city_municipality, province')
+            .inFilter('account_id', accountIds);
+        
+        if (mothersResponse is List) {
+          mothersData = List<Map<String, dynamic>>.from(mothersResponse);
+        }
+      }
+      
+      // Step 3: Get all ongoing pregnancies
+      final List<int> motherIds = [];
+      for (var mother in mothersData) {
+        final int? mid = mother['mother_id'] as int?;
+        if (mid != null) {
+          motherIds.add(mid);
+        }
+      }
+      
+      Map<int, Map<String, dynamic>> pregnancyMap = {};
+      if (motherIds.isNotEmpty) {
+        final pregnanciesResponse = await SupabaseService.client
+            .from('pregnancies')
+            .select('mother_id, last_menstrual_period')
+            .eq('status', 'ongoing')
+            .inFilter('mother_id', motherIds);
+        
+        if (pregnanciesResponse is List) {
+          for (var pregnancy in pregnanciesResponse) {
+            if (pregnancy is Map<String, dynamic>) {
+              final int? mid = pregnancy['mother_id'] as int?;
+              if (mid != null) {
+                pregnancyMap[mid] = pregnancy;
+              }
+            }
+          }
+        }
+      }
+      
+      // Step 4: Build mother map for quick lookup
+      final Map<int, Map<String, dynamic>> motherMap = {};
+      for (var mother in mothersData) {
+        final int? aid = mother['account_id'] as int?;
+        if (aid != null) {
+          motherMap[aid] = mother;
+        }
+      }
+      
+      // Step 5: Process all accounts
+      final List<Map<String, dynamic>> newMothers = [];
+      
+      for (var account in accountsResponse) {
+        if (account is! Map<String, dynamic>) continue;
+        
+        final int accountId = account['account_id'] as int;
+        final Map<String, dynamic>? motherInfo = motherMap[accountId];
+        final int? motherId = motherInfo?['mother_id'] as int?;
+        
+        final String firstName = account['first_name']?.toString() ?? '';
+        final String lastName = account['last_name']?.toString() ?? '';
+        final String fullName = '$firstName $lastName'.trim();
+        
+        // Calculate age
+        int age = 0;
+        final String? birthdateStr = motherInfo?['birthdate']?.toString();
+        if (birthdateStr != null && birthdateStr.isNotEmpty) {
+          final DateTime? birthdate = DateTime.tryParse(birthdateStr);
+          if (birthdate != null) {
+            age = DateTime.now().difference(birthdate).inDays ~/ 365;
+          }
+        }
+        
+        // Get pregnancy info
+        int gestWeeks = 0;
+        if (motherId != null) {
+          final Map<String, dynamic>? pregnancy = pregnancyMap[motherId];
+          final String? lmpString = pregnancy?['last_menstrual_period'] as String?;
+          if (lmpString != null && lmpString.isNotEmpty) {
+            final DateTime? lmpDate = DateTime.tryParse(lmpString);
+            if (lmpDate != null) {
+              gestWeeks = DateTime.now().difference(lmpDate).inDays ~/ 7;
+            }
+          }
+        }
+        
+        newMothers.add({
+          'account_id': accountId,
+          'first_name': firstName,
+          'last_name': lastName,
+          'phone_number': account['phone_number']?.toString() ?? '',
+          'email_address': account['email_address']?.toString() ?? '',
+          'full_name': fullName.isEmpty ? 'Unknown Mother' : fullName,
+          'mother_id': motherId,
+          'age': age,
+          'gest_weeks': gestWeeks,
+          'has_pregnancy': motherId != null && pregnancyMap.containsKey(motherId),
+          'barangay': motherInfo?['barangay']?.toString() ?? '',
+          'city': motherInfo?['city_municipality']?.toString() ?? '',
+          'province': motherInfo?['province']?.toString() ?? '',
+        });
+      }
+      
+      if (mounted) {
+        setState(() {
+          if (reset) {
+            _mothers = newMothers;
+          } else {
+            _mothers.addAll(newMothers);
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error loading mothers: $e');
+      }
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+          _isLoadingMore = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshMothers() async {
+    _currentPage = 0;
+    _mothers = [];
+    _hasMoreData = true;
+    await _loadMothers(reset: true);
   }
 
   @override
@@ -153,7 +289,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         bottom: false,
         child: Column(
           children: [
-            // 1. Header Banner
+            // Header Banner
             Container(
               width: double.infinity,
               height: 110,
@@ -196,7 +332,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                           ),
                         ),
                         Text(
-                          '${_mothers.length} Mothers!', // Count based on actual mothers
+                          '${_mothers.length} Mothers',
                           style: const TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
@@ -210,7 +346,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
               ),
             ),
 
-            // 2. Search Bar
+            // Search Bar
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: AppInputField(
@@ -220,13 +356,17 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                 onTrailingTap: _searchController.text.isNotEmpty 
                     ? () {
                         _searchController.clear();
-                        _onSearch();
+                        _searchQuery = '';
+                        _currentPage = 0;
+                        _mothers = [];
+                        _hasMoreData = true;
+                        _loadMothers(reset: true);
                       }
                     : null,
               ),
             ),
 
-            // 3. Helper Text
+            // Helper Text
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 4, horizontal: 16),
               child: Text(
@@ -240,8 +380,9 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
               ),
             ),
 
+            // Main Content with Pagination
             Expanded(
-              child: _loading
+              child: _isLoading && _mothers.isEmpty
                   ? const Center(
                       child: CircularProgressIndicator(color: AppColors.brandPrimary),
                     )
@@ -273,7 +414,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 ElevatedButton.icon(
-                                  onPressed: _loadMothers,
+                                  onPressed: () => _refreshMothers(),
                                   icon: const Icon(Icons.refresh),
                                   label: const Text('Retry'),
                                   style: ElevatedButton.styleFrom(
@@ -285,26 +426,60 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                             ),
                           ),
                         )
-                      : _filtered.isEmpty
+                      : _mothers.isEmpty
                           ? _buildEmpty()
-                          : ListView.separated(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                              itemCount: _filtered.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 10),
-                              itemBuilder: (context, index) =>
-                                  _MotherCard(mother: _filtered[index], onTap: () {
-                                    final motherId = _filtered[index]['mother_id'];
-                                    if (motherId != null) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => MotherProfilePage(
-                                            motherId: motherId,
+                          : RefreshIndicator(
+                              onRefresh: _refreshMothers,
+                              color: AppColors.brandPrimary,
+                              child: ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                                itemCount: _mothers.length + (_hasMoreData ? 1 : 0),
+                                itemBuilder: (context, index) {
+                                  // Show loading indicator at the bottom
+                                  if (index == _mothers.length) {
+                                    return const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 20),
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 30,
+                                          height: 30,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppColors.brandPrimary,
                                           ),
                                         ),
-                                      ).then((_) => _loadMothers());
-                                    }
-                                  }),
+                                      ),
+                                    );
+                                  }
+                                  
+                                  final Map<String, dynamic> mother = _mothers[index];
+                                  final int? motherId = mother['mother_id'] as int?;
+                                  
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: _MotherCard(
+                                      mother: mother,
+                                      onTap: motherId != null
+                                          ? () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => MotherProfilePage(
+                                                    motherId: motherId,
+                                                  ),
+                                                ),
+                                              ).then((_) {
+                                                if (mounted) {
+                                                  _refreshMothers();
+                                                }
+                                              });
+                                            }
+                                          : null,
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
             ),
           ],
@@ -312,14 +487,14 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          final added = await Navigator.push(
+          final bool? added = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => const MidwifeAddMotherScreen(),
             ),
           );
-          if (added == true) {
-            _loadMothers();
+          if (added == true && mounted) {
+            _refreshMothers();
           }
         },
         backgroundColor: AppColors.brandPrimary,
@@ -331,7 +506,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   }
 
   Widget _buildEmpty() {
-    final isSearching = _searchController.text.isNotEmpty;
+    final bool isSearching = _searchController.text.isNotEmpty;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -341,7 +516,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                 ? Icons.search_off_rounded
                 : Icons.pregnant_woman_rounded,
             size: 64,
-            color: AppColors.brandPrimary.withOpacity(0.4),
+            color: AppColors.brandPrimary.withValues(alpha: 0.4),
           ),
           const SizedBox(height: 12),
           Text(
@@ -367,26 +542,54 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 
 class _MotherCard extends StatelessWidget {
   final Map<String, dynamic> mother;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
-  const _MotherCard({required this.mother, required this.onTap});
+  const _MotherCard({
+    required this.mother,
+    this.onTap,
+  });
+
+  String _getInitials(String fullName) {
+    if (fullName.isEmpty || fullName == 'Unknown Mother') return '?';
+    
+    final String trimmed = fullName.trim();
+    if (trimmed.isEmpty) return '?';
+    
+    final List<String> parts = trimmed.split(' ');
+    if (parts.isEmpty) return '?';
+    
+    final String firstPart = parts[0];
+    if (firstPart.isEmpty) return '?';
+    final String firstInitial = firstPart[0].toUpperCase();
+    
+    if (parts.length > 1) {
+      final String secondPart = parts[1];
+      if (secondPart.isNotEmpty) {
+        return '$firstInitial${secondPart[0].toUpperCase()}';
+      }
+    }
+    
+    return firstInitial;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final fullName = mother['full_name']?.toString() ?? 'Unnamed';
-    final pregnancyCount = mother['pregnancy_count'] as int? ?? 0;
-    final age = mother['age'] as int?;
-    final gestWeeks = mother['gest_weeks'] as int?;
+    final String fullName = mother['full_name']?.toString() ?? '';
+    final int age = mother['age'] as int? ?? 0;
+    final int gestWeeks = mother['gest_weeks'] as int? ?? 0;
+    final bool hasPregnancy = mother['has_pregnancy'] as bool? ?? false;
 
-    String subtitleText = '';
-    if (age != null) {
-      subtitleText += '$age Years old';
+    final String displayName = fullName.isEmpty ? 'Unknown Mother' : fullName;
+    
+    final StringBuffer subtitleBuffer = StringBuffer();
+    if (age > 0) {
+      subtitleBuffer.write('$age Years old');
     } else {
-      subtitleText += 'Age unknown';
+      subtitleBuffer.write('Age unknown');
     }
 
-    if (pregnancyCount > 0 && gestWeeks != null) {
-      subtitleText += ' - $gestWeeks weeks pregnant';
+    if (hasPregnancy && gestWeeks > 0) {
+      subtitleBuffer.write(' - $gestWeeks weeks pregnant');
     }
 
     return Container(
@@ -395,7 +598,7 @@ class _MotherCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -414,9 +617,24 @@ class _MotherCard extends StatelessWidget {
                 Container(
                   width: 50,
                   height: 50,
-                  decoration: const BoxDecoration(
-                    color: AppColors.brandPrimary,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.brandPrimary.withValues(alpha: 0.3),
+                        AppColors.brandAccent.withValues(alpha: 0.2),
+                      ],
+                    ),
                     shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      _getInitials(displayName),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandPrimary,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -425,7 +643,7 @@ class _MotherCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        fullName,
+                        displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -436,7 +654,7 @@ class _MotherCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        subtitleText,
+                        subtitleBuffer.toString(),
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.textSecondary,
@@ -456,15 +674,5 @@ class _MotherCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _getInitials(String fullName) {
-    if (fullName.isEmpty || fullName == 'Unnamed') return '?';
-    
-    final parts = fullName.trim().split(' ');
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    
-    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 }

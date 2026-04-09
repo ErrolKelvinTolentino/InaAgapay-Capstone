@@ -1,4 +1,4 @@
-// lib/screens/mother/mother_profile_page.dart
+﻿// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -104,7 +104,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   // Helper methods for formatting
   String _formatDate(dynamic date) {
-    if (date == null) return '—';
+    if (date == null) return '-';
     try {
       final parsed = DateTime.tryParse(date.toString());
       if (parsed == null) return date.toString();
@@ -115,7 +115,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
   String _formatDateTime(dynamic dateTime) {
-    if (dateTime == null) return '—';
+    if (dateTime == null) return '-';
     try {
       final parsed = DateTime.tryParse(dateTime.toString());
       if (parsed == null) return dateTime.toString();
@@ -133,13 +133,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
   String _formatValue(dynamic value) {
-    if (value == null) return '—';
+    if (value == null) return '-';
     final str = value.toString().trim();
-    return str.isEmpty ? '—' : str;
+    return str.isEmpty ? '-' : str;
   }
 
   String _formatOutcome(String? outcome) {
-    if (outcome == null) return '—';
+    if (outcome == null) return '-';
     switch (outcome.toLowerCase()) {
       case 'live_birth':
         return 'Live Birth';
@@ -170,11 +170,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       );
     }
 
-    // ── 1. Try to use the stored DB risk level ──────────────────────────────
+    //  1. Try to use the stored DB risk level 
     final dbLevel =
         (pregnancy['pregnancy_risk_level'] as String?)?.toLowerCase();
 
-    // ── 2. Collect risk factors from stored checkup risk assessments ────────
+    //  2. Collect risk factors from stored checkup risk assessments 
     final checkups = (pregnancy['checkups'] as List?) ?? [];
     final List<String> dbFactors = [];
     String? dbAiNote;
@@ -207,7 +207,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       }
     }
 
-    // ── 3. Build baseline risk from DB level (if present) or fallback engine ─
+    //  3. Build baseline risk from DB level (if present) or fallback engine 
     String baselineLevel = 'low';
     double baselineScore = 5;
     String baselineNote = 'No significant risk factors identified.';
@@ -279,7 +279,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       baselineFactors.addAll(fallback.factors);
     }
 
-    // ── 4. Add latest ultrasound and lab-test signals to risk level ─────────
+    //  4. Add latest ultrasound and lab-test signals to risk level 
     int supplementalScore = 0;
     bool hasSevereSupplementalSignal = false;
     final supplementalFactors = <String>[];
@@ -290,7 +290,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     if (latestUltrasound != null) {
       final usDate = _formatDate(latestUltrasound['ultrasound_date']);
       final remarks = _formatValue(latestUltrasound['remarks']).toLowerCase();
-      if (remarks != '—') {
+      if (remarks != '-') {
         if (RegExp(r'critical|urgent|severe|fetal distress|placenta previa',
                 caseSensitive: false)
             .hasMatch(remarks)) {
@@ -419,7 +419,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     } else if (fhr != null && (fhr < 120 || fhr > 160)) {
       overallAssessment =
           'Fetal heart rate is outside the usual expected range and should be reviewed clinically.';
-    } else if (edema != '—' && edema != 'none') {
+    } else if (edema != '-' && edema != 'none') {
       overallAssessment =
           'Mild edema is noted; monitor progression and correlate with blood pressure and symptoms.';
     }
@@ -432,68 +432,68 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     if (bpSys != null && bpDia != null) {
       if (bpSys >= 140 || bpDia >= 90) {
         buffer.write(
-            '• Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [REVIEW].\n');
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [REVIEW].\n');
       } else if (bpSys < 90 || bpDia < 60) {
         buffer.write(
-            '• Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [MONITOR].\n');
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [MONITOR].\n');
       } else {
         buffer.write(
-            '• Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [WITHIN NORMAL LIMITS].\n');
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [WITHIN NORMAL LIMITS].\n');
       }
     } else {
       buffer.write(
-          '• Maternal Vitals - Blood Pressure: Not documented in this record.\n');
+          '- Maternal Vitals - Blood Pressure: Not documented in this record.\n');
     }
 
     if (weight != null) {
       buffer.write(
-          '• Maternal Vitals - Weight: ${weight.toStringAsFixed(1)} kg.\n');
+          '- Maternal Vitals - Weight: ${weight.toStringAsFixed(1)} kg.\n');
     }
 
     if (fhr != null) {
       if (fhr >= 120 && fhr <= 160) {
         buffer.write(
-            '• Fetal Status - Heart Rate: $fhr bpm [WITHIN NORMAL LIMITS].\n');
+            '- Fetal Status - Heart Rate: $fhr bpm [WITHIN NORMAL LIMITS].\n');
       } else {
-        buffer.write('• Fetal Status - Heart Rate: $fhr bpm [REVIEW].\n');
+        buffer.write('- Fetal Status - Heart Rate: $fhr bpm [REVIEW].\n');
       }
-    } else if (fhrRaw != '—') {
-      buffer.write('• Fetal Status - Heart Rate: $fhrRaw [REVIEW MANUALLY].\n');
+    } else if (fhrRaw != '-') {
+      buffer.write('- Fetal Status - Heart Rate: $fhrRaw [REVIEW MANUALLY].\n');
     }
 
     final fetalPosition = _formatValue(checkup['fetal_position']);
-    if (fetalPosition != '—') {
-      buffer.write('• Fetal Status - Position: $fetalPosition.\n');
+    if (fetalPosition != '-') {
+      buffer.write('- Fetal Status - Position: $fetalPosition.\n');
     }
 
-    if (edemaRaw != '—') {
+    if (edemaRaw != '-') {
       if (edema == 'none') {
-        buffer.write('• Maternal Observation - Edema: None reported.\n');
+        buffer.write('- Maternal Observation - Edema: None reported.\n');
       } else {
-        buffer.write('• Maternal Observation - Edema: $edemaRaw [MONITOR].\n');
+        buffer.write('- Maternal Observation - Edema: $edemaRaw [MONITOR].\n');
       }
     }
 
-    if (tdDose != '—') {
-      buffer.write('• Preventive Care - TD Vaccine: $tdDose documented.\n');
+    if (tdDose != '-') {
+      buffer.write('- Preventive Care - TD Vaccine: $tdDose documented.\n');
     }
 
     final nextSchedule = _formatDate(checkup['next_schedule']);
-    if (nextSchedule != '—') {
-      buffer.write('• Follow-up - Next Schedule: $nextSchedule.\n');
+    if (nextSchedule != '-') {
+      buffer.write('- Follow-up - Next Schedule: $nextSchedule.\n');
     }
 
     buffer.write('\nRECOMMENDATIONS:\n');
-    buffer.write('• Continue scheduled prenatal follow-up visits.\n');
+    buffer.write('- Continue scheduled prenatal follow-up visits.\n');
     buffer
-        .write('• Monitor maternal warning signs and fetal movement daily.\n');
+        .write('- Monitor maternal warning signs and fetal movement daily.\n');
     if ((bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) ||
         (fhr != null && (fhr < 120 || fhr > 160))) {
       buffer.write(
-          '• Prioritize clinician review for blood pressure and/or fetal heart findings.\n');
+          '- Prioritize clinician review for blood pressure and/or fetal heart findings.\n');
     }
-    if (edema != '—' && edema != 'none') {
-      buffer.write('• Reassess edema severity in next checkup.\n');
+    if (edema != '-' && edema != 'none') {
+      buffer.write('- Reassess edema severity in next checkup.\n');
     }
 
     return buffer.toString().trim();
@@ -501,7 +501,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
     final buffer = StringBuffer();
-    buffer.write('🤖 Ultrasound AI Insights:\n\n');
+    buffer.write('Ultrasound AI Insights:\n\n');
 
     final remarks = ultrasound['remarks']?.toString().toLowerCase() ?? '';
     final date = _formatDate(ultrasound['ultrasound_date']);
@@ -522,21 +522,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     // Analyze remarks
     if (remarks.contains('normal') || remarks.contains('healthy')) {
       buffer.write(
-          '✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
+          '**Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
       buffer.write(
-          '📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
+          '**Follow-up Recommended**: Some findings require additional observation.\n\n');
     } else if (remarks.contains('concern') || remarks.contains('abnormal')) {
       buffer.write(
-          '🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
+          '**Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
     } else {
       buffer.write(
-          '📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
+          '**Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
     }
 
-    buffer.write('💡 **Key Recommendations**:\n');
-    buffer.write('• Discuss findings with your healthcare provider\n');
-    buffer.write('• Continue all scheduled prenatal appointments\n');
+        buffer.write('**Key Recommendations**:\n');
+    buffer.write('- Discuss findings with your healthcare provider\n');
+    buffer.write('- Continue all scheduled prenatal appointments\n');
 
     return buffer.toString();
   }
@@ -643,7 +643,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       }
 
       final edema = _formatValue(latestCheckup['edema']).toLowerCase();
-      if (edema != '—' && edema != 'none') {
+      if (edema != '-' && edema != 'none') {
         riskScore += 1;
         observations.add(
             'Latest Checkup ($checkupDate): Edema is reported (${_formatValue(latestCheckup['edema'])}).');
@@ -658,7 +658,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     if (latestUltrasound != null) {
       final usDate = _formatDate(latestUltrasound['ultrasound_date']);
       final remarks = _formatValue(latestUltrasound['remarks']).toLowerCase();
-      if (remarks != '—') {
+      if (remarks != '-') {
         if (RegExp(r'abnormal|concern|urgent|critical', caseSensitive: false)
             .hasMatch(remarks)) {
           riskScore += 3;
@@ -740,11 +740,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     buffer.write('OVERALL ASSESSMENT: $overall\n\n');
     buffer.write('KEY OBSERVATIONS:\n');
     for (final item in observations) {
-      buffer.write('• $item\n');
+      buffer.write('- $item\n');
     }
     buffer.write('\nRECOMMENDATIONS:\n');
     for (final item in recommendations.take(4)) {
-      buffer.write('• $item\n');
+      buffer.write('- $item\n');
     }
 
     return (level: level, structuredText: buffer.toString().trim());
@@ -860,7 +860,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   String _normalizeMarkdownLine(String input) {
     var line = input;
     line = line.replaceFirst(RegExp(r'^\s*#{1,6}\s*'), '');
-    line = line.replaceFirst(RegExp(r'^\s*(?:[-*]|•)\s+'), '');
+    line = line.replaceFirst(RegExp(r'^\s*(?:[-*]|-)\s+'), '');
     return line;
   }
 
@@ -1029,7 +1029,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
 
     if (RegExp(
-      r'\babnormal\b|\bcritical\b|outside normal range|higher than normal|lower than normal|\belevated\b|\bdecreased\b|\bincreased\b|⚠',
+      r'\babnormal\b|\bcritical\b|outside normal range|higher than normal|lower than normal|\belevated\b|\bdecreased\b|\bincreased\b|!',
       caseSensitive: false,
     ).hasMatch(value)) {
       return 'ABNORMAL (REVIEW)';
@@ -1102,7 +1102,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   ({String testName, String value, String status}) _parseLabResultLine(
       String line) {
     final cleaned =
-        _safeText(line).replaceFirst(RegExp(r'^[•\-*]\s*'), '').trim();
+        _safeText(line).replaceFirst(RegExp(r'^[-\-*]\s*'), '').trim();
     final colonIndex = cleaned.indexOf(':');
     if (colonIndex == -1) {
       return (testName: cleaned, value: '', status: 'UNKNOWN');
@@ -1113,8 +1113,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final status = _classifyLabStatus(testName, rawValue);
 
     final value = rawValue
-        .replaceAll('⚠️', '')
-        .replaceAll('⚠', '')
+      .replaceAll('!', '')
         .replaceAll(RegExp(r'\bABNORMAL\b', caseSensitive: false), '')
         .trim();
 
@@ -1423,7 +1422,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           else
             ...lines.map((line) {
               final cleaned =
-                  line.replaceFirst(RegExp(r'^[•\-*]\s*'), '').trim();
+                  line.replaceFirst(RegExp(r'^[-\-*]\s*'), '').trim();
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -2906,7 +2905,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
-                                profile['email_address'] ?? '—',
+                                profile['email_address'] ?? '-',
                                 style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textSecondary),
@@ -2922,7 +2921,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 size: 14, color: AppColors.textSecondary),
                             const SizedBox(width: 4),
                             Text(
-                              profile['phone_number'] ?? '—',
+                              profile['phone_number'] ?? '-',
                               style: const TextStyle(
                                   fontSize: 12, color: AppColors.textSecondary),
                             ),
@@ -2986,17 +2985,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               Icons.person_outline,
               [
                 _buildInfoRow('Birthdate', _formatDate(profile['birthdate'])),
-                _buildInfoRow('Blood Type', profile['blood_type'] ?? '—'),
+                _buildInfoRow('Blood Type', profile['blood_type'] ?? '-'),
                 _buildInfoRow(
                     'Height',
                     profile['height'] != null
                         ? '${profile['height']} cm'
-                        : '—'),
+                        : '-'),
                 _buildInfoRow(
                     'Weight',
                     profile['weight'] != null
                         ? '${profile['weight']} kg'
-                        : '—'),
+                        : '-'),
               ],
             ),
 
@@ -3007,11 +3006,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               'Address',
               Icons.home_outlined,
               [
-                _buildInfoRow('House No.', profile['house_number'] ?? '—'),
-                _buildInfoRow('Street', profile['street'] ?? '—'),
-                _buildInfoRow('Barangay', profile['barangay'] ?? '—'),
-                _buildInfoRow('City', profile['city_municipality'] ?? '—'),
-                _buildInfoRow('Province', profile['province'] ?? '—'),
+                _buildInfoRow('House No.', profile['house_number'] ?? '-'),
+                _buildInfoRow('Street', profile['street'] ?? '-'),
+                _buildInfoRow('Barangay', profile['barangay'] ?? '-'),
+                _buildInfoRow('City', profile['city_municipality'] ?? '-'),
+                _buildInfoRow('Province', profile['province'] ?? '-'),
               ],
             ),
 
@@ -3045,12 +3044,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        c['condition_name'] ?? '—',
+                                        c['condition_name'] ?? '-',
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w500),
                                       ),
                                       Text(
-                                        '${c['status'] ?? 'active'} • ${_formatDate(c['diagnosis_date'])}',
+                                        '${c['status'] ?? 'active'} - ${_formatDate(c['diagnosis_date'])}',
                                         style: const TextStyle(
                                             fontSize: 12,
                                             color: AppColors.textSecondary),
@@ -3094,12 +3093,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        a['allergen'] ?? '—',
+                                        a['allergen'] ?? '-',
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w500),
                                       ),
                                       Text(
-                                        '${a['status'] ?? 'active'} • ${_formatDate(a['diagnosis_date'])}',
+                                        '${a['status'] ?? 'active'} - ${_formatDate(a['diagnosis_date'])}',
                                         style: const TextStyle(
                                             fontSize: 12,
                                             color: AppColors.textSecondary),
@@ -3144,7 +3143,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                         size: 14,
                                         color: AppColors.textSecondary),
                                     const SizedBox(width: 4),
-                                    Text(c['phone_number'] ?? '—'),
+                                    Text(c['phone_number'] ?? '-'),
                                   ],
                                 ),
                                 if (c['affiliation'] != null) ...[
@@ -3350,7 +3349,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         child: Column(
                           children: [
                             Text(
-                              gestWeeks != null ? '$gestWeeks' : '—',
+                              gestWeeks != null ? '$gestWeeks' : '-',
                               style: const TextStyle(
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
@@ -3373,7 +3372,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         child: Column(
                           children: [
                             Text(
-                              daysToEdd != null ? daysToEdd.toString() : '—',
+                              daysToEdd != null ? daysToEdd.toString() : '-',
                               style: const TextStyle(
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
@@ -3404,7 +3403,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           pregnancy['pregnancy_risk_level']
                                   ?.toString()
                                   .toUpperCase() ??
-                              '—',
+                              '-',
                           Icons.warning,
                           color: pregnancy['pregnancy_risk_level'] == 'high'
                               ? Colors.red
@@ -3521,7 +3520,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 _buildInfoRow(
                     'EDD', _formatDate(pregnancy['expected_date_of_delivery'])),
                 _buildInfoRow('Status',
-                    pregnancy['status']?.toString().toUpperCase() ?? '—'),
+                    pregnancy['status']?.toString().toUpperCase() ?? '-'),
               ],
             ),
 
@@ -3739,10 +3738,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               ? outcomesList
                   .map((o) => _formatOutcome(o['outcome'] as String?))
                   .join(', ')
-              : '—';
+              : '-';
           final primaryOutcomeDate = normalizedOutcomes.isNotEmpty
               ? _formatDate(normalizedOutcomes.first['outcome_date'] as String?)
-              : '—';
+              : '-';
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
             child: ExpansionTile(
@@ -3763,7 +3762,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           'Gestational Age',
                           p['gestational_age_at_end'] != null
                               ? '${p['gestational_age_at_end']} weeks'
-                              : '—'),
+                              : '-'),
                       const SizedBox(height: 8),
                       for (int i = 0; i < normalizedOutcomes.length; i++) ...[
                         if (normalizedOutcomes.length > 1)
@@ -3793,11 +3792,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               _buildInfoRow(
                                   'Place',
                                   delivery['place_of_delivery']?.toString() ??
-                                      '—'),
+                                      '-'),
                               _buildInfoRow(
                                   'Method',
                                   delivery['delivery_method']?.toString() ??
-                                      '—'),
+                                      '-'),
                             ];
                           }
                           return <Widget>[];
@@ -3965,7 +3964,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(date, style: const TextStyle(fontSize: 12)),
-            if (bpSys != '—' && bpDia != '—')
+            if (bpSys != '-' && bpDia != '-')
               Text('BP: $bpSys/$bpDia', style: const TextStyle(fontSize: 12)),
           ],
         ),
@@ -4209,3 +4208,4 @@ class _MenuItem extends StatelessWidget {
     );
   }
 }
+

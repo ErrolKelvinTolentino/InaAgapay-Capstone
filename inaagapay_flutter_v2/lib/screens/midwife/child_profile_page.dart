@@ -36,6 +36,12 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
   Map<String, dynamic>? latestGrowth;
   List<Map<String, dynamic>> immunizations = [];
 
+  @override
+  void initState() {
+    super.initState();
+    fetchProfile();
+  }
+
   Future<void> fetchProfile() async {
     setState(() => loading = true);
 
@@ -165,12 +171,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
       return province;
     }
     return 'Not recorded';
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    fetchProfile();
   }
 
   @override
@@ -312,7 +312,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                         MaterialPageRoute(
                           builder: (_) => ChildGrowthListPage(childId: widget.childId),
                         ),
-                      );
+                      ).then((_) => fetchProfile());
                     },
                   ),
                   RecordItem(
@@ -325,7 +325,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                         MaterialPageRoute(
                           builder: (_) => ChildGrowthListPage(childId: widget.childId),
                         ),
-                      );
+                      ).then((_) => fetchProfile());
                     },
                   ),
                 ],
@@ -343,7 +343,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                     MaterialPageRoute(
                       builder: (_) => ChildGrowthListPage(childId: widget.childId),
                     ),
-                  );
+                  ).then((_) => fetchProfile());
                 },
               ),
 
@@ -395,7 +395,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                               MaterialPageRoute(
                                 builder: (_) => ChildImmunizationListPage(childId: widget.childId),
                               ),
-                            );
+                            ).then((_) => fetchProfile());
                           },
                         );
                       }).toList(),
@@ -413,7 +413,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                     MaterialPageRoute(
                       builder: (_) => ChildImmunizationListPage(childId: widget.childId),
                     ),
-                  );
+                  ).then((_) => fetchProfile());
                 },
               ),
 
@@ -448,7 +448,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                     MaterialPageRoute(
                       builder: (_) => ChildGrowthAIPage(childId: widget.childId),
                     ),
-                  );
+                  ).then((_) => fetchProfile());
                 },
               ),
 

@@ -1,5 +1,7 @@
+// lib/screens/mother/complete_profile.dart
+
 import 'package:flutter/material.dart';
-// Change these:
+import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/app_input_field.dart';
@@ -8,6 +10,7 @@ import '../../widgets/progressive_step_indicator.dart';
 import '../../widgets/page_title.dart';
 import '../../services/supabase_service.dart';
 import '../../services/auth_storage.dart';
+import '../../models/due_date_basis.dart';
 import 'welcome_screen.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
@@ -20,7 +23,7 @@ class CompleteProfileScreen extends StatefulWidget {
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   int _currentStep = 0;
 
-  // Controllers
+  // Controllers - Personal Info
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _middleName = TextEditingController();
@@ -28,19 +31,18 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _birthDate = TextEditingController();
   final _contactNumber = TextEditingController();
 
-  final _province = TextEditingController();
-  final _city = TextEditingController();
-  final _barangay = TextEditingController();
-  final _street = TextEditingController();
-  final _houseNo = TextEditingController();
-
-  late final TextEditingController _addressSummary;
+  // Due Date / Gestation
+  DueDateBasis _dueDateBasis = DueDateBasis.lmp;
+  final _lmpDate = TextEditingController();
+  final _eddDate = TextEditingController();
+  final _aogWeeks = TextEditingController();
+  final _aogDays = TextEditingController();
+  DateTime? _selectedLmp;
+  DateTime? _selectedEdd;
 
   @override
   void initState() {
     super.initState();
-    print('=== COMPLETE PROFILE SCREEN INITIALIZED ===');
-    _addressSummary = TextEditingController();
   }
 
   @override
@@ -51,47 +53,63 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     _extensionName.dispose();
     _birthDate.dispose();
     _contactNumber.dispose();
-    _province.dispose();
-    _city.dispose();
-    _barangay.dispose();
-    _street.dispose();
-    _houseNo.dispose();
-    _addressSummary.dispose();
+    _lmpDate.dispose();
+    _eddDate.dispose();
+    _aogWeeks.dispose();
+    _aogDays.dispose();
     super.dispose();
   }
 
   void _nextStep() {
-    print('=== NEXT STEP CALLED ===');
-    print('Current step: $_currentStep');
-    
-    if (_currentStep == 1) {
-      _addressSummary.text =
-          '${_province.text}, ${_city.text}, ${_barangay.text}';
-    }
-
-    if (_currentStep < 2) {
+    if (_currentStep < 1) {
       setState(() => _currentStep++);
-      print('New step: $_currentStep');
     }
   }
 
   void _previousStep() {
-    print('Previous step called');
     if (_currentStep > 0) {
       setState(() => _currentStep--);
     }
   }
 
-  void _jumpToStep(int step) {
-    print('Jump to step: $step');
-    setState(() => _currentStep = step);
+  void _updateFromLmp(DateTime lmp) {
+    _selectedLmp = lmp;
+    _lmpDate.text = _formatDate(lmp);
+    _selectedEdd = lmp.add(const Duration(days: 280));
+    _eddDate.text = _formatDate(_selectedEdd!);
+  }
+
+  void _updateFromEdd(DateTime edd) {
+    _selectedEdd = edd;
+    _eddDate.text = _formatDate(edd);
+    _selectedLmp = edd.subtract(const Duration(days: 280));
+    _lmpDate.text = _formatDate(_selectedLmp!);
+  }
+
+  void _updateFromAog() {
+    final weeks = int.tryParse(_aogWeeks.text.trim()) ?? 0;
+    final days = int.tryParse(_aogDays.text.trim()) ?? 0;
+    if (weeks == 0 && days == 0) return;
+    final totalDays = (weeks * 7) + days;
+    final lmp = DateTime.now().subtract(Duration(days: totalDays));
+    _updateFromLmp(lmp);
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _getFormattedAog() {
+    if (_selectedLmp == null) return '';
+    final days = DateTime.now().difference(_selectedLmp!).inDays;
+    if (days < 0) return '';
+    final weeks = days ~/ 7;
+    final remainingDays = days % 7;
+    return '$weeks weeks, $remainingDays days';
   }
 
   Future<void> _handlePrimaryAction() async {
-    print('=== HANDLE PRIMARY ACTION ===');
-    print('Current step: $_currentStep');
-    
-    if (_currentStep < 2) {
+    if (_currentStep < 1) {
       _nextStep();
       return;
     }
@@ -100,13 +118,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   Future<void> _saveProfileAndContinue() async {
-    print('=== SAVING PROFILE ===');
-    
     final userId = await AuthStorage.getUserId();
-    print('User ID: $userId');
-    
     if (userId == null) {
-      print('ERROR: No user ID found');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Session expired. Please login again.')),
@@ -115,28 +128,48 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       return;
     }
 
-    final profileData = {
-      'first_name': _firstName.text,
-      'middle_name': _middleName.text,
-      'last_name': _lastName.text,
-      'extension_name': _extensionName.text,
-      'birth_date': _birthDate.text,
-      'contact_number': _contactNumber.text,
-      'province': _province.text,
-      'city': _city.text,
-      'barangay': _barangay.text,
-      'street': _street.text,
-      'house_no': _houseNo.text,
-    };
+    // Validate required fields
+    if (_firstName.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your first name'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
     
-    print('Profile data: $profileData');
+    if (_lastName.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your last name'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+    
+    if (_birthDate.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your birth date'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+    
+    if (_contactNumber.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your contact number'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
 
-    final res = await SupabaseService.completeMotherProfile(
-      userId,
-      profileData,
-    );
+    // Prepare profile data
+    final profileData = {
+      'first_name': _firstName.text.trim(),
+      'middle_name': _middleName.text.trim(),
+      'last_name': _lastName.text.trim(),
+      'extension_name': _extensionName.text.trim(),
+      'birth_date': _birthDate.text.trim(),
+      'contact_number': _contactNumber.text.trim(),
+      'lmp': _selectedLmp?.toIso8601String().split('T')[0],
+      'edd': _selectedEdd?.toIso8601String().split('T')[0],
+    };
 
-    print('Profile save response: $res');
+    final res = await SupabaseService.completeMotherProfile(userId, profileData);
 
     if (!res['success']) {
       if (!mounted) return;
@@ -153,78 +186,149 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
     if (!mounted) return;
 
-    print('Navigating to welcome screen');
+    // Navigate directly to WelcomeScreen
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const WelcomeScreen()),
     );
   }
 
+  // Emergency exit
+  Future<void> _emergencyExit() async {
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Exit Profile Setup'),
+        content: const Text(
+          'Are you sure you want to exit?\n\n'
+          'Your profile information will NOT be saved.\n'
+          'You will be logged out and need to log in again.',
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Exit'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldExit == true) {
+      await AuthStorage.clearAll();
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/login',
+          (route) => false,
+        );
+      }
+    }
+  }
+
   bool get _canProceedFromStep0 {
-    final isValid = _firstName.text.isNotEmpty &&
+    return _firstName.text.isNotEmpty &&
         _lastName.text.isNotEmpty &&
         _birthDate.text.isNotEmpty &&
         _contactNumber.text.isNotEmpty;
-    
-    print('=== STEP 0 VALIDATION ===');
-    print('First name: ${_firstName.text.isNotEmpty} (${_firstName.text})');
-    print('Last name: ${_lastName.text.isNotEmpty} (${_lastName.text})');
-    print('Birth date: ${_birthDate.text.isNotEmpty} (${_birthDate.text})');
-    print('Contact: ${_contactNumber.text.isNotEmpty} (${_contactNumber.text})');
-    print('Can proceed: $isValid');
-    
-    return isValid;
+  }
+
+  bool get _canProceedFromStep1 {
+    if (_dueDateBasis == DueDateBasis.lmp && _selectedLmp == null) return false;
+    if (_dueDateBasis == DueDateBasis.edd && _selectedEdd == null) return false;
+    if (_dueDateBasis == DueDateBasis.aog) {
+      final weeks = int.tryParse(_aogWeeks.text.trim()) ?? 0;
+      final days = int.tryParse(_aogDays.text.trim()) ?? 0;
+      if (weeks == 0 && days == 0) return false;
+    }
+    return true;
   }
 
   @override
   Widget build(BuildContext context) {
-    print('=== COMPLETE PROFILE BUILD ===');
-    print('Current step: $_currentStep');
-    print('Step 0 button enabled: ${_currentStep == 0 ? _canProceedFromStep0 : true}');
-
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-            SecondaryHeader(
-              title: 'Complete Your Profile',
-              onBack: _currentStep == 0 ? null : _previousStep,
-            ),
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: _stepHeader(),
-            ),
-            const SizedBox(height: 16),
-            ProgressiveStepIndicator(
-              currentStep: _currentStep,
-              totalSteps: 3,
-            ),
-            const SizedBox(height: 24),
-            Expanded(
-              child: IndexedStack(
-                index: _currentStep,
-                children: [
-                  _personalInfoStep(),
-                  _addressStep(),
-                  _reviewStep(),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: MainButton(
-                label: _currentStep == 2 ? 'Save Profile' : 'Next',
-                showIcons: false,
-                onPressed: _currentStep == 0
-                    ? (_canProceedFromStep0 ? _handlePrimaryAction : null)
-                    : _handlePrimaryAction,
-              ),
-            ),
-          ],
+      appBar: AppBar(
+        title: const Text('Complete Profile'),
+        backgroundColor: AppColors.bgPrimary,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _currentStep == 0 ? _emergencyExit : _previousStep,
         ),
+        actions: [
+          TextButton.icon(
+            onPressed: _emergencyExit,
+            icon: const Icon(Icons.exit_to_app, size: 20),
+            label: const Text('Exit'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _stepHeader(),
+          ),
+          const SizedBox(height: 16),
+          ProgressiveStepIndicator(
+            currentStep: _currentStep,
+            totalSteps: 2,
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: IndexedStack(
+              index: _currentStep,
+              children: [
+                _personalInfoStep(),
+                _gestationStep(),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                MainButton(
+                  label: _currentStep == 1 ? 'Save Profile' : 'Next',
+                  showIcons: false,
+                  onPressed: _currentStep == 0
+                      ? (_canProceedFromStep0 ? _handlePrimaryAction : null)
+                      : (_canProceedFromStep1 ? _handlePrimaryAction : null),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _emergencyExit,
+                  icon: const Icon(Icons.logout, size: 18),
+                  label: const Text('Emergency Exit to Login'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    minimumSize: const Size(double.infinity, 45),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -237,16 +341,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           leadingIcon: Icons.person,
           trailingIcon: Icons.check,
         );
-      case 1:
-        return const PageTitle(
-          title: 'Address (Optional)',
-          leadingIcon: Icons.home,
-          trailingIcon: Icons.check,
-        );
       default:
         return const PageTitle(
-          title: 'Review Information',
-          leadingIcon: Icons.edit,
+          title: 'Pregnancy Details',
+          leadingIcon: Icons.pregnant_woman,
           trailingIcon: Icons.check,
         );
     }
@@ -278,16 +376,12 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           ),
           const SizedBox(height: 12),
           AppInputField(
-            hintText: 'Extension Name',
+            hintText: 'Extension Name (Jr., III, etc.)',
             controller: _extensionName,
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
-          AppInputField(
-            hintText: 'Birthdate*',
-            controller: _birthDate,
-            isRequired: true,
-            leadingIcon: Icons.calendar_today,
+          GestureDetector(
             onTap: () async {
               final pickedDate = await showDatePicker(
                 context: context,
@@ -295,19 +389,25 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 firstDate: DateTime(1900),
                 lastDate: DateTime.now(),
               );
-
               if (pickedDate != null) {
                 setState(() {
-                  _birthDate.text =
-                      '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+                  _birthDate.text = _formatDate(pickedDate);
                 });
               }
             },
-            onChanged: (_) => setState(() {}),
+            child: AbsorbPointer(
+              child: AppInputField(
+                hintText: 'Birthdate*',
+                controller: _birthDate,
+                isRequired: true,
+                leadingIcon: Icons.calendar_today,
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           AppInputField(
-            hintText: '+63 Contact Number*',
+            hintText: 'Contact Number*',
             controller: _contactNumber,
             isRequired: true,
             keyboardType: TextInputType.phone,
@@ -320,39 +420,187 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
   }
 
-  Widget _addressStep() {
+  Widget _gestationStep() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          AppInputField(
-            hintText: 'Province',
-            controller: _province,
-            onChanged: (_) => setState(() {}),
+          // Due Date Basis Selection
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'How would you like to calculate your due date?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildBasisOption(
+                  title: 'Last Menstrual Period (LMP)',
+                  subtitle: 'Based on the first day of your last period',
+                  basis: DueDateBasis.lmp,
+                  selected: _dueDateBasis == DueDateBasis.lmp,
+                  onTap: () => setState(() => _dueDateBasis = DueDateBasis.lmp),
+                ),
+                const SizedBox(height: 8),
+                _buildBasisOption(
+                  title: 'Estimated Delivery Date (EDD)',
+                  subtitle: 'If you already know your due date',
+                  basis: DueDateBasis.edd,
+                  selected: _dueDateBasis == DueDateBasis.edd,
+                  onTap: () => setState(() => _dueDateBasis = DueDateBasis.edd),
+                ),
+                const SizedBox(height: 8),
+                _buildBasisOption(
+                  title: 'Age of Gestation (AOG)',
+                  subtitle: 'Enter how many weeks and days pregnant you are',
+                  basis: DueDateBasis.aog,
+                  selected: _dueDateBasis == DueDateBasis.aog,
+                  onTap: () => setState(() => _dueDateBasis = DueDateBasis.aog),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          AppInputField(
-            hintText: 'City / Municipality',
-            controller: _city,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          AppInputField(
-            hintText: 'Barangay',
-            controller: _barangay,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          AppInputField(
-            hintText: 'Street Name',
-            controller: _street,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          AppInputField(
-            hintText: 'House No.',
-            controller: _houseNo,
-            onChanged: (_) => setState(() {}),
+          const SizedBox(height: 20),
+
+          // Date Entry based on selection
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_dueDateBasis == DueDateBasis.lmp) ...[
+                  const Text(
+                    'Last Menstrual Period',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedLmp ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        setState(() => _updateFromLmp(picked));
+                      }
+                    },
+                    child: AbsorbPointer(
+                      child: AppInputField(
+                        hintText: 'Select LMP date',
+                        controller: _lmpDate,
+                        isRequired: true,
+                        leadingIcon: Icons.calendar_today,
+                        readOnly: true,
+                      ),
+                    ),
+                  ),
+                ] else if (_dueDateBasis == DueDateBasis.edd) ...[
+                  const Text(
+                    'Estimated Delivery Date',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedEdd ?? DateTime.now().add(const Duration(days: 280)),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null) {
+                        setState(() => _updateFromEdd(picked));
+                      }
+                    },
+                    child: AbsorbPointer(
+                      child: AppInputField(
+                        hintText: 'Select EDD date',
+                        controller: _eddDate,
+                        isRequired: true,
+                        leadingIcon: Icons.event_available,
+                        readOnly: true,
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  const Text(
+                    'Age of Gestation',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppInputField(
+                          hintText: 'Weeks',
+                          controller: _aogWeeks,
+                          keyboardType: TextInputType.number,
+                          onChanged: (_) => _updateFromAog(),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: AppInputField(
+                          hintText: 'Days',
+                          controller: _aogDays,
+                          keyboardType: TextInputType.number,
+                          onChanged: (_) => _updateFromAog(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 16),
+                _infoRow(
+                  Icons.calendar_today,
+                  'LMP',
+                  _lmpDate.text.isEmpty ? 'Not set' : _lmpDate.text,
+                ),
+                const SizedBox(height: 8),
+                _infoRow(
+                  Icons.event_available,
+                  'EDD',
+                  _eddDate.text.isEmpty ? 'Not set' : _eddDate.text,
+                ),
+                const SizedBox(height: 8),
+                _infoRow(
+                  Icons.timer,
+                  'Current AOG',
+                  _getFormattedAog().isEmpty ? 'Not calculated' : _getFormattedAog(),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 32),
         ],
@@ -360,43 +608,69 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
   }
 
-  Widget _reviewStep() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          _reviewField('First Name', _firstName, () => _jumpToStep(0)),
-          const SizedBox(height: 12),
-          _reviewField('Middle Name', _middleName, () => _jumpToStep(0)),
-          const SizedBox(height: 12),
-          _reviewField('Last Name', _lastName, () => _jumpToStep(0)),
-          const SizedBox(height: 12),
-          _reviewField('Birthdate', _birthDate, () => _jumpToStep(0)),
-          const SizedBox(height: 12),
-          _reviewField(
-            '+63 Contact Number',
-            _contactNumber,
-            () => _jumpToStep(0),
+  Widget _buildBasisOption({
+    required String title,
+    required String subtitle,
+    required DueDateBasis basis,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.brandPrimary.withValues(alpha: 0.05) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.brandPrimary : AppColors.borderPrimary,
           ),
-          const SizedBox(height: 12),
-          _reviewField('Address', _addressSummary, () => _jumpToStep(1)),
-          const SizedBox(height: 32),
-        ],
+        ),
+        child: Row(
+          children: [
+            Radio<DueDateBasis>(
+              value: basis,
+              groupValue: _dueDateBasis,
+              onChanged: (_) => onTap(),
+              activeColor: AppColors.brandPrimary,
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _reviewField(
-    String label,
-    TextEditingController controller,
-    VoidCallback onEdit,
-  ) {
-    return AppInputField(
-      hintText: label,
-      controller: controller,
-      readOnly: true,
-      trailingIcon: Icons.edit,
-      onTrailingTap: onEdit,
+  Widget _infoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.brandPrimary),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 80,
+          child: Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+        ),
+      ],
     );
   }
 }
