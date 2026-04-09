@@ -1,7 +1,6 @@
 // lib/screens/mother/mother_dashboard_shell.dart
 
 import 'package:flutter/material.dart';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
@@ -114,7 +113,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => MotherProfilePage(motherId: _motherId!),
+                              builder: (context) =>
+                                  MotherProfilePage(motherId: _motherId!),
                             ),
                           );
                         }
@@ -240,11 +240,12 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
         );
 
         final bytes = await image.readAsBytes();
-        final url = await SupabaseService.uploadProfilePicture(_motherId!, bytes);
+        final url =
+            await SupabaseService.uploadProfilePicture(_motherId!, bytes);
 
         if (mounted) {
           Navigator.pop(context); // Close loading
-          
+
           if (url != null) {
             setState(() {
               _profilePictureUrl = url;
@@ -376,8 +377,10 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                     child: Image.asset(
                       'assets/images/logo.png',
                       height: 36,
-                      errorBuilder: (context, error, stackTrace) => 
-                        const Icon(Icons.favorite, color: AppColors.brandPrimary, size: 30),
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.favorite,
+                          color: AppColors.brandPrimary,
+                          size: 30),
                     ),
                   ),
                   Text(
@@ -428,7 +431,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 ],
               ),
             ),
-            
+
             // Content
             Expanded(
               child: IndexedStack(
@@ -510,7 +513,8 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = isActive ? AppColors.brandPrimary : AppColors.textSecondary;
+    final Color color =
+        isActive ? AppColors.brandPrimary : AppColors.textSecondary;
 
     return GestureDetector(
       onTap: onTap,

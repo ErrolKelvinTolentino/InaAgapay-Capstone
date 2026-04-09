@@ -107,7 +107,7 @@ class _VaccineGroupCard extends StatelessWidget {
                 name: vaccine.name,
                 status: status,
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

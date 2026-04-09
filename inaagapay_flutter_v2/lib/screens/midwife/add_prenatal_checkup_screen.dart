@@ -377,8 +377,8 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           .from('pregnancies')
           .select('fetal_count')
           .eq('pregnancy_id', widget.pregnancyId)
-          .maybeSingle();  // ← FIXED: Changed from .single()
-      
+          .maybeSingle(); // ← FIXED: Changed from .single()
+
       if (res != null && mounted) {
         setState(() {
           _originalFetalCount = res['fetal_count'] as int;
@@ -402,8 +402,8 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           .from('midwives')
           .select('midwife_id')
           .eq('account_id', accountId)
-          .maybeSingle();  // ← FIXED: Changed from .single()
-      
+          .maybeSingle(); // ← FIXED: Changed from .single()
+
       if (result != null && mounted) {
         setState(() => _midwifeId = result['midwife_id'] as int);
       }
@@ -900,7 +900,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
 
         if (outcomeDate != null) {
           if (latestHistoricalOutcome == null ||
-              outcomeDate.isAfter(latestHistoricalOutcome!)) {
+              outcomeDate.isAfter(latestHistoricalOutcome)) {
             latestHistoricalOutcome = outcomeDate;
           }
         }
@@ -934,7 +934,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           if (daysGap > 0 && daysGap < 180) {
             score += 20;
             factors.add(_RiskFactorItem(
-              factor: 'Short interpregnancy interval (${daysGap} days)',
+              factor: 'Short interpregnancy interval ($daysGap days)',
               influence: 'high',
               sourceTable: 'pregnancies',
               sourceId: pid,
@@ -942,8 +942,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           } else if (daysGap >= 180 && daysGap < 365) {
             score += 10;
             factors.add(_RiskFactorItem(
-              factor:
-                  'Interpregnancy interval under 12 months (${daysGap} days)',
+              factor: 'Interpregnancy interval under 12 months ($daysGap days)',
               influence: 'low',
               sourceTable: 'pregnancies',
               sourceId: pid,
@@ -1210,7 +1209,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
 
     if (latestHistoricalOutcome != null) {
       notable.add(
-          'Most recent prior pregnancy outcome: ${DateFormat('yyyy-MM-dd').format(latestHistoricalOutcome!)}');
+          'Most recent prior pregnancy outcome: ${DateFormat('yyyy-MM-dd').format(latestHistoricalOutcome)}');
     }
 
     if (_weightCtrl.text.trim().isEmpty ||
@@ -2506,7 +2505,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
           })
           .select('ai_response_id')
           .maybeSingle();
-      
+
       if (insertedAi == null) return;
       aiResponseId = insertedAi['ai_response_id'] as int;
     }
@@ -2572,7 +2571,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
         .maybeSingle();
 
     if (riskInsert == null) return;
-    
+
     final pregnancyRiskId = riskInsert['pregnancy_risk_id'] as int;
 
     if (finalRiskFactors.isNotEmpty) {
@@ -2976,8 +2975,9 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                           contentPadding: const EdgeInsets.all(12),
                         ),
                         onChanged: (_) {
-                          if (_fetalCountError != null)
+                          if (_fetalCountError != null) {
                             setState(() => _fetalCountError = null);
+                          }
                         },
                       ),
                       const SizedBox(height: 4),
@@ -4410,7 +4410,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: influence,
+                    initialValue: influence,
                     decoration: const InputDecoration(labelText: 'Influence'),
                     items: const [
                       DropdownMenuItem(value: 'low', child: Text('Low')),

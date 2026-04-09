@@ -159,19 +159,22 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                     }
 
                     return ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
                       itemCount: journals.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final entry = journals[index];
-                        final date = DateFormat('MMMM d, y').format(entry.createdAt);
+                        final date =
+                            DateFormat('MMMM d, y').format(entry.createdAt);
 
                         return GestureDetector(
                           onTap: () async {
                             await Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => JournalDetailsPage(entry: entry),
+                                builder: (_) =>
+                                    JournalDetailsPage(entry: entry),
                               ),
                             );
                             if (mounted) {
@@ -201,7 +204,8 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                                     Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                                        color: AppColors.brandPrimary
+                                            .withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: const Icon(
@@ -230,8 +234,10 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                                           vertical: 4,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: AppColors.info.withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(12),
+                                          color: AppColors.info
+                                              .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                         ),
                                         child: const Text(
                                           'Edited',
@@ -301,8 +307,8 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.brandPrimary,
         onPressed: _openAddJournal,
-        child: const Icon(Icons.add, color: Colors.white),
         elevation: 2,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -361,7 +367,8 @@ class _EmptyJournalState extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandPrimary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
                 ),

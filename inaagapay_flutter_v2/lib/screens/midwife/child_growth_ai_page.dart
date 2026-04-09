@@ -3,7 +3,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart';
 
 import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
@@ -31,10 +30,10 @@ class ChildGrowthAIPage extends StatefulWidget {
 
 class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
   final GeminiService _geminiService = GeminiService();
-  
+
   bool loading = true;
   int _currentTab = 0;
-  
+
   List<GrowthRecord> _growthRecords = [];
   Child? _child;
   AIAnalysis? _analysis;
@@ -52,16 +51,13 @@ class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
 
     try {
       // First fetch child details
-      final childResponse = await Supabase.instance.client
-          .from('children')
-          .select('''
+      final childResponse =
+          await Supabase.instance.client.from('children').select('''
             child_id,
             first_name,
             last_name,
             sex
-          ''')
-          .eq('child_id', widget.childId)
-          .single();
+          ''').eq('child_id', widget.childId).single();
 
       // Then fetch birth details separately (NOT through mothers)
       final birthDetailsResponse = await Supabase.instance.client
@@ -71,11 +67,14 @@ class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
           .maybeSingle();
 
       final birthdate = birthDetailsResponse?['birthdate']?.toString();
-      
+
       _child = Child(
         id: childResponse['child_id'].toString(),
-        name: '${childResponse['first_name'] ?? ''} ${childResponse['last_name'] ?? ''}'.trim(),
-        birthDate: birthdate != null ? DateTime.parse(birthdate) : DateTime.now(),
+        name:
+            '${childResponse['first_name'] ?? ''} ${childResponse['last_name'] ?? ''}'
+                .trim(),
+        birthDate:
+            birthdate != null ? DateTime.parse(birthdate) : DateTime.now(),
         gender: childResponse['sex']?.toString() ?? 'male',
         dateAdded: DateTime.now(),
       );
@@ -88,23 +87,25 @@ class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
           .order('created_at', ascending: true);
 
       final records = List<Map<String, dynamic>>.from(growthResponse);
-      
-      final birthDateObj = birthdate != null ? DateTime.parse(birthdate) : DateTime.now();
-      
+
+      final birthDateObj =
+          birthdate != null ? DateTime.parse(birthdate) : DateTime.now();
+
       _growthRecords = records.map((r) {
         final height = (r['child_height'] as num?)?.toDouble() ?? 0;
         final weight = (r['child_weight'] as num?)?.toDouble() ?? 0;
-        
+
         // Calculate BMI from height and weight
         double bmi = 0;
         if (height > 0 && weight > 0) {
           final heightM = height / 100;
           bmi = weight / (heightM * heightM);
         }
-        
+
         final dateRecorded = DateTime.parse(r['created_at']);
-        final ageInWeeks = (dateRecorded.difference(birthDateObj).inDays / 7).floor();
-        
+        final ageInWeeks =
+            (dateRecorded.difference(birthDateObj).inDays / 7).floor();
+
         return GrowthRecord(
           id: r['child_details_id'].toString(),
           childId: widget.childId.toString(),
@@ -113,9 +114,12 @@ class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
           weight: weight,
           height: height,
           bmi: bmi,
-          weightZScore: GrowthCalculator.calculateWeightZScore(weight, ageInWeeks, _child!.gender),
-          heightZScore: GrowthCalculator.calculateHeightZScore(height, ageInWeeks, _child!.gender),
-          bmiZScore: GrowthCalculator.calculateBMIZScore(bmi, ageInWeeks, _child!.gender),
+          weightZScore: GrowthCalculator.calculateWeightZScore(
+              weight, ageInWeeks, _child!.gender),
+          heightZScore: GrowthCalculator.calculateHeightZScore(
+              height, ageInWeeks, _child!.gender),
+          bmiZScore: GrowthCalculator.calculateBMIZScore(
+              bmi, ageInWeeks, _child!.gender),
           weightClassification: '',
           heightClassification: '',
           bmiClassification: '',
@@ -205,20 +209,22 @@ Return ONLY the JSON, no markdown formatting.
       // Parse AI response
       String cleanText = aiText.trim();
       if (cleanText.startsWith('```')) {
-        cleanText = cleanText.replaceAll(RegExp(r'^```[a-z]*\n?'), '')
+        cleanText = cleanText
+            .replaceAll(RegExp(r'^```[a-z]*\n?'), '')
             .replaceAll(RegExp(r'\n?```$'), '')
             .trim();
       }
-      
+
       final jsonData = jsonDecode(cleanText) as Map<String, dynamic>;
-      
+
       _analysis = AIAnalysis.fromJson(jsonData);
-      disclaimer = 'AI-generated analysis based on ${_growthRecords.length} growth records using WHO standards. For medical advice, consult a healthcare professional.';
-      
+      disclaimer =
+          'AI-generated analysis based on ${_growthRecords.length} growth records using WHO standards. For medical advice, consult a healthcare professional.';
     } catch (e) {
       debugPrint('AI Analysis error: $e');
       _analysis = AIAnalysis(
-        summary: 'Based on ${_growthRecords.length} growth records, the child is developing within expected ranges.',
+        summary:
+            'Based on ${_growthRecords.length} growth records, the child is developing within expected ranges.',
         trend: 'Normal',
         recommendations: [
           'Continue regular growth monitoring every 2-4 weeks.',
@@ -227,11 +233,13 @@ Return ONLY the JSON, no markdown formatting.
         ],
         insights: {
           'records_analyzed': _growthRecords.length,
-          'age_range': '${_growthRecords.first.ageInWeeks} to ${_growthRecords.last.ageInWeeks} weeks',
+          'age_range':
+              '${_growthRecords.first.ageInWeeks} to ${_growthRecords.last.ageInWeeks} weeks',
         },
         confidenceScore: 0.85,
       );
-      _aiAnalysisError = 'AI analysis temporarily unavailable. Showing basic summary.';
+      _aiAnalysisError =
+          'AI analysis temporarily unavailable. Showing basic summary.';
     }
   }
 
@@ -285,12 +293,18 @@ Return ONLY the JSON, no markdown formatting.
 
   Color _getTrendColor(String trend) {
     switch (trend.toUpperCase()) {
-      case 'EXCELLENT': return Colors.green;
-      case 'GOOD': return Colors.lightGreen;
-      case 'NORMAL': return Colors.blue;
-      case 'CONCERNING': return Colors.orange;
-      case 'CRITICAL': return Colors.red;
-      default: return Colors.grey;
+      case 'EXCELLENT':
+        return Colors.green;
+      case 'GOOD':
+        return Colors.lightGreen;
+      case 'NORMAL':
+        return Colors.blue;
+      case 'CONCERNING':
+        return Colors.orange;
+      case 'CRITICAL':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -375,7 +389,6 @@ Return ONLY the JSON, no markdown formatting.
       body: Column(
         children: [
           const SizedBox(height: 12),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -392,9 +405,7 @@ Return ONLY the JSON, no markdown formatting.
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
           Expanded(
             child: IndexedStack(
               index: _currentTab,
@@ -417,12 +428,12 @@ Return ONLY the JSON, no markdown formatting.
           HeroCard(
             image: null,
             title: _child!.name,
-            subtitle: '${_child!.getAgeInWeeks()} weeks • ${_child!.gender == 'female' ? 'Girl' : 'Boy'}',
+            subtitle:
+                '${_child!.getAgeInWeeks()} weeks • ${_child!.gender == 'female' ? 'Girl' : 'Boy'}',
             showWeekBadge: false,
             showHeartRow: false,
           ),
           const SizedBox(height: 16),
-
           ChartCard(
             title: 'Height Chart',
             headerIcon: Icons.height,
@@ -437,11 +448,9 @@ Return ONLY the JSON, no markdown formatting.
             insightText: getHeightInsight(),
           ),
           const SizedBox(height: 16),
-
           AiAnalyticsCard(
             text: _analysis?.summary ?? 'Analyzing growth patterns...',
           ),
-          
           if (_analysis != null) ...[
             const SizedBox(height: 12),
             Container(
@@ -458,7 +467,8 @@ Return ONLY the JSON, no markdown formatting.
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: _getTrendColor(_analysis!.trend).withValues(alpha: 0.2),
+                          color: _getTrendColor(_analysis!.trend)
+                              .withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -481,44 +491,47 @@ Return ONLY the JSON, no markdown formatting.
                     ],
                   ),
                   const SizedBox(height: 12),
-                  ..._analysis!.recommendations.asMap().entries.map((entry) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${entry.key + 1}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.brandPrimary,
-                              ),
+                  ..._analysis!.recommendations
+                      .asMap()
+                      .entries
+                      .map((entry) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brandPrimary
+                                        .withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '${entry.key + 1}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.brandPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    entry.value,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            entry.value,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
+                          )),
                 ],
               ),
             ),
           ],
-          
           if (_aiAnalysisError != null) ...[
             const SizedBox(height: 12),
             Container(
@@ -537,7 +550,6 @@ Return ONLY the JSON, no markdown formatting.
               ),
             ),
           ],
-          
           if (disclaimer.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
@@ -569,12 +581,12 @@ Return ONLY the JSON, no markdown formatting.
           HeroCard(
             image: null,
             title: _child!.name,
-            subtitle: '${_child!.getAgeInWeeks()} weeks • ${_child!.gender == 'female' ? 'Girl' : 'Boy'}',
+            subtitle:
+                '${_child!.getAgeInWeeks()} weeks • ${_child!.gender == 'female' ? 'Girl' : 'Boy'}',
             showWeekBadge: false,
             showHeartRow: false,
           ),
           const SizedBox(height: 16),
-
           ChartCard(
             title: 'Weight Chart',
             headerIcon: Icons.monitor_weight,
@@ -589,11 +601,9 @@ Return ONLY the JSON, no markdown formatting.
             insightText: getWeightInsight(),
           ),
           const SizedBox(height: 16),
-
           AiAnalyticsCard(
             text: _analysis?.summary ?? 'Analyzing growth patterns...',
           ),
-          
           if (_analysis != null) ...[
             const SizedBox(height: 12),
             Container(
@@ -610,7 +620,8 @@ Return ONLY the JSON, no markdown formatting.
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: _getTrendColor(_analysis!.trend).withValues(alpha: 0.2),
+                          color: _getTrendColor(_analysis!.trend)
+                              .withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -633,44 +644,47 @@ Return ONLY the JSON, no markdown formatting.
                     ],
                   ),
                   const SizedBox(height: 12),
-                  ..._analysis!.recommendations.asMap().entries.map((entry) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${entry.key + 1}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.brandPrimary,
-                              ),
+                  ..._analysis!.recommendations
+                      .asMap()
+                      .entries
+                      .map((entry) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brandPrimary
+                                        .withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '${entry.key + 1}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.brandPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    entry.value,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            entry.value,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
+                          )),
                 ],
               ),
             ),
           ],
-          
           if (_aiAnalysisError != null) ...[
             const SizedBox(height: 12),
             Container(
@@ -689,7 +703,6 @@ Return ONLY the JSON, no markdown formatting.
               ),
             ),
           ],
-          
           if (disclaimer.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(

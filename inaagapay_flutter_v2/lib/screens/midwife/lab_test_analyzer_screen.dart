@@ -71,7 +71,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   late int _motherId;
   late int _pregnancyId;
 
-  List<String> _uploadedImageUrls = [];
+  final List<String> _uploadedImageUrls = [];
 
   static const List<String> _pregnancyLabTests = [
     'Complete Blood Count (CBC)',
@@ -352,8 +352,9 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     final match =
         RegExp(r'RELEVANCE\s*REASON\s*:\s*([^\n]+)', caseSensitive: false)
             .firstMatch(text);
-    if (match == null)
+    if (match == null) {
       return 'Uploaded content appears unrelated to lab tests.';
+    }
     return match.group(1)?.trim() ??
         'Uploaded content appears unrelated to lab tests.';
   }
@@ -2338,7 +2339,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedLabType,
+                initialValue: _selectedLabType,
                 decoration: const InputDecoration(
                   hintText: 'Select pregnancy-related lab test',
                   border: OutlineInputBorder(),
@@ -2503,7 +2504,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                   ];
 
                   return DropdownButtonFormField<String>(
-                    value: dropdownValue,
+                    initialValue: dropdownValue,
                     decoration: const InputDecoration(
                       labelText: 'Profession *',
                       border: OutlineInputBorder(),
@@ -2715,6 +2716,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,

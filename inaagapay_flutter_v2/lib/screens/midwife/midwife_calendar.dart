@@ -13,21 +13,51 @@ class MidwifeCalendar extends StatefulWidget {
 class _MidwifeCalendarState extends State<MidwifeCalendar> {
   DateTime _focusedMonth = DateTime.now();
   DateTime? _selectedDate;
-  
+
   final Map<String, List<Map<String, dynamic>>> _events = {
     '2026-05-15': [
-      {'time': '09:00', 'title': 'Prenatal Checkup', 'patient': 'Maria Santos', 'type': 'checkup'},
-      {'time': '14:00', 'title': 'Ultrasound Review', 'patient': 'Juana Dela Cruz', 'type': 'ultrasound'},
+      {
+        'time': '09:00',
+        'title': 'Prenatal Checkup',
+        'patient': 'Maria Santos',
+        'type': 'checkup'
+      },
+      {
+        'time': '14:00',
+        'title': 'Ultrasound Review',
+        'patient': 'Juana Dela Cruz',
+        'type': 'ultrasound'
+      },
     ],
     '2026-05-16': [
-      {'time': '10:00', 'title': 'Lab Results Discussion', 'patient': 'Ana Lopez', 'type': 'lab'},
+      {
+        'time': '10:00',
+        'title': 'Lab Results Discussion',
+        'patient': 'Ana Lopez',
+        'type': 'lab'
+      },
     ],
     '2026-05-18': [
-      {'time': '08:30', 'title': 'New Patient Registration', 'patient': 'New Mother', 'type': 'registration'},
-      {'time': '11:00', 'title': 'Follow-up Checkup', 'patient': 'Maria Santos', 'type': 'checkup'},
+      {
+        'time': '08:30',
+        'title': 'New Patient Registration',
+        'patient': 'New Mother',
+        'type': 'registration'
+      },
+      {
+        'time': '11:00',
+        'title': 'Follow-up Checkup',
+        'patient': 'Maria Santos',
+        'type': 'checkup'
+      },
     ],
     '2026-05-20': [
-      {'time': '13:00', 'title': 'Home Visit', 'patient': 'Juana Dela Cruz', 'type': 'visit'},
+      {
+        'time': '13:00',
+        'title': 'Home Visit',
+        'patient': 'Juana Dela Cruz',
+        'type': 'visit'
+      },
     ],
   };
 
@@ -91,7 +121,7 @@ class _MidwifeCalendarState extends State<MidwifeCalendar> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-                  .map((day) => Container(
+                  .map((day) => SizedBox(
                         width: 40,
                         child: Text(
                           day,
@@ -127,7 +157,8 @@ class _MidwifeCalendarState extends State<MidwifeCalendar> {
                 }
 
                 final isToday = _isSameDay(date, DateTime.now());
-                final isSelected = _selectedDate != null && _isSameDay(date, _selectedDate!);
+                final isSelected =
+                    _selectedDate != null && _isSameDay(date, _selectedDate!);
                 final hasEvents = _getEventsForDate(date).isNotEmpty;
                 final isCurrentMonth = date.month == _focusedMonth.month;
 
@@ -163,7 +194,8 @@ class _MidwifeCalendarState extends State<MidwifeCalendar> {
                                 ? Colors.white
                                 : (isCurrentMonth
                                     ? AppColors.textPrimary
-                                    : AppColors.textSecondary.withValues(alpha: 0.5)),
+                                    : AppColors.textSecondary
+                                        .withValues(alpha: 0.5)),
                           ),
                         ),
                         if (hasEvents)
@@ -172,7 +204,9 @@ class _MidwifeCalendarState extends State<MidwifeCalendar> {
                             width: 6,
                             height: 6,
                             decoration: BoxDecoration(
-                              color: isSelected ? Colors.white : AppColors.brandSecondary,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppColors.brandSecondary,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -277,15 +311,16 @@ class _MidwifeCalendarState extends State<MidwifeCalendar> {
   List<DateTime?> _getDaysInMonth() {
     final year = _focusedMonth.year;
     final month = _focusedMonth.month;
-    
+
     final firstDayOfMonth = DateTime(year, month, 1);
-    final firstDayOfGrid = firstDayOfMonth.subtract(Duration(days: firstDayOfMonth.weekday - 1));
-    
+    final firstDayOfGrid =
+        firstDayOfMonth.subtract(Duration(days: firstDayOfMonth.weekday - 1));
+
     final days = <DateTime?>[];
     for (int i = 0; i < 42; i++) {
       days.add(firstDayOfGrid.add(Duration(days: i)));
     }
-    
+
     return days;
   }
 
@@ -300,14 +335,16 @@ class _MidwifeCalendarState extends State<MidwifeCalendar> {
 
   Widget _buildEventList() {
     final events = _getEventsForDate(_selectedDate!);
-    
+
     if (events.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
         alignment: Alignment.center,
         child: Column(
           children: [
-            Icon(Icons.event_busy, size: 32, color: AppColors.textSecondary.withValues(alpha: 0.5)),
+            Icon(Icons.event_busy,
+                size: 32,
+                color: AppColors.textSecondary.withValues(alpha: 0.5)),
             const SizedBox(height: 8),
             Text(
               'No schedules for this day',
@@ -322,7 +359,7 @@ class _MidwifeCalendarState extends State<MidwifeCalendar> {
       children: events.map((event) {
         Color eventColor;
         IconData eventIcon;
-        
+
         switch (event['type']) {
           case 'ultrasound':
             eventColor = Colors.purple;

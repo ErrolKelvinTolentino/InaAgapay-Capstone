@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../theme/app_colors.dart';
-import '../../widgets/main_header.dart';
 import '../../services/auth_storage.dart';
 
 class MidwifeSchedulesScreen extends StatefulWidget {
@@ -38,7 +37,7 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
             .select('midwife_id')
             .eq('account_id', accountId)
             .maybeSingle();
-        
+
         if (response != null && response['midwife_id'] != null) {
           setState(() {
             _midwifeId = response['midwife_id'] as int;
@@ -64,7 +63,8 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchSchedulesForDate(DateTime date) async {
+  Future<List<Map<String, dynamic>>> fetchSchedulesForDate(
+      DateTime date) async {
     if (_midwifeId == null) return [];
 
     try {
@@ -94,9 +94,8 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
           .order('checkup_datetime');
 
       // Also fetch checkup_schedule table if it has data
-      final scheduleResponse = await Supabase.instance.client
-          .from('checkup_schedule')
-          .select('''
+      final scheduleResponse =
+          await Supabase.instance.client.from('checkup_schedule').select('''
             schedule_id,
             scheduled_date,
             notes,
@@ -107,9 +106,7 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                 last_name
               )
             )
-          ''')
-          .eq('scheduled_date', formattedDate)
-          .order('scheduled_date');
+          ''').eq('scheduled_date', formattedDate).order('scheduled_date');
 
       final List<Map<String, dynamic>> schedules = [];
 
@@ -295,7 +292,8 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                     ],
                   ),
                   child: TableCalendar(
-                    firstDay: DateTime.now().subtract(const Duration(days: 365)),
+                    firstDay:
+                        DateTime.now().subtract(const Duration(days: 365)),
                     lastDay: DateTime.now().add(const Duration(days: 365)),
                     focusedDay: _focusedDay,
                     selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
@@ -466,13 +464,15 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                                 width: 100,
                                 height: 100,
                                 decoration: BoxDecoration(
-                                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                                  color: AppColors.brandPrimary
+                                      .withValues(alpha: 0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
                                   Icons.calendar_today,
                                   size: 50,
-                                  color: AppColors.brandPrimary.withValues(alpha: 0.5),
+                                  color: AppColors.brandPrimary
+                                      .withValues(alpha: 0.5),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -522,8 +522,10 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                           scheduleType: schedule['type'] as String,
                           status: schedule['status'] as String,
                           notes: schedule['notes'] as String?,
-                          icon: schedule['icon'] as IconData? ?? _getScheduleIcon(schedule['type'] as String),
-                          statusColor: _getStatusColor(schedule['status'] as String),
+                          icon: schedule['icon'] as IconData? ??
+                              _getScheduleIcon(schedule['type'] as String),
+                          statusColor:
+                              _getStatusColor(schedule['status'] as String),
                           nextSchedule: schedule['next_schedule'] as String?,
                         );
                       },
@@ -586,7 +588,8 @@ class ScheduleCard extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.brandPrimary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
@@ -630,11 +633,13 @@ class ScheduleCard extends StatelessWidget {
 
                     /// 🏷️ STATUS BADGE
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                        border: Border.all(
+                            color: statusColor.withValues(alpha: 0.3)),
                       ),
                       child: Text(
                         status.toUpperCase(),

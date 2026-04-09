@@ -1,12 +1,10 @@
 // lib/screens/mother/mother_children_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../services/auth_storage.dart';
-import '../../services/child_service.dart';
 import '../../models/child_model.dart';
 import 'mother_child_stack.dart';
 
@@ -19,7 +17,7 @@ class MotherChildrenScreen extends StatefulWidget {
 
 class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
   final TextEditingController _searchController = TextEditingController();
-  
+
   List<ChildModel> _children = [];
   List<ChildModel> _filteredChildren = [];
   bool _loading = true;
@@ -56,16 +54,15 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
 
   Future<void> _fetchChildren() async {
     if (_motherId == null) return;
-    
+
     setState(() {
       _loading = true;
       _errorMessage = null;
     });
 
     try {
-      final response = await Supabase.instance.client
-          .from('children')
-          .select('''
+      final response =
+          await Supabase.instance.client.from('children').select('''
             *,
             birth_details (
               birthdate,
@@ -75,12 +72,10 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
               birthplace_city_municipality,
               birthplace_province
             )
-          ''')
-          .eq('mother_id', _motherId!)
-          .order('added_at', ascending: false);
+          ''').eq('mother_id', _motherId!).order('added_at', ascending: false);
 
       final List<dynamic> data = response;
-      
+
       final children = data.map((json) {
         final birthDetails = json['birth_details'] as Map<String, dynamic>?;
         return ChildModel(
@@ -92,13 +87,15 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
           extensionName: json['extension_name'] as String?,
           sex: json['sex'] as String? ?? 'male',
           addedAt: DateTime.parse(json['added_at']),
-          birthdate: birthDetails != null && birthDetails['birthdate'] != null 
-              ? DateTime.parse(birthDetails['birthdate']) 
+          birthdate: birthDetails != null && birthDetails['birthdate'] != null
+              ? DateTime.parse(birthDetails['birthdate'])
               : null,
           birthWeight: (birthDetails?['birth_weight'] as num?)?.toDouble(),
           birthLength: (birthDetails?['birth_length'] as num?)?.toDouble(),
-          headCircumference: (birthDetails?['head_circumference'] as num?)?.toDouble(),
-          birthplaceCity: birthDetails?['birthplace_city_municipality'] as String?,
+          headCircumference:
+              (birthDetails?['head_circumference'] as num?)?.toDouble(),
+          birthplaceCity:
+              birthDetails?['birthplace_city_municipality'] as String?,
           birthplaceProvince: birthDetails?['birthplace_province'] as String?,
         );
       }).toList();
@@ -174,7 +171,8 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                     bottom: 0,
                     top: 0,
                     child: Padding(
-                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
+                      padding: const EdgeInsets.only(
+                          right: 16.0, top: 4.0, bottom: 4.0),
                       child: Image.asset(
                         'assets/images/baby.png',
                         fit: BoxFit.contain,
@@ -313,13 +311,15 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                                 ),
                               )
                             : ListView.separated(
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 8),
                                 itemCount: _filteredChildren.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final child = _filteredChildren[index];
                                   final age = child.ageText;
-                                  
+
                                   return _ChildCard(
                                     firstName: child.firstName,
                                     lastName: child.lastName,
@@ -408,7 +408,7 @@ class _ChildCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  
+
                   // Child Info
                   Expanded(
                     child: Column(
@@ -435,7 +435,7 @@ class _ChildCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  
+
                   // Arrow
                   const Icon(
                     Icons.chevron_right,

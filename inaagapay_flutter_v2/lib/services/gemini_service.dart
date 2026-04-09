@@ -319,9 +319,9 @@ Rules:
     final base64Image = base64Encode(bytes);
     String mimeType = 'image/jpeg';
     final ext = imageFile.path.split('.').last.toLowerCase();
-    if (ext == 'png')
+    if (ext == 'png') {
       mimeType = 'image/png';
-    else if (ext == 'webp') mimeType = 'image/webp';
+    } else if (ext == 'webp') mimeType = 'image/webp';
 
     final parts = [
       {"text": prompt},

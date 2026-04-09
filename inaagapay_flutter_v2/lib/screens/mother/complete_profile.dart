@@ -1,9 +1,7 @@
 // lib/screens/mother/complete_profile.dart
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
-import '../../widgets/secondary_header.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/progressive_step_indicator.dart';
@@ -131,28 +129,36 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     // Validate required fields
     if (_firstName.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your first name'), backgroundColor: AppColors.error),
+        const SnackBar(
+            content: Text('Please enter your first name'),
+            backgroundColor: AppColors.error),
       );
       return;
     }
-    
+
     if (_lastName.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your last name'), backgroundColor: AppColors.error),
+        const SnackBar(
+            content: Text('Please enter your last name'),
+            backgroundColor: AppColors.error),
       );
       return;
     }
-    
+
     if (_birthDate.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your birth date'), backgroundColor: AppColors.error),
+        const SnackBar(
+            content: Text('Please enter your birth date'),
+            backgroundColor: AppColors.error),
       );
       return;
     }
-    
+
     if (_contactNumber.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your contact number'), backgroundColor: AppColors.error),
+        const SnackBar(
+            content: Text('Please enter your contact number'),
+            backgroundColor: AppColors.error),
       );
       return;
     }
@@ -169,7 +175,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       'edd': _selectedEdd?.toIso8601String().split('T')[0],
     };
 
-    final res = await SupabaseService.completeMotherProfile(userId, profileData);
+    final res =
+        await SupabaseService.completeMotherProfile(userId, profileData);
 
     if (!res['success']) {
       if (!mounted) return;
@@ -533,7 +540,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     onTap: () async {
                       final picked = await showDatePicker(
                         context: context,
-                        initialDate: _selectedEdd ?? DateTime.now().add(const Duration(days: 280)),
+                        initialDate: _selectedEdd ??
+                            DateTime.now().add(const Duration(days: 280)),
                         firstDate: DateTime.now(),
                         lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
@@ -597,7 +605,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 _infoRow(
                   Icons.timer,
                   'Current AOG',
-                  _getFormattedAog().isEmpty ? 'Not calculated' : _getFormattedAog(),
+                  _getFormattedAog().isEmpty
+                      ? 'Not calculated'
+                      : _getFormattedAog(),
                 ),
               ],
             ),
@@ -620,7 +630,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: selected ? AppColors.brandPrimary.withValues(alpha: 0.05) : Colors.transparent,
+          color: selected
+              ? AppColors.brandPrimary.withValues(alpha: 0.05)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected ? AppColors.brandPrimary : AppColors.borderPrimary,
@@ -644,7 +656,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -662,7 +675,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         const SizedBox(width: 12),
         SizedBox(
           width: 80,
-          child: Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+          child: Text(label,
+              style: const TextStyle(color: AppColors.textSecondary)),
         ),
         Expanded(
           child: Text(

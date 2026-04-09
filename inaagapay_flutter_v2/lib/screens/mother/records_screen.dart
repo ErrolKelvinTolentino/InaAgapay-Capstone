@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
 import '../../services/supabase_service.dart';
@@ -17,18 +16,19 @@ class RecordsScreen extends StatefulWidget {
   State<RecordsScreen> createState() => _RecordsScreenState();
 }
 
-class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProviderStateMixin {
+class _RecordsScreenState extends State<RecordsScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   String? _errorMessage;
   int? _motherId;
-  
+
   List<Map<String, dynamic>> _ultrasounds = [];
   List<Map<String, dynamic>> _labTests = [];
-  
+
   String _selectedFilter = 'all';
   String _sortOrder = 'desc';
   String _searchQuery = '';
-  
+
   late TabController _tabController;
 
   @override
@@ -52,7 +52,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
 
     try {
       _motherId = await AuthStorage.getMotherId();
-      
+
       if (_motherId == null) {
         throw Exception('Mother ID not found');
       }
@@ -68,10 +68,11 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
           _labTests = [];
         });
       } else {
-        final pregnancyIds = pregnanciesResponse.map<int>((p) => p['pregnancy_id'] as int).toList();
+        final pregnancyIds = pregnanciesResponse
+            .map<int>((p) => p['pregnancy_id'] as int)
+            .toList();
         await _loadRecordsForPregnancies(pregnancyIds);
       }
-
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -207,7 +208,8 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                               if (subtitle != null && subtitle.isNotEmpty)
                                 Text(
                                   subtitle,
-                                  style: const TextStyle(color: AppColors.textSecondary),
+                                  style: const TextStyle(
+                                      color: AppColors.textSecondary),
                                 ),
                             ],
                           ),
@@ -219,7 +221,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       ],
                     ),
                     const SizedBox(height: 16),
-
                     if (imageUrls != null && imageUrls.isNotEmpty) ...[
                       SizedBox(
                         height: 200,
@@ -228,13 +229,15 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                           itemCount: imageUrls.length,
                           itemBuilder: (context, index) {
                             return GestureDetector(
-                              onTap: () => _showFullScreenImage(imageUrls, index),
+                              onTap: () =>
+                                  _showFullScreenImage(imageUrls, index),
                               child: Container(
                                 width: 200,
                                 margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey.shade300),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
@@ -248,27 +251,36 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                                           color: AppColors.bgSecondary,
                                           child: const Center(
                                             child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
                                               children: [
-                                                Icon(Icons.broken_image, size: 32, color: Colors.grey),
+                                                Icon(Icons.broken_image,
+                                                    size: 32,
+                                                    color: Colors.grey),
                                                 SizedBox(height: 4),
                                                 Text(
                                                   'Image not available',
-                                                  style: TextStyle(fontSize: 10),
+                                                  style:
+                                                      TextStyle(fontSize: 10),
                                                   textAlign: TextAlign.center,
                                                 ),
                                               ],
                                             ),
                                           ),
                                         ),
-                                        loadingBuilder: (context, child, loadingProgress) {
-                                          if (loadingProgress == null) return child;
+                                        loadingBuilder:
+                                            (context, child, loadingProgress) {
+                                          if (loadingProgress == null)
+                                            return child;
                                           return Container(
                                             color: AppColors.bgSecondary,
                                             child: const Center(
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 2,
-                                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                            Color>(
+                                                        AppColors.brandPrimary),
                                               ),
                                             ),
                                           );
@@ -284,8 +296,10 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                                               vertical: 4,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.6),
-                                              borderRadius: BorderRadius.circular(12),
+                                              color:
+                                                  Colors.black.withOpacity(0.6),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                             child: Text(
                                               '+${imageUrls.length - 1} more',
@@ -307,7 +321,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       ),
                       const SizedBox(height: 16),
                     ],
-
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -317,36 +330,39 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                         border: Border.all(color: AppColors.borderPrimary),
                       ),
                       child: Column(
-                        children: rows.map((entry) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 120,
-                                child: Text(
-                                  entry.key,
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 13,
+                        children: rows
+                            .map((entry) => Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 6),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(
+                                        width: 120,
+                                        child: Text(
+                                          entry.key,
+                                          style: const TextStyle(
+                                            color: AppColors.textSecondary,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          entry.value,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  entry.value,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )).toList(),
+                                ))
+                            .toList(),
                       ),
                     ),
-
                     if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Container(
@@ -355,14 +371,17 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                         decoration: BoxDecoration(
                           color: const Color(0xFFF3E5F5),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFF7E57C2).withValues(alpha: 0.2)),
+                          border: Border.all(
+                              color: const Color(0xFF7E57C2)
+                                  .withValues(alpha: 0.2)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.psychology_rounded, color: const Color(0xFF7E57C2), size: 20),
+                                Icon(Icons.psychology_rounded,
+                                    color: const Color(0xFF7E57C2), size: 20),
                                 const SizedBox(width: 8),
                                 const Text(
                                   'AI-Powered Insights',
@@ -412,17 +431,21 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
     final remarks = ultrasound['remarks']?.toString().toLowerCase() ?? '';
     final buffer = StringBuffer();
-    
+
     buffer.write('🤖 Ultrasound AI Insights:\n\n');
-    
+
     if (remarks.contains('normal') || remarks.contains('healthy')) {
-      buffer.write('✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
+      buffer.write(
+          '✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
-      buffer.write('📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
+      buffer.write(
+          '📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
     } else if (remarks.contains('concern') || remarks.contains('abnormal')) {
-      buffer.write('🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
+      buffer.write(
+          '🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
     } else {
-      buffer.write('📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
+      buffer.write(
+          '📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
     }
 
     buffer.write('💡 **Key Recommendations**:\n');
@@ -435,9 +458,9 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
   String _generateLabTestAIInsights(Map<String, dynamic> labTest) {
     final remarks = labTest['remarks']?.toString().toLowerCase() ?? '';
     final buffer = StringBuffer();
-    
+
     buffer.write('🤖 Lab Test AI Analysis:\n\n');
-    
+
     if (remarks.contains('normal')) {
       buffer.write('✅ **All results are within normal range.**\n\n');
     } else if (remarks.contains('abnormal') || remarks.contains('borderline')) {
@@ -453,7 +476,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
 
   List<Map<String, dynamic>> _getFilteredAndSortedRecords() {
     List<Map<String, dynamic>> allRecords = [];
-    
+
     for (var ultrasound in _ultrasounds) {
       allRecords.add({
         ...ultrasound,
@@ -461,7 +484,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
         'record_date': ultrasound['ultrasound_date'],
       });
     }
-    
+
     for (var labTest in _labTests) {
       allRecords.add({
         ...labTest,
@@ -469,32 +492,46 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
         'record_date': labTest['lab_test_date'],
       });
     }
-    
+
     if (_selectedFilter != 'all') {
-      allRecords = allRecords.where((record) => record['record_type'] == _selectedFilter).toList();
+      allRecords = allRecords
+          .where((record) => record['record_type'] == _selectedFilter)
+          .toList();
     }
-    
+
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       allRecords = allRecords.where((record) {
         if (record['record_type'] == 'ultrasound') {
-          return _formatDate(record['ultrasound_date']).toLowerCase().contains(query) ||
-                 (record['remarks']?.toString().toLowerCase().contains(query) ?? false);
+          return _formatDate(record['ultrasound_date'])
+                  .toLowerCase()
+                  .contains(query) ||
+              (record['remarks']?.toString().toLowerCase().contains(query) ??
+                  false);
         } else {
-          return _formatDate(record['lab_test_date']).toLowerCase().contains(query) ||
-                 (record['lab_test_type']?.toString().toLowerCase().contains(query) ?? false) ||
-                 (record['remarks']?.toString().toLowerCase().contains(query) ?? false);
+          return _formatDate(record['lab_test_date'])
+                  .toLowerCase()
+                  .contains(query) ||
+              (record['lab_test_type']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains(query) ??
+                  false) ||
+              (record['remarks']?.toString().toLowerCase().contains(query) ??
+                  false);
         }
       }).toList();
     }
-    
+
     allRecords.sort((a, b) {
       final dateA = DateTime.tryParse(a['record_date'] ?? '');
       final dateB = DateTime.tryParse(b['record_date'] ?? '');
       if (dateA == null || dateB == null) return 0;
-      return _sortOrder == 'desc' ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
+      return _sortOrder == 'desc'
+          ? dateB.compareTo(dateA)
+          : dateA.compareTo(dateB);
     });
-    
+
     return allRecords;
   }
 
@@ -597,7 +634,8 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                   },
                   decoration: InputDecoration(
                     hintText: 'Search records...',
-                    prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
+                    prefixIcon: const Icon(Icons.search,
+                        color: AppColors.textSecondary),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -618,9 +656,13 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                         isExpanded: true,
                         underline: const SizedBox(),
                         items: const [
-                          DropdownMenuItem(value: 'all', child: Text('All Records')),
-                          DropdownMenuItem(value: 'ultrasound', child: Text('Ultrasounds Only')),
-                          DropdownMenuItem(value: 'labtest', child: Text('Lab Tests Only')),
+                          DropdownMenuItem(
+                              value: 'all', child: Text('All Records')),
+                          DropdownMenuItem(
+                              value: 'ultrasound',
+                              child: Text('Ultrasounds Only')),
+                          DropdownMenuItem(
+                              value: 'labtest', child: Text('Lab Tests Only')),
                         ],
                         onChanged: (value) {
                           setState(() {
@@ -641,8 +683,10 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       value: _sortOrder,
                       underline: const SizedBox(),
                       items: const [
-                        DropdownMenuItem(value: 'desc', child: Text('Newest First')),
-                        DropdownMenuItem(value: 'asc', child: Text('Oldest First')),
+                        DropdownMenuItem(
+                            value: 'desc', child: Text('Newest First')),
+                        DropdownMenuItem(
+                            value: 'asc', child: Text('Oldest First')),
                       ],
                       onChanged: (value) {
                         setState(() {
@@ -663,7 +707,9 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        _searchQuery.isNotEmpty ? Icons.search_off : Icons.folder_open,
+                        _searchQuery.isNotEmpty
+                            ? Icons.search_off
+                            : Icons.folder_open,
                         size: 64,
                         color: AppColors.textSecondary.withOpacity(0.5),
                       ),
@@ -698,8 +744,9 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                     itemCount: allRecords.length,
                     itemBuilder: (context, index) {
                       final record = allRecords[index];
-                      final isUltrasound = record['record_type'] == 'ultrasound';
-                      
+                      final isUltrasound =
+                          record['record_type'] == 'ultrasound';
+
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: ListTile(
@@ -707,18 +754,19 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                           leading: Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: isUltrasound 
+                              color: isUltrasound
                                   ? Colors.purple.withOpacity(0.1)
                                   : Colors.orange.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
                               isUltrasound ? Icons.photo : Icons.science,
-                              color: isUltrasound ? Colors.purple : Colors.orange,
+                              color:
+                                  isUltrasound ? Colors.purple : Colors.orange,
                             ),
                           ),
                           title: Text(
-                            isUltrasound 
+                            isUltrasound
                                 ? 'Ultrasound'
                                 : (record['lab_test_type'] ?? 'Lab Test'),
                             style: const TextStyle(
@@ -730,8 +778,8 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                             children: [
                               const SizedBox(height: 4),
                               Text(
-                                _formatDate(isUltrasound 
-                                    ? record['ultrasound_date'] 
+                                _formatDate(isUltrasound
+                                    ? record['ultrasound_date']
                                     : record['lab_test_date']),
                                 style: const TextStyle(
                                   fontSize: 12,
@@ -756,37 +804,72 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                           ),
                           onTap: () {
                             if (isUltrasound) {
-                              final imageUrls = _parseImageUrls(record['ultrasound_image']);
+                              final imageUrls =
+                                  _parseImageUrls(record['ultrasound_image']);
                               _showRecordDetails(
                                 title: 'Ultrasound',
-                                subtitle: _formatDate(record['ultrasound_date']),
+                                subtitle:
+                                    _formatDate(record['ultrasound_date']),
                                 icon: Icons.monitor_heart,
-                                imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+                                imageUrls:
+                                    imageUrls.isNotEmpty ? imageUrls : null,
                                 rows: [
-                                  MapEntry('Date', _formatDate(record['ultrasound_date'])),
-                                  MapEntry('Location', _formatValue(record['ultrasound_location'])),
-                                  MapEntry('Health Worker', _formatValue(record['health_worker_name'])),
-                                  MapEntry('Institution', _formatValue(record['health_worker_institution'])),
-                                  MapEntry('Profession', _formatValue(record['health_worker_profession'])),
-                                  MapEntry('Remarks', _formatValue(record['remarks'])),
+                                  MapEntry('Date',
+                                      _formatDate(record['ultrasound_date'])),
+                                  MapEntry(
+                                      'Location',
+                                      _formatValue(
+                                          record['ultrasound_location'])),
+                                  MapEntry(
+                                      'Health Worker',
+                                      _formatValue(
+                                          record['health_worker_name'])),
+                                  MapEntry(
+                                      'Institution',
+                                      _formatValue(
+                                          record['health_worker_institution'])),
+                                  MapEntry(
+                                      'Profession',
+                                      _formatValue(
+                                          record['health_worker_profession'])),
+                                  MapEntry('Remarks',
+                                      _formatValue(record['remarks'])),
                                 ],
-                                aiAnalysis: _generateUltrasoundAIInsights(record),
+                                aiAnalysis:
+                                    _generateUltrasoundAIInsights(record),
                               );
                             } else {
-                              final imageUrls = _parseImageUrls(record['lab_test_image']);
+                              final imageUrls =
+                                  _parseImageUrls(record['lab_test_image']);
                               _showRecordDetails(
                                 title: record['lab_test_type'] ?? 'Lab Test',
                                 subtitle: _formatDate(record['lab_test_date']),
                                 icon: Icons.science,
-                                imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+                                imageUrls:
+                                    imageUrls.isNotEmpty ? imageUrls : null,
                                 rows: [
-                                  MapEntry('Type', _formatValue(record['lab_test_type'])),
-                                  MapEntry('Date', _formatDate(record['lab_test_date'])),
-                                  MapEntry('Location', _formatValue(record['lab_test_location'])),
-                                  MapEntry('Health Worker', _formatValue(record['health_worker_name'])),
-                                  MapEntry('Institution', _formatValue(record['health_worker_institution'])),
-                                  MapEntry('Profession', _formatValue(record['health_worker_profession'])),
-                                  MapEntry('Remarks', _formatValue(record['remarks'])),
+                                  MapEntry('Type',
+                                      _formatValue(record['lab_test_type'])),
+                                  MapEntry('Date',
+                                      _formatDate(record['lab_test_date'])),
+                                  MapEntry(
+                                      'Location',
+                                      _formatValue(
+                                          record['lab_test_location'])),
+                                  MapEntry(
+                                      'Health Worker',
+                                      _formatValue(
+                                          record['health_worker_name'])),
+                                  MapEntry(
+                                      'Institution',
+                                      _formatValue(
+                                          record['health_worker_institution'])),
+                                  MapEntry(
+                                      'Profession',
+                                      _formatValue(
+                                          record['health_worker_profession'])),
+                                  MapEntry('Remarks',
+                                      _formatValue(record['remarks'])),
                                 ],
                                 aiAnalysis: _generateLabTestAIInsights(record),
                               );
@@ -806,21 +889,21 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
     final totalUltrasounds = _ultrasounds.length;
     final totalLabTests = _labTests.length;
     final totalRecords = totalUltrasounds + totalLabTests;
-    
+
     final allRecords = _getFilteredAndSortedRecords();
     final latestRecord = allRecords.isNotEmpty ? allRecords.first : null;
-    
+
     final now = DateTime.now();
     final last6Months = List.generate(6, (i) {
       return DateTime(now.year, now.month - i, 1);
     }).reversed.toList();
-    
+
     Map<String, int> recordsByMonth = {};
     for (var month in last6Months) {
       final monthKey = DateFormat('MMM yyyy').format(month);
       recordsByMonth[monthKey] = 0;
     }
-    
+
     for (var record in allRecords) {
       final dateStr = record['record_date'];
       if (dateStr != null) {
@@ -882,9 +965,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
               ),
             ],
           ),
-
           const SizedBox(height: 24),
-
           if (latestRecord != null) ...[
             const Text(
               'LATEST RECORD',
@@ -914,15 +995,19 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: (latestRecord['record_type'] == 'ultrasound' 
-                          ? Colors.purple : Colors.orange).withOpacity(0.1),
+                      color: (latestRecord['record_type'] == 'ultrasound'
+                              ? Colors.purple
+                              : Colors.orange)
+                          .withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      latestRecord['record_type'] == 'ultrasound' 
-                          ? Icons.photo : Icons.science,
-                      color: latestRecord['record_type'] == 'ultrasound' 
-                          ? Colors.purple : Colors.orange,
+                      latestRecord['record_type'] == 'ultrasound'
+                          ? Icons.photo
+                          : Icons.science,
+                      color: latestRecord['record_type'] == 'ultrasound'
+                          ? Colors.purple
+                          : Colors.orange,
                       size: 24,
                     ),
                   ),
@@ -932,7 +1017,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          latestRecord['record_type'] == 'ultrasound' 
+                          latestRecord['record_type'] == 'ultrasound'
                               ? 'Ultrasound'
                               : (latestRecord['lab_test_type'] ?? 'Lab Test'),
                           style: const TextStyle(
@@ -957,22 +1042,22 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: latestRecord['ultrasound_image'] != null || 
+                      color: latestRecord['ultrasound_image'] != null ||
                               latestRecord['lab_test_image'] != null
                           ? Colors.green.withOpacity(0.1)
                           : Colors.grey.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      latestRecord['ultrasound_image'] != null || 
-                      latestRecord['lab_test_image'] != null
+                      latestRecord['ultrasound_image'] != null ||
+                              latestRecord['lab_test_image'] != null
                           ? 'Has Images'
                           : 'No Images',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        color: latestRecord['ultrasound_image'] != null || 
-                               latestRecord['lab_test_image'] != null
+                        color: latestRecord['ultrasound_image'] != null ||
+                                latestRecord['lab_test_image'] != null
                             ? Colors.green
                             : Colors.grey,
                       ),
@@ -982,9 +1067,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
               ),
             ),
           ],
-
           const SizedBox(height: 24),
-
           const Text(
             'RECORDS BY MONTH',
             style: TextStyle(
@@ -1022,7 +1105,9 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                         ),
                         Container(
                           height: 30,
-                          width: (entry.value / 10) * MediaQuery.of(context).size.width * 0.5,
+                          width: (entry.value / 10) *
+                              MediaQuery.of(context).size.width *
+                              0.5,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
@@ -1054,9 +1139,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
               ),
             );
           }),
-
           const SizedBox(height: 24),
-
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1122,7 +1205,8 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1173,7 +1257,8 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildActionButton(
+      String label, IconData icon, Color color, VoidCallback onTap) {
     return ElevatedButton(
       onPressed: onTap,
       style: ElevatedButton.styleFrom(

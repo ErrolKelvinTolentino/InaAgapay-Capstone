@@ -3,10 +3,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'email_service.dart';
-import 'auth_storage.dart';
 
 class SupabaseService {
   static SupabaseClient get client => Supabase.instance.client;
@@ -20,14 +18,11 @@ class SupabaseService {
   // Generate random secure password
   static String _generateSecurePassword() {
     const length = 12;
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$%&*';
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$%&*';
     final random = Random.secure();
-    return String.fromCharCodes(
-      Iterable.generate(
-        length,
-        (_) => chars.codeUnitAt(random.nextInt(chars.length))
-      )
-    );
+    return String.fromCharCodes(Iterable.generate(
+        length, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
   }
 
   // Hash password using bcrypt
@@ -61,15 +56,12 @@ class SupabaseService {
   static Future<bool> updatePassword(int accountId, String newPassword) async {
     try {
       final hashedPassword = _hashPassword(newPassword);
-      
-      await client
-          .from('accounts')
-          .update({
-            'password_hash': hashedPassword,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('account_id', accountId);
-      
+
+      await client.from('accounts').update({
+        'password_hash': hashedPassword,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('account_id', accountId);
+
       return true;
     } catch (e) {
       if (kDebugMode) debugPrint('Update password error: $e');
@@ -80,14 +72,11 @@ class SupabaseService {
   // Clear temporary password flag
   static Future<bool> clearTemporaryPasswordFlag(int accountId) async {
     try {
-      await client
-          .from('accounts')
-          .update({
-            'is_temporary_password': false,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('account_id', accountId);
-      
+      await client.from('accounts').update({
+        'is_temporary_password': false,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('account_id', accountId);
+
       return true;
     } catch (e) {
       if (kDebugMode) debugPrint('Clear temporary password flag error: $e');
@@ -96,10 +85,12 @@ class SupabaseService {
   }
 
   // Send OTP email
-  static Future<bool> sendOTPEmail(String email, String code, String type) async {
+  static Future<bool> sendOTPEmail(
+      String email, String code, String type) async {
     try {
-      if (kDebugMode) debugPrint('Sending OTP email to: $email with code: $code');
-      
+      if (kDebugMode)
+        debugPrint('Sending OTP email to: $email with code: $code');
+
       if (type == 'verification') {
         return await EmailService.sendVerificationCode(email, code);
       } else if (type == 'reset') {
@@ -127,7 +118,8 @@ class SupabaseService {
           .maybeSingle();
 
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       if (existing != null) {
         if (existing['is_verified']) {
@@ -162,7 +154,8 @@ class SupabaseService {
       if (!emailSent) {
         return {
           'success': true,
-          'message': 'Account created but email failed to send. Please use "Resend Code" on the next screen.',
+          'message':
+              'Account created but email failed to send. Please use "Resend Code" on the next screen.',
           'email_failed': true,
         };
       }
@@ -200,7 +193,8 @@ class SupabaseService {
       }
 
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       await client.from('accounts').update({
         'reset_code': code,
@@ -247,7 +241,8 @@ class SupabaseService {
   }
 
   // Reset password with new password
-  static Future<Map<String, dynamic>> resetPasswordWithNew(String email, String newPassword) async {
+  static Future<Map<String, dynamic>> resetPasswordWithNew(
+      String email, String newPassword) async {
     try {
       final newHash = _hashPassword(newPassword);
 
@@ -259,12 +254,16 @@ class SupabaseService {
 
       return {'success': true, 'message': 'Password reset successfully'};
     } catch (e) {
-      return {'success': false, 'message': 'Failed to reset password: ${e.toString()}'};
+      return {
+        'success': false,
+        'message': 'Failed to reset password: ${e.toString()}'
+      };
     }
   }
 
   // LOGIN - THE FIXED VERSION
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  static Future<Map<String, dynamic>> login(
+      String email, String password) async {
     try {
       if (kDebugMode) debugPrint('Attempting login for: $email');
 
@@ -272,7 +271,8 @@ class SupabaseService {
       if (!isConnected) {
         return {
           'success': false,
-          'message': 'Cannot connect to server. Please check your internet connection.'
+          'message':
+              'Cannot connect to server. Please check your internet connection.'
         };
       }
 
@@ -323,11 +323,11 @@ class SupabaseService {
 
       // CRITICAL FIX: Get created_by FIRST and don't let errors overwrite it
       final createdBy = accountResponse['created_by'] as String? ?? 'self';
-      
+
       if (kDebugMode) {
         debugPrint('=== CRITICAL: created_by from account = $createdBy ===');
       }
-      
+
       Map<String, dynamic>? motherData;
       bool profileComplete = false;
       int? motherId;
@@ -341,7 +341,7 @@ class SupabaseService {
               .select('''
                 mother_id,
                 birthdate
-              ''')  // Only select what we need
+              ''') // Only select what we need
               .eq('account_id', accountResponse['account_id'])
               .maybeSingle();
 
@@ -352,9 +352,10 @@ class SupabaseService {
           }
         } catch (e) {
           // Log error but continue - don't let this break login
-          if (kDebugMode) debugPrint('Error fetching mother data (non-critical): $e');
+          if (kDebugMode)
+            debugPrint('Error fetching mother data (non-critical): $e');
         }
-        
+
         // CRITICAL: For midwife-created accounts, profile is ALWAYS complete
         if (createdBy == 'midwife') {
           profileComplete = true;
@@ -363,22 +364,25 @@ class SupabaseService {
           }
         } else {
           // For self-registered accounts, check essential fields
-          final hasFirstName = accountResponse['first_name'] != null && 
-                               accountResponse['first_name'].toString().isNotEmpty;
-          final hasLastName = accountResponse['last_name'] != null && 
-                              accountResponse['last_name'].toString().isNotEmpty;
-          final hasBirthdate = motherData != null && motherData['birthdate'] != null;
-          final hasPhone = accountResponse['phone_number'] != null && 
-                           accountResponse['phone_number'].toString().isNotEmpty;
-          
-          profileComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
+          final hasFirstName = accountResponse['first_name'] != null &&
+              accountResponse['first_name'].toString().isNotEmpty;
+          final hasLastName = accountResponse['last_name'] != null &&
+              accountResponse['last_name'].toString().isNotEmpty;
+          final hasBirthdate =
+              motherData != null && motherData['birthdate'] != null;
+          final hasPhone = accountResponse['phone_number'] != null &&
+              accountResponse['phone_number'].toString().isNotEmpty;
+
+          profileComplete =
+              hasFirstName && hasLastName && hasBirthdate && hasPhone;
           if (kDebugMode) {
-            debugPrint('Self-registered account - profileComplete = $profileComplete');
+            debugPrint(
+                'Self-registered account - profileComplete = $profileComplete');
           }
         }
-        
+
         needsPasswordChange = accountResponse['is_temporary_password'] == true;
-        
+
         if (kDebugMode) {
           debugPrint('=== FINAL LOGIN VALUES ===');
           debugPrint('createdBy: $createdBy');
@@ -388,7 +392,8 @@ class SupabaseService {
         }
       }
 
-      final token = _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
+      final token =
+          _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
 
       try {
         await client.from('accounts').update({
@@ -402,7 +407,7 @@ class SupabaseService {
       final userData = {
         'id': accountResponse['account_id'],
         'role': accountResponse['account_type'],
-        'created_by': createdBy,  // CRITICAL: Use the value we captured
+        'created_by': createdBy, // CRITICAL: Use the value we captured
       };
 
       if (accountResponse['account_type'] == 'mother') {
@@ -453,10 +458,12 @@ class SupabaseService {
   }
 
   // Resend verification code
-  static Future<Map<String, dynamic>> resendVerificationCode(String email) async {
+  static Future<Map<String, dynamic>> resendVerificationCode(
+      String email) async {
     try {
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       await client
           .from('accounts')
@@ -533,7 +540,8 @@ class SupabaseService {
           .maybeSingle();
 
       String? birthDateStr;
-      if (profileData['birth_date'] != null && profileData['birth_date'].isNotEmpty) {
+      if (profileData['birth_date'] != null &&
+          profileData['birth_date'].isNotEmpty) {
         try {
           if (profileData['birth_date'].contains('/')) {
             final parts = profileData['birth_date'].split('/');
@@ -541,7 +549,8 @@ class SupabaseService {
               final month = int.parse(parts[0]);
               final day = int.parse(parts[1]);
               final year = int.parse(parts[2]);
-              birthDateStr = '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+              birthDateStr =
+                  '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
             }
           } else {
             birthDateStr = profileData['birth_date'];
@@ -556,7 +565,7 @@ class SupabaseService {
       final eddStr = profileData['edd'];
       DateTime? lmp;
       DateTime? edd;
-      
+
       if (lmpStr != null && lmpStr.isNotEmpty) {
         lmp = DateTime.tryParse(lmpStr);
       }
@@ -570,17 +579,17 @@ class SupabaseService {
           'birthdate': birthDateStr,
           'status': 'active',
         });
-        
+
         if (lmp != null && edd != null) {
           final motherRecord = await client
               .from('mothers')
               .select('mother_id')
               .eq('account_id', accountId)
               .maybeSingle();
-          
+
           if (motherRecord != null) {
             final motherId = motherRecord['mother_id'] as int;
-            
+
             await client.from('pregnancies').insert({
               'mother_id': motherId,
               'last_menstrual_period': lmp.toIso8601String().split('T')[0],
@@ -592,11 +601,14 @@ class SupabaseService {
       } else {
         final updateData = <String, dynamic>{};
         if (birthDateStr != null) updateData['birthdate'] = birthDateStr;
-        
+
         if (updateData.isNotEmpty) {
-          await client.from('mothers').update(updateData).eq('account_id', accountId);
+          await client
+              .from('mothers')
+              .update(updateData)
+              .eq('account_id', accountId);
         }
-        
+
         if (lmp != null && edd != null) {
           final existingPregnancy = await client
               .from('pregnancies')
@@ -604,7 +616,7 @@ class SupabaseService {
               .eq('mother_id', existingMother['mother_id'])
               .eq('status', 'ongoing')
               .maybeSingle();
-          
+
           if (existingPregnancy == null) {
             await client.from('pregnancies').insert({
               'mother_id': existingMother['mother_id'],
@@ -627,7 +639,8 @@ class SupabaseService {
   }
 
   // Get greeting
-  static Future<Map<String, dynamic>> getGreeting(int accountId, String role) async {
+  static Future<Map<String, dynamic>> getGreeting(
+      int accountId, String role) async {
     try {
       final accountResponse = await client.from('accounts').select('''
             first_name,
@@ -735,7 +748,8 @@ class SupabaseService {
   }
 
   // Check if account exists and get existing data
-  static Future<Map<String, dynamic>> getExistingMotherAccount(String email) async {
+  static Future<Map<String, dynamic>> getExistingMotherAccount(
+      String email) async {
     try {
       final accountData = await client
           .from('accounts')
@@ -772,7 +786,7 @@ class SupabaseService {
       }
 
       final motherData = accountData['mothers'] as Map<String, dynamic>?;
-      
+
       return {
         'exists': true,
         'account_id': accountData['account_id'],
@@ -829,10 +843,10 @@ class SupabaseService {
           .select('account_id')
           .eq('mother_id', motherId)
           .maybeSingle();
-      
+
       if (motherResponse != null) {
         final accountId = motherResponse['account_id'] as int;
-        
+
         await client
             .from('accounts')
             .update({
@@ -842,22 +856,19 @@ class SupabaseService {
             .eq('account_id', accountId)
             .eq('created_by', 'self');
       }
-      
-      await client
-          .from('mothers')
-          .update({
-            'assigned_bhc_id': assignedBhcId,
-            'house_number': houseNumber,
-            'street': street,
-            'barangay': barangay,
-            'city_municipality': city,
-            'province': province,
-            'height': heightCm,
-            'weight': weightKg,
-            'blood_type': bloodType,
-            'status': 'active',
-          })
-          .eq('mother_id', motherId);
+
+      await client.from('mothers').update({
+        'assigned_bhc_id': assignedBhcId,
+        'house_number': houseNumber,
+        'street': street,
+        'barangay': barangay,
+        'city_municipality': city,
+        'province': province,
+        'height': heightCm,
+        'weight': weightKg,
+        'blood_type': bloodType,
+        'status': 'active',
+      }).eq('mother_id', motherId);
 
       if (emergencyContacts.isNotEmpty) {
         await client.from('emergency_contacts').insert(
@@ -894,7 +905,7 @@ class SupabaseService {
             })
             .select('pregnancy_id')
             .maybeSingle();
-        
+
         if (pregRow != null) {
           pregnancyId = pregRow['pregnancy_id'] as int;
         }
@@ -913,9 +924,9 @@ class SupabaseService {
             .maybeSingle();
 
         if (pastPregRow == null) continue;
-        
+
         final pastPregId = pastPregRow['pregnancy_id'] as int;
-        
+
         final outcomes = pp['outcomes'] as List<dynamic>? ?? [];
         for (int i = 0; i < outcomes.length; i++) {
           final outcome = outcomes[i] as Map<String, dynamic>;
@@ -926,15 +937,18 @@ class SupabaseService {
             'fetus_number': fetusNumber,
             'outcome': outcome['outcome'],
             'outcome_date': outcome['outcome_date'],
-            'is_outcome_date_estimated': outcome['is_outcome_date_estimated'] ?? false,
+            'is_outcome_date_estimated':
+                outcome['is_outcome_date_estimated'] ?? false,
           });
 
-          if (outcome['place_of_delivery'] != null || outcome['delivery_method'] != null) {
+          if (outcome['place_of_delivery'] != null ||
+              outcome['delivery_method'] != null) {
             await client.from('deliveries').insert({
               'pregnancy_id': pastPregId,
               'fetus_number': fetusNumber,
               'delivery_date': outcome['outcome_date'],
-              'is_delivery_date_estimated': outcome['is_outcome_date_estimated'] ?? false,
+              'is_delivery_date_estimated':
+                  outcome['is_outcome_date_estimated'] ?? false,
               'place_of_delivery': outcome['place_of_delivery'],
               'delivery_method': outcome['delivery_method'],
             });
@@ -986,10 +1000,7 @@ class SupabaseService {
     try {
       final emailFree = await isEmailAvailable(email);
       if (!emailFree) {
-        return {
-          'success': false, 
-          'message': 'This email is already in use.'
-        };
+        return {'success': false, 'message': 'This email is already in use.'};
       }
 
       final generatedPassword = _generateSecurePassword();
@@ -1010,7 +1021,7 @@ class SupabaseService {
             'is_verified': true,
             'status': 'active',
             'is_temporary_password': true,
-            'created_by': 'midwife',  // ← CRITICAL: This must be here
+            'created_by': 'midwife', // ← CRITICAL: This must be here
             'created_at': DateTime.now().toIso8601String(),
           })
           .select('account_id')
@@ -1086,7 +1097,7 @@ class SupabaseService {
             })
             .select('pregnancy_id')
             .maybeSingle();
-        
+
         if (pregRow != null) {
           pregnancyId = pregRow['pregnancy_id'] as int;
         }
@@ -1106,9 +1117,9 @@ class SupabaseService {
             .maybeSingle();
 
         if (pastPregRow == null) continue;
-        
+
         final pastPregId = pastPregRow['pregnancy_id'] as int;
-        
+
         final outcomes = pp['outcomes'] as List<dynamic>? ?? [];
         for (int i = 0; i < outcomes.length; i++) {
           final outcome = outcomes[i] as Map<String, dynamic>;
@@ -1119,15 +1130,18 @@ class SupabaseService {
             'fetus_number': fetusNumber,
             'outcome': outcome['outcome'],
             'outcome_date': outcome['outcome_date'],
-            'is_outcome_date_estimated': outcome['is_outcome_date_estimated'] ?? false,
+            'is_outcome_date_estimated':
+                outcome['is_outcome_date_estimated'] ?? false,
           });
 
-          if (outcome['place_of_delivery'] != null || outcome['delivery_method'] != null) {
+          if (outcome['place_of_delivery'] != null ||
+              outcome['delivery_method'] != null) {
             await client.from('deliveries').insert({
               'pregnancy_id': pastPregId,
               'fetus_number': fetusNumber,
               'delivery_date': outcome['outcome_date'],
-              'is_delivery_date_estimated': outcome['is_outcome_date_estimated'] ?? false,
+              'is_delivery_date_estimated':
+                  outcome['is_outcome_date_estimated'] ?? false,
               'place_of_delivery': outcome['place_of_delivery'],
               'delivery_method': outcome['delivery_method'],
             });
@@ -1150,12 +1164,13 @@ class SupabaseService {
         'account_id': accountId,
         'generated_password': generatedPassword,
         'email_sent': emailSent,
-        'message': emailSent 
+        'message': emailSent
             ? 'Mother account created. Credentials sent to $email'
             : 'Mother account created but email failed to send. Please provide the password manually.',
       };
     } catch (e) {
-      if (kDebugMode) debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');
+      if (kDebugMode)
+        debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');
       return {
         'success': false,
         'message': 'Failed to add mother: ${e.toString()}',
@@ -1168,62 +1183,64 @@ class SupabaseService {
   // ============================================================
 
   // Upload profile picture
-  static Future<String?> uploadProfilePicture(int motherId, Uint8List imageBytes) async {
+  static Future<String?> uploadProfilePicture(
+      int motherId, Uint8List imageBytes) async {
     try {
       final motherResponse = await client
           .from('mothers')
           .select('account_id')
           .eq('mother_id', motherId)
           .maybeSingle();
-      
+
       if (motherResponse == null) {
         debugPrint('Mother not found for ID: $motherId');
         return null;
       }
-      
+
       final accountId = motherResponse['account_id'] as int;
-      
+
       final fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final filePath = 'profile-pictures/$accountId/$fileName';
-      
+
       await client.storage.from('files').uploadBinary(
-        filePath,
-        imageBytes,
-        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
-      );
-      
+            filePath,
+            imageBytes,
+            fileOptions:
+                const FileOptions(contentType: 'image/jpeg', upsert: true),
+          );
+
       final publicUrl = client.storage.from('files').getPublicUrl(filePath);
-      
+
       final existingFiles = await client
           .from('files')
           .select('file_id, file_path')
           .eq('reference_type', 'profile_photo')
           .eq('uploaded_by', accountId);
-      
+
       for (var file in existingFiles) {
         try {
-          await client.storage.from('files').remove([file['file_path'] as String]);
+          await client.storage
+              .from('files')
+              .remove([file['file_path'] as String]);
         } catch (e) {}
         await client.from('files').delete().eq('file_id', file['file_id']);
       }
-      
-      await client
-          .from('files')
-          .insert({
-            'bucket_name': 'files',
-            'file_path': filePath,
-            'file_name': fileName,
-            'file_category': 'profile_photo',
-            'mime_type': 'image/jpeg',
-            'file_size': imageBytes.length,
-            'uploaded_by': accountId,
-            'reference_type': 'profile_photo',
-            'reference_id': motherId,
-            'processing_type': 'profile_photo',
-            'ai_processed': false,
-            'created_at': DateTime.now().toIso8601String(),
-          });
-      
+
+      await client.from('files').insert({
+        'bucket_name': 'files',
+        'file_path': filePath,
+        'file_name': fileName,
+        'file_category': 'profile_photo',
+        'mime_type': 'image/jpeg',
+        'file_size': imageBytes.length,
+        'uploaded_by': accountId,
+        'reference_type': 'profile_photo',
+        'reference_id': motherId,
+        'processing_type': 'profile_photo',
+        'ai_processed': false,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
       return publicUrl;
     } catch (e) {
       debugPrint('Error uploading profile picture: $e');
@@ -1239,14 +1256,14 @@ class SupabaseService {
           .select('account_id')
           .eq('mother_id', motherId)
           .maybeSingle();
-      
+
       if (motherResponse == null) {
         debugPrint('Mother not found for ID: $motherId');
         return null;
       }
-      
+
       final accountId = motherResponse['account_id'] as int;
-      
+
       final fileResponse = await client
           .from('files')
           .select('file_path, bucket_name')
@@ -1255,7 +1272,7 @@ class SupabaseService {
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
-      
+
       if (fileResponse != null) {
         final bucket = fileResponse['bucket_name'] as String? ?? 'files';
         final path = fileResponse['file_path'] as String?;
@@ -1263,7 +1280,7 @@ class SupabaseService {
           return client.storage.from(bucket).getPublicUrl(path);
         }
       }
-      
+
       return null;
     } catch (e) {
       debugPrint('Error getting profile picture URL: $e');
@@ -1279,17 +1296,17 @@ class SupabaseService {
           .select('account_id')
           .eq('mother_id', motherId)
           .maybeSingle();
-      
+
       if (motherResponse == null) return false;
-      
+
       final accountId = motherResponse['account_id'] as int;
-      
+
       final filesToDelete = await client
           .from('files')
           .select('file_id, file_path, bucket_name')
           .eq('reference_type', 'profile_photo')
           .eq('uploaded_by', accountId);
-      
+
       for (var file in filesToDelete) {
         final bucket = file['bucket_name'] as String? ?? 'files';
         final path = file['file_path'] as String?;
@@ -1300,7 +1317,7 @@ class SupabaseService {
         }
         await client.from('files').delete().eq('file_id', file['file_id']);
       }
-      
+
       return true;
     } catch (e) {
       debugPrint('Error deleting profile picture: $e');

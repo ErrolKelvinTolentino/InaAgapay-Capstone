@@ -170,11 +170,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       );
     }
 
-    //  1. Try to use the stored DB risk level 
+    //  1. Try to use the stored DB risk level
     final dbLevel =
         (pregnancy['pregnancy_risk_level'] as String?)?.toLowerCase();
 
-    //  2. Collect risk factors from stored checkup risk assessments 
+    //  2. Collect risk factors from stored checkup risk assessments
     final checkups = (pregnancy['checkups'] as List?) ?? [];
     final List<String> dbFactors = [];
     String? dbAiNote;
@@ -207,7 +207,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       }
     }
 
-    //  3. Build baseline risk from DB level (if present) or fallback engine 
+    //  3. Build baseline risk from DB level (if present) or fallback engine
     String baselineLevel = 'low';
     double baselineScore = 5;
     String baselineNote = 'No significant risk factors identified.';
@@ -279,7 +279,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       baselineFactors.addAll(fallback.factors);
     }
 
-    //  4. Add latest ultrasound and lab-test signals to risk level 
+    //  4. Add latest ultrasound and lab-test signals to risk level
     int supplementalScore = 0;
     bool hasSevereSupplementalSignal = false;
     final supplementalFactors = <String>[];
@@ -534,7 +534,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           '**Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
     }
 
-        buffer.write('**Key Recommendations**:\n');
+    buffer.write('**Key Recommendations**:\n');
     buffer.write('- Discuss findings with your healthcare provider\n');
     buffer.write('- Continue all scheduled prenatal appointments\n');
 
@@ -1113,7 +1113,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final status = _classifyLabStatus(testName, rawValue);
 
     final value = rawValue
-      .replaceAll('!', '')
+        .replaceAll('!', '')
         .replaceAll(RegExp(r'\bABNORMAL\b', caseSensitive: false), '')
         .trim();
 
@@ -1720,8 +1720,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                             ),
                                             loadingBuilder: (context, child,
                                                 loadingProgress) {
-                                              if (loadingProgress == null)
+                                              if (loadingProgress == null) {
                                                 return child;
+                                              }
                                               return Container(
                                                 color: AppColors.bgSecondary,
                                                 child: const Center(
@@ -2044,7 +2045,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: DropdownButtonFormField<String>(
-                                value: outcomes[i],
+                                initialValue: outcomes[i],
                                 decoration: const InputDecoration(
                                   labelText: 'Outcome',
                                   border: InputBorder.none,
@@ -2153,7 +2154,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: DropdownButtonFormField<String>(
-                                  value: deliveryMethods[i],
+                                  initialValue: deliveryMethods[i],
                                   decoration: const InputDecoration(
                                     labelText: 'Delivery Method',
                                     border: InputBorder.none,
@@ -3191,7 +3192,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: DropdownButtonFormField<String>(
-                    value: _childSort,
+                    initialValue: _childSort,
                     decoration: const InputDecoration(
                       labelText: 'Sort by',
                       border: InputBorder.none,
@@ -3303,7 +3304,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final now = DateTime.now();
     final gestWeeks =
         lmp != null ? (now.difference(lmp).inDays / 7).floor() : null;
-    final daysToEdd = edd != null ? edd.difference(now).inDays : null;
+    final daysToEdd = edd?.difference(now).inDays;
 
     // Generate risk assessment
     final riskAssessment = _buildRiskAssessmentFromDb(profile, pregnancy);
@@ -4208,4 +4209,3 @@ class _MenuItem extends StatelessWidget {
     );
   }
 }
-
