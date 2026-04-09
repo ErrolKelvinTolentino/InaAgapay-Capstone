@@ -38,6 +38,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   String _labSort = 'desc';
   String _childQuery = '';
   String _childSort = 'recent';
+  final Set<String> _expandedLabInsightAspects = <String>{};
+  StateSetter? _recordDetailsModalSetState;
 
   @override
   void initState() {
@@ -62,6 +64,16 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     await AuthStorage.clearAll();
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
+
+  void _refreshRecordDetailsUi() {
+    final modalSetState = _recordDetailsModalSetState;
+    if (modalSetState != null) {
+      modalSetState(() {});
+      return;
+    }
+    if (!mounted) return;
+    setState(() {});
   }
 
   // Navigate to ultrasound analyzer
@@ -195,139 +207,292 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       }
     }
 
-    // ── 3. If we have DB data, return that ──────────────────────────────────
+    // ── 3. Build baseline risk from DB level (if present) or fallback engine ─
+    String baselineLevel = 'low';
+    int baselineScore = 5;
+    String baselineNote = 'No significant risk factors identified.';
+    final baselineFactors = <String>[];
+
     if (dbLevel != null && dbLevel.isNotEmpty) {
-      final level =
+      baselineLevel =
           (dbLevel == 'high' || dbLevel == 'medium' || dbLevel == 'low')
               ? dbLevel
               : 'low';
+      baselineScore =
+          baselineLevel == 'high' ? 60 : baselineLevel == 'medium' ? 30 : 5;
+      baselineFactors.addAll(
+          dbFactors.isNotEmpty ? dbFactors : ['No risk factors recorded yet']);
 
-      String note;
-      switch (level) {
+      switch (baselineLevel) {
         case 'high':
-          note = dbAiNote ??
+          baselineNote = dbAiNote ??
               'High-risk pregnancy. Close monitoring required. Consult with specialist.';
           break;
         case 'medium':
-          note = dbAiNote ??
+          baselineNote = dbAiNote ??
               'Moderate risk factors present. Regular monitoring recommended.';
           break;
         default:
-          note = dbAiNote ?? 'No significant risk factors identified.';
+          baselineNote = dbAiNote ?? 'No significant risk factors identified.';
       }
-
-      return RiskAssessment(
-        level: level,
-        score: level == 'high'
-            ? 60
-            : level == 'medium'
-                ? 30
-                : 5,
-        factors:
-            dbFactors.isNotEmpty ? dbFactors : ['No risk factors recorded yet'],
-        note: note,
-      );
-    }
-
-    // ── 4. Fallback to local rule-based engine if no DB risk data yet ───────
-    final formData = AddMotherFormData();
-    if (profile['birthdate'] != null) {
-      try {
-        formData.birthdate = DateTime.parse(profile['birthdate']);
-      } catch (_) {}
-    }
-    if (profile['height'] != null && profile['weight'] != null) {
-      formData.heightCm = (profile['height'] as num?)?.toDouble();
-      formData.weightKg = (profile['weight'] as num?)?.toDouble();
-    }
-    final conditions = profile['medical_conditions'] as List? ?? [];
-    for (final condition in conditions) {
-      formData.medicalConditions.add(
-        MedicalConditionEntry(
-          conditionName: condition['condition_name'] ?? '',
-          status: condition['status'] ?? 'active',
-        )..diagnosisDate = DateTime.tryParse(condition['diagnosis_date'] ?? ''),
-      );
-    }
-    final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
-    for (final pg in pastPregnancies) {
-      final date = DateTime.tryParse(pg['outcome_date'] ?? '');
-      if (date != null) {
-        formData.pregnancyHistory.add(
-          PregnancyHistoryEntry(
-            outcome: pg['outcome'] ?? 'live_birth',
-            outcomeDate: date,
-          ),
+    } else {
+      final formData = AddMotherFormData();
+      if (profile['birthdate'] != null) {
+        try {
+          formData.birthdate = DateTime.parse(profile['birthdate']);
+        } catch (_) {}
+      }
+      if (profile['height'] != null && profile['weight'] != null) {
+        formData.heightCm = (profile['height'] as num?)?.toDouble();
+        formData.weightKg = (profile['weight'] as num?)?.toDouble();
+      }
+      final conditions = profile['medical_conditions'] as List? ?? [];
+      for (final condition in conditions) {
+        formData.medicalConditions.add(
+          MedicalConditionEntry(
+            conditionName: condition['condition_name'] ?? '',
+            status: condition['status'] ?? 'active',
+          )..diagnosisDate = DateTime.tryParse(condition['diagnosis_date'] ?? ''),
         );
       }
-    }
-    return RiskEngine.evaluate(formData);
-  }
-
-  // AI Analysis Generators
-  String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
-    final buffer = StringBuffer();
-    buffer.write('🤖 AI Analysis:\n\n');
-
-    // Blood Pressure Analysis
-    final bpSys = _toDouble(checkup['blood_pressure_systolic']);
-    final bpDia = _toDouble(checkup['blood_pressure_diastolic']);
-    if (bpSys != null && bpDia != null) {
-      if (bpSys >= 140 || bpDia >= 90) {
-        buffer.write('⚠️ **Elevated Blood Pressure** detected. '
-            'Consider monitoring for preeclampsia symptoms.\n\n');
-      } else if (bpSys < 90 || bpDia < 60) {
-        buffer.write('📉 **Low Blood Pressure** noted. '
-            'Ensure adequate hydration and gradual position changes.\n\n');
-      } else {
-        buffer.write(
-            '✅ **Blood Pressure** is within normal pregnancy range.\n\n');
+      final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
+      for (final pg in pastPregnancies) {
+        final date = DateTime.tryParse(pg['outcome_date'] ?? '');
+        if (date != null) {
+          formData.pregnancyHistory.add(
+            PregnancyHistoryEntry(
+              outcome: pg['outcome'] ?? 'live_birth',
+              outcomeDate: date,
+            ),
+          );
+        }
       }
+
+      final fallback = RiskEngine.evaluate(formData);
+      baselineLevel = fallback.level;
+      baselineScore = fallback.score;
+      baselineNote = fallback.note;
+      baselineFactors.addAll(fallback.factors);
     }
 
-    // Weight Analysis
-    final weight = _toDouble(checkup['checkup_weight']);
-    if (weight != null) {
-      buffer.write('⚖️ **Weight**: $weight kg\n\n');
-    }
+    // ── 4. Add latest ultrasound and lab-test signals to risk level ─────────
+    int supplementalScore = 0;
+    bool hasSevereSupplementalSignal = false;
+    final supplementalFactors = <String>[];
 
-    // Fetal Heart Rate
-    final fhr = checkup['fetal_heart_beat'];
-    if (fhr != null) {
-      final rate = int.tryParse(fhr.toString());
-      if (rate != null) {
-        if (rate >= 120 && rate <= 160) {
-          buffer.write('💓 **Fetal Heart Rate**: $rate bpm (Normal range)\n\n');
-        } else if (rate < 120) {
-          buffer.write(
-              '⚠️ **Fetal Heart Rate**: $rate bpm (Below normal range)\n\n');
-        } else {
-          buffer.write(
-              '⚠️ **Fetal Heart Rate**: $rate bpm (Above normal range)\n\n');
+    final ultrasounds = (pregnancy['ultrasounds'] as List?) ?? const [];
+    final latestUltrasound =
+        _latestRecordByDate(ultrasounds, 'ultrasound_date');
+    if (latestUltrasound != null) {
+      final usDate = _formatDate(latestUltrasound['ultrasound_date']);
+      final remarks = _formatValue(latestUltrasound['remarks']).toLowerCase();
+      if (remarks != '—') {
+        if (RegExp(r'critical|urgent|severe|fetal distress|placenta previa',
+                caseSensitive: false)
+            .hasMatch(remarks)) {
+          supplementalScore += 3;
+          hasSevereSupplementalSignal = true;
+          supplementalFactors.add(
+              'Ultrasound ($usDate): severe/urgent finding mentioned in remarks');
+        } else if (
+            RegExp(r'abnormal|concern|suspicious', caseSensitive: false)
+                .hasMatch(remarks)) {
+          supplementalScore += 2;
+          supplementalFactors
+              .add('Ultrasound ($usDate): abnormal or concerning finding');
+        } else if (
+            RegExp(r'follow|monitor|repeat', caseSensitive: false)
+                .hasMatch(remarks)) {
+          supplementalScore += 1;
+          supplementalFactors
+              .add('Ultrasound ($usDate): requires follow-up monitoring');
         }
       }
     }
 
-    // Edema
-    final edema = checkup['edema']?.toString().toLowerCase();
-    if (edema != null && edema != 'none') {
+    final labTests = (pregnancy['lab_tests'] as List?) ?? const [];
+    final latestLab = _latestRecordByDate(labTests, 'lab_test_date');
+    if (latestLab != null) {
+      final labDate = _formatDate(latestLab['lab_test_date']);
+      final split = _splitLabRemarksAndAi(latestLab['remarks']?.toString());
+      final labText = '${split.cleanRemarks} ${split.extractedAi ?? ''}'
+          .toLowerCase()
+          .trim();
+
+      if (labText.isNotEmpty) {
+        if (RegExp(
+          r'critical|abnormal \(review\)|positive \(review\)|outside normal range|higher than normal|lower than normal',
+          caseSensitive: false,
+        ).hasMatch(labText)) {
+          supplementalScore += 2;
+          supplementalFactors
+              .add('Lab test ($labDate): review-level laboratory finding');
+        } else if (RegExp(r'borderline|observe|monitor', caseSensitive: false)
+            .hasMatch(labText)) {
+          supplementalScore += 1;
+          supplementalFactors
+              .add('Lab test ($labDate): borderline/monitoring finding');
+        }
+      }
+    }
+
+    int rankOf(String level) {
+      switch (level) {
+        case 'high':
+          return 2;
+        case 'medium':
+          return 1;
+        default:
+          return 0;
+      }
+    }
+
+    String levelFromRank(int rank) {
+      if (rank >= 2) return 'high';
+      if (rank == 1) return 'medium';
+      return 'low';
+    }
+
+    final supplementalRank = hasSevereSupplementalSignal || supplementalScore >= 3
+        ? 2
+        : supplementalScore >= 1
+            ? 1
+            : 0;
+
+    final finalRank =
+        rankOf(baselineLevel) >= supplementalRank ? rankOf(baselineLevel) : supplementalRank;
+    final finalLevel = levelFromRank(finalRank);
+
+    int finalScore = baselineScore + (supplementalScore * 8);
+    if (finalLevel == 'high' && finalScore < 60) finalScore = 60;
+    if (finalLevel == 'medium' && finalScore < 30) finalScore = 30;
+    if (finalLevel == 'low' && finalScore < 5) finalScore = 5;
+    if (finalScore > 95) finalScore = 95;
+
+    final allFactors = <String>[];
+    allFactors.addAll(baselineFactors);
+    for (final f in supplementalFactors) {
+      if (!allFactors.contains(f)) allFactors.add(f);
+    }
+    if (allFactors.isEmpty) {
+      allFactors.add('No risk factors recorded yet');
+    }
+
+    var finalNote = baselineNote;
+    if (supplementalFactors.isNotEmpty) {
+      finalNote =
+          '$baselineNote Latest ultrasound/lab records also influenced this risk level.';
+    }
+
+    return RiskAssessment(
+      level: finalLevel,
+      score: finalScore,
+      factors: allFactors,
+      note: finalNote,
+    );
+  }
+
+  // AI Analysis Generators
+  String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
+    final bpSys = _toDouble(checkup['blood_pressure_systolic']);
+    final bpDia = _toDouble(checkup['blood_pressure_diastolic']);
+    final weight = _toDouble(checkup['checkup_weight']);
+    final edemaRaw = _formatValue(checkup['edema']);
+    final edema = edemaRaw.toLowerCase();
+    final tdDose = _formatValue(checkup['td_vaccine_dose']);
+
+    final fhrRaw = _formatValue(checkup['fetal_heart_beat']);
+    final fhr = int.tryParse(fhrRaw);
+
+    String overallAssessment =
+        'Current prenatal checkup findings appear stable overall.';
+    if (bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) {
+      overallAssessment =
+          'Blood pressure is elevated and needs closer monitoring for hypertensive disorders of pregnancy.';
+    } else if (bpSys != null && bpDia != null && (bpSys < 90 || bpDia < 60)) {
+      overallAssessment =
+          'Blood pressure is lower than typical range; monitor hydration, symptoms, and follow-up trends.';
+    } else if (fhr != null && (fhr < 120 || fhr > 160)) {
+      overallAssessment =
+          'Fetal heart rate is outside the usual expected range and should be reviewed clinically.';
+    } else if (edema != '—' && edema != 'none') {
+      overallAssessment =
+          'Mild edema is noted; monitor progression and correlate with blood pressure and symptoms.';
+    }
+
+    final buffer = StringBuffer();
+    buffer.write('OVERALL ASSESSMENT: $overallAssessment\n\n');
+
+    buffer.write('KEY OBSERVATIONS:\n');
+
+    if (bpSys != null && bpDia != null) {
+      if (bpSys >= 140 || bpDia >= 90) {
+        buffer.write(
+            '• Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [REVIEW].\n');
+      } else if (bpSys < 90 || bpDia < 60) {
+        buffer.write(
+            '• Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [MONITOR].\n');
+      } else {
+        buffer.write(
+            '• Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [WITHIN NORMAL LIMITS].\n');
+      }
+    } else {
+      buffer.write('• Maternal Vitals - Blood Pressure: Not documented in this record.\n');
+    }
+
+    if (weight != null) {
       buffer.write(
-          '💧 **Edema**: ${edema.toUpperCase()} - Monitor for worsening symptoms.\n\n');
+          '• Maternal Vitals - Weight: ${weight.toStringAsFixed(1)} kg.\n');
     }
 
-    // TD Vaccine
-    final tdDose = checkup['td_vaccine_dose']?.toString();
-    if (tdDose != null && tdDose.isNotEmpty) {
-      buffer.write('💉 **TD Vaccine**: $tdDose administered\n\n');
+    if (fhr != null) {
+      if (fhr >= 120 && fhr <= 160) {
+        buffer.write(
+            '• Fetal Status - Heart Rate: $fhr bpm [WITHIN NORMAL LIMITS].\n');
+      } else {
+        buffer.write(
+            '• Fetal Status - Heart Rate: $fhr bpm [REVIEW].\n');
+      }
+    } else if (fhrRaw != '—') {
+      buffer.write('• Fetal Status - Heart Rate: $fhrRaw [REVIEW MANUALLY].\n');
     }
 
-    // Recommendations
-    buffer.write('📋 **Recommendations**:\n');
-    buffer.write('• Continue regular prenatal visits\n');
-    buffer.write('• Monitor fetal movements daily\n');
-    buffer.write('• Report any unusual symptoms immediately\n');
+    final fetalPosition = _formatValue(checkup['fetal_position']);
+    if (fetalPosition != '—') {
+      buffer.write('• Fetal Status - Position: $fetalPosition.\n');
+    }
 
-    return buffer.toString();
+    if (edemaRaw != '—') {
+      if (edema == 'none') {
+        buffer.write('• Maternal Observation - Edema: None reported.\n');
+      } else {
+        buffer.write(
+            '• Maternal Observation - Edema: $edemaRaw [MONITOR].\n');
+      }
+    }
+
+    if (tdDose != '—') {
+      buffer.write('• Preventive Care - TD Vaccine: $tdDose documented.\n');
+    }
+
+    final nextSchedule = _formatDate(checkup['next_schedule']);
+    if (nextSchedule != '—') {
+      buffer.write('• Follow-up - Next Schedule: $nextSchedule.\n');
+    }
+
+    buffer.write('\nRECOMMENDATIONS:\n');
+    buffer.write('• Continue scheduled prenatal follow-up visits.\n');
+    buffer.write('• Monitor maternal warning signs and fetal movement daily.\n');
+    if ((bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) ||
+        (fhr != null && (fhr < 120 || fhr > 160))) {
+      buffer.write(
+          '• Prioritize clinician review for blood pressure and/or fetal heart findings.\n');
+    }
+    if (edema != '—' && edema != 'none') {
+      buffer.write('• Reassess edema severity in next checkup.\n');
+    }
+
+    return buffer.toString().trim();
   }
 
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
@@ -372,54 +537,306 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return buffer.toString();
   }
 
-  String _generateLabTestAIInsights(Map<String, dynamic> labTest) {
-    final buffer = StringBuffer();
-    buffer.write('🤖 Lab Test AI Analysis:\n\n');
+  ({String cleanRemarks, String? extractedAi}) _splitLabRemarksAndAi(
+      String? rawRemarks) {
+    final source = rawRemarks?.trim() ?? '';
+    if (source.isEmpty) {
+      return (cleanRemarks: '', extractedAi: null);
+    }
 
-    final testType = labTest['lab_test_type']?.toString().toLowerCase() ?? '';
-    final remarks = labTest['remarks']?.toString().toLowerCase() ?? '';
-    final date = _formatDate(labTest['lab_test_date']);
+    final marker = RegExp(r'\bAI\s*Analysis\s*:', caseSensitive: false);
+    final match = marker.firstMatch(source);
+    if (match == null) {
+      return (cleanRemarks: source, extractedAi: null);
+    }
 
-    buffer.write('**${testType.toUpperCase()} Results** from $date:\n\n');
+    final notesPart = source.substring(0, match.start).trim();
+    final aiPart = source.substring(match.end).trim();
 
-    // Analyze based on test type
-    if (testType.contains('blood') || testType.contains('cbc')) {
-      buffer.write('🩸 **Blood Test Analysis**:\n');
-      if (remarks.contains('normal')) {
-        buffer.write('• Blood parameters are within normal pregnancy ranges\n');
-      } else if (remarks.contains('low')) {
-        buffer.write('• Some values below optimal range\n');
-        buffer.write('• Consider dietary adjustments or supplements\n');
-      } else if (remarks.contains('high')) {
-        buffer.write('• Elevated values noted\n');
-        buffer.write('• May require follow-up testing\n');
+    return (
+      cleanRemarks: notesPart,
+      extractedAi: aiPart.isEmpty ? null : aiPart,
+    );
+  }
+
+  Map<String, dynamic>? _latestRecordByDate(List records, String dateField) {
+    if (records.isEmpty) return null;
+    final typed = List<Map<String, dynamic>>.from(
+      records.whereType<Map<String, dynamic>>(),
+    );
+    if (typed.isEmpty) return null;
+
+    typed.sort((a, b) {
+      final da = _parseDateForSort(a[dateField]);
+      final db = _parseDateForSort(b[dateField]);
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return db.compareTo(da);
+    });
+    return typed.first;
+  }
+
+  ({String level, String structuredText}) _buildUnifiedMaternalInsight(
+      Map<String, dynamic> pregnancy) {
+    final checkups = (pregnancy['checkups'] as List?) ?? const [];
+    final ultrasounds = (pregnancy['ultrasounds'] as List?) ?? const [];
+    final labTests = (pregnancy['lab_tests'] as List?) ?? const [];
+
+    final latestCheckup = _latestRecordByDate(checkups, 'checkup_datetime');
+    final latestUltrasound =
+        _latestRecordByDate(ultrasounds, 'ultrasound_date');
+    final latestLab = _latestRecordByDate(labTests, 'lab_test_date');
+
+    final observations = <String>[];
+    final recommendations = <String>[];
+    int riskScore = 0;
+    bool hasSevereSignal = false;
+
+    if (latestCheckup != null) {
+      final checkupDate = _formatDateTime(latestCheckup['checkup_datetime']);
+      final bpSys = _toDouble(latestCheckup['blood_pressure_systolic']);
+      final bpDia = _toDouble(latestCheckup['blood_pressure_diastolic']);
+      if (bpSys != null && bpDia != null) {
+        if (bpSys >= 160 || bpDia >= 110) {
+          riskScore += 4;
+          hasSevereSignal = true;
+          observations.add(
+              'Latest Checkup ($checkupDate): BP $bpSys/$bpDia mmHg is severely elevated.');
+          recommendations.add(
+              'Urgent clinician review is advised for severe blood pressure elevation.');
+        } else if (bpSys >= 140 || bpDia >= 90) {
+          riskScore += 3;
+          observations.add(
+              'Latest Checkup ($checkupDate): BP $bpSys/$bpDia mmHg is elevated.');
+          recommendations
+              .add('Increase BP monitoring frequency and assess warning signs.');
+        } else if (bpSys < 90 || bpDia < 60) {
+          riskScore += 1;
+          observations.add(
+              'Latest Checkup ($checkupDate): BP $bpSys/$bpDia mmHg is lower than expected.');
+          recommendations
+              .add('Review hydration status and monitor dizziness/syncope symptoms.');
+        } else {
+          observations.add(
+              'Latest Checkup ($checkupDate): Blood pressure is within expected range.');
+        }
       }
-    } else if (testType.contains('urine')) {
-      buffer.write('🧪 **Urine Test Analysis**:\n');
-      if (remarks.contains('normal')) {
-        buffer.write('• Urine analysis shows no concerning findings\n');
-      } else if (remarks.contains('protein')) {
-        buffer.write('• Protein detected - monitor for preeclampsia\n');
-      } else if (remarks.contains('infection')) {
-        buffer.write('• Possible urinary tract infection\n');
-        buffer.write('• Consult healthcare provider\n');
+
+      final fhrRaw = _formatValue(latestCheckup['fetal_heart_beat']);
+      final fhr = int.tryParse(fhrRaw);
+      if (fhr != null) {
+        if (fhr < 120 || fhr > 160) {
+          riskScore += 2;
+          observations.add(
+              'Latest Checkup ($checkupDate): Fetal heart rate $fhr bpm is outside expected range.');
+          recommendations.add(
+              'Correlate fetal heart findings with repeat assessment and clinical exam.');
+        } else {
+          observations.add(
+              'Latest Checkup ($checkupDate): Fetal heart rate $fhr bpm is within expected range.');
+        }
       }
-    } else if (testType.contains('glucose')) {
-      buffer.write('📊 **Glucose Test Analysis**:\n');
-      if (remarks.contains('normal')) {
-        buffer.write('• Glucose levels are within normal range\n');
-      } else if (remarks.contains('high')) {
-        buffer.write('• Elevated glucose levels detected\n');
-        buffer
-            .write('• May indicate need for gestational diabetes screening\n');
+
+      final edema = _formatValue(latestCheckup['edema']).toLowerCase();
+      if (edema != '—' && edema != 'none') {
+        riskScore += 1;
+        observations.add(
+            'Latest Checkup ($checkupDate): Edema is reported (${_formatValue(latestCheckup['edema'])}).');
+        recommendations.add('Track edema progression in succeeding checkups.');
+      }
+    } else {
+      observations.add('No prenatal checkup records are currently available.');
+      recommendations
+          .add('Schedule a prenatal checkup to refresh current maternal status.');
+    }
+
+    if (latestUltrasound != null) {
+      final usDate = _formatDate(latestUltrasound['ultrasound_date']);
+      final remarks = _formatValue(latestUltrasound['remarks']).toLowerCase();
+      if (remarks != '—') {
+        if (RegExp(r'abnormal|concern|urgent|critical', caseSensitive: false)
+            .hasMatch(remarks)) {
+          riskScore += 3;
+          observations.add(
+              'Latest Ultrasound ($usDate): Findings indicate concern/abnormality in remarks.');
+          recommendations
+              .add('Review latest ultrasound report with obstetric interpretation.');
+        } else if (RegExp(r'follow|monitor', caseSensitive: false)
+            .hasMatch(remarks)) {
+          riskScore += 1;
+          observations.add(
+              'Latest Ultrasound ($usDate): Follow-up monitoring is recommended.');
+          recommendations
+              .add('Maintain ultrasound follow-up schedule as advised.');
+        } else if (RegExp(r'normal|healthy', caseSensitive: false)
+            .hasMatch(remarks)) {
+          observations.add(
+              'Latest Ultrasound ($usDate): Remarks suggest stable/normal findings.');
+        } else {
+          observations.add(
+              'Latest Ultrasound ($usDate): Report available; review detailed notes for context.');
+        }
       }
     }
 
-    buffer.write('\n🏥 **Health Recommendations**:\n');
-    buffer.write('• Review results with your healthcare provider\n');
-    buffer.write('• Follow any prescribed treatment plans\n');
+    if (latestLab != null) {
+      final labDate = _formatDate(latestLab['lab_test_date']);
+      final split = _splitLabRemarksAndAi(latestLab['remarks']?.toString());
+      final labText = '${split.cleanRemarks} ${split.extractedAi ?? ''}'
+          .toLowerCase()
+          .trim();
 
-    return buffer.toString();
+      if (labText.isNotEmpty) {
+        if (RegExp(
+          r'critical|abnormal \(review\)|positive \(review\)|outside normal range|higher than normal|lower than normal',
+          caseSensitive: false,
+        ).hasMatch(labText)) {
+          riskScore += 3;
+          observations.add(
+              'Latest Lab Test ($labDate): Review-level laboratory findings are present.');
+          recommendations.add(
+              'Prioritize clinical correlation of latest laboratory findings.');
+        } else if (RegExp(r'borderline|observe|monitor', caseSensitive: false)
+            .hasMatch(labText)) {
+          riskScore += 1;
+          observations.add(
+              'Latest Lab Test ($labDate): Borderline/observe findings were noted.');
+          recommendations.add('Trend repeat labs if symptoms persist or worsen.');
+        } else if (RegExp(r'within normal limits|normal', caseSensitive: false)
+            .hasMatch(labText)) {
+          observations.add(
+              'Latest Lab Test ($labDate): Findings are generally within normal limits.');
+        } else {
+          observations.add(
+              'Latest Lab Test ($labDate): Result available; interpret with clinical context.');
+        }
+      }
+    }
+
+    if (recommendations.isEmpty) {
+      recommendations.add(
+          'Continue routine prenatal surveillance and document new symptoms promptly.');
+    }
+
+    final level = hasSevereSignal || riskScore >= 6
+        ? 'HIGH ALERT'
+        : riskScore >= 3
+            ? 'MODERATE ALERT'
+            : 'STABLE';
+
+    final overall = level == 'HIGH ALERT'
+        ? 'High-priority review is advised based on the latest combined records (checkup, ultrasound, and lab test).'
+        : level == 'MODERATE ALERT'
+            ? 'Some risk signals are present across recent records and should be monitored closely.'
+            : 'Latest combined records suggest a relatively stable maternal state at this time.';
+
+    final buffer = StringBuffer();
+    buffer.write('OVERALL ASSESSMENT: $overall\n\n');
+    buffer.write('KEY OBSERVATIONS:\n');
+    for (final item in observations) {
+      buffer.write('• $item\n');
+    }
+    buffer.write('\nRECOMMENDATIONS:\n');
+    for (final item in recommendations.take(4)) {
+      buffer.write('• $item\n');
+    }
+
+    return (level: level, structuredText: buffer.toString().trim());
+  }
+
+  Widget _buildUnifiedMaternalInsightCard(Map<String, dynamic> pregnancy) {
+    final unified = _buildUnifiedMaternalInsight(pregnancy);
+
+    Color levelColor;
+    IconData levelIcon;
+    switch (unified.level) {
+      case 'HIGH ALERT':
+        levelColor = Colors.red;
+        levelIcon = Icons.notification_important_rounded;
+        break;
+      case 'MODERATE ALERT':
+        levelColor = Colors.orange.shade700;
+        levelIcon = Icons.warning_amber_rounded;
+        break;
+      default:
+        levelColor = Colors.green;
+        levelIcon = Icons.verified_rounded;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.bgSecondary,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.insights_rounded,
+                  color: AppColors.brandPrimary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Current Maternal AI Insight',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: levelColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: levelColor.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(levelIcon, size: 14, color: levelColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      unified.level,
+                      style: TextStyle(
+                        color: levelColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildStructuredAiInsights(unified.structuredText),
+        ],
+      ),
+    );
   }
 
 // Show full screen image
@@ -435,6 +852,735 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
+  String _normalizeMarkdownLine(String input) {
+    var line = input;
+    line = line.replaceFirst(RegExp(r'^\s*#{1,6}\s*'), '');
+    line = line.replaceFirst(RegExp(r'^\s*(?:[-*]|•)\s+'), '');
+    return line;
+  }
+
+  String _cleanResidualMarkdown(String input) {
+    var text = input;
+    text = text.replaceAll('**', '');
+    text = text.replaceAll('##', '');
+    text = text.replaceAll(RegExp(r'(?<!\*)\*(?!\*)'), '');
+    return text;
+  }
+
+  List<TextSpan> _parseInlineMarkdown(String input) {
+    final spans = <TextSpan>[];
+    final pattern = RegExp(r'\*\*(.+?)\*\*');
+    int current = 0;
+
+    for (final match in pattern.allMatches(input)) {
+      if (match.start > current) {
+        spans.add(TextSpan(
+          text: _cleanResidualMarkdown(input.substring(current, match.start)),
+        ));
+      }
+
+      final boldText = match.group(1) ?? '';
+      spans.add(TextSpan(
+        text: boldText,
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ));
+      current = match.end;
+    }
+
+    if (current < input.length) {
+      spans.add(TextSpan(
+        text: _cleanResidualMarkdown(input.substring(current)),
+      ));
+    }
+
+    if (spans.isEmpty) {
+      spans.add(TextSpan(text: _cleanResidualMarkdown(input)));
+    }
+
+    return spans;
+  }
+
+  Widget _buildFormattedAiText(String text) {
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    final lines = text.split('\n');
+    final List<TextSpan> spans = [];
+
+    for (int i = 0; i < lines.length; i++) {
+      final normalizedLine = _normalizeMarkdownLine(lines[i]);
+      spans.addAll(_parseInlineMarkdown(normalizedLine));
+      if (i < lines.length - 1) {
+        spans.add(const TextSpan(text: '\n'));
+      }
+    }
+
+    return RichText(
+      text: TextSpan(
+        style:
+            const TextStyle(color: Colors.black87, fontSize: 15, height: 1.5),
+        children: spans,
+      ),
+    );
+  }
+
+  Map<String, List<String>> _extractAiSections(String rawText) {
+    final lines = rawText
+        .split('\n')
+        .map((l) => _cleanResidualMarkdown(_normalizeMarkdownLine(l)).trim())
+        .toList();
+
+    final Map<String, List<String>> sections = {};
+    String currentSection = 'Summary';
+    sections[currentSection] = [];
+
+    final headingPattern = RegExp(
+      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|LABORATORY RESULTS|ABNORMAL FINDINGS|NORMAL RANGES|REFERENCE RANGES|OVERALL ASSESSMENT|RECOMMENDATIONS|KEY OBSERVATIONS)\s*:\s*(.*)$',
+      caseSensitive: false,
+    );
+
+    for (final line in lines) {
+      if (line.isEmpty) continue;
+      if (line.toUpperCase() == 'COMPREHENSIVE LABORATORY ANALYSIS') continue;
+      if (RegExp(r'^[-_=]{2,}$').hasMatch(line.replaceAll(' ', ''))) {
+        continue;
+      }
+
+      final heading = headingPattern.firstMatch(line);
+      if (heading != null) {
+        currentSection = heading.group(1)!.toUpperCase();
+        if (currentSection == 'REFERENCE RANGES') {
+          currentSection = 'NORMAL RANGES';
+        }
+        sections.putIfAbsent(currentSection, () => []);
+        final inlineContent = heading.group(2)?.trim() ?? '';
+        if (inlineContent.isNotEmpty) {
+          sections[currentSection]!.add(inlineContent);
+        }
+        continue;
+      }
+
+      sections.putIfAbsent(currentSection, () => []);
+      sections[currentSection]!.add(line);
+    }
+
+    sections.removeWhere((_, value) => value.isEmpty);
+    return sections;
+  }
+
+  bool _isConcerningAnalyte(String text) {
+    final t = text.toLowerCase();
+    return RegExp(
+      r'protein|glucose|ketone|nitrite|leukocyte|blood|pus|bacteria|bilirubin|hiv|hbsag|vdrl|rpr|syphilis|infection|pathogen',
+      caseSensitive: false,
+    ).hasMatch(t);
+  }
+
+  String _classifyLabStatus(String testName, String rawValue) {
+    final test = testName.toLowerCase();
+    final value = rawValue.toLowerCase();
+    final merged = '$test $value';
+
+    final hasWithinNormal = RegExp(
+      r'within normal limits|within normal range|normal range|wnl',
+      caseSensitive: false,
+    ).hasMatch(value);
+    if (hasWithinNormal) return 'WITHIN NORMAL LIMITS';
+
+    final isColorFinding = test.contains('color') || test.contains('colour');
+    if (isColorFinding) {
+      if (RegExp(r'\byellow\b|\bstraw\b|\bpale\b|\bclear\b',
+              caseSensitive: false)
+          .hasMatch(value)) {
+        return 'WITHIN NORMAL LIMITS';
+      }
+      if (RegExp(r'\bdark\b|\bamber\b|\bbrown\b|\bred\b|\bbloody\b',
+              caseSensitive: false)
+          .hasMatch(value)) {
+        return 'ABNORMAL (REVIEW)';
+      }
+      return 'OBSERVE';
+    }
+
+    if (RegExp(r'\bpositive\b', caseSensitive: false).hasMatch(value)) {
+      if (_isConcerningAnalyte(merged)) return 'POSITIVE (REVIEW)';
+      if (RegExp(r'pregnancy|hcg', caseSensitive: false).hasMatch(test)) {
+        return 'POSITIVE (EXPECTED)';
+      }
+      return 'POSITIVE';
+    }
+
+    if (RegExp(r'\bnegative\b', caseSensitive: false).hasMatch(value)) {
+      if (RegExp(r'pregnancy|hcg', caseSensitive: false).hasMatch(test)) {
+        return 'NEGATIVE (REVIEW)';
+      }
+      if (_isConcerningAnalyte(merged)) return 'NEGATIVE (REASSURING)';
+      return 'NEGATIVE';
+    }
+
+    if (RegExp(r'\btrace\b|\bfew\b|\bslight\b|\bmild\b|\bborderline\b',
+            caseSensitive: false)
+        .hasMatch(value)) {
+      return 'BORDERLINE';
+    }
+
+    if (RegExp(
+      r'\babnormal\b|\bcritical\b|outside normal range|higher than normal|lower than normal|\belevated\b|\bdecreased\b|\bincreased\b|⚠',
+      caseSensitive: false,
+    ).hasMatch(value)) {
+      return 'ABNORMAL (REVIEW)';
+    }
+
+    if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
+      return 'NORMAL';
+    }
+
+    return 'OBSERVE';
+  }
+
+  bool _isConcerningStatus(String status) {
+    final s = status.toUpperCase();
+    return s.contains('REVIEW') || s == 'ABNORMAL';
+  }
+
+  bool _isCautionStatus(String status) {
+    final s = status.toUpperCase();
+    return s == 'OBSERVE' || s == 'BORDERLINE' || s == 'POSITIVE';
+  }
+
+  Color _statusChipBackground(String status) {
+    if (_isConcerningStatus(status)) return Colors.red.shade50;
+    if (_isCautionStatus(status)) return Colors.orange.shade50;
+    return Colors.green.shade50;
+  }
+
+  Color _statusChipBorder(String status) {
+    if (_isConcerningStatus(status)) return Colors.red.shade200;
+    if (_isCautionStatus(status)) return Colors.orange.shade200;
+    return Colors.green.shade200;
+  }
+
+  Color _statusChipTextColor(String status) {
+    if (_isConcerningStatus(status)) return Colors.red;
+    if (_isCautionStatus(status)) return Colors.orange.shade800;
+    return Colors.green;
+  }
+
+  String _statusMeaning(String status) {
+    switch (status.toUpperCase()) {
+      case 'WITHIN NORMAL LIMITS':
+        return 'Consistent with expected findings for this test.';
+      case 'NORMAL':
+        return 'Reported as normal for this parameter.';
+      case 'ABNORMAL (REVIEW)':
+      case 'ABNORMAL':
+        return 'May need clinician review with symptoms and history.';
+      case 'BORDERLINE':
+        return 'Near threshold. Monitor trends and correlate clinically.';
+      case 'OBSERVE':
+        return 'Not clearly high-risk. Observe and compare with references.';
+      case 'POSITIVE (REVIEW)':
+        return 'Positive finding that may be clinically significant.';
+      case 'POSITIVE (EXPECTED)':
+        return 'Positive finding can be expected for this test context.';
+      case 'NEGATIVE (REASSURING)':
+        return 'No concerning marker detected for this parameter.';
+      case 'NEGATIVE (REVIEW)':
+        return 'Negative may be unexpected for this context; verify clinically.';
+      case 'POSITIVE':
+      case 'NEGATIVE':
+        return 'Interpret this result based on the specific test context.';
+      default:
+        return 'Interpret this result together with reference ranges and overall assessment.';
+    }
+  }
+
+  ({String testName, String value, String status}) _parseLabResultLine(
+      String line) {
+    final cleaned =
+        _safeText(line).replaceFirst(RegExp(r'^[•\-*]\s*'), '').trim();
+    final colonIndex = cleaned.indexOf(':');
+    if (colonIndex == -1) {
+      return (testName: cleaned, value: '', status: 'UNKNOWN');
+    }
+
+    final testName = cleaned.substring(0, colonIndex).trim();
+    final rawValue = _safeText(cleaned.substring(colonIndex + 1)).trim();
+    final status = _classifyLabStatus(testName, rawValue);
+
+    final value = rawValue
+        .replaceAll('⚠️', '')
+        .replaceAll('⚠', '')
+        .replaceAll(RegExp(r'\bABNORMAL\b', caseSensitive: false), '')
+        .trim();
+
+    return (
+      testName: _stripDecorativeDashes(testName),
+      value: _stripDecorativeDashes(value),
+      status: status
+    );
+  }
+
+  String _safeText(Object? value) => value?.toString() ?? '';
+
+  String _stripDecorativeDashes(String value) {
+    final trimmed = value.trim();
+    if (RegExp(r'^[-_=]{2,}$').hasMatch(trimmed)) {
+      return '';
+    }
+    return trimmed.replaceAll(RegExp(r'\s+--+\s+'), ' ').trim();
+  }
+
+  String _normalizeAspectKey(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  bool _lineMatchesAspect(String line, String aspect) {
+    final a = _normalizeAspectKey(_safeText(aspect));
+    final l = _normalizeAspectKey(_safeText(line));
+    return a.isNotEmpty && l.contains(a);
+  }
+
+  String _buildAspectDetails(
+      String aspect, List<String> abnormalLines, List<String> rangeLines) {
+    final matches = <String>[];
+    for (final line in abnormalLines) {
+      if (_lineMatchesAspect(line, aspect)) {
+        matches.add(line);
+      }
+    }
+    for (final line in rangeLines) {
+      if (_lineMatchesAspect(line, aspect)) {
+        matches.add('Reference: $line');
+      }
+    }
+    return matches.join('\n\n').trim();
+  }
+
+  Widget _buildLabResultsSummaryCard(Map<String, List<String>> sections) {
+    final labLines = sections['LABORATORY RESULTS'] ?? const <String>[];
+    final abnormalLines = sections['ABNORMAL FINDINGS'] ?? const <String>[];
+    final rangeLines = sections['NORMAL RANGES'] ?? const <String>[];
+
+    final rows = labLines
+        .map(_parseLabResultLine)
+        .where((r) => r.testName.isNotEmpty && r.status != 'UNKNOWN')
+        .toList();
+
+    if (rows.isEmpty) {
+      return _buildAiSectionCard('LABORATORY RESULTS', labLines);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.science_outlined,
+                  size: 18, color: AppColors.brandPrimary),
+              SizedBox(width: 8),
+              Text(
+                'Laboratory Results',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.brandPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.bgSecondary,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'Status guide: REVIEW = needs clinician review, BORDERLINE/OBSERVE = monitor and correlate, WITHIN NORMAL LIMITS = reassuring in context.',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...rows.map((row) {
+            final details = _buildAspectDetails(
+              row.testName,
+              abnormalLines,
+              rangeLines,
+            );
+            final aspectKey = _normalizeAspectKey(row.testName);
+            final isExpanded = _expandedLabInsightAspects.contains(aspectKey);
+            final hasDetails = details.isNotEmpty;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.borderPrimary),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          row.testName,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 24,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          splashRadius: 16,
+                          onPressed: hasDetails
+                              ? () {
+                                  if (isExpanded) {
+                                    _expandedLabInsightAspects
+                                        .remove(aspectKey);
+                                  } else {
+                                    _expandedLabInsightAspects.add(aspectKey);
+                                  }
+                                  _refreshRecordDetailsUi();
+                                }
+                              : null,
+                          icon: Icon(
+                            isExpanded ? Icons.expand_less : Icons.expand_more,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _statusChipBackground(row.status),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: _statusChipBorder(row.status),
+                          ),
+                        ),
+                        child: Text(
+                          row.status,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _statusChipTextColor(row.status),
+                          ),
+                        ),
+                      ),
+                      if (row.value.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSecondary,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            row.value,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _statusMeaning(row.status),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (isExpanded && hasDetails)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.only(top: 10),
+                      child: _buildFormattedAiText(details),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  String _friendlyAiSectionTitle(String title) {
+    switch (title) {
+      case 'LABORATORY RESULTS':
+        return 'Laboratory Results';
+      case 'ABNORMAL FINDINGS':
+        return 'Abnormal Findings';
+      case 'NORMAL RANGES':
+        return 'Reference Ranges';
+      case 'OVERALL ASSESSMENT':
+        return 'Overall Assessment';
+      case 'RECOMMENDATIONS':
+        return 'Recommendations';
+      case 'RELEVANCE CHECK':
+        return 'Relevance Check';
+      case 'RELEVANCE REASON':
+        return 'Relevance Reason';
+      case 'KEY OBSERVATIONS':
+        return 'Key Observations';
+      default:
+        return title
+            .split(' ')
+            .map(
+                (w) => w.isEmpty ? w : '${w[0]}${w.substring(1).toLowerCase()}')
+            .join(' ');
+    }
+  }
+
+  Widget _buildAiSectionCard(String title, List<String> lines) {
+    final safeTitle = _safeText(title).toUpperCase();
+    final isAbnormal = safeTitle.contains('ABNORMAL');
+    final isRecommendation = safeTitle.contains('RECOMMENDATION');
+    final isAssessment = safeTitle.contains('ASSESSMENT');
+
+    final Color accent = isAbnormal
+        ? Colors.red
+        : isRecommendation
+            ? Colors.blue
+            : isAssessment
+                ? Colors.deepPurple
+                : AppColors.brandPrimary;
+
+    final IconData icon = isAbnormal
+        ? Icons.warning_amber_rounded
+        : isRecommendation
+            ? Icons.lightbulb_outline
+            : isAssessment
+                ? Icons.health_and_safety_outlined
+                : Icons.article_outlined;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _friendlyAiSectionTitle(safeTitle),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (safeTitle == 'LABORATORY RESULTS')
+            _buildLabResultRows(lines)
+          else
+            ...lines.map((line) {
+              final cleaned =
+                  line.replaceFirst(RegExp(r'^[•\-*]\s*'), '').trim();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 6, right: 8),
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Expanded(child: _buildFormattedAiText(cleaned)),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLabResultRows(List<String> lines) {
+    return Column(
+      children: lines.map((line) {
+        final parsed = _parseLabResultLine(line);
+        final concerning = _isConcerningStatus(parsed.status);
+        final caution = _isCautionStatus(parsed.status);
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: concerning
+                ? Colors.red.shade50
+                : caution
+                    ? Colors.orange.shade50
+                    : Colors.green.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: concerning
+                  ? Colors.red.shade200
+                  : caution
+                      ? Colors.orange.shade200
+                      : Colors.green.shade200,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      parsed.testName,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (parsed.value.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        parsed.value,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      _statusMeaning(parsed.status),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: concerning
+                      ? Colors.red
+                      : caution
+                          ? Colors.orange.shade700
+                          : Colors.green,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  parsed.status,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildStructuredAiInsights(String text) {
+    final sections = _extractAiSections(text);
+    if (sections.isEmpty) return _buildFormattedAiText(text);
+
+    const sectionOrder = [
+      'OVERALL ASSESSMENT',
+      'LABORATORY RESULTS',
+      'ABNORMAL FINDINGS',
+      'NORMAL RANGES',
+      'KEY OBSERVATIONS',
+      'RECOMMENDATIONS',
+      'SUMMARY',
+    ];
+
+    final orderedEntries = <MapEntry<String, List<String>>>[];
+    for (final key in sectionOrder) {
+      if (sections.containsKey(key)) {
+        orderedEntries.add(MapEntry(key, sections[key]!));
+      }
+    }
+    for (final entry in sections.entries) {
+      if (!sectionOrder.contains(entry.key)) {
+        orderedEntries.add(entry);
+      }
+    }
+
+    final widgets = <Widget>[];
+    for (final entry in orderedEntries) {
+      if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON') {
+        continue;
+      }
+
+      if (entry.key == 'LABORATORY RESULTS') {
+        widgets.add(_buildLabResultsSummaryCard(sections));
+        continue;
+      }
+
+      if (entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
+        continue;
+      }
+
+      widgets.add(_buildAiSectionCard(entry.key, entry.value));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
+    );
+  }
+
   // Show record details modal
   void _showRecordDetails({
     required String title,
@@ -443,287 +1589,353 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     String? subtitle,
     List<String>? imageUrls,
     String? aiAnalysis,
+    bool useStructuredAiInsights = false,
   }) {
+    _expandedLabInsightAspects.clear();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            // Handle
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
+      builder: (_) => StatefulBuilder(
+        builder: (context, modalSetState) {
+          _recordDetailsModalSetState = modalSetState;
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.9,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Row(
+            child: Column(
+              children: [
+                // Handle
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: AppColors.bgSecondary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(icon, color: AppColors.brandPrimary),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                        // Header
+                        Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: AppColors.bgSecondary,
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              if (subtitle != null && subtitle.isNotEmpty)
-                                Text(
-                                  subtitle,
-                                  style: const TextStyle(
-                                      color: AppColors.textSecondary),
-                                ),
-                            ],
-                          ),
+                              child: Icon(icon, color: AppColors.brandPrimary),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (subtitle != null && subtitle.isNotEmpty)
+                                    Text(
+                                      subtitle,
+                                      style: const TextStyle(
+                                          color: AppColors.textSecondary),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                    // Image Gallery if available
-                    if (imageUrls != null && imageUrls.isNotEmpty) ...[
-                      SizedBox(
-                        height: 200,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: imageUrls.length,
-                          itemBuilder: (context, index) {
-                            return GestureDetector(
-                              onTap: () =>
-                                  _showFullScreenImage(imageUrls, index),
-                              child: Container(
-                                width: 200,
-                                margin: const EdgeInsets.only(right: 12),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      Image.network(
-                                        imageUrls[index],
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => Container(
-                                          color: AppColors.bgSecondary,
-                                          child: const Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(Icons.broken_image,
-                                                    size: 32,
-                                                    color: Colors.grey),
-                                                SizedBox(height: 4),
-                                                Text(
-                                                  'Image not available',
-                                                  style:
-                                                      TextStyle(fontSize: 10),
-                                                  textAlign: TextAlign.center,
+                        // Image Gallery if available
+                        if (imageUrls != null && imageUrls.isNotEmpty) ...[
+                          SizedBox(
+                            height: 200,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: imageUrls.length,
+                              itemBuilder: (context, index) {
+                                return GestureDetector(
+                                  onTap: () =>
+                                      _showFullScreenImage(imageUrls, index),
+                                  child: Container(
+                                    width: 200,
+                                    margin: const EdgeInsets.only(right: 12),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          Image.network(
+                                            imageUrls[index],
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                Container(
+                                              color: AppColors.bgSecondary,
+                                              child: const Center(
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.broken_image,
+                                                        size: 32,
+                                                        color: Colors.grey),
+                                                    SizedBox(height: 4),
+                                                    Text(
+                                                      'Image not available',
+                                                      style: TextStyle(
+                                                          fontSize: 10),
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        loadingBuilder:
-                                            (context, child, loadingProgress) {
-                                          if (loadingProgress == null)
-                                            return child;
-                                          return Container(
-                                            color: AppColors.bgSecondary,
-                                            child: const Center(
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor:
-                                                    AlwaysStoppedAnimation<
-                                                            Color>(
-                                                        AppColors.brandPrimary),
                                               ),
                                             ),
-                                          );
-                                        },
+                                            loadingBuilder: (context, child,
+                                                loadingProgress) {
+                                              if (loadingProgress == null)
+                                                return child;
+                                              return Container(
+                                                color: AppColors.bgSecondary,
+                                                child: const Center(
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                                Color>(
+                                                            AppColors
+                                                                .brandPrimary),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                          // Image counter overlay
+                                          if (imageUrls.length > 1 &&
+                                              index == 0)
+                                            Positioned(
+                                              top: 8,
+                                              right: 8,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black
+                                                      .withOpacity(0.6),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  '+${imageUrls.length - 1} more',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
-                                      // Image counter overlay
-                                      if (imageUrls.length > 1 && index == 0)
-                                        Positioned(
-                                          top: 8,
-                                          right: 8,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  Colors.black.withOpacity(0.6),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+
+                        // Details
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSecondary,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.borderPrimary),
+                          ),
+                          child: Column(
+                            children: rows
+                                .map((entry) => Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 6),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SizedBox(
+                                            width: 120,
                                             child: Text(
-                                              '+${imageUrls.length - 1} more',
+                                              entry.key,
                                               style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
+                                                color: AppColors.textSecondary,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: Text(
+                                              entry.value,
+                                              style: const TextStyle(
+                                                fontSize: 13,
                                                 fontWeight: FontWeight.w500,
                                               ),
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Details
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.borderPrimary),
-                      ),
-                      child: Column(
-                        children: rows
-                            .map((entry) => Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 6),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      SizedBox(
-                                        width: 120,
-                                        child: Text(
-                                          entry.key,
-                                          style: const TextStyle(
-                                            color: AppColors.textSecondary,
-                                            fontSize: 13,
-                                          ),
-                                        ),
+                                        ],
                                       ),
-                                      Expanded(
-                                        child: Text(
-                                          entry.value,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ))
-                            .toList(),
-                      ),
-                    ),
-
-                    // AI Analysis if available
-                    if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3E5F5),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                              color: const Color(0xFF7E57C2)
-                                  .withValues(alpha: 0.2)),
+                                    ))
+                                .toList(),
+                          ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.psychology_rounded,
-                                    color: const Color(0xFF7E57C2), size: 20),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'AI-Powered Insights',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF5E35B1),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              aiAnalysis,
-                              style: const TextStyle(fontSize: 13, height: 1.5),
-                            ),
-                            const SizedBox(height: 12),
+
+                        // AI Analysis if available
+                        if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          if (useStructuredAiInsights)
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'Note: This is AI-generated analysis for informational purposes only.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
-                                  fontStyle: FontStyle.italic,
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: AppColors.borderPrimary,
+                                  width: 1.5,
                                 ),
                               ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.bgSecondary,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: Icon(
+                                          Icons.medical_information,
+                                          color: AppColors.brandPrimary,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'Clinical Assessment',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildStructuredAiInsights(aiAnalysis),
+                                ],
+                              ),
+                            )
+                          else
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3E5F5),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                    color: const Color(0xFF7E57C2)
+                                        .withValues(alpha: 0.2)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.psychology_rounded,
+                                          color: const Color(0xFF7E57C2),
+                                          size: 20),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'AI-Powered Insights',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF5E35B1),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    aiAnalysis,
+                                    style: const TextStyle(
+                                        fontSize: 13, height: 1.5),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.7),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'Note: This is AI-generated analysis for informational purposes only.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
-    );
+    ).whenComplete(() {
+      _recordDetailsModalSetState = null;
+      _expandedLabInsightAspects.clear();
+    });
   }
 
   // Show conclude pregnancy dialog
@@ -2106,6 +3318,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
             const SizedBox(height: 16),
 
+            // Unified AI insight from latest checkup, ultrasound, and lab test records.
+            _buildUnifiedMaternalInsightCard(pregnancy),
+
+            const SizedBox(height: 16),
+
             // Quick Stats
             Container(
               padding: const EdgeInsets.all(16),
@@ -2593,39 +3810,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
   // Helper Widgets
-  Widget _buildToolCard(
-      String label, IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 28),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildActionButton(
       String label, IconData icon, Color color, VoidCallback onTap) {
@@ -2782,7 +3966,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         ),
         trailing:
             const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        onTap: () {
+        onTap: () async {
           final aog = _formatValue(checkup['age_of_gestation']);
           final weight = _formatValue(checkup['checkup_weight']);
 
@@ -2805,6 +3989,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               MapEntry('Next Schedule', _formatDate(checkup['next_schedule'])),
             ],
             aiAnalysis: _generatePrenatalAIInsights(checkup),
+            useStructuredAiInsights: true,
           );
         },
       ),
@@ -2830,7 +4015,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         subtitle: Text(date),
         trailing:
             const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        onTap: () {
+        onTap: () async {
           // Get all image URLs
           List<String> imageUrls = [];
 
@@ -2887,7 +4072,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         subtitle: Text(date),
         trailing:
             const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        onTap: () {
+        onTap: () async {
           // Get all image URLs
           List<String> imageUrls = [];
 
@@ -2903,6 +4088,20 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             }
           }
 
+          final split = _splitLabRemarksAndAi(labTest['remarks']?.toString());
+
+          String? aiAnalysis;
+          final labTestId = labTest['lab_test_id'];
+          if (labTestId is int) {
+            aiAnalysis = await MotherProfileService.getLabTestAIAnalysis(
+              labTestId,
+            );
+          }
+
+          aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
+              ? aiAnalysis.trim()
+              : split.extractedAi;
+
           _showRecordDetails(
             title: type,
             subtitle: date,
@@ -2914,9 +4113,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               MapEntry('Location', _formatValue(labTest['lab_test_location'])),
               MapEntry(
                   'Health Worker', _formatValue(labTest['health_worker_name'])),
-              MapEntry('Remarks', _formatValue(labTest['remarks'])),
+              MapEntry('Remarks', _formatValue(split.cleanRemarks)),
             ],
-            aiAnalysis: _generateLabTestAIInsights(labTest),
+            aiAnalysis: aiAnalysis,
+            useStructuredAiInsights:
+                aiAnalysis != null && aiAnalysis.isNotEmpty,
           );
         },
       ),
@@ -2924,12 +4125,18 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
   // Helper methods
+  DateTime? _parseDateForSort(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    return DateTime.tryParse(value.toString());
+  }
+
   List<Map<String, dynamic>> _sortByDate(
       List list, String field, String order) {
     final sorted = List<Map<String, dynamic>>.from(list);
     sorted.sort((a, b) {
-      final dateA = DateTime.tryParse(a[field] ?? '');
-      final dateB = DateTime.tryParse(b[field] ?? '');
+      final dateA = _parseDateForSort(a[field]);
+      final dateB = _parseDateForSort(b[field]);
       if (dateA == null || dateB == null) return 0;
       return order == 'desc' ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
     });

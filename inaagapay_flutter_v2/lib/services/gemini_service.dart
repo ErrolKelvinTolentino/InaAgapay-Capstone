@@ -1,10 +1,12 @@
 // lib/services/gemini_service.dart
 
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import '../models/gemini_response.dart';
 import '../models/ocr_result.dart';
 
@@ -108,7 +110,11 @@ Format your response with clear sections and use ✓ for normal findings.
   }
 
   // Lab Test Analysis
-  Future<GeminiResponse> analyzeLabTestImages(List<XFile> imageFiles) async {
+  Future<GeminiResponse> analyzeLabTestImages(
+    List<XFile> imageFiles, {
+    String? selectedLabType,
+    String? notes,
+  }) async {
     if (imageFiles.isEmpty) {
       throw Exception('No images selected');
     }
@@ -122,12 +128,27 @@ Format your response with clear sections and use ✓ for normal findings.
       await checkAvailableModels();
     }
 
+    final normalizedType = (selectedLabType ?? '').trim();
+    final normalizedNotes = (notes ?? '').trim();
+
     final String prompt = """
 You are an AI assistant that helps analyze laboratory test results for maternal and child health.
 
 IMPORTANT DISCLAIMER: You are not making a medical diagnosis. You are extracting and organizing lab values for healthcare provider review. Always consult with a healthcare professional.
 
 I am providing you with ${imageFiles.length} laboratory test result images.
+Selected lab test type: ${normalizedType.isEmpty ? 'Not specified' : normalizedType}
+Notes entered by user: ${normalizedNotes.isEmpty ? 'None provided' : normalizedNotes}
+
+Perform a strict relevance check first:
+- If the uploaded images are not laboratory results, are unreadable, or appear unrelated to the selected lab test context, return:
+  RELEVANCE CHECK: UNRELATED
+  RELEVANCE REASON: [brief reason]
+  RECOMMENDATION: Upload clear and related laboratory result images only.
+  Then stop and do not fabricate results.
+- If relevant, return:
+  RELEVANCE CHECK: RELATED
+
 Please analyze ALL images and provide a COMPREHENSIVE LABORATORY ANALYSIS that includes:
 
 1. LABORATORY RESULTS:
@@ -419,19 +440,14 @@ Rules:
     ];
 
     for (int i = 0; i < imageFiles.length; i++) {
-      final bytes = await imageFiles[i].readAsBytes();
-      final base64Image = base64Encode(bytes);
-
-      String mimeType = 'image/jpeg';
-      final extension = imageFiles[i].path.split('.').last.toLowerCase();
-      if (extension == 'png')
-        mimeType = 'image/png';
-      else if (extension == 'jpg' || extension == 'jpeg')
-        mimeType = 'image/jpeg';
-      else if (extension == 'webp') mimeType = 'image/webp';
+      final preparedImage = await _prepareImageForGemini(imageFiles[i]);
+      final base64Image = base64Encode(preparedImage.bytes);
 
       parts.add({
-        "inline_data": {"mime_type": mimeType, "data": base64Image}
+        "inline_data": {
+          "mime_type": preparedImage.mimeType,
+          "data": base64Image
+        }
       });
     }
 
@@ -461,6 +477,41 @@ Rules:
     } else {
       throw Exception('API Error (${response.statusCode})');
     }
+  }
+
+  Future<_PreparedGeminiImage> _prepareImageForGemini(XFile imageFile) async {
+    final rawBytes = await imageFile.readAsBytes();
+    final extension = imageFile.path.split('.').last.toLowerCase();
+
+    if (extension == 'jpg' || extension == 'jpeg') {
+      return _PreparedGeminiImage(
+        bytes: Uint8List.fromList(rawBytes),
+        mimeType: 'image/jpeg',
+      );
+    }
+
+    if (extension == 'png') {
+      return _PreparedGeminiImage(
+        bytes: Uint8List.fromList(rawBytes),
+        mimeType: 'image/png',
+      );
+    }
+
+    if (extension == 'webp') {
+      return _PreparedGeminiImage(
+        bytes: Uint8List.fromList(rawBytes),
+        mimeType: 'image/webp',
+      );
+    }
+
+    final decoded = img.decodeImage(rawBytes);
+    if (decoded == null) {
+      throw Exception(
+          'Unsupported image format. Please upload JPG, PNG, WEBP, or a convertible image.');
+    }
+
+    final converted = Uint8List.fromList(img.encodeJpg(decoded, quality: 88));
+    return _PreparedGeminiImage(bytes: converted, mimeType: 'image/jpeg');
   }
 
   Future<String> _sendTextRequest({
@@ -520,4 +571,11 @@ Rules:
 
     return text.trim();
   }
+}
+
+class _PreparedGeminiImage {
+  const _PreparedGeminiImage({required this.bytes, required this.mimeType});
+
+  final Uint8List bytes;
+  final String mimeType;
 }

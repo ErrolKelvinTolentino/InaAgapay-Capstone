@@ -430,15 +430,32 @@ class MotherProfileService {
   // Get AI analysis for lab test
   static Future<String?> getLabTestAIAnalysis(int labTestId) async {
     try {
-      final response = await client
+      final primaryResponse = await client
+          .from('ai_responses')
+          .select('response')
+          .eq('reference_table', 'lab_tests')
+          .eq('reference_id', labTestId)
+          .eq('response_type', 'lab_test_analysis')
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (primaryResponse?['response'] != null) {
+        return primaryResponse!['response'] as String?;
+      }
+
+      // Backward compatibility for older response_type naming.
+      final fallbackResponse = await client
           .from('ai_responses')
           .select('response')
           .eq('reference_table', 'lab_tests')
           .eq('reference_id', labTestId)
           .eq('response_type', 'lab_analysis')
+          .order('created_at', ascending: false)
+          .limit(1)
           .maybeSingle();
 
-      return response?['response'] as String?;
+      return fallbackResponse?['response'] as String?;
     } catch (e) {
       return null;
     }
