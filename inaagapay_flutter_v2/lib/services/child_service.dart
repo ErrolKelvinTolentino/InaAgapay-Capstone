@@ -217,8 +217,6 @@ class ChildService {
 
   // Fetch immunization records for a child
   static Future<List<ImmunizationRecord>> fetchImmunizations(int childId) async {
-    final motherId = await _getMotherId();
-
     try {
       final response = await client
           .from('immunization_record')

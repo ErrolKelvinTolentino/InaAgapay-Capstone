@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -856,7 +855,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedLabType,
+                initialValue: _selectedLabType,
                 decoration: const InputDecoration(
                   hintText: 'Select pregnancy-related lab test',
                   border: OutlineInputBorder(),

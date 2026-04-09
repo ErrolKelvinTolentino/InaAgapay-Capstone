@@ -300,7 +300,6 @@ class InaagapayApp extends StatelessWidget {
             }
             // Handle child profile route
             if (settings.name == '/child-profile') {
-              final childId = settings.arguments as int;
               return MaterialPageRoute(
                 builder: (_) => const MidwifeChildrenScreen(),
                 // Note: You'll need to pass childId to the screen

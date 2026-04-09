@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../theme/app_colors.dart';
 import '../../../widgets/headline.dart';
-import '../../../widgets/app_input_field.dart';
 import '../../../widgets/main_button.dart';
 import '../../../widgets/calculation_dropdown.dart';
 import '../../../widgets/aog_input.dart';
@@ -146,7 +145,7 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
         final days = int.tryParse(_daysController.text.trim()) ?? 0;
         final totalDays = (weeks * 7) + days;
         lmp = DateTime.now().subtract(Duration(days: totalDays));
-        edd = lmp!.add(const Duration(days: 280));
+        edd = lmp.add(const Duration(days: 280));
       }
       
       if (lmp == null || edd == null) {

@@ -152,10 +152,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             .select('mother_id, account_id, birthdate, barangay, city_municipality, province')
             .inFilter('account_id', accountIds);
         
-        if (mothersResponse is List) {
-          mothersData = List<Map<String, dynamic>>.from(mothersResponse);
+        mothersData = List<Map<String, dynamic>>.from(mothersResponse);
         }
-      }
       
       // Step 3: Get all ongoing pregnancies
       final List<int> motherIds = [];
@@ -174,14 +172,10 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             .eq('status', 'ongoing')
             .inFilter('mother_id', motherIds);
         
-        if (pregnanciesResponse is List) {
-          for (var pregnancy in pregnanciesResponse) {
-            if (pregnancy is Map<String, dynamic>) {
-              final int? mid = pregnancy['mother_id'] as int?;
-              if (mid != null) {
-                pregnancyMap[mid] = pregnancy;
-              }
-            }
+        for (var pregnancy in pregnanciesResponse) {
+          final int? mid = pregnancy['mother_id'] as int?;
+          if (mid != null) {
+            pregnancyMap[mid] = pregnancy;
           }
         }
       }

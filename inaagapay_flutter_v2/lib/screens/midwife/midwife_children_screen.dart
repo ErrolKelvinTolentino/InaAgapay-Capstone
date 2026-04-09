@@ -22,7 +22,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
   List<Map<String, dynamic>> _filteredChildren = [];
   bool _loading = true;
   String? _errorMessage;
-  int? _midwifeId;
   int? _assignedBhcId;
 
   @override
@@ -48,8 +47,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
           .select('midwife_id, assigned_bhc_id')
           .eq('account_id', accountId)
           .single();
-      
-      _midwifeId = result['midwife_id'] as int;
+
       _assignedBhcId = result['assigned_bhc_id'] as int;
       
       await _fetchChildren();

@@ -7,7 +7,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/app_input_field.dart';
-import '../../widgets/status_indicator.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/page_title.dart';
 import '../../widgets/dialog_box.dart';
@@ -41,8 +40,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   double? _weightZScore;
   double? _heightZScore;
   double? _bmiZScore;
-  
-  StatusIndicatorType _bmiStatus = StatusIndicatorType.normal;
+
   String _bmiCategoryText = 'Normal';
   Color _bmiCategoryColor = AppColors.success;
   
@@ -130,7 +128,6 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       setState(() {
         _bmiController.text = '';
         _bmiZScore = null;
-        _bmiStatus = StatusIndicatorType.normal;
         _bmiCategoryText = 'Normal';
         _bmiCategoryColor = AppColors.success;
       });
@@ -164,32 +161,26 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     
     setState(() {
       if (zScore < -2) {
-        _bmiStatus = StatusIndicatorType.underweight;
         _bmiCategoryText = 'Underweight';
         _bmiCategoryColor = AppColors.warning;
         debugPrint('Category: Underweight (zScore < -2)');
       } else if (zScore < -1) {
-        _bmiStatus = StatusIndicatorType.normal;
         _bmiCategoryText = 'Mildly Underweight';
         _bmiCategoryColor = Colors.orange;
         debugPrint('Category: Mildly Underweight (-2 < zScore < -1)');
       } else if (zScore <= 1) {
-        _bmiStatus = StatusIndicatorType.normal;
         _bmiCategoryText = 'Normal';
         _bmiCategoryColor = AppColors.success;
         debugPrint('Category: Normal (-1 <= zScore <= 1)');
       } else if (zScore <= 2) {
-        _bmiStatus = StatusIndicatorType.overweight;
         _bmiCategoryText = 'Overweight';
         _bmiCategoryColor = Colors.orange;
         debugPrint('Category: Overweight (1 < zScore <= 2)');
       } else if (zScore <= 3) {
-        _bmiStatus = StatusIndicatorType.obese;
         _bmiCategoryText = 'Obese';
         _bmiCategoryColor = AppColors.error;
         debugPrint('Category: Obese (2 < zScore <= 3)');
       } else {
-        _bmiStatus = StatusIndicatorType.obese;
         _bmiCategoryText = 'Severely Obese';
         _bmiCategoryColor = AppColors.error;
         debugPrint('Category: Severely Obese (zScore > 3)');

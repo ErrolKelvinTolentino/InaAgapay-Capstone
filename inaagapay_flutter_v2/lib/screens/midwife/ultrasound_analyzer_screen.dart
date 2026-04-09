@@ -54,11 +54,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   final TextEditingController _healthWorkerProfessionController =
       TextEditingController();
 
-  String? _userRole;
   late int _motherId;
   late int _pregnancyId;
 
-  List<String> _uploadedImageUrls = [];
+  final List<String> _uploadedImageUrls = [];
 
   @override
   void initState() {
@@ -88,10 +87,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   Future<void> _loadUserContext() async {
     try {
-      final role = await AuthStorage.getUserRole();
-      setState(() {
-        _userRole = role;
-      });
+      await AuthStorage.getUserRole();
     } catch (e) {
       if (kDebugMode) print('Error loading user context: $e');
     }

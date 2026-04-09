@@ -61,7 +61,6 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
   // Midwife info
   String _midwifeName = 'Midwife';
   String _bhcName = 'Loading...';
-  int? _assignedBhcId;
   List<int> _motherIds = [];
 
   @override
@@ -170,7 +169,6 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       if (!contextResult['success']) throw Exception('Failed to load midwife context');
       
       final assignedBhcId = contextResult['assigned_bhc_id'] as int?;
-      _assignedBhcId = assignedBhcId;
       _bhcName = contextResult['bhc_name']?.toString() ?? 'Unknown BHC';
       
       // Get midwife name from accounts

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/otp_input_field.dart';
-import '../../widgets/clickable_text.dart';
 import '../../widgets/page_title.dart';
 import '../../services/supabase_service.dart';
 
@@ -35,8 +34,11 @@ class _ResetPasswordVerifyScreenState extends State<ResetPasswordVerifyScreen> {
     _timer?.cancel();
     _secondsRemaining = _initialSeconds;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_secondsRemaining == 0) timer.cancel();
-      else setState(() => _secondsRemaining--);
+      if (_secondsRemaining == 0) {
+        timer.cancel();
+      } else {
+        setState(() => _secondsRemaining--);
+      }
     });
   }
 
