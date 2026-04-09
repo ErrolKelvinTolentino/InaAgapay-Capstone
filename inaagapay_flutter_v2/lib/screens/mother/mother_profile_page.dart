@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/auth_storage.dart';
+import '../../services/supabase_service.dart';
 import '../midwife/ultrasound_analyzer_screen.dart';
 import '../midwife/lab_test_analyzer_screen.dart';
 import '../midwife/add_prenatal_checkup_screen.dart';
@@ -30,8 +31,8 @@ class MotherProfilePage extends StatefulWidget {
 class _MotherProfilePageState extends State<MotherProfilePage> with SingleTickerProviderStateMixin {
   late Future<Map<String, dynamic>> _profileFuture;
   late TabController _tabController;
-
-  // Sort states
+  
+  String? _profilePictureUrl;
   String _checkupSort = 'desc';
   String _ultrasoundSort = 'desc';
   String _labSort = 'desc';
@@ -43,6 +44,7 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _profileFuture = MotherProfileService.fetchMotherProfile(widget.motherId);
+    _loadProfilePicture();
   }
 
   @override
@@ -51,10 +53,20 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     super.dispose();
   }
 
+  Future<void> _loadProfilePicture() async {
+    final url = await SupabaseService.getProfilePictureUrl(widget.motherId);
+    if (mounted) {
+      setState(() {
+        _profilePictureUrl = url;
+      });
+    }
+  }
+
   Future<void> _refresh() async {
     setState(() {
       _profileFuture = MotherProfileService.fetchMotherProfile(widget.motherId);
     });
+    await _loadProfilePicture();
   }
 
   Future<void> _logout() async {
@@ -63,7 +75,6 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
-  // Navigate to ultrasound analyzer
   void _goToUltrasoundAnalyzer(Map<String, dynamic> pregnancy) {
     Navigator.push(
       context,
@@ -76,7 +87,6 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     ).then((_) => _refresh());
   }
 
-  // Navigate to lab test analyzer
   void _goToLabTestAnalyzer(Map<String, dynamic> pregnancy) {
     Navigator.push(
       context,
@@ -89,7 +99,6 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     ).then((_) => _refresh());
   }
 
-  // Helper methods for formatting
   String _formatDate(dynamic date) {
     if (date == null) return '—';
     try {
@@ -143,9 +152,6 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     }
   }
 
-  // Build risk assessment from DB-stored values (preferred) with local engine fallback.
-  // Reads `pregnancy_risk_level` from the pregnancies row and risk factors from
-  // the most recent checkup that has stored risk_factors.
   RiskAssessment _buildRiskAssessmentFromDb(
       Map<String, dynamic> profile,
       Map<String, dynamic>? pregnancy) {
@@ -158,22 +164,18 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
       );
     }
 
-    // ── 1. Try to use the stored DB risk level ──────────────────────────────
     final dbLevel = (pregnancy['pregnancy_risk_level'] as String?)?.toLowerCase();
-
-    // ── 2. Collect risk factors from stored checkup risk assessments ────────
     final checkups = (pregnancy['checkups'] as List?) ?? [];
     final List<String> dbFactors = [];
     String? dbAiNote;
 
-    // Walk checkups newest-first to find the most recent one with risk data
     final sortedCheckups = List<Map<String, dynamic>>.from(
         checkups.whereType<Map<String, dynamic>>())
       ..sort((a, b) {
         final da = DateTime.tryParse(a['checkup_datetime'] ?? '');
         final db = DateTime.tryParse(b['checkup_datetime'] ?? '');
         if (da == null || db == null) return 0;
-        return db.compareTo(da); // newest first
+        return db.compareTo(da);
       });
 
     for (final checkup in sortedCheckups) {
@@ -184,17 +186,15 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
           final factor = fMap['factor']?.toString() ?? '';
           if (factor.isNotEmpty) dbFactors.add(factor);
         }
-        // Also grab the AI response text if available
         final aiResp = checkup['risk_ai_response'] as Map<String, dynamic>?;
         if (aiResp != null) {
           final resp = aiResp['response']?.toString();
           if (resp != null && resp.isNotEmpty) dbAiNote = resp;
         }
-        break; // Only use the most recent checkup's risk data
+        break;
       }
     }
 
-    // ── 3. If we have DB data, return that ──────────────────────────────────
     if (dbLevel != null && dbLevel.isNotEmpty) {
       final level = (dbLevel == 'high' || dbLevel == 'medium' || dbLevel == 'low')
           ? dbLevel
@@ -227,7 +227,6 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
       );
     }
 
-    // ── 4. Fallback to local rule-based engine if no DB risk data yet ───────
     final formData = AddMotherFormData();
     if (profile['birthdate'] != null) {
       try {
@@ -262,12 +261,10 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     return RiskEngine.evaluate(formData);
   }
 
-  // AI Analysis Generators
   String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
     final buffer = StringBuffer();
     buffer.write('🤖 AI Analysis:\n\n');
 
-    // Blood Pressure Analysis
     final bpSys = _toDouble(checkup['blood_pressure_systolic']);
     final bpDia = _toDouble(checkup['blood_pressure_diastolic']);
     if (bpSys != null && bpDia != null) {
@@ -282,13 +279,11 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
       }
     }
 
-    // Weight Analysis
     final weight = _toDouble(checkup['checkup_weight']);
     if (weight != null) {
       buffer.write('⚖️ **Weight**: $weight kg\n\n');
     }
 
-    // Fetal Heart Rate
     final fhr = checkup['fetal_heart_beat'];
     if (fhr != null) {
       final rate = int.tryParse(fhr.toString());
@@ -303,19 +298,16 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
       }
     }
 
-    // Edema
     final edema = checkup['edema']?.toString().toLowerCase();
     if (edema != null && edema != 'none') {
       buffer.write('💧 **Edema**: ${edema.toUpperCase()} - Monitor for worsening symptoms.\n\n');
     }
 
-    // TD Vaccine
     final tdDose = checkup['td_vaccine_dose']?.toString();
     if (tdDose != null && tdDose.isNotEmpty) {
       buffer.write('💉 **TD Vaccine**: $tdDose administered\n\n');
     }
 
-    // Recommendations
     buffer.write('📋 **Recommendations**:\n');
     buffer.write('• Continue regular prenatal visits\n');
     buffer.write('• Monitor fetal movements daily\n');
@@ -344,7 +336,6 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     }
     buffer.write(':\n\n');
 
-    // Analyze remarks
     if (remarks.contains('normal') || remarks.contains('healthy')) {
       buffer.write('✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
@@ -372,7 +363,6 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
 
     buffer.write('**${testType.toUpperCase()} Results** from $date:\n\n');
 
-    // Analyze based on test type
     if (testType.contains('blood') || testType.contains('cbc')) {
       buffer.write('🩸 **Blood Test Analysis**:\n');
       if (remarks.contains('normal')) {
@@ -411,20 +401,18 @@ class _MotherProfilePageState extends State<MotherProfilePage> with SingleTicker
     return buffer.toString();
   }
 
-// Show full screen image
-void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => FullScreenImageViewer(
-        imageUrls: imageUrls,
-        initialIndex: initialIndex,
+  void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FullScreenImageViewer(
+          imageUrls: imageUrls,
+          initialIndex: initialIndex,
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-  // Show record details modal
   void _showRecordDetails({
     required String title,
     required List<MapEntry<String, String>> rows,
@@ -445,7 +433,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
         ),
         child: Column(
           children: [
-            // Handle
             Container(
               margin: const EdgeInsets.only(top: 8),
               width: 40,
@@ -461,7 +448,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header
                     Row(
                       children: [
                         Container(
@@ -501,7 +487,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                     ),
                     const SizedBox(height: 16),
 
-                    // Image Gallery if available
                     if (imageUrls != null && imageUrls.isNotEmpty) ...[
                       SizedBox(
                         height: 200,
@@ -556,7 +541,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                                           );
                                         },
                                       ),
-                                      // Image counter overlay
                                       if (imageUrls.length > 1 && index == 0)
                                         Positioned(
                                           top: 8,
@@ -591,7 +575,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                       const SizedBox(height: 16),
                     ],
 
-                    // Details
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -631,7 +614,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                       ),
                     ),
 
-                    // AI Analysis if available
                     if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Container(
@@ -694,7 +676,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  // Show conclude pregnancy dialog
   Future<void> _showConcludePregnancyDialog(Map<String, dynamic> pregnancy) async {
     final int fetalCount = pregnancy['fetal_count'] as int? ?? 1;
 
@@ -973,7 +954,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     }
   }
 
-  // Start new pregnancy
   Future<void> _startNewPregnancy() async {
     DateTime? lmp;
     DateTime? edd;
@@ -1231,13 +1211,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                         child: TabBarView(
                           controller: _tabController,
                           children: [
-                            // OVERVIEW TAB
                             _buildOverviewTab(profile, medicalConditions, allergies, emergencyContacts, children, currentPregnancy),
-                            
-                            // CURRENT PREGNANCY TAB
                             _buildCurrentPregnancyTab(profile, currentPregnancy),
-                            
-                            // HISTORY TAB
                             _buildHistoryTab(pastPregnancies),
                           ],
                         ),
@@ -1271,7 +1246,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              // Back Button
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.bgSecondary,
@@ -1287,8 +1261,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   padding: EdgeInsets.zero,
                 ),
               ),
-              
-              // Logo
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Image.asset(
@@ -1298,8 +1270,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                     const Icon(Icons.favorite, color: AppColors.brandPrimary, size: 30),
                 ),
               ),
-
-              // Title
               const Text(
                 'PROFILE',
                 style: TextStyle(
@@ -1309,40 +1279,40 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   letterSpacing: 0.4,
                 ),
               ),
-
               const Spacer(),
-
-              // Notifications
               IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                onPressed: () {
-                  // Handle notifications
-                },
+                onPressed: () {},
                 icon: const Icon(
                   Icons.notifications_none_rounded,
                   size: 24,
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(width: 14),
-
-              // Avatar with profile menu
               GestureDetector(
-                onTap: () => _showProfileMenu(context),
+                onTap: () => _showProfileMenu(),
                 child: Container(
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppColors.brandPrimary,
+                    image: _profilePictureUrl != null
+                        ? DecorationImage(
+                            image: NetworkImage(_profilePictureUrl!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  child: const Icon(
-                    Icons.person,
-                    size: 20,
-                    color: Colors.white,
-                  ),
+                  child: _profilePictureUrl == null
+                      ? const Icon(
+                          Icons.person,
+                          size: 20,
+                          color: Colors.white,
+                        )
+                      : null,
                 ),
               ),
             ],
@@ -1352,87 +1322,66 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  void _showProfileMenu(BuildContext context) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry entry;
-
-    entry = OverlayEntry(
-      builder: (_) => Stack(
-        children: [
-          /// FULLSCREEN OVERLAY
-          GestureDetector(
-            onTap: () => entry.remove(),
-            child: Container(
-              color: Colors.black.withOpacity(0.35),
+  void _showProfileMenu() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera),
+              title: const Text('Change Profile Picture'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Tap your avatar in the dashboard header to change your profile picture'),
+                    backgroundColor: AppColors.info,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
             ),
-          ),
-
-          /// PROFILE MENU
-          Positioned(
-            top: 90,
-            right: 16,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: 200,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    _MenuItem(
-                      icon: Icons.person_outline,
-                      label: 'View Profile',
-                      onTap: () {
-                        entry.remove();
-                        // Already on profile
-                      },
-                    ),
-                    _MenuItem(
-                      icon: Icons.settings_outlined,
-                      label: 'Settings',
-                      onTap: () {
-                        entry.remove();
-                        Navigator.pushNamed(context, '/settings');
-                      },
-                    ),
-                    _MenuItem(
-                      icon: Icons.help_outline,
-                      label: 'Help',
-                      onTap: () {
-                        entry.remove();
-                        Navigator.pushNamed(context, '/help');
-                      },
-                    ),
-                    const Divider(height: 8),
-                    _MenuItem(
-                      icon: Icons.logout_rounded,
-                      label: 'Log out',
-                      isDanger: true,
-                      onTap: () {
-                        entry.remove();
-                        _confirmLogout(context);
-                      },
-                    ),
-                  ],
-                ),
-              ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('View Profile'),
+              onTap: () {
+                Navigator.pop(context);
+              },
             ),
-          ),
-        ],
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/settings');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.help),
+              title: const Text('Help'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/help');
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                await _logout();
+              },
+            ),
+          ],
+        ),
       ),
     );
-
-    overlay.insert(entry);
   }
 
   void _confirmLogout(BuildContext context) {
@@ -1501,7 +1450,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  // OVERVIEW TAB
   Widget _buildOverviewTab(
     Map<String, dynamic> profile,
     List medicalConditions,
@@ -1542,19 +1490,22 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                     width: 70,
                     height: 70,
                     decoration: BoxDecoration(
-                      color: AppColors.brandPrimary,
                       shape: BoxShape.circle,
+                      color: AppColors.bgSecondary,
+                      image: _profilePictureUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(_profilePictureUrl!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    child: Center(
-                      child: Text(
-                        profile['full_name']?.toString().substring(0, 1).toUpperCase() ?? 'M',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
+                    child: _profilePictureUrl == null
+                        ? Icon(
+                            Icons.person,
+                            size: 40,
+                            color: AppColors.brandPrimary,
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -1939,7 +1890,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                     subtitle: Text('Added: ${_formatDate(c['added_at'])}'),
                     trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
                     onTap: () {
-                      // Navigate to child profile (to be implemented)
+                      Navigator.pushNamed(context, '/child-profile', arguments: c['child_id']);
                     },
                   ),
                 )),
@@ -1951,7 +1902,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  // CURRENT PREGNANCY TAB
   Widget _buildCurrentPregnancyTab(Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
     if (pregnancy == null) {
       return Center(
@@ -1994,7 +1944,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     final ultrasounds = (pregnancy['ultrasounds'] as List?) ?? [];
     final labTests = (pregnancy['lab_tests'] as List?) ?? [];
 
-    // Sort checkups
     final sortedCheckups = List<Map<String, dynamic>>.from(checkups);
     sortedCheckups.sort((a, b) {
       final dateA = DateTime.tryParse(a['checkup_datetime'] ?? '');
@@ -2003,14 +1952,12 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
       return _checkupSort == 'desc' ? dateB.compareTo(dateA) : dateA.compareTo(dateB);
     });
 
-    // Calculate gestation
     final lmp = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
     final edd = DateTime.tryParse(pregnancy['expected_date_of_delivery'] ?? '');
     final now = DateTime.now();
     final gestWeeks = lmp != null ? (now.difference(lmp).inDays / 7).floor() : null;
     final daysToEdd = edd != null ? edd.difference(now).inDays : null;
 
-    // Generate risk assessment
     final riskAssessment = _buildRiskAssessmentFromDb(profile, pregnancy);
 
     return RefreshIndicator(
@@ -2022,12 +1969,8 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Risk Panel
             RiskPanel(assessment: riskAssessment),
-
             const SizedBox(height: 16),
-
-            // Quick Stats
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -2113,10 +2056,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Quick Actions
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -2203,10 +2143,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Pregnancy Details
             _buildExpandableSection(
               'Pregnancy Details',
               Icons.info_outline,
@@ -2216,10 +2153,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                 _buildInfoRow('Status', pregnancy['status']?.toString().toUpperCase() ?? '—'),
               ],
             ),
-
             const SizedBox(height: 12),
-
-            // Checkups
             _buildExpandableSection(
               'Prenatal Checkups',
               Icons.medical_services_outlined,
@@ -2259,10 +2193,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   ...sortedCheckups.map((c) => _buildCheckupCard(c)),
               ],
             ),
-
             const SizedBox(height: 12),
-
-            // Ultrasounds
             _buildExpandableSection(
               'Ultrasounds',
               Icons.photo_outlined,
@@ -2304,10 +2235,7 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
                   ),
               ],
             ),
-
             const SizedBox(height: 12),
-
-            // Lab Tests
             _buildExpandableSection(
               'Lab Tests',
               Icons.science_outlined,
@@ -2355,7 +2283,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  // HISTORY TAB
   Widget _buildHistoryTab(List pastPregnancies) {
     if (pastPregnancies.isEmpty) {
       return Center(
@@ -2494,7 +2421,6 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-  // Helper Widgets
   Widget _buildToolCard(String label, IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -2702,110 +2628,103 @@ void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     );
   }
 
-Widget _buildUltrasoundCard(Map<String, dynamic> ultrasound) {
-  final date = _formatDate(ultrasound['ultrasound_date']);
-  
-  return Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.purple.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+  Widget _buildUltrasoundCard(Map<String, dynamic> ultrasound) {
+    final date = _formatDate(ultrasound['ultrasound_date']);
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.photo, color: Colors.purple, size: 20),
         ),
-        child: const Icon(Icons.photo, color: Colors.purple, size: 20),
-      ),
-      title: Text('Ultrasound', style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(date),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-      onTap: () {
-        // Get all image URLs
-        List<String> imageUrls = [];
-        
-        if (ultrasound['ultrasound_image'] != null) {
-          final imageField = ultrasound['ultrasound_image'].toString();
-          if (imageField.contains(',')) {
-            // Multiple URLs separated by commas
-            imageUrls = imageField.split(',').map((url) => url.trim()).toList();
-          } else if (imageField.isNotEmpty) {
-            // Single URL
-            imageUrls = [imageField];
+        title: Text('Ultrasound', style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(date),
+        trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+        onTap: () {
+          List<String> imageUrls = [];
+          
+          if (ultrasound['ultrasound_image'] != null) {
+            final imageField = ultrasound['ultrasound_image'].toString();
+            if (imageField.contains(',')) {
+              imageUrls = imageField.split(',').map((url) => url.trim()).toList();
+            } else if (imageField.isNotEmpty) {
+              imageUrls = [imageField];
+            }
           }
-        }
-        
-        _showRecordDetails(
-          title: 'Ultrasound',
-          subtitle: date,
-          icon: Icons.monitor_heart,
-          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-          rows: [
-            MapEntry('Date', _formatDate(ultrasound['ultrasound_date'])),
-            MapEntry('Location', _formatValue(ultrasound['ultrasound_location'])),
-            MapEntry('Health Worker', _formatValue(ultrasound['health_worker_name'])),
-            MapEntry('Institution', _formatValue(ultrasound['health_worker_institution'])),
-            MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
-          ],
-          aiAnalysis: _generateUltrasoundAIInsights(ultrasound),
-        );
-      },
-    ),
-  );
-}
+          
+          _showRecordDetails(
+            title: 'Ultrasound',
+            subtitle: date,
+            icon: Icons.monitor_heart,
+            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+            rows: [
+              MapEntry('Date', _formatDate(ultrasound['ultrasound_date'])),
+              MapEntry('Location', _formatValue(ultrasound['ultrasound_location'])),
+              MapEntry('Health Worker', _formatValue(ultrasound['health_worker_name'])),
+              MapEntry('Institution', _formatValue(ultrasound['health_worker_institution'])),
+              MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
+            ],
+            aiAnalysis: _generateUltrasoundAIInsights(ultrasound),
+          );
+        },
+      ),
+    );
+  }
 
-Widget _buildLabTestCard(Map<String, dynamic> labTest) {
-  final date = _formatDate(labTest['lab_test_date']);
-  final type = labTest['lab_test_type'] ?? 'Lab Test';
-  
-  return Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+  Widget _buildLabTestCard(Map<String, dynamic> labTest) {
+    final date = _formatDate(labTest['lab_test_date']);
+    final type = labTest['lab_test_type'] ?? 'Lab Test';
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.science, color: Colors.orange, size: 20),
         ),
-        child: const Icon(Icons.science, color: Colors.orange, size: 20),
-      ),
-      title: Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(date),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-      onTap: () {
-        // Get all image URLs
-        List<String> imageUrls = [];
-        
-        if (labTest['lab_test_image'] != null) {
-          final imageField = labTest['lab_test_image'].toString();
-          if (imageField.contains(',')) {
-            // Multiple URLs separated by commas
-            imageUrls = imageField.split(',').map((url) => url.trim()).toList();
-          } else if (imageField.isNotEmpty) {
-            // Single URL
-            imageUrls = [imageField];
+        title: Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(date),
+        trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+        onTap: () {
+          List<String> imageUrls = [];
+          
+          if (labTest['lab_test_image'] != null) {
+            final imageField = labTest['lab_test_image'].toString();
+            if (imageField.contains(',')) {
+              imageUrls = imageField.split(',').map((url) => url.trim()).toList();
+            } else if (imageField.isNotEmpty) {
+              imageUrls = [imageField];
+            }
           }
-        }
-        
-        _showRecordDetails(
-          title: type,
-          subtitle: date,
-          icon: Icons.science,
-          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-          rows: [
-            MapEntry('Type', type),
-            MapEntry('Date', _formatDate(labTest['lab_test_date'])),
-            MapEntry('Location', _formatValue(labTest['lab_test_location'])),
-            MapEntry('Health Worker', _formatValue(labTest['health_worker_name'])),
-            MapEntry('Remarks', _formatValue(labTest['remarks'])),
-          ],
-          aiAnalysis: _generateLabTestAIInsights(labTest),
-        );
-      },
-    ),
-  );
-}
+          
+          _showRecordDetails(
+            title: type,
+            subtitle: date,
+            icon: Icons.science,
+            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+            rows: [
+              MapEntry('Type', type),
+              MapEntry('Date', _formatDate(labTest['lab_test_date'])),
+              MapEntry('Location', _formatValue(labTest['lab_test_location'])),
+              MapEntry('Health Worker', _formatValue(labTest['health_worker_name'])),
+              MapEntry('Remarks', _formatValue(labTest['remarks'])),
+            ],
+            aiAnalysis: _generateLabTestAIInsights(labTest),
+          );
+        },
+      ),
+    );
+  }
 
-  // Helper methods
   List<Map<String, dynamic>> _sortByDate(List list, String field, String order) {
     final sorted = List<Map<String, dynamic>>.from(list);
     sorted.sort((a, b) {
@@ -2838,45 +2757,5 @@ Widget _buildLabTestCard(Map<String, dynamic> labTest) {
     }
 
     return filtered;
-  }
-}
-
-class _MenuItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool isDanger;
-
-  const _MenuItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.isDanger = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isDanger ? Colors.redAccent : AppColors.textPrimary;
-
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

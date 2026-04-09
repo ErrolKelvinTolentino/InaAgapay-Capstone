@@ -1,9 +1,11 @@
 // lib/screens/mother/mother_children_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
-import '../../widgets/small_description.dart';
+import '../../services/auth_storage.dart';
 import '../../services/child_service.dart';
 import '../../models/child_model.dart';
 import 'mother_child_stack.dart';
@@ -18,15 +20,16 @@ class MotherChildrenScreen extends StatefulWidget {
 class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
   final TextEditingController _searchController = TextEditingController();
   
-  List<ChildModel> _allChildren = [];
+  List<ChildModel> _children = [];
   List<ChildModel> _filteredChildren = [];
   bool _loading = true;
   String? _errorMessage;
+  int? _motherId;
 
   @override
   void initState() {
     super.initState();
-    _fetchChildren();
+    _loadMotherId();
     _searchController.addListener(_filterChildren);
   }
 
@@ -36,16 +39,72 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
     super.dispose();
   }
 
+  Future<void> _loadMotherId() async {
+    try {
+      _motherId = await AuthStorage.getMotherId();
+      if (_motherId == null) {
+        throw Exception('Mother ID not found');
+      }
+      await _fetchChildren();
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
   Future<void> _fetchChildren() async {
+    if (_motherId == null) return;
+    
     setState(() {
       _loading = true;
       _errorMessage = null;
     });
 
     try {
-      final children = await ChildService.fetchChildren();
+      final response = await Supabase.instance.client
+          .from('children')
+          .select('''
+            *,
+            birth_details (
+              birthdate,
+              birth_weight,
+              birth_length,
+              head_circumference,
+              birthplace_city_municipality,
+              birthplace_province
+            )
+          ''')
+          .eq('mother_id', _motherId!)
+          .order('added_at', ascending: false);
+
+      final List<dynamic> data = response;
+      
+      final children = data.map((json) {
+        final birthDetails = json['birth_details'] as Map<String, dynamic>?;
+        return ChildModel(
+          childId: json['child_id'] as int,
+          motherId: json['mother_id'] as int,
+          firstName: json['first_name'] as String? ?? '',
+          middleName: json['middle_name'] as String?,
+          lastName: json['last_name'] as String? ?? '',
+          extensionName: json['extension_name'] as String?,
+          sex: json['sex'] as String? ?? 'male',
+          addedAt: DateTime.parse(json['added_at']),
+          birthdate: birthDetails != null && birthDetails['birthdate'] != null 
+              ? DateTime.parse(birthDetails['birthdate']) 
+              : null,
+          birthWeight: (birthDetails?['birth_weight'] as num?)?.toDouble(),
+          birthLength: (birthDetails?['birth_length'] as num?)?.toDouble(),
+          headCircumference: (birthDetails?['head_circumference'] as num?)?.toDouble(),
+          birthplaceCity: birthDetails?['birthplace_city_municipality'] as String?,
+          birthplaceProvince: birthDetails?['birthplace_province'] as String?,
+        );
+      }).toList();
+
       setState(() {
-        _allChildren = children;
+        _children = children;
         _filteredChildren = children;
         _loading = false;
       });
@@ -61,11 +120,11 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
     final query = _searchController.text.toLowerCase().trim();
     if (query.isEmpty) {
       setState(() {
-        _filteredChildren = List.from(_allChildren);
+        _filteredChildren = List.from(_children);
       });
     } else {
       setState(() {
-        _filteredChildren = _allChildren.where((child) {
+        _filteredChildren = _children.where((child) {
           return child.fullName.toLowerCase().contains(query);
         }).toList();
       });
@@ -83,7 +142,7 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
           childGender: child.sex,
         ),
       ),
-    ).then((_) => _fetchChildren()); // Refresh when returning
+    ).then((_) => _fetchChildren());
   }
 
   @override
@@ -95,99 +154,61 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
         bottom: false,
         child: Column(
           children: [
-            // Header Section
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'My Children',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Track your children\'s health and development 🌱',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    height: 4,
-                    width: 60,
-                    decoration: BoxDecoration(
-                      color: AppColors.brandPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 16),
 
-            const SizedBox(height: 8),
-
-            // Stats Card
+            // Stats Card - Pink background with baby image
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
-              height: 96,
+              height: 110,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.brandPrimary.withValues(alpha: 0.15),
-                    AppColors.brandSecondary,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                image: const DecorationImage(
+                  image: AssetImage('assets/images/pinkbg.png'),
+                  fit: BoxFit.cover,
                 ),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text(
-                            'You have',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            '${_filteredChildren.length} Beautiful ${_filteredChildren.length == 1 ? 'Child' : 'Children'}!',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.brandPrimary,
-                            ),
-                          ),
-                        ],
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    top: 0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
+                      child: Image.asset(
+                        'assets/images/baby.png',
+                        fit: BoxFit.contain,
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.family_restroom,
-                        size: 40,
-                        color: AppColors.brandPrimary,
-                      ),
+                  ),
+                  Positioned(
+                    left: 24,
+                    top: 0,
+                    bottom: 0,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'You have',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        Text(
+                          '${_filteredChildren.length} Beautiful ${_filteredChildren.length == 1 ? 'Child' : 'Children'}!',
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.brandPrimary,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
 
@@ -203,14 +224,23 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
               ),
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
 
-            const SmallDescription(
-              text: 'Tap a child to view health records',
-              textAlign: TextAlign.center,
+            // Helper Text
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+              child: Text(
+                'Tap a child to view health records',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
             // Children List
             Expanded(
@@ -263,23 +293,19 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                                       color: AppColors.textSecondary,
                                     ),
                                     const SizedBox(height: 16),
-                                    Text(
-                                      _searchController.text.isEmpty
-                                          ? 'No children added yet'
-                                          : 'No matching children found',
-                                      style: const TextStyle(
+                                    const Text(
+                                      'No children found',
+                                      style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.textPrimary,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
-                                    Text(
-                                      _searchController.text.isEmpty
-                                          ? 'Children will appear here once added by your midwife'
-                                          : 'Try a different search term',
+                                    const Text(
+                                      'Children will appear here once registered by your midwife',
                                       textAlign: TextAlign.center,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: AppColors.textSecondary,
                                       ),
                                     ),
@@ -292,8 +318,12 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final child = _filteredChildren[index];
+                                  final age = child.ageText;
+                                  
                                   return _ChildCard(
-                                    child: child,
+                                    firstName: child.firstName,
+                                    lastName: child.lastName,
+                                    age: age,
                                     onTap: () => _openChildProfile(child),
                                   );
                                 },
@@ -308,130 +338,116 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
 }
 
 class _ChildCard extends StatelessWidget {
-  final ChildModel child;
+  final String firstName;
+  final String lastName;
+  final String age;
   final VoidCallback onTap;
 
   const _ChildCard({
-    required this.child,
+    required this.firstName,
+    required this.lastName,
+    required this.age,
     required this.onTap,
   });
+
+  String get fullName => '$firstName $lastName'.trim();
+
+  String get _initials {
+    final firstInitial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '';
+    final lastInitial = lastName.isNotEmpty ? lastName[0].toUpperCase() : '';
+    if (firstInitial.isNotEmpty && lastInitial.isNotEmpty) {
+      return '$firstInitial$lastInitial';
+    }
+    return firstInitial.isNotEmpty ? firstInitial : 'C';
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 0),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 12,
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    child.sex == 'female' 
-                        ? Colors.pink.shade200
-                        : Colors.blue.shade200,
-                    child.sex == 'female'
-                        ? Colors.pink.shade100
-                        : Colors.blue.shade100,
-                  ],
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                child.sex == 'female' ? Icons.female : Icons.male,
-                size: 32,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 16),
-            
-            // Child Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(30),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 20, 16),
+              child: Row(
                 children: [
-                  Text(
-                    child.fullName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                  // Avatar - Pink background with pink text initials (matching mother list)
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        _initials,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.cake_outlined,
-                        size: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        child.ageText,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
+                  const SizedBox(width: 16),
+                  
+                  // Child Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Icon(
-                        Icons.event,
-                        size: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        child.birthdate != null
-                            ? 'Added ${_formatDate(child.addedAt)}'
-                            : 'Birth info pending',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
+                        const SizedBox(height: 2),
+                        Text(
+                          age,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  
+                  // Arrow
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 24,
+                    color: AppColors.textSecondary,
                   ),
                 ],
               ),
             ),
-            
-            // Arrow
-            const Icon(
-              Icons.chevron_right,
-              size: 24,
-              color: AppColors.textSecondary,
-            ),
-          ],
+          ),
         ),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date).inDays;
-    
-    if (difference == 0) return 'today';
-    if (difference == 1) return 'yesterday';
-    if (difference < 7) return '$difference days ago';
-    if (difference < 30) return '${difference ~/ 7} weeks ago';
-    if (difference < 365) return '${difference ~/ 30} months ago';
-    return '${difference ~/ 365} years ago';
   }
 }

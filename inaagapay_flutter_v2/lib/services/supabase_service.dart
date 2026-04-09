@@ -1,10 +1,12 @@
-// lib/services/supabase_service.dart
+// lib/services/supabase_service.dart - COMPLETE FIXED VERSION
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'email_service.dart';
+import 'auth_storage.dart';
 
 class SupabaseService {
   static SupabaseClient get client => Supabase.instance.client;
@@ -110,7 +112,7 @@ class SupabaseService {
     }
   }
 
-  // Register with OTP
+  // Register with OTP (self-registration)
   static Future<Map<String, dynamic>> registerWithOTP(
     String email,
     String password,
@@ -139,6 +141,7 @@ class SupabaseService {
           'password_hash': _hashPassword(password),
           'verification_code': code,
           'verification_expires': expires,
+          'created_by': 'self',
         }).eq('email_address', email);
       } else {
         await client.from('accounts').insert({
@@ -149,6 +152,7 @@ class SupabaseService {
           'verification_expires': expires,
           'is_verified': false,
           'status': 'active',
+          'created_by': 'self',
           'created_at': DateTime.now().toIso8601String(),
         });
       }
@@ -259,7 +263,7 @@ class SupabaseService {
     }
   }
 
-  // Login
+  // LOGIN - THE FIXED VERSION
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       if (kDebugMode) debugPrint('Attempting login for: $email');
@@ -285,10 +289,14 @@ class SupabaseService {
             extension_name,
             phone_number,
             created_at,
-            is_temporary_password
+            is_temporary_password,
+            created_by
           ''').eq('email_address', email).maybeSingle();
 
-      if (kDebugMode) debugPrint('Account query response: $accountResponse');
+      if (kDebugMode) {
+        debugPrint('Account query response: $accountResponse');
+        debugPrint('created_by from query: ${accountResponse?['created_by']}');
+      }
 
       if (accountResponse == null) {
         return {'success': false, 'message': 'Invalid credentials'};
@@ -313,6 +321,13 @@ class SupabaseService {
         return {'success': false, 'message': 'Account inactive'};
       }
 
+      // CRITICAL FIX: Get created_by FIRST and don't let errors overwrite it
+      final createdBy = accountResponse['created_by'] as String? ?? 'self';
+      
+      if (kDebugMode) {
+        debugPrint('=== CRITICAL: created_by from account = $createdBy ===');
+      }
+      
       Map<String, dynamic>? motherData;
       bool profileComplete = false;
       int? motherId;
@@ -320,20 +335,13 @@ class SupabaseService {
 
       if (accountResponse['account_type'] == 'mother') {
         try {
+          // Try to get mother data - but don't let errors affect created_by
           motherData = await client
               .from('mothers')
               .select('''
                 mother_id,
-                birthdate,
-                house_number,
-                street,
-                barangay,
-                city_municipality,
-                province,
-                height,
-                weight,
-                blood_type
-              ''')
+                birthdate
+              ''')  // Only select what we need
               .eq('account_id', accountResponse['account_id'])
               .maybeSingle();
 
@@ -341,21 +349,42 @@ class SupabaseService {
 
           if (motherData != null) {
             motherId = motherData['mother_id'] as int?;
-            
-            profileComplete = accountResponse['first_name'] != null &&
-                accountResponse['last_name'] != null &&
-                motherData['birthdate'] != null;
-            
-            // Check if this is a temporary password account
-            needsPasswordChange = accountResponse['is_temporary_password'] == true;
-            
-            if (kDebugMode) {
-              debugPrint('is_temporary_password: ${accountResponse['is_temporary_password']}');
-              debugPrint('Needs password change: $needsPasswordChange');
-            }
           }
         } catch (e) {
-          if (kDebugMode) debugPrint('Error fetching mother data: $e');
+          // Log error but continue - don't let this break login
+          if (kDebugMode) debugPrint('Error fetching mother data (non-critical): $e');
+        }
+        
+        // CRITICAL: For midwife-created accounts, profile is ALWAYS complete
+        if (createdBy == 'midwife') {
+          profileComplete = true;
+          if (kDebugMode) {
+            debugPrint('✅ Midwife account detected - profileComplete = true');
+          }
+        } else {
+          // For self-registered accounts, check essential fields
+          final hasFirstName = accountResponse['first_name'] != null && 
+                               accountResponse['first_name'].toString().isNotEmpty;
+          final hasLastName = accountResponse['last_name'] != null && 
+                              accountResponse['last_name'].toString().isNotEmpty;
+          final hasBirthdate = motherData != null && motherData['birthdate'] != null;
+          final hasPhone = accountResponse['phone_number'] != null && 
+                           accountResponse['phone_number'].toString().isNotEmpty;
+          
+          profileComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
+          if (kDebugMode) {
+            debugPrint('Self-registered account - profileComplete = $profileComplete');
+          }
+        }
+        
+        needsPasswordChange = accountResponse['is_temporary_password'] == true;
+        
+        if (kDebugMode) {
+          debugPrint('=== FINAL LOGIN VALUES ===');
+          debugPrint('createdBy: $createdBy');
+          debugPrint('profileComplete: $profileComplete');
+          debugPrint('needsPasswordChange: $needsPasswordChange');
+          debugPrint('motherId: $motherId');
         }
       }
 
@@ -373,16 +402,18 @@ class SupabaseService {
       final userData = {
         'id': accountResponse['account_id'],
         'role': accountResponse['account_type'],
+        'created_by': createdBy,  // CRITICAL: Use the value we captured
       };
 
       if (accountResponse['account_type'] == 'mother') {
         userData['profile_complete'] = profileComplete;
         userData['mother_id'] = motherId;
         userData['needs_password_change'] = needsPasswordChange;
-        if (kDebugMode) {
-          debugPrint('Including mother_id in login response: $motherId');
-          debugPrint('Needs password change: $needsPasswordChange');
-        }
+      }
+
+      if (kDebugMode) {
+        debugPrint('=== RESPONSE USER DATA ===');
+        debugPrint('userData: $userData');
       }
 
       return {
@@ -481,7 +512,7 @@ class SupabaseService {
     }
   }
 
-  // Complete mother profile
+  // Complete mother profile (for self-registered users)
   static Future<Map<String, dynamic>> completeMotherProfile(
     int accountId,
     Map<String, dynamic> profileData,
@@ -497,7 +528,7 @@ class SupabaseService {
 
       final existingMother = await client
           .from('mothers')
-          .select('mother_id')
+          .select('mother_id, assigned_bhc_id')
           .eq('account_id', accountId)
           .maybeSingle();
 
@@ -521,25 +552,68 @@ class SupabaseService {
         }
       }
 
+      final lmpStr = profileData['lmp'];
+      final eddStr = profileData['edd'];
+      DateTime? lmp;
+      DateTime? edd;
+      
+      if (lmpStr != null && lmpStr.isNotEmpty) {
+        lmp = DateTime.tryParse(lmpStr);
+      }
+      if (eddStr != null && eddStr.isNotEmpty) {
+        edd = DateTime.tryParse(eddStr);
+      }
+
       if (existingMother == null) {
         await client.from('mothers').insert({
           'account_id': accountId,
           'birthdate': birthDateStr,
-          'house_number': profileData['house_no'],
-          'street': profileData['street'],
-          'barangay': profileData['barangay'],
-          'city_municipality': profileData['city'],
-          'province': profileData['province'],
+          'status': 'active',
         });
+        
+        if (lmp != null && edd != null) {
+          final motherRecord = await client
+              .from('mothers')
+              .select('mother_id')
+              .eq('account_id', accountId)
+              .maybeSingle();
+          
+          if (motherRecord != null) {
+            final motherId = motherRecord['mother_id'] as int;
+            
+            await client.from('pregnancies').insert({
+              'mother_id': motherId,
+              'last_menstrual_period': lmp.toIso8601String().split('T')[0],
+              'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
+              'status': 'ongoing',
+            });
+          }
+        }
       } else {
-        await client.from('mothers').update({
-          'birthdate': birthDateStr,
-          'house_number': profileData['house_no'],
-          'street': profileData['street'],
-          'barangay': profileData['barangay'],
-          'city_municipality': profileData['city'],
-          'province': profileData['province'],
-        }).eq('account_id', accountId);
+        final updateData = <String, dynamic>{};
+        if (birthDateStr != null) updateData['birthdate'] = birthDateStr;
+        
+        if (updateData.isNotEmpty) {
+          await client.from('mothers').update(updateData).eq('account_id', accountId);
+        }
+        
+        if (lmp != null && edd != null) {
+          final existingPregnancy = await client
+              .from('pregnancies')
+              .select('pregnancy_id')
+              .eq('mother_id', existingMother['mother_id'])
+              .eq('status', 'ongoing')
+              .maybeSingle();
+          
+          if (existingPregnancy == null) {
+            await client.from('pregnancies').insert({
+              'mother_id': existingMother['mother_id'],
+              'last_menstrual_period': lmp.toIso8601String().split('T')[0],
+              'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
+              'status': 'ongoing',
+            });
+          }
+        }
       }
 
       return {'success': true, 'message': 'Profile completed successfully'};
@@ -628,7 +702,11 @@ class SupabaseService {
           .from('midwives')
           .select('midwife_id, assigned_bhc_id, bhc!inner(bhc_name)')
           .eq('account_id', accountId)
-          .single();
+          .maybeSingle();
+
+      if (result == null) {
+        return {'success': false, 'message': 'Midwife not found'};
+      }
 
       final bhc = result['bhc'] as Map?;
       return {
@@ -656,7 +734,229 @@ class SupabaseService {
     }
   }
 
-  // Add mother with auto-generated password
+  // Check if account exists and get existing data
+  static Future<Map<String, dynamic>> getExistingMotherAccount(String email) async {
+    try {
+      final accountData = await client
+          .from('accounts')
+          .select('''
+            account_id,
+            email_address,
+            first_name,
+            middle_name,
+            last_name,
+            extension_name,
+            phone_number,
+            created_by,
+            mothers!inner (
+              mother_id,
+              birthdate,
+              assigned_bhc_id,
+              house_number,
+              street,
+              barangay,
+              city_municipality,
+              province,
+              height,
+              weight,
+              blood_type,
+              status
+            )
+          ''')
+          .eq('email_address', email)
+          .eq('account_type', 'mother')
+          .maybeSingle();
+
+      if (accountData == null) {
+        return {'exists': false};
+      }
+
+      final motherData = accountData['mothers'] as Map<String, dynamic>?;
+      
+      return {
+        'exists': true,
+        'account_id': accountData['account_id'],
+        'mother_id': motherData?['mother_id'],
+        'has_bhc': motherData?['assigned_bhc_id'] != null,
+        'created_by': accountData['created_by'] ?? 'self',
+        'data': {
+          'first_name': accountData['first_name'],
+          'middle_name': accountData['middle_name'],
+          'last_name': accountData['last_name'],
+          'extension_name': accountData['extension_name'],
+          'phone_number': accountData['phone_number'],
+          'email_address': accountData['email_address'],
+          'birthdate': motherData?['birthdate'],
+          'house_number': motherData?['house_number'],
+          'street': motherData?['street'],
+          'barangay': motherData?['barangay'],
+          'city_municipality': motherData?['city_municipality'],
+          'province': motherData?['province'],
+          'height': motherData?['height'],
+          'weight': motherData?['weight'],
+          'blood_type': motherData?['blood_type'],
+          'assigned_bhc_id': motherData?['assigned_bhc_id'],
+        },
+      };
+    } catch (e) {
+      return {'exists': false, 'error': e.toString()};
+    }
+  }
+
+  // Update existing mother account
+  static Future<Map<String, dynamic>> updateExistingMotherAccount({
+    required int motherId,
+    required int assignedBhcId,
+    String? houseNumber,
+    String? street,
+    String? barangay,
+    String? city,
+    String? province,
+    double? heightCm,
+    double? weightKg,
+    String? bloodType,
+    DateTime? lmp,
+    DateTime? edd,
+    List<Map<String, dynamic>> emergencyContacts = const [],
+    List<Map<String, dynamic>> medicalConditions = const [],
+    List<Map<String, dynamic>> allergies = const [],
+    List<Map<String, dynamic>> pastPregnancies = const [],
+    int fetalCount = 1,
+  }) async {
+    try {
+      final motherResponse = await client
+          .from('mothers')
+          .select('account_id')
+          .eq('mother_id', motherId)
+          .maybeSingle();
+      
+      if (motherResponse != null) {
+        final accountId = motherResponse['account_id'] as int;
+        
+        await client
+            .from('accounts')
+            .update({
+              'created_by': 'midwife',
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('account_id', accountId)
+            .eq('created_by', 'self');
+      }
+      
+      await client
+          .from('mothers')
+          .update({
+            'assigned_bhc_id': assignedBhcId,
+            'house_number': houseNumber,
+            'street': street,
+            'barangay': barangay,
+            'city_municipality': city,
+            'province': province,
+            'height': heightCm,
+            'weight': weightKg,
+            'blood_type': bloodType,
+            'status': 'active',
+          })
+          .eq('mother_id', motherId);
+
+      if (emergencyContacts.isNotEmpty) {
+        await client.from('emergency_contacts').insert(
+              emergencyContacts
+                  .map((ec) => {'mother_id': motherId, ...ec})
+                  .toList(),
+            );
+      }
+
+      if (medicalConditions.isNotEmpty) {
+        await client.from('medical_conditions').insert(
+              medicalConditions
+                  .map((mc) => {'mother_id': motherId, ...mc})
+                  .toList(),
+            );
+      }
+
+      if (allergies.isNotEmpty) {
+        await client.from('allergies').insert(
+              allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
+            );
+      }
+
+      int? pregnancyId;
+      if (lmp != null && edd != null) {
+        final pregRow = await client
+            .from('pregnancies')
+            .insert({
+              'mother_id': motherId,
+              'fetal_count': fetalCount,
+              'last_menstrual_period': lmp.toIso8601String().split('T')[0],
+              'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
+              'status': 'ongoing',
+            })
+            .select('pregnancy_id')
+            .maybeSingle();
+        
+        if (pregRow != null) {
+          pregnancyId = pregRow['pregnancy_id'] as int;
+        }
+      }
+
+      for (final pp in pastPregnancies) {
+        final pastPregRow = await client
+            .from('pregnancies')
+            .insert({
+              'mother_id': motherId,
+              'status': 'ended',
+              'fetal_count': pp['fetal_count'] ?? 1,
+              'gestational_age_at_end': pp['gestational_age_at_end'],
+            })
+            .select('pregnancy_id')
+            .maybeSingle();
+
+        if (pastPregRow == null) continue;
+        
+        final pastPregId = pastPregRow['pregnancy_id'] as int;
+        
+        final outcomes = pp['outcomes'] as List<dynamic>? ?? [];
+        for (int i = 0; i < outcomes.length; i++) {
+          final outcome = outcomes[i] as Map<String, dynamic>;
+          final fetusNumber = i + 1;
+
+          await client.from('pregnancy_outcomes').insert({
+            'pregnancy_id': pastPregId,
+            'fetus_number': fetusNumber,
+            'outcome': outcome['outcome'],
+            'outcome_date': outcome['outcome_date'],
+            'is_outcome_date_estimated': outcome['is_outcome_date_estimated'] ?? false,
+          });
+
+          if (outcome['place_of_delivery'] != null || outcome['delivery_method'] != null) {
+            await client.from('deliveries').insert({
+              'pregnancy_id': pastPregId,
+              'fetus_number': fetusNumber,
+              'delivery_date': outcome['outcome_date'],
+              'is_delivery_date_estimated': outcome['is_outcome_date_estimated'] ?? false,
+              'place_of_delivery': outcome['place_of_delivery'],
+              'delivery_method': outcome['delivery_method'],
+            });
+          }
+        }
+      }
+
+      return {
+        'success': true,
+        'mother_id': motherId,
+        'pregnancy_id': pregnancyId,
+        'message': 'Mother account updated successfully',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Failed to update mother account: ${e.toString()}',
+      };
+    }
+  }
+
+  // Add mother with auto-generated password (midwife creates account)
   static Future<Map<String, dynamic>> addMotherFullByMidwifeWithAutoPassword({
     required int midwifeId,
     required int assignedBhcId,
@@ -692,11 +992,10 @@ class SupabaseService {
         };
       }
 
-      // Generate random secure password
       final generatedPassword = _generateSecurePassword();
       final hashedPassword = _hashPassword(generatedPassword);
 
-      // Create account with auto-generated password
+      // CRITICAL: Set created_by = 'midwife' when creating account
       final accountRow = await client
           .from('accounts')
           .insert({
@@ -711,14 +1010,18 @@ class SupabaseService {
             'is_verified': true,
             'status': 'active',
             'is_temporary_password': true,
+            'created_by': 'midwife',  // ← CRITICAL: This must be here
             'created_at': DateTime.now().toIso8601String(),
           })
           .select('account_id')
-          .single();
+          .maybeSingle();
+
+      if (accountRow == null) {
+        throw Exception('Failed to create account');
+      }
 
       final accountId = accountRow['account_id'] as int;
 
-      // Create mother record
       final motherRow = await client
           .from('mothers')
           .insert({
@@ -736,7 +1039,11 @@ class SupabaseService {
             'status': 'active',
           })
           .select('mother_id')
-          .single();
+          .maybeSingle();
+
+      if (motherRow == null) {
+        throw Exception('Failed to create mother record');
+      }
 
       final motherId = motherRow['mother_id'] as int;
 
@@ -765,7 +1072,7 @@ class SupabaseService {
             );
       }
 
-      // Create pregnancy if LMP provided
+      // Insert current pregnancy
       int? pregnancyId;
       if (lmp != null && edd != null) {
         final pregRow = await client
@@ -778,8 +1085,11 @@ class SupabaseService {
               'status': 'ongoing',
             })
             .select('pregnancy_id')
-            .single();
-        pregnancyId = pregRow['pregnancy_id'] as int;
+            .maybeSingle();
+        
+        if (pregRow != null) {
+          pregnancyId = pregRow['pregnancy_id'] as int;
+        }
       }
 
       // Insert past pregnancies
@@ -793,8 +1103,10 @@ class SupabaseService {
               'gestational_age_at_end': pp['gestational_age_at_end'],
             })
             .select('pregnancy_id')
-            .single();
+            .maybeSingle();
 
+        if (pastPregRow == null) continue;
+        
         final pastPregId = pastPregRow['pregnancy_id'] as int;
         
         final outcomes = pp['outcomes'] as List<dynamic>? ?? [];
@@ -823,7 +1135,7 @@ class SupabaseService {
         }
       }
 
-      // Send email with generated password
+      // Send email with credentials
       final emailSent = await EmailService.sendAccountCredentials(
         email: email,
         password: generatedPassword,
@@ -848,6 +1160,151 @@ class SupabaseService {
         'success': false,
         'message': 'Failed to add mother: ${e.toString()}',
       };
+    }
+  }
+
+  // ============================================================
+  // PROFILE PICTURE METHODS - Using uploaded_by (account_id)
+  // ============================================================
+
+  // Upload profile picture
+  static Future<String?> uploadProfilePicture(int motherId, Uint8List imageBytes) async {
+    try {
+      final motherResponse = await client
+          .from('mothers')
+          .select('account_id')
+          .eq('mother_id', motherId)
+          .maybeSingle();
+      
+      if (motherResponse == null) {
+        debugPrint('Mother not found for ID: $motherId');
+        return null;
+      }
+      
+      final accountId = motherResponse['account_id'] as int;
+      
+      final fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final filePath = 'profile-pictures/$accountId/$fileName';
+      
+      await client.storage.from('files').uploadBinary(
+        filePath,
+        imageBytes,
+        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+      );
+      
+      final publicUrl = client.storage.from('files').getPublicUrl(filePath);
+      
+      final existingFiles = await client
+          .from('files')
+          .select('file_id, file_path')
+          .eq('reference_type', 'profile_photo')
+          .eq('uploaded_by', accountId);
+      
+      for (var file in existingFiles) {
+        try {
+          await client.storage.from('files').remove([file['file_path'] as String]);
+        } catch (e) {}
+        await client.from('files').delete().eq('file_id', file['file_id']);
+      }
+      
+      await client
+          .from('files')
+          .insert({
+            'bucket_name': 'files',
+            'file_path': filePath,
+            'file_name': fileName,
+            'file_category': 'profile_photo',
+            'mime_type': 'image/jpeg',
+            'file_size': imageBytes.length,
+            'uploaded_by': accountId,
+            'reference_type': 'profile_photo',
+            'reference_id': motherId,
+            'processing_type': 'profile_photo',
+            'ai_processed': false,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+      
+      return publicUrl;
+    } catch (e) {
+      debugPrint('Error uploading profile picture: $e');
+      return null;
+    }
+  }
+
+  // Get profile picture URL
+  static Future<String?> getProfilePictureUrl(int motherId) async {
+    try {
+      final motherResponse = await client
+          .from('mothers')
+          .select('account_id')
+          .eq('mother_id', motherId)
+          .maybeSingle();
+      
+      if (motherResponse == null) {
+        debugPrint('Mother not found for ID: $motherId');
+        return null;
+      }
+      
+      final accountId = motherResponse['account_id'] as int;
+      
+      final fileResponse = await client
+          .from('files')
+          .select('file_path, bucket_name')
+          .eq('reference_type', 'profile_photo')
+          .eq('uploaded_by', accountId)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      
+      if (fileResponse != null) {
+        final bucket = fileResponse['bucket_name'] as String? ?? 'files';
+        final path = fileResponse['file_path'] as String?;
+        if (path != null && path.isNotEmpty) {
+          return client.storage.from(bucket).getPublicUrl(path);
+        }
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('Error getting profile picture URL: $e');
+      return null;
+    }
+  }
+
+  // Delete profile picture
+  static Future<bool> deleteProfilePicture(int motherId) async {
+    try {
+      final motherResponse = await client
+          .from('mothers')
+          .select('account_id')
+          .eq('mother_id', motherId)
+          .maybeSingle();
+      
+      if (motherResponse == null) return false;
+      
+      final accountId = motherResponse['account_id'] as int;
+      
+      final filesToDelete = await client
+          .from('files')
+          .select('file_id, file_path, bucket_name')
+          .eq('reference_type', 'profile_photo')
+          .eq('uploaded_by', accountId);
+      
+      for (var file in filesToDelete) {
+        final bucket = file['bucket_name'] as String? ?? 'files';
+        final path = file['file_path'] as String?;
+        if (path != null) {
+          try {
+            await client.storage.from(bucket).remove([path]);
+          } catch (e) {}
+        }
+        await client.from('files').delete().eq('file_id', file['file_id']);
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting profile picture: $e');
+      return false;
     }
   }
 }

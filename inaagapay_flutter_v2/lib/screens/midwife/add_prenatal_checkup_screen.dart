@@ -1,3 +1,5 @@
+// lib/screens/midwife/add_prenatal_checkup_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -373,15 +375,14 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           .from('pregnancies')
           .select('fetal_count')
           .eq('pregnancy_id', widget.pregnancyId)
-          .maybeSingle();
-      if (res != null && res['fetal_count'] != null) {
-        if (mounted) {
-          setState(() {
-            _originalFetalCount = res['fetal_count'] as int;
-            _fetalCount = _originalFetalCount;
-            _loadingFetalCount = false;
-          });
-        }
+          .maybeSingle();  // ← FIXED: Changed from .single()
+      
+      if (res != null && mounted) {
+        setState(() {
+          _originalFetalCount = res['fetal_count'] as int;
+          _fetalCount = _originalFetalCount;
+          _loadingFetalCount = false;
+        });
       } else {
         if (mounted) setState(() => _loadingFetalCount = false);
       }
@@ -399,8 +400,11 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           .from('midwives')
           .select('midwife_id')
           .eq('account_id', accountId)
-          .single();
-      if (mounted) setState(() => _midwifeId = result['midwife_id'] as int);
+          .maybeSingle();  // ← FIXED: Changed from .single()
+      
+      if (result != null && mounted) {
+        setState(() => _midwifeId = result['midwife_id'] as int);
+      }
     } catch (_) {}
   }
 
@@ -2495,7 +2499,9 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
             'generated_by_ai': snapshot.aiGenerated,
           })
           .select('ai_response_id')
-          .single();
+          .maybeSingle();
+      
+      if (insertedAi == null) return;
       aiResponseId = insertedAi['ai_response_id'] as int;
     }
 
@@ -2520,8 +2526,10 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
               !wasEdited && !riskManuallyEdited && snapshot.aiGenerated,
         })
         .select('pregnancy_risk_id')
-        .single();
+        .maybeSingle();
 
+    if (riskInsert == null) return;
+    
     final pregnancyRiskId = riskInsert['pregnancy_risk_id'] as int;
 
     if (finalRiskFactors.isNotEmpty) {
@@ -2599,7 +2607,11 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
             'next_schedule': _nextSchedule?.toIso8601String().split('T')[0],
           })
           .select('prenatal_checkup_id')
-          .single();
+          .maybeSingle();
+
+      if (checkup == null) {
+        throw Exception('Failed to create prenatal checkup record');
+      }
 
       final prenatalCheckupId = checkup['prenatal_checkup_id'] as int;
 
@@ -3234,7 +3246,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          ' $_dangerSymptomCount danger symptom(s) detected. Consider urgent follow-up.',
+                          '⚠️ $_dangerSymptomCount danger symptom(s) detected. Consider urgent follow-up.',
                           style: const TextStyle(
                             color: AppColors.error,
                             fontWeight: FontWeight.w700,

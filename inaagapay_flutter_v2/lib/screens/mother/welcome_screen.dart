@@ -1,9 +1,9 @@
+// lib/screens/mother/welcome_screen.dart
+
 import 'package:flutter/material.dart';
-// Change these:
 import '../../theme/app_colors.dart';
 import '../../widgets/headline.dart';
-import 'due_date_setter.dart';
-import '../../models/due_date_mode.dart';
+import '../../widgets/main_button.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -42,8 +42,7 @@ class WelcomeScreen extends StatelessWidget {
                       const Headline(text: 'Welcome, Nanay!'),
                       const SizedBox(height: 16),
                       const Text(
-                        'We\'re here to support you every step of the way. '
-                        'Would you like to track your pregnancy?',
+                        'Your pregnancy journey has been set up successfully!',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 16,
@@ -51,7 +50,7 @@ class WelcomeScreen extends StatelessWidget {
                           height: 1.5,
                         ),
                       ),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 24),
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -67,33 +66,24 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                         child: Column(
                           children: [
-                            _buildOption(
-                              context,
-                              icon: Icons.favorite,
-                              title: 'Yes, I\'m pregnant',
-                              description: 'Track your pregnancy journey',
-                              mode: DueDateMode.pregnant,
+                            _buildInfoRow(
+                              icon: Icons.calendar_today,
+                              title: 'What\'s Next?',
+                              description: 'Track your pregnancy journey, get weekly updates, and access health resources.',
                             ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              child: Divider(),
+                            const SizedBox(height: 16),
+                            _buildInfoRow(
+                              icon: Icons.notifications_active,
+                              title: 'Stay Informed',
+                              description: 'Receive timely reminders for checkups and important milestones.',
                             ),
-                            _buildOption(
-                              context,
-                              icon: Icons.people,
-                              title: 'No, I\'m supporting',
-                              description: 'Support a loved one',
-                              mode: DueDateMode.supporting,
+                            const SizedBox(height: 16),
+                            _buildInfoRow(
+                              icon: Icons.health_and_safety,
+                              title: 'Health Tracking',
+                              description: 'Record symptoms, track weight, and monitor your baby\'s development.',
                             ),
                           ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'You can always set this up later',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textSecondary.withValues(alpha: 0.7),
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -101,6 +91,17 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              MainButton(
+                label: "Go to Dashboard",
+                onPressed: () {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/mother-dashboard',
+                    (route) => false,
+                  );
+                },
+              ),
+              const SizedBox(height: 28),
             ],
           ),
         ),
@@ -108,71 +109,52 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildOption(
-    BuildContext context, {
+  Widget _buildInfoRow({
     required IconData icon,
     required String title,
     required String description,
-    required DueDateMode mode,
   }) {
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DueDateSetter(mode: mode),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.brandAccent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
           ),
-        );
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.brandAccent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: AppColors.brandAccent,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.arrow_forward_ios,
-              color: AppColors.textSecondary,
-              size: 16,
-            ),
-          ],
+          child: Icon(
+            icon,
+            color: AppColors.brandAccent,
+            size: 20,
+          ),
         ),
-      ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

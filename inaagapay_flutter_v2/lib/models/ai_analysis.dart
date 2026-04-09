@@ -1,3 +1,5 @@
+// lib/models/ai_analysis.dart
+
 class AIAnalysis {
   final String summary;
   final String trend;

@@ -32,5 +32,58 @@ flutter:
   uses-material-design: true
 
   assets:
-  - assets/images/
   - .env
+  - assets/images/
+  - assets/images/apple.png
+  - assets/images/avocado.png
+  - assets/images/baby.png
+  - assets/images/banana.png
+  - assets/images/beetroot.png
+  - assets/images/blueberry.png
+  - assets/images/cabbage.png
+  - assets/images/carrot.png
+  - assets/images/cauliflower.png
+  - assets/images/cherry.png
+  - assets/images/coconut.png
+  - assets/images/coffee.png
+  - assets/images/corn.png
+  - assets/images/cucumber.png
+  - assets/images/eggplant.png
+  - assets/images/greenonions.png
+  - assets/images/height.png
+  - assets/images/inaagapay_name.png
+  - assets/images/kabocha.png
+  - assets/images/lab.png
+  - assets/images/largecarrot.png
+  - assets/images/lemon.png
+  - assets/images/lettuce.png
+  - assets/images/lime.png
+  - assets/images/logo.png
+  - assets/images/mango.png
+  - assets/images/melon.png
+  - assets/images/midwife.png
+  - assets/images/mother_weight.png
+  - assets/images/onion.png
+  - assets/images/orange.png
+  - assets/images/pea.png
+  - assets/images/peach.png
+  - assets/images/pear.png
+  - assets/images/pepper.png
+  - assets/images/pineapple.png
+  - assets/images/pinkbg.png
+  - assets/images/plum.png
+  - assets/images/pomelo.png
+  - assets/images/pregnant1.png
+  - assets/images/prenatal.png
+  - assets/images/pumpkin.png
+  - assets/images/raspberry.png
+  - assets/images/records.png
+  - assets/images/rice.png
+  - assets/images/spinach.png
+  - assets/images/strawberry.png
+  - assets/images/sweet potato.png
+  - assets/images/taro.png
+  - assets/images/ultrasound.png
+  - assets/images/vaccine.png
+  - assets/images/watermelon.png
+  - assets/images/weight.png
