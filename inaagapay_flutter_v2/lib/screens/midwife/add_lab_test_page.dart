@@ -7,8 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
+import '../../services/gemini_service.dart';
 import '../../theme/app_colors.dart';
-import '../../widgets/app_input_field.dart';
+import '../../widgets/app_snackbar.dart';
 import '../../widgets/progressive_step_indicator.dart';
 
 class AddLabTestPage extends StatefulWidget {
@@ -25,27 +26,31 @@ class AddLabTestPage extends StatefulWidget {
 
 class _AddLabTestPageState extends State<AddLabTestPage> {
   final ImagePicker _picker = ImagePicker();
-
-  final _locationCtrl = TextEditingController();
-  final _remarksCtrl = TextEditingController();
-  final _workerNameCtrl = TextEditingController();
-  final _institutionCtrl = TextEditingController();
+  final GeminiService _geminiService = GeminiService();
+  final TextEditingController _notesCtrl = TextEditingController();
 
   DateTime? _date;
   DateTime? _pregnancyLmp;
   DateTime? _pregnancyEdd;
   int? _pregnancyId;
-  String? _profession;
   String? _selectedLabType;
-  XFile? _imageFile;
-  String? _locationError;
-  String? _workerNameError;
-  String? _institutionError;
+
+  final List<XFile> _images = [];
 
   bool _loading = true;
   bool _submitting = false;
   int _step = 0;
-  static const int _totalSteps = 3;
+  static const int _totalSteps = 2;
+
+  int _analysisRequestId = 0;
+  final Set<int> _cancelledRequests = <int>{};
+  bool _loadingModalVisible = false;
+
+  String? _aiDraftInsight;
+  String? _aiApprovedInsight;
+  String? _aiOriginalInsight;
+  String? _lastAiPrompt;
+  bool _showAllAi = false;
 
   static const List<String> _pregnancyLabTests = [
     'Complete Blood Count (CBC)',
@@ -59,31 +64,18 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     'Glucose Challenge Test',
     'Thyroid Function (TSH)',
     'Stool Examination',
-    'Other (specify in remarks)',
-  ];
-
-  static const List<String> _labProfessions = [
-    'Medical Technologist',
-    'Pathologist',
-    'Nurse',
-    'Midwife',
+    'Other (specify in notes)',
   ];
 
   @override
   void initState() {
     super.initState();
-    _locationCtrl.addListener(_validateLocationInline);
-    _workerNameCtrl.addListener(_validateWorkerInline);
-    _institutionCtrl.addListener(_validateWorkerInline);
     _loadPregnancy();
   }
 
   @override
   void dispose() {
-    _locationCtrl.dispose();
-    _remarksCtrl.dispose();
-    _workerNameCtrl.dispose();
-    _institutionCtrl.dispose();
+    _notesCtrl.dispose();
     super.dispose();
   }
 
@@ -114,295 +106,9 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     setState(() => _loading = false);
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final image = await _picker.pickImage(
-        source: source,
-        maxWidth: 1400,
-        maxHeight: 1400,
-        imageQuality: 85,
-      );
-      if (image == null || !mounted) return;
-      setState(() => _imageFile = image);
-    } catch (e) {
-      _showMessage('Unable to pick image: $e');
-    }
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _validateLocationInline() {
-    final location = _locationCtrl.text.trim();
-    setState(() {
-      if (location.isEmpty) {
-        _locationError = null;
-      } else if (location.length < 3 || location.length > 150) {
-        _locationError = 'Must be 3 to 150 characters';
-      } else {
-        _locationError = null;
-      }
-    });
-  }
-
-  void _validateWorkerInline() {
-    final worker = _workerNameCtrl.text.trim();
-    final institution = _institutionCtrl.text.trim();
-    setState(() {
-      _workerNameError =
-          (worker.isNotEmpty && (worker.length < 3 || worker.length > 80))
-              ? 'Must be 3 to 80 characters'
-              : null;
-      _institutionError = (institution.isNotEmpty &&
-              (institution.length < 3 || institution.length > 120))
-          ? 'Must be 3 to 120 characters'
-          : null;
-    });
-  }
-
-  Widget _sectionCard({required String title, required Widget child}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borderPrimary),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(10),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: AppColors.brandText,
-            ),
-          ),
-          const SizedBox(height: 10),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryRow(String label, String value, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 108,
-            child: Text(
-              label,
-              style: const TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: valueColor ?? AppColors.textPrimary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  bool _validateCurrentStep() {
-    final now = DateTime.now();
-
-    if (_step == 0) {
-      if (_selectedLabType == null || _selectedLabType!.isEmpty) {
-        _showMessage('Please select lab test type.');
-        return false;
-      }
-      if (_date == null) {
-        _showMessage('Please select lab test date.');
-        return false;
-      }
-      if (_date!.isAfter(now)) {
-        _showMessage('Future lab test dates are not allowed.');
-        return false;
-      }
-      if (_pregnancyLmp != null && _date!.isBefore(_pregnancyLmp!)) {
-        _showMessage(
-            'Lab test date cannot be before the current pregnancy LMP.');
-        return false;
-      }
-      if (_pregnancyEdd != null &&
-          _date!.isAfter(_pregnancyEdd!.add(const Duration(days: 45)))) {
-        _showMessage('Lab test date is too far beyond expected due date.');
-        return false;
-      }
-
-      final location = _locationCtrl.text.trim();
-      setState(() {
-        _locationError = location.isEmpty
-            ? 'Location is required'
-            : (location.length < 3 || location.length > 150)
-                ? 'Must be 3 to 150 characters'
-                : null;
-      });
-      if (location.length < 3 || location.length > 150) {
-        _showMessage('Lab test location must be 3 to 150 characters.');
-        return false;
-      }
-
-      if (_imageFile != null) {
-        final lower = _imageFile!.name.toLowerCase();
-        final validImage = lower.endsWith('.jpg') ||
-            lower.endsWith('.jpeg') ||
-            lower.endsWith('.png') ||
-            lower.endsWith('.webp');
-        if (!validImage) {
-          _showMessage('Only JPG, PNG, or WEBP images are allowed.');
-          return false;
-        }
-      }
-    }
-
-    if (_step == 1) {
-      final worker = _workerNameCtrl.text.trim();
-      final institution = _institutionCtrl.text.trim();
-      final anyWorkerField =
-          worker.isNotEmpty || institution.isNotEmpty || _profession != null;
-      setState(() {
-        _workerNameError =
-            (worker.isNotEmpty && (worker.length < 3 || worker.length > 80))
-                ? 'Must be 3 to 80 characters'
-                : null;
-        _institutionError = (institution.isNotEmpty &&
-                (institution.length < 3 || institution.length > 120))
-            ? 'Must be 3 to 120 characters'
-            : null;
-      });
-      if (anyWorkerField) {
-        if (worker.isEmpty || institution.isEmpty || _profession == null) {
-          _showMessage(
-              'Complete health worker name, institution, and profession.');
-          return false;
-        }
-        if (worker.length < 3 || worker.length > 80) {
-          _showMessage('Health worker name must be 3 to 80 characters.');
-          return false;
-        }
-        if (institution.length < 3 || institution.length > 120) {
-          _showMessage('Institution must be 3 to 120 characters.');
-          return false;
-        }
-      }
-    }
-
-    if (_step == 2 && _remarksCtrl.text.trim().length > 500) {
-      _showMessage('Remarks must be 500 characters or less.');
-      return false;
-    }
-
-    return true;
-  }
-
-  Future<void> _submit() async {
-    if (_pregnancyId == null || _date == null || _selectedLabType == null) {
-      _showMessage('Please complete required fields.');
-      return;
-    }
-
-    setState(() => _submitting = true);
-    try {
-      final userId = await AuthStorage.getUserId();
-      String? publicUrl;
-      String? filePath;
-
-      if (_imageFile != null) {
-        final bytes = await _imageFile!.readAsBytes();
-        final upload = await _uploadImage(bytes);
-        filePath = upload['filePath'];
-        publicUrl = upload['publicUrl'];
-      }
-
-      final inserted = await Supabase.instance.client
-          .from('lab_tests')
-          .insert({
-            'pregnancy_id': _pregnancyId,
-            'lab_test_type': _selectedLabType,
-            'lab_test_date': DateFormat('yyyy-MM-dd').format(_date!),
-            'lab_test_location': _locationCtrl.text.trim(),
-            'lab_test_image': publicUrl,
-            'remarks': _remarksCtrl.text.trim().isEmpty
-                ? null
-                : _remarksCtrl.text.trim(),
-            'health_worker_name': _workerNameCtrl.text.trim().isEmpty
-                ? null
-                : _workerNameCtrl.text.trim(),
-            'health_worker_institution': _institutionCtrl.text.trim().isEmpty
-                ? null
-                : _institutionCtrl.text.trim(),
-            'health_worker_profession': _profession,
-          })
-          .select('lab_test_id')
-          .single();
-
-      final labTestId = inserted['lab_test_id'];
-      if (filePath != null && userId != null) {
-        await Supabase.instance.client.from('files').insert({
-          'bucket_name': 'medical-images',
-          'file_path': filePath,
-          'file_name': filePath.split('/').last,
-          'file_category': 'lab_test_image',
-          'mime_type': 'image/jpeg',
-          'uploaded_by': userId,
-          'reference_type': 'lab_test',
-          'reference_id': labTestId,
-          'processing_type': 'manual_upload',
-          'ai_processed': false,
-        });
-      }
-
-      if (!mounted) return;
-      _showMessage('Lab test record saved.');
-      Navigator.pop(context, true);
-    } catch (e) {
-      if (!mounted) return;
-      _showMessage('Failed to save lab test: $e');
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  Future<Map<String, String>> _uploadImage(Uint8List bytes) async {
-    final fileName = 'lab_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final filePath = 'lab-tests/${widget.motherId}/$fileName';
-
-    await Supabase.instance.client.storage.from('medical-images').uploadBinary(
-          filePath,
-          bytes,
-          fileOptions:
-              const FileOptions(contentType: 'image/jpeg', upsert: true),
-        );
-
-    final publicUrl = Supabase.instance.client.storage
-        .from('medical-images')
-        .getPublicUrl(filePath);
-
-    return {
-      'filePath': filePath,
-      'publicUrl': publicUrl,
-    };
+  void _showMessage(String message,
+      {AppSnackType type = AppSnackType.warning}) {
+    AppSnackbar.show(context, message, type: type);
   }
 
   Future<void> _pickDate() async {
@@ -411,6 +117,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
         ? DateTime(
             _pregnancyLmp!.year, _pregnancyLmp!.month, _pregnancyLmp!.day)
         : DateTime(2000);
+
     final picked = await showDatePicker(
       context: context,
       initialDate: _date ?? now,
@@ -420,12 +127,119 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           ? 'Select Lab Test Date'
           : 'Select date after LMP (${DateFormat('MMM d, yyyy').format(_pregnancyLmp!)})',
     );
+
     if (picked == null) return;
     setState(() => _date = picked);
   }
 
+  Future<void> _pickSingleImage(ImageSource source) async {
+    try {
+      final image = await _picker.pickImage(
+        source: source,
+        maxWidth: 1400,
+        maxHeight: 1400,
+        imageQuality: 85,
+      );
+      if (image == null || !mounted) return;
+      setState(() {
+        _images.add(image);
+        _aiDraftInsight = null;
+        _aiApprovedInsight = null;
+        _aiOriginalInsight = null;
+        _lastAiPrompt = null;
+      });
+    } catch (e) {
+      _showMessage('Unable to pick image: $e', type: AppSnackType.error);
+    }
+  }
+
+  Future<void> _pickMultiFromGallery() async {
+    try {
+      final images = await _picker.pickMultiImage(
+        maxWidth: 1400,
+        maxHeight: 1400,
+        imageQuality: 85,
+      );
+      if (images.isEmpty || !mounted) return;
+      setState(() {
+        _images.addAll(images);
+        _aiDraftInsight = null;
+        _aiApprovedInsight = null;
+        _aiOriginalInsight = null;
+        _lastAiPrompt = null;
+      });
+    } catch (e) {
+      _showMessage('Unable to pick images: $e', type: AppSnackType.error);
+    }
+  }
+
+  void _openImagePickerSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.photo_library_outlined),
+                  title: const Text('Choose from Gallery'),
+                  subtitle: const Text('Add one or more images'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickMultiFromGallery();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_camera_outlined),
+                  title: const Text('Take Photo'),
+                  subtitle: const Text('Capture one image'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickSingleImage(ImageSource.camera);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool _validateStep1() {
+    final now = DateTime.now();
+    if (_selectedLabType == null || _selectedLabType!.isEmpty) {
+      _showMessage('Please select lab test type.');
+      return false;
+    }
+    if (_date == null) {
+      _showMessage('Please select lab test date.');
+      return false;
+    }
+    if (_date!.isAfter(now)) {
+      _showMessage('Future lab test dates are not allowed.');
+      return false;
+    }
+    if (_pregnancyLmp != null && _date!.isBefore(_pregnancyLmp!)) {
+      _showMessage('Lab test date cannot be before the current pregnancy LMP.');
+      return false;
+    }
+    if (_pregnancyEdd != null &&
+        _date!.isAfter(_pregnancyEdd!.add(const Duration(days: 45)))) {
+      _showMessage('Lab test date is too far beyond expected due date.');
+      return false;
+    }
+    return true;
+  }
+
   void _next() {
-    if (!_validateCurrentStep()) return;
+    if (_step == 0 && !_validateStep1()) return;
     if (_step < _totalSteps - 1) {
       setState(() => _step += 1);
     }
@@ -437,224 +251,836 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     }
   }
 
-  Widget _buildStep() {
-    if (_step == 0) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionCard(
-            title: 'Lab Test Type',
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedLabType,
-              decoration: const InputDecoration(labelText: 'Select test type'),
-              items: _pregnancyLabTests
-                  .map((type) =>
-                      DropdownMenuItem(value: type, child: Text(type)))
-                  .toList(),
-              onChanged: (value) => setState(() => _selectedLabType = value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _sectionCard(
-            title: 'Lab Test Date',
-            child: InkWell(
-              onTap: _pickDate,
-              child: Row(
+  void _showAiLoadingModal(int requestId) {
+    _loadingModalVisible = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: Dialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.calendar_today,
-                      color: AppColors.brandPrimary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _date == null
-                          ? 'Tap to choose date'
-                          : DateFormat('MMMM d, yyyy').format(_date!),
-                      style: TextStyle(
-                        color: _date == null
-                            ? AppColors.textSecondary
-                            : AppColors.textPrimary,
-                        fontWeight:
-                            _date == null ? FontWeight.w400 : FontWeight.w600,
+                  const Row(
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
                       ),
+                      SizedBox(width: 12),
+                      Text(
+                        'Analyzing lab test images',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSecondary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _StatusLine(
+                          icon: Icons.image_outlined,
+                          text: 'Processing attached images',
+                        ),
+                        SizedBox(height: 8),
+                        _StatusLine(
+                          icon: Icons.science_outlined,
+                          text: 'Extracting laboratory values',
+                        ),
+                        SizedBox(height: 8),
+                        _StatusLine(
+                          icon: Icons.auto_awesome_outlined,
+                          text: 'Generating AI insights',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        _cancelledRequests.add(requestId);
+                        Navigator.of(context).pop();
+                        _loadingModalVisible = false;
+                        _showMessage('AI analysis canceled.',
+                            type: AppSnackType.info);
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                      label: const Text('Cancel'),
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          _sectionCard(
-            title: 'Location',
-            child: AppInputField(
-              hintText: 'Lab test location',
-              controller: _locationCtrl,
-              isRequired: true,
-              errorText: _locationError,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _sectionCard(
-            title: 'Image (Optional)',
-            child: Column(
-              children: [
-                if (_imageFile != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      children: [
-                        Image.file(
-                          File(_imageFile!.path),
-                          height: 180,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            height: 180,
-                            color: AppColors.bgSecondary,
-                            alignment: Alignment.center,
-                            child: const Text('Unable to preview image'),
-                          ),
-                        ),
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: IconButton.filledTonal(
-                            onPressed: () => setState(() => _imageFile = null),
-                            icon: const Icon(Icons.close),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  Container(
-                    height: 180,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.borderPrimary),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text('No image selected'),
-                  ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _pickImage(ImageSource.camera),
-                        icon: const Icon(Icons.photo_camera),
-                        label: const Text('Camera'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _pickImage(ImageSource.gallery),
-                        icon: const Icon(Icons.photo_library),
-                        label: const Text('Gallery'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
+        );
+      },
+    ).then((_) {
+      _loadingModalVisible = false;
+    });
+  }
+
+  void _closeAiLoadingModalIfNeeded() {
+    if (!_loadingModalVisible || !mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    _loadingModalVisible = false;
+  }
+
+  Future<void> _runAiAnalysis() async {
+    if (_images.isEmpty) {
+      _showMessage('Please add at least one image before AI analysis.');
+      return;
     }
 
-    if (_step == 1) {
-      return Column(
-        children: [
-          _sectionCard(
-            title: 'Health Worker',
-            child: Column(
-              children: [
-                AppInputField(
-                  hintText: 'Health worker name',
-                  controller: _workerNameCtrl,
-                  errorText: _workerNameError,
+    final requestId = ++_analysisRequestId;
+    _showAiLoadingModal(requestId);
+
+    try {
+      _lastAiPrompt = [
+        'Lab test AI analysis request',
+        'Selected lab type: ${_selectedLabType ?? 'Not specified'}',
+        'Notes: ${_notesCtrl.text.trim().isEmpty ? 'None provided' : _notesCtrl.text.trim()}',
+        'Image count: ${_images.length}',
+      ].join('\n');
+
+      final result = await _geminiService.analyzeLabTestImages(_images);
+      if (!mounted || _cancelledRequests.contains(requestId)) return;
+
+      _closeAiLoadingModalIfNeeded();
+
+      final insight = result.description.trim().isEmpty
+          ? 'No AI insights generated.'
+          : result.description.trim();
+
+      setState(() {
+        _aiDraftInsight = insight;
+        _aiOriginalInsight = insight;
+        _showAllAi = false;
+      });
+
+      await _showAiInsightsModal();
+    } catch (e) {
+      if (!mounted || _cancelledRequests.contains(requestId)) return;
+      _closeAiLoadingModalIfNeeded();
+      _showMessage('AI analysis failed: $e', type: AppSnackType.error);
+    } finally {
+      _cancelledRequests.remove(requestId);
+      _closeAiLoadingModalIfNeeded();
+    }
+  }
+
+  Future<void> _showAiInsightsModal() async {
+    if (_aiDraftInsight == null) return;
+
+    final editCtrl = TextEditingController(text: _aiDraftInsight!);
+    final original = _aiDraftInsight!;
+    bool isEditing = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final maxHeight = MediaQuery.of(context).size.height * 0.85;
+            return WillPopScope(
+              onWillPop: () async => false,
+              child: Dialog(
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 20,
                 ),
-                const SizedBox(height: 12),
-                AppInputField(
-                  hintText: 'Institution / Clinic',
-                  controller: _institutionCtrl,
-                  errorText: _institutionError,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _profession,
-                  decoration: const InputDecoration(
-                    labelText: 'Health worker profession',
+                child: SizedBox(
+                  width: double.maxFinite,
+                  height: maxHeight,
+                  child: Column(
+                    children: [
+                      const LinearProgressIndicator(
+                        minHeight: 4,
+                        value: 1,
+                        color: AppColors.brandPrimary,
+                        backgroundColor: AppColors.borderPrimary,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                        child: Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'AI Analysis',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                setModalState(() {
+                                  _showAllAi = !_showAllAi;
+                                });
+                              },
+                              child:
+                                  Text(_showAllAi ? 'Show Less' : 'Show All'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                        child: Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: () {
+                                setModalState(() {
+                                  isEditing = !isEditing;
+                                });
+                              },
+                              icon: const Icon(Icons.edit_outlined),
+                              label: const Text('Edit'),
+                            ),
+                            const SizedBox(width: 8),
+                            if (!isEditing)
+                              FilledButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _aiDraftInsight = editCtrl.text.trim();
+                                  });
+                                  _showMessage('Draft saved.',
+                                      type: AppSnackType.success);
+                                },
+                                icon: const Icon(Icons.save_outlined),
+                                label: const Text('Save'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.brandPrimary,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child: isEditing
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    TextField(
+                                      controller: editCtrl,
+                                      minLines: 12,
+                                      maxLines: null,
+                                      decoration: InputDecoration(
+                                        hintText: 'Edit AI analysis...',
+                                        filled: true,
+                                        fillColor: AppColors.bgSecondary,
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () {
+                                              setModalState(() {
+                                                editCtrl.text = original;
+                                                isEditing = false;
+                                              });
+                                              _showMessage(
+                                                'Edit changes discarded.',
+                                                type: AppSnackType.info,
+                                              );
+                                            },
+                                            child:
+                                                const Text('Discard Changes'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: FilledButton(
+                                            onPressed: () {
+                                              final updated =
+                                                  editCtrl.text.trim();
+                                              if (updated.isEmpty) {
+                                                _showMessage(
+                                                  'AI analysis cannot be empty.',
+                                                );
+                                                return;
+                                              }
+                                              setState(() {
+                                                _aiDraftInsight = updated;
+                                              });
+                                              setModalState(() {
+                                                isEditing = false;
+                                              });
+                                              _showMessage(
+                                                'Changes saved.',
+                                                type: AppSnackType.success,
+                                              );
+                                            },
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor:
+                                                  AppColors.brandPrimary,
+                                            ),
+                                            child: const Text('Save Changes'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                )
+                              : Text(
+                                  _aiDraftInsight!,
+                                  maxLines: _showAllAi ? null : 14,
+                                  overflow: _showAllAi
+                                      ? TextOverflow.visible
+                                      : TextOverflow.fade,
+                                  style: const TextStyle(
+                                    height: 1.45,
+                                    fontSize: 14,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _aiDraftInsight = null;
+                                    _aiApprovedInsight = null;
+                                    _aiOriginalInsight = null;
+                                    _lastAiPrompt = null;
+                                  });
+                                  Navigator.of(context).pop();
+                                },
+                                child: const Text('Discard'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () {
+                                  final approvedText = editCtrl.text.trim();
+                                  if (approvedText.isEmpty) {
+                                    _showMessage(
+                                        'AI analysis cannot be empty.');
+                                    return;
+                                  }
+                                  setState(() {
+                                    _aiDraftInsight = approvedText;
+                                    _aiApprovedInsight = approvedText;
+                                  });
+                                  Navigator.of(context).pop();
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.brandPrimary,
+                                ),
+                                child: const Text('Approve'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  items: _labProfessions
-                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                      .toList(),
-                  onChanged: (value) => setState(() => _profession = value),
                 ),
-                const SizedBox(height: 8),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Fill all health worker fields or leave all empty.',
-                    style:
-                        TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    editCtrl.dispose();
+  }
+
+  Future<Map<String, List<String>>> _uploadImages(List<XFile> images) async {
+    final urls = <String>[];
+    final paths = <String>[];
+
+    for (final image in images) {
+      final bytes = await image.readAsBytes();
+      final fileName =
+          'lab_${DateTime.now().millisecondsSinceEpoch}_${paths.length}.jpg';
+      final filePath = 'lab-tests/${widget.motherId}/$fileName';
+
+      await Supabase.instance.client.storage
+          .from('medical-images')
+          .uploadBinary(
+            filePath,
+            bytes,
+            fileOptions:
+                const FileOptions(contentType: 'image/jpeg', upsert: true),
+          );
+
+      final publicUrl =
+          Supabase.instance.client.storage.from('medical-images').getPublicUrl(
+                filePath,
+              );
+
+      urls.add(publicUrl);
+      paths.add(filePath);
     }
 
+    return {
+      'urls': urls,
+      'paths': paths,
+    };
+  }
+
+  Future<void> _submit() async {
+    if (!_validateStep1()) return;
+    if (_pregnancyId == null) {
+      _showMessage('No ongoing pregnancy found for this mother.');
+      return;
+    }
+
+    if (_aiDraftInsight != null && _aiApprovedInsight == null) {
+      _showMessage('Approve or discard the AI analysis before saving.');
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      final userId = await AuthStorage.getUserId();
+      if (_aiApprovedInsight != null && userId == null) {
+        throw Exception(
+            'User not logged in. AI approvals require account tracking.');
+      }
+      final upload = _images.isEmpty
+          ? {
+              'urls': <String>[],
+              'paths': <String>[],
+            }
+          : await _uploadImages(_images);
+
+      final urls = upload['urls'] ?? <String>[];
+      final paths = upload['paths'] ?? <String>[];
+
+      final notes = _notesCtrl.text.trim();
+      final remarks = _aiApprovedInsight != null
+          ? (notes.isEmpty
+              ? _aiApprovedInsight!
+              : '$notes\n\nAI Analysis:\n${_aiApprovedInsight!}')
+          : (notes.isEmpty ? null : notes);
+
+      final inserted = await Supabase.instance.client
+          .from('lab_tests')
+          .insert({
+            'pregnancy_id': _pregnancyId,
+            'lab_test_type': _selectedLabType,
+            'lab_test_date': DateFormat('yyyy-MM-dd').format(_date!),
+            'lab_test_location': 'Not specified',
+            'lab_test_image': urls.isEmpty ? null : urls.join(','),
+            'remarks': remarks,
+          })
+          .select('lab_test_id')
+          .single();
+
+      final labTestId = inserted['lab_test_id'] as int;
+
+      if (userId != null) {
+        for (final path in paths) {
+          await Supabase.instance.client.from('files').insert({
+            'bucket_name': 'medical-images',
+            'file_path': path,
+            'file_name': path.split('/').last,
+            'file_category': 'lab_test_image',
+            'mime_type': 'image/jpeg',
+            'uploaded_by': userId,
+            'reference_type': 'lab_test',
+            'reference_id': labTestId,
+            'processing_type': 'manual_upload',
+            'ai_processed': _aiApprovedInsight != null,
+          });
+        }
+      }
+
+      if (_aiApprovedInsight != null) {
+        final approvedAiText = _aiApprovedInsight!.trim();
+        final originalAiText = (_aiOriginalInsight ?? '').trim();
+        final aiWasEdited =
+            originalAiText.isNotEmpty && approvedAiText != originalAiText;
+
+        final insertedAi = await Supabase.instance.client
+            .from('ai_responses')
+            .insert({
+              'response_type': 'lab_test_analysis',
+              'reference_table': 'lab_tests',
+              'reference_id': labTestId,
+              'ai_model': 'Gemini 1.5 Flash',
+              'confidence_score': 0.92,
+              'response': approvedAiText,
+              'response_category': 'analysis',
+              'status': 'approved',
+              'generated_by_ai': true,
+              'approved_by': userId,
+            })
+            .select('ai_response_id')
+            .single();
+
+        final aiResponseId = insertedAi['ai_response_id'] as int;
+
+        if ((_lastAiPrompt ?? '').trim().isNotEmpty) {
+          await Supabase.instance.client.from('ai_prompt_logs').insert({
+            'ai_response_id': aiResponseId,
+            'prompt': _lastAiPrompt,
+            'model_used': 'Gemini 1.5 Flash',
+          });
+        }
+
+        if (aiWasEdited) {
+          await Supabase.instance.client.from('ai_edit_history').insert({
+            'ai_response_id': aiResponseId,
+            'old_content': originalAiText,
+            'new_content': approvedAiText,
+            'edited_by': userId,
+            'edit_reason': 'Midwife edited AI lab analysis before final save.',
+          });
+        }
+
+        await Supabase.instance.client.from('audit_trail').insert({
+          'action': 'AI_APPROVAL',
+          'table_name': 'ai_responses',
+          'account_id': userId,
+          'old_data': {
+            'status': aiWasEdited ? 'edited' : 'generated',
+            'approved_by': null,
+          },
+          'new_data': {
+            'ai_response_id': aiResponseId,
+            'status': 'approved',
+            'approved_by': userId,
+            'reference_table': 'lab_tests',
+            'reference_id': labTestId,
+          },
+          'description':
+              'Midwife approved AI lab analysis for lab_test_id=$labTestId.',
+        });
+      }
+
+      if (!mounted) return;
+      _showMessage('Lab test record saved.', type: AppSnackType.success);
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('Failed to save lab test: $e', type: AppSnackType.error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Widget _buildStep1() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionCard(
-          title: 'Remarks',
-          child: TextField(
-            controller: _remarksCtrl,
-            maxLines: 4,
-            maxLength: 500,
-            decoration: const InputDecoration(
-              labelText: 'Remarks',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'Summary',
+        _sectionTitle('Step 1: Test Details'),
+        const SizedBox(height: 10),
+        _card(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _summaryRow('Type', _selectedLabType ?? 'Not set'),
-              _summaryRow(
-                'Date',
-                _date == null
-                    ? 'Not set'
-                    : DateFormat('yyyy-MM-dd').format(_date!),
+              const Text(
+                'Lab Test Date',
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
-              _summaryRow(
-                'Location',
-                _locationCtrl.text.trim().isEmpty
-                    ? 'Not set'
-                    : _locationCtrl.text.trim(),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: _pickDate,
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSecondary,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderPrimary),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today,
+                          size: 18, color: AppColors.brandPrimary),
+                      const SizedBox(width: 10),
+                      Text(
+                        _date == null
+                            ? 'Select date'
+                            : DateFormat('MMMM d, yyyy').format(_date!),
+                        style: TextStyle(
+                          color: _date == null
+                              ? AppColors.textSecondary
+                              : AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              _summaryRow(
-                'Image',
-                _imageFile == null
-                    ? 'No image attached'
-                    : 'Image ready to upload',
-                valueColor: _imageFile == null
-                    ? AppColors.textSecondary
-                    : AppColors.success,
+              const SizedBox(height: 14),
+              const Text(
+                'Lab Test Type',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedLabType,
+                decoration: const InputDecoration(
+                  hintText: 'Select pregnancy-related lab test',
+                  border: OutlineInputBorder(),
+                ),
+                items: _pregnancyLabTests
+                    .map((type) => DropdownMenuItem(
+                          value: type,
+                          child: Text(type),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  setState(() => _selectedLabType = value);
+                },
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildImageTile(XFile image, int index) {
+    return Stack(
+      children: [
+        Container(
+          width: 98,
+          height: 98,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderPrimary),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: Image.file(
+              File(image.path),
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: AppColors.bgSecondary,
+                alignment: Alignment.center,
+                child: const Icon(Icons.broken_image_outlined),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: -4,
+          right: -4,
+          child: IconButton(
+            onPressed: () {
+              setState(() {
+                _images.removeAt(index);
+                _aiDraftInsight = null;
+                _aiApprovedInsight = null;
+                _aiOriginalInsight = null;
+                _lastAiPrompt = null;
+              });
+            },
+            iconSize: 18,
+            splashRadius: 18,
+            color: AppColors.error,
+            icon: const Icon(Icons.cancel),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddImageTile() {
+    return InkWell(
+      onTap: _openImagePickerSheet,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 98,
+        height: 98,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.brandPrimary.withValues(alpha: 0.55),
+          ),
+          color: AppColors.bgSecondary,
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_a_photo_outlined, color: AppColors.brandPrimary),
+            SizedBox(height: 6),
+            Text(
+              'Add Image +',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.brandText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStep2() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('Step 2: Attach Images and Notes'),
+        const SizedBox(height: 10),
+        _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Image Layout',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderPrimary),
+                  color: AppColors.bgSecondary.withValues(alpha: 0.35),
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (var i = 0; i < _images.length; i++)
+                      _buildImageTile(_images[i], i),
+                    _buildAddImageTile(),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Notes',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _notesCtrl,
+                minLines: 4,
+                maxLines: 8,
+                maxLength: 1000,
+                decoration: const InputDecoration(
+                  hintText: 'Type your notes here...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _runAiAnalysis,
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  label: const Text('AI Analyze'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+              if (_aiApprovedInsight != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: AppColors.success.withValues(alpha: 0.45)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle_outline,
+                          color: AppColors.success),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'AI analysis approved and ready to save.',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+        color: AppColors.brandText,
+      ),
+    );
+  }
+
+  Widget _card({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 
@@ -685,46 +1111,13 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                           currentStep: _step,
                           totalSteps: _totalSteps,
                         ),
-                        const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                [
-                                  'Lab Details',
-                                  'Health Worker',
-                                  'Remarks & Summary',
-                                ][_step],
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.brandText,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                [
-                                  'Type, date, location, and image',
-                                  'Optional worker identity',
-                                  'Final review before saving',
-                                ][_step],
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 14),
                         Expanded(
                           child: SingleChildScrollView(
-                            child: _buildStep(),
+                            child: _step == 0 ? _buildStep1() : _buildStep2(),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                         Row(
                           children: [
                             if (_step > 0)
@@ -746,6 +1139,8 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppColors.brandPrimary,
                                   foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
                                 ),
                                 child: _submitting
                                     ? const SizedBox(
@@ -756,9 +1151,11 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                                           color: Colors.white,
                                         ),
                                       )
-                                    : Text(_step == _totalSteps - 1
-                                        ? 'Save Lab Test'
-                                        : 'Next'),
+                                    : Text(
+                                        _step == _totalSteps - 1
+                                            ? 'Save Lab Test'
+                                            : 'Next',
+                                      ),
                               ),
                             ),
                           ],
@@ -767,6 +1164,33 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                     ),
                   ),
                 ),
+    );
+  }
+}
+
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.brandPrimary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

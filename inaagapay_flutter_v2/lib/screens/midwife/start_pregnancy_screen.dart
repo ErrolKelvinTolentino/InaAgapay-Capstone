@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/due_date_basis.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
 
 class StartPregnancyScreen extends StatefulWidget {
@@ -288,8 +289,7 @@ class _StartPregnancyScreenState extends State<StartPregnancyScreen> {
   Future<void> _submit() async {
     final message = _validate();
     if (message != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      AppSnackbar.warning(context, message);
       return;
     }
 
@@ -330,8 +330,7 @@ class _StartPregnancyScreenState extends State<StartPregnancyScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      AppSnackbar.error(context, e.toString());
     } finally {
       if (mounted) {
         setState(() => _submitting = false);
