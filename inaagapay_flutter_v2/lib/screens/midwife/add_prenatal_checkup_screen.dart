@@ -243,6 +243,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   String? _riskPreviewError;
   _RiskSnapshot? _riskSnapshot;
   String? _lastRiskSignature;
+  String? _lastRiskAiPrompt;
   Map<String, dynamic>? _motherRiskContext;
   String? _aiOriginalAssessment;
   bool _aiAssessmentEdited = false;
@@ -1419,6 +1420,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
 
     try {
       final prompt = _buildAiPrompt(draft);
+      _lastRiskAiPrompt = prompt;
       final aiText = await _geminiService.generateTextInsight(
         prompt: prompt,
         temperature: 0.1,
@@ -2455,7 +2457,8 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
     final editedText = _aiAssessmentCtrl.text.trim();
     final finalAiText = editedText.isEmpty ? originalText : editedText;
     final wasEdited = finalAiText != originalText;
-    final aiStatus = wasEdited ? 'edited' : 'generated';
+    final aiStatus =
+        _aiResponseApproved ? 'approved' : (wasEdited ? 'edited' : 'generated');
     final finalRiskLevel = _editableRiskLevel;
     final finalRiskFactors = List<_RiskFactorItem>.from(_editableRiskFactors);
     final riskManuallyEdited = finalRiskLevel != snapshot.level ||
@@ -2470,6 +2473,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
         .maybeSingle();
 
     int aiResponseId;
+    final bool aiResponseUpdated = aiRow != null;
     if (aiRow != null) {
       aiResponseId = aiRow['ai_response_id'] as int;
       await client.from('ai_responses').update({
@@ -2478,6 +2482,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
         'response_category': 'analysis',
         'status': aiStatus,
         'generated_by_ai': snapshot.aiGenerated,
+        'approved_by': _aiResponseApproved ? _accountId : null,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('ai_response_id', aiResponseId);
     } else {
@@ -2493,11 +2498,39 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
             'response_category': 'analysis',
             'status': aiStatus,
             'generated_by_ai': snapshot.aiGenerated,
+            'approved_by': _aiResponseApproved ? _accountId : null,
           })
           .select('ai_response_id')
           .single();
       aiResponseId = insertedAi['ai_response_id'] as int;
     }
+
+    if (snapshot.aiGenerated && (_lastRiskAiPrompt ?? '').trim().isNotEmpty) {
+      await client.from('ai_prompt_logs').insert({
+        'ai_response_id': aiResponseId,
+        'prompt': _lastRiskAiPrompt,
+        'model_used': snapshot.aiModel ?? 'Rule Engine',
+      });
+    }
+
+    await client.from('audit_trail').insert({
+      'action': aiResponseUpdated ? 'UPDATE' : 'INSERT',
+      'table_name': 'ai_responses',
+      'account_id': _accountId,
+      'old_data': aiResponseUpdated
+          ? {
+              'status': wasEdited ? 'edited' : 'generated',
+              'approved_by': null,
+            }
+          : null,
+      'new_data': {
+        'ai_response_id': aiResponseId,
+        'status': aiStatus,
+        'approved_by': _aiResponseApproved ? _accountId : null,
+      },
+      'description':
+          'Saved AI risk assessment for prenatal checkup $prenatalCheckupId.',
+    });
 
     if (wasEdited) {
       await client.from('ai_edit_history').insert({
@@ -2507,6 +2540,16 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
         'edited_by': _accountId,
         'edit_reason':
             'Midwife updated AI risk assessment before saving checkup.',
+      });
+
+      await client.from('audit_trail').insert({
+        'action': 'UPDATE',
+        'table_name': 'ai_edit_history',
+        'account_id': _accountId,
+        'old_data': {'content': originalText},
+        'new_data': {'content': finalAiText, 'ai_response_id': aiResponseId},
+        'description':
+            'Midwife edited AI risk assessment content before approval.',
       });
     }
 

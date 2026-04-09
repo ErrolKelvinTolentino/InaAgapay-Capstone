@@ -48,6 +48,8 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
 
   String? _aiDraftInsight;
   String? _aiApprovedInsight;
+  String? _aiOriginalInsight;
+  String? _lastAiPrompt;
   bool _showAllAi = false;
 
   static const List<String> _pregnancyLabTests = [
@@ -143,6 +145,8 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
         _images.add(image);
         _aiDraftInsight = null;
         _aiApprovedInsight = null;
+        _aiOriginalInsight = null;
+        _lastAiPrompt = null;
       });
     } catch (e) {
       _showMessage('Unable to pick image: $e', type: AppSnackType.error);
@@ -161,6 +165,8 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
         _images.addAll(images);
         _aiDraftInsight = null;
         _aiApprovedInsight = null;
+        _aiOriginalInsight = null;
+        _lastAiPrompt = null;
       });
     } catch (e) {
       _showMessage('Unable to pick images: $e', type: AppSnackType.error);
@@ -349,6 +355,13 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     _showAiLoadingModal(requestId);
 
     try {
+      _lastAiPrompt = [
+        'Lab test AI analysis request',
+        'Selected lab type: ${_selectedLabType ?? 'Not specified'}',
+        'Notes: ${_notesCtrl.text.trim().isEmpty ? 'None provided' : _notesCtrl.text.trim()}',
+        'Image count: ${_images.length}',
+      ].join('\n');
+
       final result = await _geminiService.analyzeLabTestImages(_images);
       if (!mounted || _cancelledRequests.contains(requestId)) return;
 
@@ -360,6 +373,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
 
       setState(() {
         _aiDraftInsight = insight;
+        _aiOriginalInsight = insight;
         _showAllAi = false;
       });
 
@@ -567,6 +581,8 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                                   setState(() {
                                     _aiDraftInsight = null;
                                     _aiApprovedInsight = null;
+                                    _aiOriginalInsight = null;
+                                    _lastAiPrompt = null;
                                   });
                                   Navigator.of(context).pop();
                                 },
@@ -660,6 +676,10 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     setState(() => _submitting = true);
     try {
       final userId = await AuthStorage.getUserId();
+      if (_aiApprovedInsight != null && userId == null) {
+        throw Exception(
+            'User not logged in. AI approvals require account tracking.');
+      }
       final upload = _images.isEmpty
           ? {
               'urls': <String>[],
@@ -710,16 +730,65 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
       }
 
       if (_aiApprovedInsight != null) {
-        await Supabase.instance.client.from('ai_responses').insert({
-          'response_type': 'lab_test_analysis',
-          'reference_table': 'lab_tests',
-          'reference_id': labTestId,
-          'ai_model': 'Gemini 1.5 Flash',
-          'confidence_score': 0.92,
-          'response': _aiApprovedInsight,
-          'response_category': 'analysis',
-          'status': 'approved',
-          'generated_by_ai': true,
+        final approvedAiText = _aiApprovedInsight!.trim();
+        final originalAiText = (_aiOriginalInsight ?? '').trim();
+        final aiWasEdited =
+            originalAiText.isNotEmpty && approvedAiText != originalAiText;
+
+        final insertedAi = await Supabase.instance.client
+            .from('ai_responses')
+            .insert({
+              'response_type': 'lab_test_analysis',
+              'reference_table': 'lab_tests',
+              'reference_id': labTestId,
+              'ai_model': 'Gemini 1.5 Flash',
+              'confidence_score': 0.92,
+              'response': approvedAiText,
+              'response_category': 'analysis',
+              'status': 'approved',
+              'generated_by_ai': true,
+              'approved_by': userId,
+            })
+            .select('ai_response_id')
+            .single();
+
+        final aiResponseId = insertedAi['ai_response_id'] as int;
+
+        if ((_lastAiPrompt ?? '').trim().isNotEmpty) {
+          await Supabase.instance.client.from('ai_prompt_logs').insert({
+            'ai_response_id': aiResponseId,
+            'prompt': _lastAiPrompt,
+            'model_used': 'Gemini 1.5 Flash',
+          });
+        }
+
+        if (aiWasEdited) {
+          await Supabase.instance.client.from('ai_edit_history').insert({
+            'ai_response_id': aiResponseId,
+            'old_content': originalAiText,
+            'new_content': approvedAiText,
+            'edited_by': userId,
+            'edit_reason': 'Midwife edited AI lab analysis before final save.',
+          });
+        }
+
+        await Supabase.instance.client.from('audit_trail').insert({
+          'action': 'AI_APPROVAL',
+          'table_name': 'ai_responses',
+          'account_id': userId,
+          'old_data': {
+            'status': aiWasEdited ? 'edited' : 'generated',
+            'approved_by': null,
+          },
+          'new_data': {
+            'ai_response_id': aiResponseId,
+            'status': 'approved',
+            'approved_by': userId,
+            'reference_table': 'lab_tests',
+            'reference_id': labTestId,
+          },
+          'description':
+              'Midwife approved AI lab analysis for lab_test_id=$labTestId.',
         });
       }
 
@@ -841,6 +910,8 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                 _images.removeAt(index);
                 _aiDraftInsight = null;
                 _aiApprovedInsight = null;
+                _aiOriginalInsight = null;
+                _lastAiPrompt = null;
               });
             },
             iconSize: 18,

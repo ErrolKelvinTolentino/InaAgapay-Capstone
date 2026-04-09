@@ -209,7 +209,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
     // ── 3. Build baseline risk from DB level (if present) or fallback engine ─
     String baselineLevel = 'low';
-    int baselineScore = 5;
+    double baselineScore = 5;
     String baselineNote = 'No significant risk factors identified.';
     final baselineFactors = <String>[];
 
@@ -218,8 +218,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           (dbLevel == 'high' || dbLevel == 'medium' || dbLevel == 'low')
               ? dbLevel
               : 'low';
-      baselineScore =
-          baselineLevel == 'high' ? 60 : baselineLevel == 'medium' ? 30 : 5;
+      baselineScore = baselineLevel == 'high'
+          ? 60
+          : baselineLevel == 'medium'
+              ? 30
+              : 5;
       baselineFactors.addAll(
           dbFactors.isNotEmpty ? dbFactors : ['No risk factors recorded yet']);
 
@@ -252,7 +255,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           MedicalConditionEntry(
             conditionName: condition['condition_name'] ?? '',
             status: condition['status'] ?? 'active',
-          )..diagnosisDate = DateTime.tryParse(condition['diagnosis_date'] ?? ''),
+          )..diagnosisDate =
+              DateTime.tryParse(condition['diagnosis_date'] ?? ''),
         );
       }
       final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
@@ -294,15 +298,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           hasSevereSupplementalSignal = true;
           supplementalFactors.add(
               'Ultrasound ($usDate): severe/urgent finding mentioned in remarks');
-        } else if (
-            RegExp(r'abnormal|concern|suspicious', caseSensitive: false)
-                .hasMatch(remarks)) {
+        } else if (RegExp(r'abnormal|concern|suspicious', caseSensitive: false)
+            .hasMatch(remarks)) {
           supplementalScore += 2;
           supplementalFactors
               .add('Ultrasound ($usDate): abnormal or concerning finding');
-        } else if (
-            RegExp(r'follow|monitor|repeat', caseSensitive: false)
-                .hasMatch(remarks)) {
+        } else if (RegExp(r'follow|monitor|repeat', caseSensitive: false)
+            .hasMatch(remarks)) {
           supplementalScore += 1;
           supplementalFactors
               .add('Ultrasound ($usDate): requires follow-up monitoring');
@@ -353,17 +355,19 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       return 'low';
     }
 
-    final supplementalRank = hasSevereSupplementalSignal || supplementalScore >= 3
-        ? 2
-        : supplementalScore >= 1
-            ? 1
-            : 0;
+    final supplementalRank =
+        hasSevereSupplementalSignal || supplementalScore >= 3
+            ? 2
+            : supplementalScore >= 1
+                ? 1
+                : 0;
 
-    final finalRank =
-        rankOf(baselineLevel) >= supplementalRank ? rankOf(baselineLevel) : supplementalRank;
+    final finalRank = rankOf(baselineLevel) >= supplementalRank
+        ? rankOf(baselineLevel)
+        : supplementalRank;
     final finalLevel = levelFromRank(finalRank);
 
-    int finalScore = baselineScore + (supplementalScore * 8);
+    double finalScore = baselineScore + (supplementalScore * 8);
     if (finalLevel == 'high' && finalScore < 60) finalScore = 60;
     if (finalLevel == 'medium' && finalScore < 30) finalScore = 30;
     if (finalLevel == 'low' && finalScore < 5) finalScore = 5;
@@ -437,7 +441,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             '• Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [WITHIN NORMAL LIMITS].\n');
       }
     } else {
-      buffer.write('• Maternal Vitals - Blood Pressure: Not documented in this record.\n');
+      buffer.write(
+          '• Maternal Vitals - Blood Pressure: Not documented in this record.\n');
     }
 
     if (weight != null) {
@@ -450,8 +455,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         buffer.write(
             '• Fetal Status - Heart Rate: $fhr bpm [WITHIN NORMAL LIMITS].\n');
       } else {
-        buffer.write(
-            '• Fetal Status - Heart Rate: $fhr bpm [REVIEW].\n');
+        buffer.write('• Fetal Status - Heart Rate: $fhr bpm [REVIEW].\n');
       }
     } else if (fhrRaw != '—') {
       buffer.write('• Fetal Status - Heart Rate: $fhrRaw [REVIEW MANUALLY].\n');
@@ -466,8 +470,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       if (edema == 'none') {
         buffer.write('• Maternal Observation - Edema: None reported.\n');
       } else {
-        buffer.write(
-            '• Maternal Observation - Edema: $edemaRaw [MONITOR].\n');
+        buffer.write('• Maternal Observation - Edema: $edemaRaw [MONITOR].\n');
       }
     }
 
@@ -482,7 +485,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
     buffer.write('\nRECOMMENDATIONS:\n');
     buffer.write('• Continue scheduled prenatal follow-up visits.\n');
-    buffer.write('• Monitor maternal warning signs and fetal movement daily.\n');
+    buffer
+        .write('• Monitor maternal warning signs and fetal movement daily.\n');
     if ((bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) ||
         (fhr != null && (fhr < 120 || fhr > 160))) {
       buffer.write(
@@ -609,14 +613,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           riskScore += 3;
           observations.add(
               'Latest Checkup ($checkupDate): BP $bpSys/$bpDia mmHg is elevated.');
-          recommendations
-              .add('Increase BP monitoring frequency and assess warning signs.');
+          recommendations.add(
+              'Increase BP monitoring frequency and assess warning signs.');
         } else if (bpSys < 90 || bpDia < 60) {
           riskScore += 1;
           observations.add(
               'Latest Checkup ($checkupDate): BP $bpSys/$bpDia mmHg is lower than expected.');
-          recommendations
-              .add('Review hydration status and monitor dizziness/syncope symptoms.');
+          recommendations.add(
+              'Review hydration status and monitor dizziness/syncope symptoms.');
         } else {
           observations.add(
               'Latest Checkup ($checkupDate): Blood pressure is within expected range.');
@@ -647,8 +651,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       }
     } else {
       observations.add('No prenatal checkup records are currently available.');
-      recommendations
-          .add('Schedule a prenatal checkup to refresh current maternal status.');
+      recommendations.add(
+          'Schedule a prenatal checkup to refresh current maternal status.');
     }
 
     if (latestUltrasound != null) {
@@ -660,8 +664,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           riskScore += 3;
           observations.add(
               'Latest Ultrasound ($usDate): Findings indicate concern/abnormality in remarks.');
-          recommendations
-              .add('Review latest ultrasound report with obstetric interpretation.');
+          recommendations.add(
+              'Review latest ultrasound report with obstetric interpretation.');
         } else if (RegExp(r'follow|monitor', caseSensitive: false)
             .hasMatch(remarks)) {
           riskScore += 1;
@@ -702,7 +706,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           riskScore += 1;
           observations.add(
               'Latest Lab Test ($labDate): Borderline/observe findings were noted.');
-          recommendations.add('Trend repeat labs if symptoms persist or worsen.');
+          recommendations
+              .add('Trend repeat labs if symptoms persist or worsen.');
         } else if (RegExp(r'within normal limits|normal', caseSensitive: false)
             .hasMatch(labText)) {
           observations.add(

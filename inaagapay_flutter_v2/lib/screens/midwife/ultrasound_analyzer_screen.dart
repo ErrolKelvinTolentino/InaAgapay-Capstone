@@ -25,7 +25,8 @@ class UltrasoundAnalyzerScreen extends StatefulWidget {
   });
 
   @override
-  State<UltrasoundAnalyzerScreen> createState() => _UltrasoundAnalyzerScreenState();
+  State<UltrasoundAnalyzerScreen> createState() =>
+      _UltrasoundAnalyzerScreenState();
 }
 
 class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
@@ -38,16 +39,20 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   bool _isLoading = false;
   bool _isSaving = false;
   String? _errorMessage;
-  
+
   late TextEditingController _healthSummaryController;
   late TextEditingController _explanationController;
   bool _isEditing = false;
+  String? _lastAiPrompt;
 
   DateTime? _ultrasoundDate;
   final TextEditingController _dateController = TextEditingController();
-  final TextEditingController _healthWorkerNameController = TextEditingController();
-  final TextEditingController _healthWorkerInstitutionController = TextEditingController();
-  final TextEditingController _healthWorkerProfessionController = TextEditingController();
+  final TextEditingController _healthWorkerNameController =
+      TextEditingController();
+  final TextEditingController _healthWorkerInstitutionController =
+      TextEditingController();
+  final TextEditingController _healthWorkerProfessionController =
+      TextEditingController();
 
   String? _userRole;
   late int _motherId;
@@ -60,13 +65,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     super.initState();
     _healthSummaryController = TextEditingController();
     _explanationController = TextEditingController();
-    
+
     _ultrasoundDate = DateTime.now();
     _dateController.text = _dateFormat.format(_ultrasoundDate!);
-    
+
     _motherId = widget.motherId;
     _pregnancyId = widget.pregnancyId;
-    
+
     _loadUserContext();
   }
 
@@ -182,7 +187,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
     );
-    
+
     if (picked != null) {
       setState(() {
         _ultrasoundDate = picked;
@@ -236,12 +241,18 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     });
 
     try {
-      final result = await _geminiService.analyzeUltrasoundImages(_selectedImages);
-      
+      _lastAiPrompt = [
+        'Ultrasound AI analysis request',
+        'Image count: ${_selectedImages.length}',
+      ].join('\n');
+
+      final result =
+          await _geminiService.analyzeUltrasoundImages(_selectedImages);
+
       setState(() {
         _combinedResponse = result;
         _isLoading = false;
-        
+
         if (result.description.isNotEmpty) {
           _healthSummaryController.text = result.description;
           _explanationController.text = _extractExplanation(result.description);
@@ -267,7 +278,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
     try {
       final userId = await AuthStorage.getUserId();
-      
+
       if (userId == null) {
         throw Exception('User not logged in');
       }
@@ -276,28 +287,27 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
       final List<String> uploadedFilePaths = [];
       final List<int> fileIds = [];
-      
+
       for (int i = 0; i < _selectedImages.length; i++) {
         final image = _selectedImages[i];
         final bytes = await image.readAsBytes();
-        final fileName = 'ultrasound_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+        final fileName =
+            'ultrasound_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
         final filePath = 'ultrasounds/$_motherId/$fileName';
-        
-        await Supabase.instance.client.storage
-            .from('files')
-            .uploadBinary(
+
+        await Supabase.instance.client.storage.from('files').uploadBinary(
               filePath,
               bytes,
               fileOptions: const FileOptions(contentType: 'image/jpeg'),
             );
-        
+
         final publicUrl = Supabase.instance.client.storage
             .from('files')
             .getPublicUrl(filePath);
-        
+
         uploadedFilePaths.add(filePath);
         _uploadedImageUrls.add(publicUrl);
-        
+
         final fileResponse = await Supabase.instance.client
             .from('files')
             .insert({
@@ -325,15 +335,17 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             'pregnancy_id': _pregnancyId,
             'ultrasound_date': _ultrasoundDate!.toIso8601String().split('T')[0],
             'ultrasound_location': 'Mobile Upload',
-            'ultrasound_image': _uploadedImageUrls.isNotEmpty 
+            'ultrasound_image': _uploadedImageUrls.isNotEmpty
                 ? _uploadedImageUrls.join(',')
                 : null,
             'remarks': _healthSummaryController.text,
             'health_worker_name': _healthWorkerNameController.text.trim(),
-            'health_worker_institution': _healthWorkerInstitutionController.text.trim().isEmpty 
-                ? null 
-                : _healthWorkerInstitutionController.text.trim(),
-            'health_worker_profession': _healthWorkerProfessionController.text.trim(),
+            'health_worker_institution':
+                _healthWorkerInstitutionController.text.trim().isEmpty
+                    ? null
+                    : _healthWorkerInstitutionController.text.trim(),
+            'health_worker_profession':
+                _healthWorkerProfessionController.text.trim(),
             'created_at': DateTime.now().toIso8601String(),
           })
           .select('ultrasound_id')
@@ -341,7 +353,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
       final ultrasoundId = ultrasoundResponse['ultrasound_id'] as int;
 
-      await Supabase.instance.client
+      final finalAiText = _healthSummaryController.text.trim();
+      final originalAiText = (_combinedResponse?.description ?? '').trim();
+      final aiWasEdited =
+          originalAiText.isNotEmpty && finalAiText != originalAiText;
+
+      final insertedAi = await Supabase.instance.client
           .from('ai_responses')
           .insert({
             'response_type': 'ultrasound_analysis',
@@ -349,24 +366,64 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             'reference_id': ultrasoundId,
             'ai_model': 'Gemini 1.5 Flash',
             'confidence_score': 0.92,
-            'response': _combinedResponse!.description,
+            'response': finalAiText,
             'response_category': 'analysis',
-            'status': 'generated',
+            'status': 'approved',
             'generated_by_ai': true,
+            'approved_by': userId,
             'created_at': DateTime.now().toIso8601String(),
-          });
+          })
+          .select('ai_response_id')
+          .single();
+
+      final aiResponseId = insertedAi['ai_response_id'] as int;
+
+      if ((_lastAiPrompt ?? '').trim().isNotEmpty) {
+        await Supabase.instance.client.from('ai_prompt_logs').insert({
+          'ai_response_id': aiResponseId,
+          'prompt': _lastAiPrompt,
+          'model_used': 'Gemini 1.5 Flash',
+        });
+      }
+
+      if (aiWasEdited) {
+        await Supabase.instance.client.from('ai_edit_history').insert({
+          'ai_response_id': aiResponseId,
+          'old_content': originalAiText,
+          'new_content': finalAiText,
+          'edited_by': userId,
+          'edit_reason':
+              'Midwife edited AI ultrasound analysis before final save.',
+        });
+      }
+
+      await Supabase.instance.client.from('audit_trail').insert({
+        'action': 'AI_APPROVAL',
+        'table_name': 'ai_responses',
+        'account_id': userId,
+        'old_data': {
+          'status': aiWasEdited ? 'edited' : 'generated',
+          'approved_by': null,
+        },
+        'new_data': {
+          'ai_response_id': aiResponseId,
+          'status': 'approved',
+          'approved_by': userId,
+          'reference_table': 'ultrasounds',
+          'reference_id': ultrasoundId,
+        },
+        'description':
+            'Midwife approved AI ultrasound analysis for ultrasound_id=$ultrasoundId.',
+      });
 
       for (int fileId in fileIds) {
-        await Supabase.instance.client
-            .from('files')
-            .update({
-              'reference_id': ultrasoundId,
-            })
-            .eq('file_id', fileId);
+        await Supabase.instance.client.from('files').update({
+          'reference_id': ultrasoundId,
+        }).eq('file_id', fileId);
       }
 
       if (!mounted) return;
-      
+
       await showDialog(
         context: context,
         builder: (_) => DialogBox(
@@ -380,14 +437,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           },
         ),
       );
-
     } catch (e) {
       if (kDebugMode) {
         print('Error saving to database: $e');
       }
-      
+
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error saving: ${e.toString()}'),
@@ -404,7 +460,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   String _extractHealthSummary(String description) {
-    final summaryMatch = RegExp(r'HEALTH SUMMARY:([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)', caseSensitive: false).firstMatch(description);
+    final summaryMatch = RegExp(
+            r'HEALTH SUMMARY:([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)',
+            caseSensitive: false)
+        .firstMatch(description);
     if (summaryMatch != null) {
       return summaryMatch.group(1)?.trim() ?? description.split('\n').first;
     }
@@ -412,61 +471,66 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   String _extractExplanation(String description) {
-    final explanationMatch = RegExp(r'(?:BASIS|REASONING|EXPLANATION):([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)', caseSensitive: false).firstMatch(description);
+    final explanationMatch = RegExp(
+            r'(?:BASIS|REASONING|EXPLANATION):([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)',
+            caseSensitive: false)
+        .firstMatch(description);
     if (explanationMatch != null) {
       return explanationMatch.group(1)?.trim() ?? '';
     }
-    
+
     final lines = description.split('\n');
     final filteredLines = <String>[];
-    
+
     bool skipSection = false;
-    
+
     for (String line in lines) {
       if (line.contains('ANATOMICAL ASSESSMENT:')) {
         skipSection = true;
         continue;
       }
-      
+
       if (line.contains('KEY OBSERVATIONS:')) {
         skipSection = true;
         continue;
       }
-      
+
       if (line.contains('HEALTH SUMMARY:')) {
         skipSection = false;
         continue;
       }
-      
+
       if (!skipSection) {
-        if (line.trim().isNotEmpty || 
+        if (line.trim().isNotEmpty ||
             (filteredLines.isNotEmpty && filteredLines.last.isNotEmpty)) {
           filteredLines.add(line);
         }
       }
     }
-    
+
     if (filteredLines.isNotEmpty) {
       return filteredLines.join('\n').trim();
     }
-    
+
     return '';
   }
 
   // Beautiful formatted text widget
   Widget _buildFormattedText(String text) {
     if (text.isEmpty) return const SizedBox.shrink();
-    
+
     // Split by sections (marked by ALL CAPS lines)
     final lines = text.split('\n');
     final List<Widget> sections = [];
-    
+
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
       if (line.isEmpty) continue;
-      
+
       // Check if this is a section header (all caps and longer than 2 chars)
-      if (line.length > 2 && line == line.toUpperCase() && !line.contains(RegExp(r'[0-9]'))) {
+      if (line.length > 2 &&
+          line == line.toUpperCase() &&
+          !line.contains(RegExp(r'[0-9]'))) {
         sections.add(
           Padding(
             padding: const EdgeInsets.only(top: 16, bottom: 8),
@@ -500,7 +564,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         );
       }
       // Check if line starts with bullet point
-      else if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
+      else if (line.startsWith('•') ||
+          line.startsWith('-') ||
+          line.startsWith('*')) {
         sections.add(
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -513,7 +579,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   height: 6,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [AppColors.brandPrimary, AppColors.brandSecondary],
+                      colors: [
+                        AppColors.brandPrimary,
+                        AppColors.brandSecondary
+                      ],
                     ),
                     shape: BoxShape.circle,
                   ),
@@ -564,8 +633,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               ),
             ),
           );
-        }
-        else if (line.contains('⚠️') || line.contains('MONITORING') || line.contains('CONCERN')) {
+        } else if (line.contains('⚠️') ||
+            line.contains('MONITORING') ||
+            line.contains('CONCERN')) {
           sections.add(
             Container(
               margin: const EdgeInsets.symmetric(vertical: 4),
@@ -593,8 +663,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               ),
             ),
           );
-        }
-        else if (line.contains('🔍') || line.contains('FURTHER EVALUATION')) {
+        } else if (line.contains('🔍') || line.contains('FURTHER EVALUATION')) {
           sections.add(
             Container(
               margin: const EdgeInsets.symmetric(vertical: 4),
@@ -622,8 +691,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               ),
             ),
           );
-        }
-        else {
+        } else {
           sections.add(
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -640,7 +708,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         }
       }
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: sections,
@@ -707,7 +775,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   String _getHealthStatus() {
     if (_combinedResponse == null) return 'Assessment Complete';
-    
+
     if (_combinedResponse!.healthStatus != null) {
       if (_combinedResponse!.healthStatus!.contains('HEALTHY')) {
         return 'HEALTHY PREGNANCY';
@@ -715,13 +783,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         return 'REQUIRES MONITORING';
       }
     }
-    
+
     return 'ASSESSMENT COMPLETE';
   }
 
   Color _getHealthStatusColor() {
     if (_combinedResponse == null) return Colors.grey;
-    
+
     if (_combinedResponse!.healthStatus != null) {
       if (_combinedResponse!.healthStatus!.contains('HEALTHY')) {
         return Colors.green;
@@ -729,13 +797,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         return Colors.orange;
       }
     }
-    
+
     return AppColors.brandPrimary;
   }
 
   IconData _getHealthStatusIcon() {
     if (_combinedResponse == null) return Icons.help_outline;
-    
+
     if (_combinedResponse!.healthStatus != null) {
       if (_combinedResponse!.healthStatus!.contains('HEALTHY')) {
         return Icons.check_circle;
@@ -743,13 +811,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         return Icons.warning;
       }
     }
-    
+
     return Icons.info;
   }
 
   Widget _buildEditableSection() {
     if (_combinedResponse == null) return const SizedBox.shrink();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -782,8 +850,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   IconButton(
                     onPressed: () {
                       setState(() {
-                        _healthSummaryController.text = _extractHealthSummary(_combinedResponse!.description);
-                        _explanationController.text = _extractExplanation(_combinedResponse!.description);
+                        _healthSummaryController.text = _extractHealthSummary(
+                            _combinedResponse!.description);
+                        _explanationController.text =
+                            _extractExplanation(_combinedResponse!.description);
                         _isEditing = false;
                       });
                     },
@@ -855,7 +925,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: _getHealthStatusColor().withOpacity(0.2),
                       borderRadius: BorderRadius.circular(20),
@@ -960,7 +1031,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   controller: _explanationController,
                   maxLines: 8,
                   decoration: InputDecoration(
-                    hintText: 'Enter recommendations with bullet points...\n• Point 1\n• Point 2\n• Point 3',
+                    hintText:
+                        'Enter recommendations with bullet points...\n• Point 1\n• Point 2\n• Point 3',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: Colors.grey.shade300),
@@ -979,7 +1051,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   Widget _buildDetailedFindings() {
     if (_combinedResponse == null) return const SizedBox.shrink();
-    
+
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(20),
@@ -1006,7 +1078,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   color: Colors.teal.shade50,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.info_outline, color: Colors.teal, size: 24),
+                child: const Icon(Icons.info_outline,
+                    color: Colors.teal, size: 24),
               ),
               const SizedBox(width: 12),
               const Text(
@@ -1021,7 +1094,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           const Divider(height: 24),
 
           // Measurements
-          if (_combinedResponse!.measurements != null && _combinedResponse!.measurements!.isNotEmpty) ...[
+          if (_combinedResponse!.measurements != null &&
+              _combinedResponse!.measurements!.isNotEmpty) ...[
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
@@ -1035,7 +1109,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.straighten, color: Colors.teal, size: 20),
+                      const Icon(Icons.straighten,
+                          color: Colors.teal, size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'Measurements',
@@ -1078,7 +1153,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           ],
 
           // Key Findings
-          if (_combinedResponse!.normalFindings != null && _combinedResponse!.normalFindings!.isNotEmpty) ...[
+          if (_combinedResponse!.normalFindings != null &&
+              _combinedResponse!.normalFindings!.isNotEmpty) ...[
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
@@ -1092,7 +1168,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      const Icon(Icons.check_circle,
+                          color: Colors.green, size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'Normal Findings',
@@ -1135,7 +1212,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           ],
 
           // Concerns
-          if (_combinedResponse!.concerns != null && _combinedResponse!.concerns!.isNotEmpty) ...[
+          if (_combinedResponse!.concerns != null &&
+              _combinedResponse!.concerns!.isNotEmpty) ...[
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
@@ -1201,7 +1279,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline, size: 20, color: Colors.amber.shade800),
+                Icon(Icons.info_outline,
+                    size: 20, color: Colors.amber.shade800),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -1248,7 +1327,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+                      icon: const Icon(Icons.arrow_back,
+                          color: AppColors.textPrimary),
                       onPressed: () => Navigator.pop(context),
                       constraints: const BoxConstraints(
                         minWidth: 40,
@@ -1277,14 +1357,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 ],
               ),
             ),
-
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         color: Colors.teal.shade50,
                         borderRadius: BorderRadius.circular(12),
@@ -1298,7 +1378,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(Icons.person, size: 20, color: Colors.teal.shade700),
+                            child: Icon(Icons.person,
+                                size: 20, color: Colors.teal.shade700),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -1326,9 +1407,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 16),
-
                     if (_selectedImages.isNotEmpty) ...[
                       SizedBox(
                         height: 90,
@@ -1344,7 +1423,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                                   margin: const EdgeInsets.only(right: 8),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: Colors.teal, width: 2),
+                                    border: Border.all(
+                                        color: Colors.teal, width: 2),
                                   ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(10),
@@ -1385,12 +1465,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-
                     Row(
                       children: [
                         Expanded(
                           child: SecondaryButton(
-                            label: _selectedImages.isEmpty ? 'Add Images' : 'Add More',
+                            label: _selectedImages.isEmpty
+                                ? 'Add Images'
+                                : 'Add More',
                             onPressed: _showImageSourceDialog,
                             leadingIcon: Icons.add_a_photo,
                           ),
@@ -1405,9 +1486,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 16),
-
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -1432,7 +1511,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                                   color: Colors.teal.shade50,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(Icons.assignment, color: Colors.teal),
+                                child: const Icon(Icons.assignment,
+                                    color: Colors.teal),
                               ),
                               const SizedBox(width: 12),
                               const Text(
@@ -1445,22 +1525,24 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                             ],
                           ),
                           const SizedBox(height: 20),
-                          
                           InkWell(
                             onTap: _selectDate,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
                                 color: AppColors.bgSecondary,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.calendar_today, size: 20, color: Colors.teal),
+                                  const Icon(Icons.calendar_today,
+                                      size: 20, color: Colors.teal),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           'Study Date *',
@@ -1479,7 +1561,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                                       ],
                                     ),
                                   ),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                                  const Icon(Icons.arrow_drop_down,
+                                      color: AppColors.textSecondary),
                                 ],
                               ),
                             ),
@@ -1487,9 +1570,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 16),
-
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -1514,7 +1595,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                                   color: Colors.teal.shade50,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(Icons.person, color: Colors.teal),
+                                child: const Icon(Icons.person,
+                                    color: Colors.teal),
                               ),
                               const SizedBox(width: 12),
                               const Text(
@@ -1527,7 +1609,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                             ],
                           ),
                           const SizedBox(height: 20),
-                          
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1542,9 +1623,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                               ),
                             ),
                           ),
-                          
                           const SizedBox(height: 12),
-                          
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1559,9 +1638,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                               ),
                             ),
                           ),
-                          
                           const SizedBox(height: 12),
-                          
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
@@ -1576,7 +1653,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                               ),
                             ),
                           ),
-                          
                           const SizedBox(height: 8),
                           const Text(
                             '* Required fields',
@@ -1589,9 +1665,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 16),
-
                     if (_isLoading)
                       Container(
                         padding: const EdgeInsets.all(32),
@@ -1613,7 +1687,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                               height: 50,
                               child: CircularProgressIndicator(
                                 strokeWidth: 3,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.teal),
                               ),
                             ),
                             SizedBox(height: 16),
@@ -1628,7 +1703,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                           ],
                         ),
                       ),
-
                     if (_errorMessage != null && !_isLoading)
                       Container(
                         width: double.infinity,
@@ -1640,7 +1714,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.error_outline, color: Colors.red.shade400),
+                            Icon(Icons.error_outline,
+                                color: Colors.red.shade400),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -1651,10 +1726,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                           ],
                         ),
                       ),
-
                     if (_combinedResponse != null && !_isLoading) ...[
                       const SizedBox(height: 16),
-                      
+
                       // Status Banner
                       Container(
                         width: double.infinity,
@@ -1739,7 +1813,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                           child: Padding(
                             padding: EdgeInsets.all(20),
                             child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.green),
                             ),
                           ),
                         ),

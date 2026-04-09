@@ -50,6 +50,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   int _analysisRunId = 0;
   final Set<int> _cancelledRunIds = <int>{};
   final Set<String> _expandedAspects = <String>{};
+  String? _lastAiPrompt;
 
   final TextEditingController _notesController = TextEditingController();
 
@@ -499,6 +500,13 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     });
 
     try {
+      _lastAiPrompt = [
+        'Lab test AI analysis request',
+        'Selected lab type: ${_selectedLabType ?? 'Not specified'}',
+        'Notes: ${_notesController.text.trim().isEmpty ? 'None provided' : _notesController.text.trim()}',
+        'Image count: ${_selectedImages.length}',
+      ].join('\n');
+
       _setLoadingState(
         'Reading laboratory record',
         'Extracting laboratory values from uploaded images',
@@ -672,17 +680,66 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       final labTestId = labTestResponse['lab_test_id'] as int;
 
       if (aiGenerated) {
-        await Supabase.instance.client.from('ai_responses').insert({
-          'response_type': 'lab_test_analysis',
-          'reference_table': 'lab_tests',
-          'reference_id': labTestId,
-          'ai_model': 'Gemini 1.5 Flash',
-          'confidence_score': 0.92,
-          'response': _combinedResponse!.description,
-          'response_category': 'analysis',
-          'status': 'generated',
-          'generated_by_ai': true,
-          'created_at': DateTime.now().toIso8601String(),
+        final finalAiText = _healthSummaryController.text.trim();
+        final originalAiText = (_combinedResponse?.description ?? '').trim();
+        final aiWasEdited =
+            originalAiText.isNotEmpty && finalAiText != originalAiText;
+
+        final insertedAi = await Supabase.instance.client
+            .from('ai_responses')
+            .insert({
+              'response_type': 'lab_test_analysis',
+              'reference_table': 'lab_tests',
+              'reference_id': labTestId,
+              'ai_model': 'Gemini 1.5 Flash',
+              'confidence_score': 0.92,
+              'response': finalAiText,
+              'response_category': 'analysis',
+              'status': 'approved',
+              'generated_by_ai': true,
+              'approved_by': userId,
+              'created_at': DateTime.now().toIso8601String(),
+            })
+            .select('ai_response_id')
+            .single();
+
+        final aiResponseId = insertedAi['ai_response_id'] as int;
+
+        if ((_lastAiPrompt ?? '').trim().isNotEmpty) {
+          await Supabase.instance.client.from('ai_prompt_logs').insert({
+            'ai_response_id': aiResponseId,
+            'prompt': _lastAiPrompt,
+            'model_used': 'Gemini 1.5 Flash',
+          });
+        }
+
+        if (aiWasEdited) {
+          await Supabase.instance.client.from('ai_edit_history').insert({
+            'ai_response_id': aiResponseId,
+            'old_content': originalAiText,
+            'new_content': finalAiText,
+            'edited_by': userId,
+            'edit_reason': 'Midwife edited AI lab analysis before final save.',
+          });
+        }
+
+        await Supabase.instance.client.from('audit_trail').insert({
+          'action': 'AI_APPROVAL',
+          'table_name': 'ai_responses',
+          'account_id': userId,
+          'old_data': {
+            'status': aiWasEdited ? 'edited' : 'generated',
+            'approved_by': null,
+          },
+          'new_data': {
+            'ai_response_id': aiResponseId,
+            'status': 'approved',
+            'approved_by': userId,
+            'reference_table': 'lab_tests',
+            'reference_id': labTestId,
+          },
+          'description':
+              'Midwife approved AI lab analysis for lab_test_id=$labTestId.',
         });
       }
 
