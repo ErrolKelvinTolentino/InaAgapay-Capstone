@@ -348,31 +348,41 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
           final existingData = result['data'];
 
-          final shouldLoad = await showDialog<bool>(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Existing Account Found'),
-              content: Text(
-                  'An account already exists for ${existingData['email_address']}.\n\n'
-                  'This account was created by the mother but is incomplete.\n\n'
-                  'Would you like to load the existing data and complete the missing information?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary,
-                  ),
-                  child: const Text('Load & Continue'),
-                ),
-              ],
-            ),
-          );
+// In _checkExistingAccount() method, find the AlertDialog and update:
 
+final shouldLoad = await showDialog<bool>(
+  context: context,
+  barrierDismissible: false,
+  builder: (ctx) => AlertDialog(
+    title: const Text('Existing Account Found'),
+    content: Text(
+      'An account already exists for ${existingData['email_address']}.\n\n'
+      'This account was created by the mother but is incomplete.\n\n'
+      'Would you like to load the existing data and complete the missing information?'
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(ctx, false),
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.textSecondary,
+        ),
+        child: const Text('Cancel', style: TextStyle(fontSize: 14)),
+      ),
+      ElevatedButton(
+        onPressed: () => Navigator.pop(ctx, true),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.brandPrimary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: const Text('Load & Continue', style: TextStyle(fontSize: 14)),
+      ),
+    ],
+  ),
+);
           if (shouldLoad == true) {
             // Personal Information
             _firstNameCtrl.text = existingData['first_name'] ?? '';

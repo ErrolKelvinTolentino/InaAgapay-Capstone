@@ -76,9 +76,9 @@ class InaagapayApp extends StatelessWidget {
         debugPrint('accountId: $accountId');
       }
       
-      if (motherId != null && accountId != null) {
+      if (accountId != null) {
         try {
-          // Get the created_by field to know how account was created
+          // Get the created_by field and check if mother record exists
           final accountResponse = await SupabaseService.client
               .from('accounts')
               .select('created_by, first_name, last_name, phone_number')
@@ -87,18 +87,36 @@ class InaagapayApp extends StatelessWidget {
           
           final createdBy = accountResponse?['created_by'] as String? ?? 'self';
           
+          // Check if mother record exists with BHC assignment
+          final motherResponse = await SupabaseService.client
+              .from('mothers')
+              .select('mother_id, assigned_bhc_id, birthdate')
+              .eq('account_id', accountId)
+              .maybeSingle();
+          
+          final hasValidMother = motherResponse != null;
+          final hasBHC = hasValidMother && motherResponse['assigned_bhc_id'] != null;
+          
           if (kDebugMode) {
             debugPrint('Startup check - created_by: $createdBy');
+            debugPrint('Startup check - hasValidMother: $hasValidMother');
+            debugPrint('Startup check - hasBHC: $hasBHC');
+            debugPrint('Startup check - motherResponse: $motherResponse');
           }
           
-          // For midwife-created or midwife-updated accounts, always skip Complete Profile
+          // If mother exists but no mother_id in storage, save it
+          if (hasValidMother && motherId == null) {
+            final newMotherId = motherResponse['mother_id'] as int;
+            await AuthStorage.saveMotherId(newMotherId);
+            if (kDebugMode) {
+              debugPrint('Saved missing mother_id: $newMotherId');
+            }
+          }
+          
+          // For midwife-created accounts, always allow access
           if (createdBy == 'midwife') {
             if (!profileComplete) {
               await AuthStorage.saveProfileComplete(true);
-            }
-            
-            if (kDebugMode) {
-              debugPrint('Midwife-managed account - skipping Complete Profile');
             }
             
             if (needsPasswordChange) {
@@ -114,18 +132,21 @@ class InaagapayApp extends StatelessWidget {
             return const MotherDashboardShell();
           }
           
-          // For self-registered accounts, check if profile is actually complete
-          final response = await SupabaseService.client
-              .from('mothers')
-              .select('birthdate')
-              .eq('mother_id', motherId)
-              .maybeSingle();
+          // For self-registered accounts
+          // If mother doesn't have BHC assigned, show the dashboard shell which will show the warning dialog
+          if (!hasBHC) {
+            if (kDebugMode) {
+              debugPrint('Self-registered account without BHC - showing dashboard with warning');
+            }
+            return const MotherDashboardShell();
+          }
           
+          // Check if profile is complete (has all required fields)
           final hasFirstName = accountResponse?['first_name'] != null && 
                                (accountResponse?['first_name']?.toString() ?? '').isNotEmpty;
           final hasLastName = accountResponse?['last_name'] != null && 
                               (accountResponse?['last_name']?.toString() ?? '').isNotEmpty;
-          final hasBirthdate = response != null && response['birthdate'] != null;
+          final hasBirthdate = motherResponse != null && motherResponse['birthdate'] != null;
           final hasPhone = accountResponse?['phone_number'] != null && 
                            (accountResponse?['phone_number']?.toString() ?? '').isNotEmpty;
           
@@ -165,16 +186,16 @@ class InaagapayApp extends StatelessWidget {
           return const MotherDashboardShell();
         } catch (e) {
           if (kDebugMode) {
-            print('Error checking mother profile completeness: $e');
+            print('Error checking mother profile: $e');
           }
           return const MotherDashboardShell();
         }
       }
       
       if (kDebugMode) {
-        debugPrint('Missing motherId or accountId - defaulting to dashboard');
+        debugPrint('Missing accountId - defaulting to login');
       }
-      return const MotherDashboardShell();
+      return const LoginScreen();
     }
 
     switch (role) {
@@ -300,9 +321,9 @@ class InaagapayApp extends StatelessWidget {
             }
             // Handle child profile route
             if (settings.name == '/child-profile') {
+              final childId = settings.arguments as int;
               return MaterialPageRoute(
                 builder: (_) => const MidwifeChildrenScreen(),
-                // Note: You'll need to pass childId to the screen
               );
             }
             return null;

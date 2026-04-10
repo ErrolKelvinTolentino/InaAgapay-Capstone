@@ -2,11 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
 import '../../services/supabase_service.dart';
-import '../../widgets/headline.dart';
-import '../../widgets/main_button.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 
 class RecordsScreen extends StatefulWidget {
@@ -16,32 +15,22 @@ class RecordsScreen extends StatefulWidget {
   State<RecordsScreen> createState() => _RecordsScreenState();
 }
 
-class _RecordsScreenState extends State<RecordsScreen>
-    with SingleTickerProviderStateMixin {
+class _RecordsScreenState extends State<RecordsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   int? _motherId;
-
+  
   List<Map<String, dynamic>> _ultrasounds = [];
   List<Map<String, dynamic>> _labTests = [];
-
+  List<Map<String, dynamic>> _prenatalCheckups = [];
+  
   String _selectedFilter = 'all';
-  String _sortOrder = 'desc';
   String _searchQuery = '';
-
-  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadMotherData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadMotherData() async {
@@ -52,7 +41,7 @@ class _RecordsScreenState extends State<RecordsScreen>
 
     try {
       _motherId = await AuthStorage.getMotherId();
-
+      
       if (_motherId == null) {
         throw Exception('Mother ID not found');
       }
@@ -66,26 +55,14 @@ class _RecordsScreenState extends State<RecordsScreen>
         setState(() {
           _ultrasounds = [];
           _labTests = [];
+          _prenatalCheckups = [];
+          _isLoading = false;
         });
-      } else {
-        final pregnancyIds = pregnanciesResponse
-            .map<int>((p) => p['pregnancy_id'] as int)
-            .toList();
-        await _loadRecordsForPregnancies(pregnancyIds);
+        return;
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _loadRecordsForPregnancies(List<int> pregnancyIds) async {
-    if (pregnancyIds.isNotEmpty) {
+      
+      final pregnancyIds = pregnanciesResponse.map<int>((p) => p['pregnancy_id'] as int).toList();
+      
       final ultrasoundsResponse = await SupabaseService.client
           .from('ultrasounds')
           .select('*')
@@ -98,9 +75,28 @@ class _RecordsScreenState extends State<RecordsScreen>
           .inFilter('pregnancy_id', pregnancyIds)
           .order('lab_test_date', ascending: false);
 
+      final prenatalResponse = await SupabaseService.client
+          .from('prenatal_checkups')
+          .select('''
+            *,
+            pregnancy:pregnancy_id (
+              mother_id
+            )
+          ''')
+          .inFilter('pregnancy_id', pregnancyIds)
+          .order('checkup_datetime', ascending: false);
+
       setState(() {
         _ultrasounds = List<Map<String, dynamic>>.from(ultrasoundsResponse);
         _labTests = List<Map<String, dynamic>>.from(labTestsResponse);
+        _prenatalCheckups = List<Map<String, dynamic>>.from(prenatalResponse);
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
       });
     }
   }
@@ -113,6 +109,17 @@ class _RecordsScreenState extends State<RecordsScreen>
       return DateFormat('MMM d, yyyy').format(parsed);
     } catch (e) {
       return date.toString();
+    }
+  }
+
+  String _formatDateTime(dynamic dateTime) {
+    if (dateTime == null) return '—';
+    try {
+      final parsed = DateTime.tryParse(dateTime.toString());
+      if (parsed == null) return dateTime.toString();
+      return DateFormat('MMM d, yyyy h:mm a').format(parsed);
+    } catch (e) {
+      return dateTime.toString();
     }
   }
 
@@ -208,8 +215,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                               if (subtitle != null && subtitle.isNotEmpty)
                                 Text(
                                   subtitle,
-                                  style: const TextStyle(
-                                      color: AppColors.textSecondary),
+                                  style: const TextStyle(color: AppColors.textSecondary),
                                 ),
                             ],
                           ),
@@ -221,6 +227,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                       ],
                     ),
                     const SizedBox(height: 16),
+
                     if (imageUrls != null && imageUrls.isNotEmpty) ...[
                       SizedBox(
                         height: 200,
@@ -229,15 +236,13 @@ class _RecordsScreenState extends State<RecordsScreen>
                           itemCount: imageUrls.length,
                           itemBuilder: (context, index) {
                             return GestureDetector(
-                              onTap: () =>
-                                  _showFullScreenImage(imageUrls, index),
+                              onTap: () => _showFullScreenImage(imageUrls, index),
                               child: Container(
                                 width: 200,
                                 margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(12),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
+                                  border: Border.all(color: Colors.grey.shade300),
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
@@ -251,36 +256,27 @@ class _RecordsScreenState extends State<RecordsScreen>
                                           color: AppColors.bgSecondary,
                                           child: const Center(
                                             child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
+                                              mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                Icon(Icons.broken_image,
-                                                    size: 32,
-                                                    color: Colors.grey),
+                                                Icon(Icons.broken_image, size: 32, color: Colors.grey),
                                                 SizedBox(height: 4),
                                                 Text(
                                                   'Image not available',
-                                                  style:
-                                                      TextStyle(fontSize: 10),
+                                                  style: TextStyle(fontSize: 10),
                                                   textAlign: TextAlign.center,
                                                 ),
                                               ],
                                             ),
                                           ),
                                         ),
-                                        loadingBuilder:
-                                            (context, child, loadingProgress) {
-                                          if (loadingProgress == null)
-                                            return child;
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
                                           return Container(
                                             color: AppColors.bgSecondary,
                                             child: const Center(
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 2,
-                                                valueColor:
-                                                    AlwaysStoppedAnimation<
-                                                            Color>(
-                                                        AppColors.brandPrimary),
+                                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
                                               ),
                                             ),
                                           );
@@ -296,10 +292,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                               vertical: 4,
                                             ),
                                             decoration: BoxDecoration(
-                                              color:
-                                                  Colors.black.withOpacity(0.6),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
+                                              color: Colors.black.withValues(alpha: 0.6),
+                                              borderRadius: BorderRadius.circular(12),
                                             ),
                                             child: Text(
                                               '+${imageUrls.length - 1} more',
@@ -321,6 +315,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                       ),
                       const SizedBox(height: 16),
                     ],
+
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -330,39 +325,36 @@ class _RecordsScreenState extends State<RecordsScreen>
                         border: Border.all(color: AppColors.borderPrimary),
                       ),
                       child: Column(
-                        children: rows
-                            .map((entry) => Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 6),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      SizedBox(
-                                        width: 120,
-                                        child: Text(
-                                          entry.key,
-                                          style: const TextStyle(
-                                            color: AppColors.textSecondary,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: Text(
-                                          entry.value,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                        children: rows.map((entry) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 120,
+                                child: Text(
+                                  entry.key,
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 13,
                                   ),
-                                ))
-                            .toList(),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  entry.value,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )).toList(),
                       ),
                     ),
+
                     if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Container(
@@ -371,17 +363,14 @@ class _RecordsScreenState extends State<RecordsScreen>
                         decoration: BoxDecoration(
                           color: const Color(0xFFF3E5F5),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                              color: const Color(0xFF7E57C2)
-                                  .withValues(alpha: 0.2)),
+                          border: Border.all(color: const Color(0xFF7E57C2).withValues(alpha: 0.2)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.psychology_rounded,
-                                    color: const Color(0xFF7E57C2), size: 20),
+                                Icon(Icons.psychology_rounded, color: const Color(0xFF7E57C2), size: 20),
                                 const SizedBox(width: 8),
                                 const Text(
                                   'AI-Powered Insights',
@@ -428,27 +417,67 @@ class _RecordsScreenState extends State<RecordsScreen>
     );
   }
 
+  String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
+    final buffer = StringBuffer();
+    buffer.write('Prenatal Checkup AI Insights:\n\n');
+    
+    final bpSys = checkup['blood_pressure_systolic'];
+    final bpDia = checkup['blood_pressure_diastolic'];
+    final weight = checkup['checkup_weight'];
+    final fhr = checkup['fetal_heart_beat'];
+    final remarks = checkup['remarks']?.toString().toLowerCase() ?? '';
+    
+    if (bpSys != null && bpDia != null) {
+      if (bpSys >= 140 || bpDia >= 90) {
+        buffer.write('⚠️ Blood Pressure: $bpSys/$bpDia mmHg is elevated. Monitor for preeclampsia symptoms.\n\n');
+      } else if (bpSys < 90 || bpDia < 60) {
+        buffer.write('📉 Blood Pressure: $bpSys/$bpDia mmHg is lower than expected. Ensure adequate hydration.\n\n');
+      } else {
+        buffer.write('✓ Blood Pressure: $bpSys/$bpDia mmHg is within normal range.\n\n');
+      }
+    }
+    
+    if (weight != null) {
+      buffer.write('⚖️ Weight: ${weight.toStringAsFixed(1)} kg\n\n');
+    }
+    
+    if (fhr != null) {
+      if (fhr >= 120 && fhr <= 160) {
+        buffer.write('💓 Fetal Heart Rate: $fhr bpm (Normal range)\n\n');
+      } else {
+        buffer.write('⚠️ Fetal Heart Rate: $fhr bpm (Outside normal range - needs review)\n\n');
+      }
+    }
+    
+    if (remarks.isNotEmpty && !remarks.contains('normal')) {
+      buffer.write('📝 Remarks: $remarks\n\n');
+    }
+    
+    buffer.write('Recommendations:\n');
+    buffer.write('• Continue regular prenatal checkups\n');
+    buffer.write('• Monitor fetal movements daily\n');
+    buffer.write('• Report any unusual symptoms to your healthcare provider\n');
+    
+    return buffer.toString();
+  }
+
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
     final remarks = ultrasound['remarks']?.toString().toLowerCase() ?? '';
     final buffer = StringBuffer();
-
-    buffer.write('🤖 Ultrasound AI Insights:\n\n');
-
+    
+    buffer.write('Ultrasound AI Insights:\n\n');
+    
     if (remarks.contains('normal') || remarks.contains('healthy')) {
-      buffer.write(
-          '✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
+      buffer.write('✓ Normal Findings: Ultrasound appears normal with healthy fetal development.\n\n');
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
-      buffer.write(
-          '📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
+      buffer.write('📊 Follow-up Recommended: Some findings require additional observation.\n\n');
     } else if (remarks.contains('concern') || remarks.contains('abnormal')) {
-      buffer.write(
-          '🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
+      buffer.write('🔍 Further Evaluation Needed: Discuss findings with healthcare provider.\n\n');
     } else {
-      buffer.write(
-          '📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
+      buffer.write('📋 Diagnostic Information: The ultrasound provides important diagnostic information.\n\n');
     }
 
-    buffer.write('💡 **Key Recommendations**:\n');
+    buffer.write('Key Recommendations:\n');
     buffer.write('• Discuss findings with your healthcare provider\n');
     buffer.write('• Continue all scheduled prenatal appointments\n');
 
@@ -458,831 +487,575 @@ class _RecordsScreenState extends State<RecordsScreen>
   String _generateLabTestAIInsights(Map<String, dynamic> labTest) {
     final remarks = labTest['remarks']?.toString().toLowerCase() ?? '';
     final buffer = StringBuffer();
-
-    buffer.write('🤖 Lab Test AI Analysis:\n\n');
-
+    
+    buffer.write('Lab Test AI Analysis:\n\n');
+    
     if (remarks.contains('normal')) {
-      buffer.write('✅ **All results are within normal range.**\n\n');
+      buffer.write('✓ All results are within normal range.\n\n');
     } else if (remarks.contains('abnormal') || remarks.contains('borderline')) {
-      buffer.write('⚠️ **Some values require attention.**\n\n');
+      buffer.write('⚠️ Some values require attention.\n\n');
     }
 
-    buffer.write('🏥 **Recommendations**:\n');
+    buffer.write('Recommendations:\n');
     buffer.write('• Review results with your healthcare provider\n');
     buffer.write('• Follow any prescribed treatment plans\n');
 
     return buffer.toString();
   }
 
-  List<Map<String, dynamic>> _getFilteredAndSortedRecords() {
+  List<Map<String, dynamic>> _getFilteredRecords() {
     List<Map<String, dynamic>> allRecords = [];
-
+    
+    // Add ultrasounds
     for (var ultrasound in _ultrasounds) {
       allRecords.add({
         ...ultrasound,
-        'record_type': 'ultrasound',
-        'record_date': ultrasound['ultrasound_date'],
+        'type': 'ultrasound',
+        'type_display': 'Ultrasound',
+        'date': ultrasound['ultrasound_date'],
+        'title': 'Ultrasound',
+        'icon': Icons.photo,
+        'iconColor': Colors.purple,
+        'subtitle': _formatDate(ultrasound['ultrasound_date']),
+        'health_worker': ultrasound['health_worker_name'],
       });
     }
-
+    
+    // Add lab tests
     for (var labTest in _labTests) {
       allRecords.add({
         ...labTest,
-        'record_type': 'labtest',
-        'record_date': labTest['lab_test_date'],
+        'type': 'labtest',
+        'type_display': 'Lab Test',
+        'date': labTest['lab_test_date'],
+        'title': labTest['lab_test_type'] ?? 'Lab Test',
+        'icon': Icons.science,
+        'iconColor': Colors.orange,
+        'subtitle': _formatDate(labTest['lab_test_date']),
+        'health_worker': labTest['health_worker_name'],
       });
     }
-
-    if (_selectedFilter != 'all') {
-      allRecords = allRecords
-          .where((record) => record['record_type'] == _selectedFilter)
-          .toList();
+    
+    // Add prenatal checkups
+    for (var checkup in _prenatalCheckups) {
+      allRecords.add({
+        ...checkup,
+        'type': 'prenatal',
+        'type_display': 'Prenatal Checkup',
+        'date': checkup['checkup_datetime'],
+        'title': 'Prenatal Checkup',
+        'icon': Icons.medical_services,
+        'iconColor': AppColors.brandPrimary,
+        'subtitle': _formatDateTime(checkup['checkup_datetime']),
+        'health_worker': null,
+      });
     }
-
+    
+    // Apply filter
+    if (_selectedFilter != 'all') {
+      allRecords = allRecords.where((record) => record['type'] == _selectedFilter).toList();
+    }
+    
+    // Apply search
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       allRecords = allRecords.where((record) {
-        if (record['record_type'] == 'ultrasound') {
-          return _formatDate(record['ultrasound_date'])
-                  .toLowerCase()
-                  .contains(query) ||
-              (record['remarks']?.toString().toLowerCase().contains(query) ??
-                  false);
-        } else {
-          return _formatDate(record['lab_test_date'])
-                  .toLowerCase()
-                  .contains(query) ||
-              (record['lab_test_type']
-                      ?.toString()
-                      .toLowerCase()
-                      .contains(query) ??
-                  false) ||
-              (record['remarks']?.toString().toLowerCase().contains(query) ??
-                  false);
-        }
+        return record['title'].toString().toLowerCase().contains(query) ||
+               record['subtitle'].toString().toLowerCase().contains(query) ||
+               (record['remarks']?.toString().toLowerCase().contains(query) ?? false) ||
+               (record['lab_test_type']?.toString().toLowerCase().contains(query) ?? false);
       }).toList();
     }
-
+    
+    // Sort by date (newest first)
     allRecords.sort((a, b) {
-      final dateA = DateTime.tryParse(a['record_date'] ?? '');
-      final dateB = DateTime.tryParse(b['record_date'] ?? '');
+      final dateA = DateTime.tryParse(a['date'] ?? '');
+      final dateB = DateTime.tryParse(b['date'] ?? '');
       if (dateA == null || dateB == null) return 0;
-      return _sortOrder == 'desc'
-          ? dateB.compareTo(dateA)
-          : dateA.compareTo(dateB);
+      return dateB.compareTo(dateA);
     });
-
+    
     return allRecords;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
-        ),
-      );
-    }
+    final records = _getFilteredRecords();
+    final totalCount = _ultrasounds.length + _labTests.length + _prenatalCheckups.length;
+    final filteredCount = records.length;
 
-    if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: Colors.red,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Headline(text: 'Failed to Load Records'),
-              const SizedBox(height: 8),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 24),
-              MainButton(
-                label: 'Retry',
-                onPressed: _loadMotherData,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
 
-    final allRecords = _getFilteredAndSortedRecords();
-
-    return Column(
-      children: [
-        Container(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            indicatorColor: AppColors.brandPrimary,
-            labelColor: AppColors.brandPrimary,
-            unselectedLabelColor: AppColors.textSecondary,
-            tabs: const [
-              Tab(text: 'All Records'),
-              Tab(text: 'Statistics'),
-            ],
-          ),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildRecordsTab(allRecords),
-              _buildStatisticsTab(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecordsTab(List<Map<String, dynamic>> allRecords) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.white,
-          child: Column(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.bgSecondary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                    });
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Search records...',
-                    prefixIcon: const Icon(Icons.search,
-                        color: AppColors.textSecondary),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _selectedFilter,
-                        isExpanded: true,
-                        underline: const SizedBox(),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'all', child: Text('All Records')),
-                          DropdownMenuItem(
-                              value: 'ultrasound',
-                              child: Text('Ultrasounds Only')),
-                          DropdownMenuItem(
-                              value: 'labtest', child: Text('Lab Tests Only')),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedFilter = value!;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: DropdownButton<String>(
-                      value: _sortOrder,
-                      underline: const SizedBox(),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'desc', child: Text('Newest First')),
-                        DropdownMenuItem(
-                            value: 'asc', child: Text('Oldest First')),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _sortOrder = value!;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: allRecords.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _searchQuery.isNotEmpty
-                            ? Icons.search_off
-                            : Icons.folder_open,
-                        size: 64,
-                        color: AppColors.textSecondary.withOpacity(0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _searchQuery.isNotEmpty
-                            ? 'No matching records found'
-                            : 'No records available',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _searchQuery.isNotEmpty
-                            ? 'Try adjusting your search or filters'
-                            : 'Your medical records will appear here',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadMotherData,
-                  color: AppColors.brandPrimary,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: allRecords.length,
-                    itemBuilder: (context, index) {
-                      final record = allRecords[index];
-                      final isUltrasound =
-                          record['record_type'] == 'ultrasound';
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(16),
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: isUltrasound
-                                  ? Colors.purple.withOpacity(0.1)
-                                  : Colors.orange.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              isUltrasound ? Icons.photo : Icons.science,
-                              color:
-                                  isUltrasound ? Colors.purple : Colors.orange,
-                            ),
-                          ),
-                          title: Text(
-                            isUltrasound
-                                ? 'Ultrasound'
-                                : (record['lab_test_type'] ?? 'Lab Test'),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text(
-                                _formatDate(isUltrasound
-                                    ? record['ultrasound_date']
-                                    : record['lab_test_date']),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                              if (record['health_worker_name'] != null) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'By: ${record['health_worker_name']}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          trailing: const Icon(
-                            Icons.chevron_right,
-                            color: AppColors.textSecondary,
-                          ),
-                          onTap: () {
-                            if (isUltrasound) {
-                              final imageUrls =
-                                  _parseImageUrls(record['ultrasound_image']);
-                              _showRecordDetails(
-                                title: 'Ultrasound',
-                                subtitle:
-                                    _formatDate(record['ultrasound_date']),
-                                icon: Icons.monitor_heart,
-                                imageUrls:
-                                    imageUrls.isNotEmpty ? imageUrls : null,
-                                rows: [
-                                  MapEntry('Date',
-                                      _formatDate(record['ultrasound_date'])),
-                                  MapEntry(
-                                      'Location',
-                                      _formatValue(
-                                          record['ultrasound_location'])),
-                                  MapEntry(
-                                      'Health Worker',
-                                      _formatValue(
-                                          record['health_worker_name'])),
-                                  MapEntry(
-                                      'Institution',
-                                      _formatValue(
-                                          record['health_worker_institution'])),
-                                  MapEntry(
-                                      'Profession',
-                                      _formatValue(
-                                          record['health_worker_profession'])),
-                                  MapEntry('Remarks',
-                                      _formatValue(record['remarks'])),
-                                ],
-                                aiAnalysis:
-                                    _generateUltrasoundAIInsights(record),
-                              );
-                            } else {
-                              final imageUrls =
-                                  _parseImageUrls(record['lab_test_image']);
-                              _showRecordDetails(
-                                title: record['lab_test_type'] ?? 'Lab Test',
-                                subtitle: _formatDate(record['lab_test_date']),
-                                icon: Icons.science,
-                                imageUrls:
-                                    imageUrls.isNotEmpty ? imageUrls : null,
-                                rows: [
-                                  MapEntry('Type',
-                                      _formatValue(record['lab_test_type'])),
-                                  MapEntry('Date',
-                                      _formatDate(record['lab_test_date'])),
-                                  MapEntry(
-                                      'Location',
-                                      _formatValue(
-                                          record['lab_test_location'])),
-                                  MapEntry(
-                                      'Health Worker',
-                                      _formatValue(
-                                          record['health_worker_name'])),
-                                  MapEntry(
-                                      'Institution',
-                                      _formatValue(
-                                          record['health_worker_institution'])),
-                                  MapEntry(
-                                      'Profession',
-                                      _formatValue(
-                                          record['health_worker_profession'])),
-                                  MapEntry('Remarks',
-                                      _formatValue(record['remarks'])),
-                                ],
-                                aiAnalysis: _generateLabTestAIInsights(record),
-                              );
-                            }
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatisticsTab() {
-    final totalUltrasounds = _ultrasounds.length;
-    final totalLabTests = _labTests.length;
-    final totalRecords = totalUltrasounds + totalLabTests;
-
-    final allRecords = _getFilteredAndSortedRecords();
-    final latestRecord = allRecords.isNotEmpty ? allRecords.first : null;
-
-    final now = DateTime.now();
-    final last6Months = List.generate(6, (i) {
-      return DateTime(now.year, now.month - i, 1);
-    }).reversed.toList();
-
-    Map<String, int> recordsByMonth = {};
-    for (var month in last6Months) {
-      final monthKey = DateFormat('MMM yyyy').format(month);
-      recordsByMonth[monthKey] = 0;
-    }
-
-    for (var record in allRecords) {
-      final dateStr = record['record_date'];
-      if (dateStr != null) {
-        final date = DateTime.tryParse(dateStr);
-        if (date != null) {
-          final monthKey = DateFormat('MMM yyyy').format(date);
-          if (recordsByMonth.containsKey(monthKey)) {
-            recordsByMonth[monthKey] = (recordsByMonth[monthKey] ?? 0) + 1;
-          }
-        }
-      }
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  'Total Records',
-                  totalRecords.toString(),
-                  Icons.folder,
-                  AppColors.brandPrimary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatCard(
-                  'Ultrasounds',
-                  totalUltrasounds.toString(),
-                  Icons.photo,
-                  Colors.purple,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  'Lab Tests',
-                  totalLabTests.toString(),
-                  Icons.science,
-                  Colors.orange,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatCard(
-                  'With Images',
-                  '${_ultrasounds.where((u) => u['ultrasound_image'] != null).length + _labTests.where((l) => l['lab_test_image'] != null).length}',
-                  Icons.image,
-                  Colors.green,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          if (latestRecord != null) ...[
-            const Text(
-              'LATEST RECORD',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 12),
+            // Stats Card with Pink Background Image
             Container(
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              height: 110,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                image: const DecorationImage(
+                  image: AssetImage('assets/images/pinkbg.png'),
+                  fit: BoxFit.cover,
+                ),
+                borderRadius: BorderRadius.circular(20),
               ),
-              child: Row(
+              child: Stack(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: (latestRecord['record_type'] == 'ultrasound'
-                              ? Colors.purple
-                              : Colors.orange)
-                          .withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      latestRecord['record_type'] == 'ultrasound'
-                          ? Icons.photo
-                          : Icons.science,
-                      color: latestRecord['record_type'] == 'ultrasound'
-                          ? Colors.purple
-                          : Colors.orange,
-                      size: 24,
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    top: 0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
+                      child: Image.asset(
+                        'assets/images/records.png',
+                        height: 100,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.folder,
+                          size: 80,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
+                  Positioned(
+                    left: 24,
+                    top: 0,
+                    bottom: 0,
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          latestRecord['record_type'] == 'ultrasound'
-                              ? 'Ultrasound'
-                              : (latestRecord['lab_test_type'] ?? 'Lab Test'),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatDate(latestRecord['record_date']),
-                          style: const TextStyle(
-                            fontSize: 13,
+                        const Text(
+                          'You have',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                             color: AppColors.textSecondary,
                           ),
                         ),
+                        Text(
+                          '$totalCount Medical ${totalCount == 1 ? 'Record' : 'Records'}',
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.brandPrimary,
+                          ),
+                        ),
                       ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: latestRecord['ultrasound_image'] != null ||
-                              latestRecord['lab_test_image'] != null
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      latestRecord['ultrasound_image'] != null ||
-                              latestRecord['lab_test_image'] != null
-                          ? 'Has Images'
-                          : 'No Images',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: latestRecord['ultrasound_image'] != null ||
-                                latestRecord['lab_test_image'] != null
-                            ? Colors.green
-                            : Colors.grey,
-                      ),
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-          const SizedBox(height: 24),
-          const Text(
-            'RECORDS BY MONTH',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...recordsByMonth.entries.map((entry) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
+
+            const SizedBox(height: 20),
+
+            // Search and Filter Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: Colors.white,
+              child: Column(
                 children: [
-                  SizedBox(
-                    width: 80,
-                    child: Text(
-                      entry.key,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                  // Search Field
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSecondary,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: AppColors.borderPrimary),
+                    ),
+                    child: TextField(
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search records...',
+                        prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, color: AppColors.textSecondary),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
                   ),
-                  Expanded(
-                    child: Stack(
+                  const SizedBox(height: 12),
+                  // Filter Chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
                       children: [
-                        Container(
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: AppColors.bgSecondary,
-                            borderRadius: BorderRadius.circular(8),
+                        FilterChip(
+                          label: const Text('All'),
+                          selected: _selectedFilter == 'all',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedFilter = 'all';
+                            });
+                          },
+                          backgroundColor: Colors.white,
+                          selectedColor: AppColors.brandPrimary.withValues(alpha: 0.1),
+                          checkmarkColor: AppColors.brandPrimary,
+                          labelStyle: TextStyle(
+                            color: _selectedFilter == 'all' ? AppColors.brandPrimary : AppColors.textSecondary,
+                            fontWeight: _selectedFilter == 'all' ? FontWeight.w600 : FontWeight.normal,
                           ),
                         ),
-                        Container(
-                          height: 30,
-                          width: (entry.value / 10) *
-                              MediaQuery.of(context).size.width *
-                              0.5,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.brandPrimary,
-                                AppColors.brandSecondary,
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(8),
+                        const SizedBox(width: 8),
+                        FilterChip(
+                          label: const Text('Ultrasound'),
+                          selected: _selectedFilter == 'ultrasound',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedFilter = 'ultrasound';
+                            });
+                          },
+                          backgroundColor: Colors.white,
+                          selectedColor: Colors.purple.withValues(alpha: 0.1),
+                          checkmarkColor: Colors.purple,
+                          avatar: Icon(Icons.photo, size: 16, color: _selectedFilter == 'ultrasound' ? Colors.purple : Colors.grey),
+                          labelStyle: TextStyle(
+                            color: _selectedFilter == 'ultrasound' ? Colors.purple : AppColors.textSecondary,
+                            fontWeight: _selectedFilter == 'ultrasound' ? FontWeight.w600 : FontWeight.normal,
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                entry.value.toString(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilterChip(
+                          label: const Text('Lab Test'),
+                          selected: _selectedFilter == 'labtest',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedFilter = 'labtest';
+                            });
+                          },
+                          backgroundColor: Colors.white,
+                          selectedColor: Colors.orange.withValues(alpha: 0.1),
+                          checkmarkColor: Colors.orange,
+                          avatar: Icon(Icons.science, size: 16, color: _selectedFilter == 'labtest' ? Colors.orange : Colors.grey),
+                          labelStyle: TextStyle(
+                            color: _selectedFilter == 'labtest' ? Colors.orange : AppColors.textSecondary,
+                            fontWeight: _selectedFilter == 'labtest' ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilterChip(
+                          label: const Text('Prenatal'),
+                          selected: _selectedFilter == 'prenatal',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedFilter = 'prenatal';
+                            });
+                          },
+                          backgroundColor: Colors.white,
+                          selectedColor: AppColors.brandPrimary.withValues(alpha: 0.1),
+                          checkmarkColor: AppColors.brandPrimary,
+                          avatar: Icon(Icons.medical_services, size: 16, color: _selectedFilter == 'prenatal' ? AppColors.brandPrimary : Colors.grey),
+                          labelStyle: TextStyle(
+                            color: _selectedFilter == 'prenatal' ? AppColors.brandPrimary : AppColors.textSecondary,
+                            fontWeight: _selectedFilter == 'prenatal' ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_selectedFilter != 'all' || _searchQuery.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Showing $filteredCount of $totalCount records',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedFilter = 'all';
+                                _searchQuery = '';
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 30),
+                            ),
+                            child: const Text(
+                              'Clear filters',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.brandPrimary,
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
                 ],
               ),
-            );
-          }),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'QUICK ACTIONS',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionButton(
-                        'View All Ultrasounds',
-                        Icons.photo,
-                        Colors.purple,
-                        () {
-                          setState(() {
-                            _selectedFilter = 'ultrasound';
-                            _tabController.animateTo(0);
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildActionButton(
-                        'View All Lab Tests',
-                        Icons.science,
-                        Colors.orange,
-                        () {
-                          setState(() {
-                            _selectedFilter = 'labtest';
-                            _tabController.animateTo(0);
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildStatCard(
-      String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const Spacer(),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
+            // Records List
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                      ),
+                    )
+                  : _errorMessage != null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.error_outline,
+                                  size: 48,
+                                  color: Colors.red,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Failed to Load Records',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: AppColors.textSecondary),
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton(
+                                onPressed: _loadMotherData,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.brandPrimary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadMotherData,
+                          color: AppColors.brandPrimary,
+                          child: records.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        _searchQuery.isNotEmpty || _selectedFilter != 'all'
+                                            ? Icons.search_off
+                                            : Icons.folder_open,
+                                        size: 64,
+                                        color: AppColors.textSecondary.withValues(alpha: 0.5),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        _searchQuery.isNotEmpty || _selectedFilter != 'all'
+                                            ? 'No matching records found'
+                                            : 'No records available',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        _searchQuery.isNotEmpty || _selectedFilter != 'all'
+                                            ? 'Try adjusting your search or filters'
+                                            : 'Your medical records will appear here',
+                                        style: const TextStyle(
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.builder(
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: records.length,
+                                  itemBuilder: (context, index) {
+                                    final record = records[index];
+                                    final color = record['iconColor'];
+                                    final icon = record['icon'];
+                                    
+                                    return GestureDetector(
+                                      onTap: () {
+                                        if (record['type'] == 'ultrasound') {
+                                          final imageUrls = _parseImageUrls(record['ultrasound_image']);
+                                          _showRecordDetails(
+                                            title: 'Ultrasound',
+                                            subtitle: _formatDate(record['ultrasound_date']),
+                                            icon: Icons.monitor_heart,
+                                            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+                                            rows: [
+                                              MapEntry('Date', _formatDate(record['ultrasound_date'])),
+                                              MapEntry('Location', _formatValue(record['ultrasound_location'])),
+                                              MapEntry('Health Worker', _formatValue(record['health_worker_name'])),
+                                              MapEntry('Institution', _formatValue(record['health_worker_institution'])),
+                                              MapEntry('Profession', _formatValue(record['health_worker_profession'])),
+                                              MapEntry('Remarks', _formatValue(record['remarks'])),
+                                            ],
+                                            aiAnalysis: _generateUltrasoundAIInsights(record),
+                                          );
+                                        } else if (record['type'] == 'labtest') {
+                                          final imageUrls = _parseImageUrls(record['lab_test_image']);
+                                          _showRecordDetails(
+                                            title: record['lab_test_type'] ?? 'Lab Test',
+                                            subtitle: _formatDate(record['lab_test_date']),
+                                            icon: Icons.science,
+                                            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+                                            rows: [
+                                              MapEntry('Type', _formatValue(record['lab_test_type'])),
+                                              MapEntry('Date', _formatDate(record['lab_test_date'])),
+                                              MapEntry('Location', _formatValue(record['lab_test_location'])),
+                                              MapEntry('Health Worker', _formatValue(record['health_worker_name'])),
+                                              MapEntry('Institution', _formatValue(record['health_worker_institution'])),
+                                              MapEntry('Profession', _formatValue(record['health_worker_profession'])),
+                                              MapEntry('Remarks', _formatValue(record['remarks'])),
+                                            ],
+                                            aiAnalysis: _generateLabTestAIInsights(record),
+                                          );
+                                        } else {
+                                          _showRecordDetails(
+                                            title: 'Prenatal Checkup',
+                                            subtitle: _formatDateTime(record['checkup_datetime']),
+                                            icon: Icons.medical_services,
+                                            imageUrls: null,
+                                            rows: [
+                                              MapEntry('Date', _formatDateTime(record['checkup_datetime'])),
+                                              MapEntry('Age of Gestation', _formatValue(record['age_of_gestation'])),
+                                              MapEntry('Weight (kg)', _formatValue(record['checkup_weight'])),
+                                              MapEntry('Blood Pressure', '${_formatValue(record['blood_pressure_systolic'])}/${_formatValue(record['blood_pressure_diastolic'])}'),
+                                              MapEntry('Fetal Heart Rate', _formatValue(record['fetal_heart_beat'])),
+                                              MapEntry('Edema', _formatValue(record['edema'])),
+                                              MapEntry('TD Vaccine', _formatValue(record['td_vaccine_dose'])),
+                                              MapEntry('Remarks', _formatValue(record['remarks'])),
+                                              MapEntry('Next Schedule', _formatDate(record['next_schedule'])),
+                                            ],
+                                            aiAnalysis: _generatePrenatalAIInsights(record),
+                                          );
+                                        }
+                                      },
+                                      child: Container(
+                                        margin: const EdgeInsets.only(bottom: 12),
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(30),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(alpha: 0.05),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            // Icon
+                                            Container(
+                                              width: 50,
+                                              height: 50,
+                                              decoration: BoxDecoration(
+                                                color: color.withValues(alpha: 0.1),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Center(
+                                                child: Icon(
+                                                  icon,
+                                                  color: color,
+                                                  size: 24,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            
+                                            // Details
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    record['title'],
+                                                    style: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: AppColors.textPrimary,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    record['subtitle'],
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      color: AppColors.textSecondary,
+                                                    ),
+                                                  ),
+                                                  if (record['health_worker'] != null &&
+                                                      record['health_worker'].toString().isNotEmpty)
+                                                    Text(
+                                                      'By: ${record['health_worker']}',
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: AppColors.textSecondary,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                            
+                                            // Arrow
+                                            const Icon(
+                                              Icons.chevron_right,
+                                              size: 24,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton(
-      String label, IconData icon, Color color, VoidCallback onTap) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color.withOpacity(0.1),
-        foregroundColor: color,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          ],
         ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 16),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
       ),
     );
   }
