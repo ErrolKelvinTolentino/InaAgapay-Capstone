@@ -17,37 +17,51 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final TextEditingController _emailController = TextEditingController();
   bool _isLoading = false;
+  String? _errorMessage;
 
   Future<void> _handleSubmit() async {
-    if (_emailController.text.isEmpty) return;
+    final email = _emailController.text.trim();
+    
+    if (email.isEmpty) {
+      setState(() => _errorMessage = 'Please enter your email address');
+      return;
+    }
+    
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+      setState(() => _errorMessage = 'Please enter a valid email address');
+      return;
+    }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    // Use the correct method name: forgotPassword (not resetPassword)
-    final result = await SupabaseService.forgotPassword(_emailController.text.trim());
+    final result = await SupabaseService.forgotPassword(email);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (result['success']) {
+    if (result['success'] == true) {
+      // ✅ FIX: Show success message and navigate to verification screen
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result['message']),
           backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
         ),
       );
+      
+      // ✅ FIX: Navigate to verification screen
       Navigator.pushNamed(
         context,
-        '/reset-password-verify',
-        arguments: _emailController.text.trim(),
+        '/forgot-password-verify',
+        arguments: email,
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message']),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      setState(() {
+        _errorMessage = result['message'];
+      });
     }
   }
 
@@ -61,6 +75,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           child: Column(
             children: [
               const SizedBox(height: 40),
+              
+              // App Logo/Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
@@ -69,30 +85,46 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   color: Color(0xFFFF68A5),
                 ),
               ),
+              
               const SizedBox(height: 40),
+              
               const PageTitle(
                 title: 'Reset Password',
                 leadingIcon: Icons.lock_reset,
               ),
+              
               const SizedBox(height: 16),
+              
               const Text(
                 'Enter your email address and we\'ll send you a verification code',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary),
               ),
+              
               const SizedBox(height: 32),
+              
               AppInputField(
                 hintText: 'Email Address',
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 leadingIcon: Icons.email_outlined,
+                errorText: _errorMessage,
+                onChanged: (_) {
+                  if (_errorMessage != null) {
+                    setState(() => _errorMessage = null);
+                  }
+                },
               ),
+              
               const SizedBox(height: 32),
+              
               MainButton(
                 label: _isLoading ? 'Sending...' : 'Send Reset Code',
                 onPressed: _isLoading ? null : _handleSubmit,
               ),
+              
               const SizedBox(height: 16),
+              
               TextButton(
                 onPressed: () {
                   Navigator.pushNamedAndRemoveUntil(

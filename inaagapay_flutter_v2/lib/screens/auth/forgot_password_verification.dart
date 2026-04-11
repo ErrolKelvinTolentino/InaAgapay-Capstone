@@ -1,3 +1,5 @@
+// lib/screens/auth/forgot_password_verification.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
@@ -27,11 +29,17 @@ class _ForgotPasswordVerificationScreenState
   String _code = '';
   bool _hasError = false;
   bool _isVerifying = false;
+  String _errorMessage = '';
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    email = ModalRoute.of(context)!.settings.arguments as String;
+    final args = ModalRoute.of(context)!.settings.arguments;
+    if (args is String) {
+      email = args;
+    } else {
+      email = '';
+    }
     _startTimer();
   }
 
@@ -55,46 +63,67 @@ class _ForgotPasswordVerificationScreenState
   }
 
   Future<void> _verifyCode() async {
+    if (_code.length != 6) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Please enter the 6-digit verification code';
+      });
+      return;
+    }
+
     setState(() {
       _isVerifying = true;
       _hasError = false;
+      _errorMessage = '';
     });
 
-    // Verify reset code - you need to implement this in SupabaseService
-    // For now, just navigate to change password
-    await Future.delayed(const Duration(milliseconds: 500));
-    
+    // ✅ FIX: Verify the reset code
+    final isValid = await SupabaseService.verifyResetCode(email, _code);
+
     if (!mounted) return;
-    
+
     setState(() {
       _isVerifying = false;
+      _hasError = !isValid;
+      if (!isValid) {
+        _errorMessage = 'Invalid or expired code. Please try again.';
+      }
     });
-    
-    Navigator.pushNamed(context, '/change-forgot-password');
+
+    if (isValid) {
+      // ✅ FIX: Navigate to change password screen
+      Navigator.pushNamed(
+        context,
+        '/change-forgot-password',
+        arguments: email,
+      );
+    }
   }
 
   Future<void> _resendCode() async {
     setState(() => _isVerifying = true);
 
-    final result = await SupabaseService.resendVerificationCode(email);
+    final result = await SupabaseService.forgotPassword(email);
 
     if (!mounted) return;
 
     setState(() => _isVerifying = false);
 
-    if (result['success']) {
+    if (result['success'] == true) {
       _startTimer();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result['message']),
           backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message']),
+          content: Text(result['message'] ?? 'Failed to resend code'),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -111,7 +140,6 @@ class _ForgotPasswordVerificationScreenState
             children: [
               const SizedBox(height: 40),
               
-              // App Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
@@ -127,43 +155,66 @@ class _ForgotPasswordVerificationScreenState
                 title: 'Verify Code',
                 leadingIcon: Icons.mail,
               ),
+              
               const SizedBox(height: 16),
+              
               Text(
                 'Enter the 6-digit code sent to\n$email',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.textSecondary),
               ),
+              
               const SizedBox(height: 32),
+              
               OtpInputField(
                 onChanged: (value) {
                   setState(() {
                     _code = value;
                     _hasError = false;
+                    _errorMessage = '';
                   });
                 },
                 showError: _hasError,
               ),
+              
               if (_hasError)
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
                   child: ValidationMessage(
-                    message: 'Invalid code. Please try again.',
+                    message: _errorMessage,
+                    type: ValidationType.error,
                   ),
                 ),
+              
               const SizedBox(height: 32),
+              
               MainButton(
                 label: _isVerifying ? 'Verifying...' : 'Verify',
                 showIcons: false,
-                onPressed: _code.length == 6 && !_isVerifying ? _verifyCode : null,
+                onPressed: _code.length == 6 && !_isVerifying
+                    ? _verifyCode
+                    : null,
               ),
+              
               const SizedBox(height: 24),
-              _secondsRemaining == 0
-                  ? ClickableText(text: 'Resend Code', onTap: _resendCode)
-                  : Text(
-                      'Resend Code in $_formattedTime',
-                      style: const TextStyle(color: AppColors.textSecondary),
-                    ),
+              
+              if (_isVerifying)
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF68A5)),
+                )
+              else if (_secondsRemaining == 0)
+                ClickableText(
+                  text: 'Resend Code',
+                  onTap: _resendCode,
+                )
+              else
+                Text(
+                  'Resend Code in $_formattedTime',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+              
               const SizedBox(height: 16),
+              
               TextButton(
                 onPressed: () {
                   Navigator.pushNamedAndRemoveUntil(

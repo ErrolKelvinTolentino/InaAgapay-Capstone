@@ -258,29 +258,38 @@ class InaagapayApp extends StatelessWidget {
           ),
           home: snapshot.data ?? const LoginScreen(),
           routes: {
-            // Authentication Routes
+            // ============================================
+            // AUTHENTICATION ROUTES
+            // ============================================
+            
+            // Login & Registration
             '/login': (context) => const LoginScreen(),
             '/register': (context) => const MotherRegistrationScreen(),
-            '/verify-registration': (context) =>
-                const AccountVerificationRegistration(),
+            '/verify-registration': (context) => const AccountVerificationRegistration(),
+            
+            // Forgot Password Flow
             '/forgot-password': (context) => const ForgotPasswordScreen(),
-            '/forgot-password-verify': (context) =>
-                const ForgotPasswordVerificationScreen(),
-            '/change-forgot-password': (context) =>
-                const ChangeForgotPasswordScreen(),
+            '/forgot-password-verify': (context) => const ForgotPasswordVerificationScreen(),
+            '/change-forgot-password': (context) => const ChangeForgotPasswordScreen(),
 
-            // Mother Onboarding Routes
+            // ============================================
+            // MOTHER ONBOARDING ROUTES
+            // ============================================
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
             '/change-password': (context) => const ChangePasswordScreen(),
             '/change-temporary-password': (context) => const ChangeTemporaryPasswordScreen(),
 
-            // Dashboard Routes
+            // ============================================
+            // DASHBOARD ROUTES
+            // ============================================
             '/mother-dashboard': (context) => const MotherDashboardShell(),
             '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
 
-            // Mother Feature Routes
+            // ============================================
+            // MOTHER FEATURE ROUTES
+            // ============================================
             '/mother-profile': (context) {
               final args = ModalRoute.of(context)!.settings.arguments;
               if (args is int) {
@@ -292,14 +301,16 @@ class InaagapayApp extends StatelessWidget {
             '/mother-journal': (context) => const MotherJournalScreen(),
             '/mother-children': (context) => const MotherChildrenScreen(),
 
-            // Midwife Feature Routes
+            // ============================================
+            // MIDWIFE FEATURE ROUTES
+            // ============================================
             '/midwife-mothers': (context) => const MidwifeMothersScreen(),
             '/midwife-children': (context) => const MidwifeChildrenScreen(),
             '/midwife-schedules': (context) => const MidwifeSchedulesScreen(),
             '/midwife-add-mother': (context) => const MidwifeAddMotherScreen(),
           },
           onGenerateRoute: (settings) {
-            // Handle ultrasound analyzer route
+            // Handle ultrasound analyzer route with parameters
             if (settings.name == '/ultrasound-analyzer') {
               final args = settings.arguments as Map<String, int>;
               return MaterialPageRoute(
@@ -309,7 +320,8 @@ class InaagapayApp extends StatelessWidget {
                 ),
               );
             }
-            // Handle lab test analyzer route
+            
+            // Handle lab test analyzer route with parameters
             if (settings.name == '/lab-test-analyzer') {
               final args = settings.arguments as Map<String, int>;
               return MaterialPageRoute(
@@ -319,6 +331,7 @@ class InaagapayApp extends StatelessWidget {
                 ),
               );
             }
+            
             // Handle child profile route
             if (settings.name == '/child-profile') {
               final childId = settings.arguments as int;
@@ -326,6 +339,7 @@ class InaagapayApp extends StatelessWidget {
                 builder: (_) => const MidwifeChildrenScreen(),
               );
             }
+            
             return null;
           },
         );
