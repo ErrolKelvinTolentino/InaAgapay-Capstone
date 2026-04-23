@@ -20,9 +20,7 @@ class ChildService {
     final motherId = await _getMotherId();
 
     try {
-      final response = await client
-          .from('children')
-          .select('''
+      final response = await client.from('children').select('''
             *,
             birth_details (
               birthdate,
@@ -32,12 +30,10 @@ class ChildService {
               birthplace_city_municipality,
               birthplace_province
             )
-          ''')
-          .eq('mother_id', motherId)
-          .order('added_at', ascending: false);
+          ''').eq('mother_id', motherId).order('added_at', ascending: false);
 
       final List<dynamic> data = response;
-      
+
       return data.map((json) {
         final birthDetails = json['birth_details'] as Map<String, dynamic>?;
         return ChildModel(
@@ -49,13 +45,15 @@ class ChildService {
           extensionName: json['extension_name'] as String?,
           sex: json['sex'] as String? ?? 'male',
           addedAt: DateTime.parse(json['added_at']),
-          birthdate: birthDetails != null && birthDetails['birthdate'] != null 
-              ? DateTime.parse(birthDetails['birthdate']) 
+          birthdate: birthDetails != null && birthDetails['birthdate'] != null
+              ? DateTime.parse(birthDetails['birthdate'])
               : null,
           birthWeight: (birthDetails?['birth_weight'] as num?)?.toDouble(),
           birthLength: (birthDetails?['birth_length'] as num?)?.toDouble(),
-          headCircumference: (birthDetails?['head_circumference'] as num?)?.toDouble(),
-          birthplaceCity: birthDetails?['birthplace_city_municipality'] as String?,
+          headCircumference:
+              (birthDetails?['head_circumference'] as num?)?.toDouble(),
+          birthplaceCity:
+              birthDetails?['birthplace_city_municipality'] as String?,
           birthplaceProvince: birthDetails?['birthplace_province'] as String?,
         );
       }).toList();
@@ -70,9 +68,7 @@ class ChildService {
 
     try {
       // Fetch child with birth details
-      final childResponse = await client
-          .from('children')
-          .select('''
+      final childResponse = await client.from('children').select('''
             *,
             birth_details (
               birthdate,
@@ -83,10 +79,7 @@ class ChildService {
               birthplace_province,
               birth_complications
             )
-          ''')
-          .eq('child_id', childId)
-          .eq('mother_id', motherId)
-          .maybeSingle();
+          ''').eq('child_id', childId).eq('mother_id', motherId).maybeSingle();
 
       if (childResponse == null) {
         throw Exception('Child not found');
@@ -111,8 +104,9 @@ class ChildService {
           .eq('child_id', childId)
           .order('vaccination_date', ascending: false);
 
-      final birthDetails = childResponse['birth_details'] as Map<String, dynamic>?;
-      
+      final birthDetails =
+          childResponse['birth_details'] as Map<String, dynamic>?;
+
       final child = ChildModel(
         childId: childResponse['child_id'] as int,
         motherId: childResponse['mother_id'] as int,
@@ -122,19 +116,20 @@ class ChildService {
         extensionName: childResponse['extension_name'] as String?,
         sex: childResponse['sex'] as String? ?? 'male',
         addedAt: DateTime.parse(childResponse['added_at']),
-        birthdate: birthDetails != null && birthDetails['birthdate'] != null 
-            ? DateTime.parse(birthDetails['birthdate']) 
+        birthdate: birthDetails != null && birthDetails['birthdate'] != null
+            ? DateTime.parse(birthDetails['birthdate'])
             : null,
         birthWeight: (birthDetails?['birth_weight'] as num?)?.toDouble(),
         birthLength: (birthDetails?['birth_length'] as num?)?.toDouble(),
-        headCircumference: (birthDetails?['head_circumference'] as num?)?.toDouble(),
-        birthplaceCity: birthDetails?['birthplace_city_municipality'] as String?,
+        headCircumference:
+            (birthDetails?['head_circumference'] as num?)?.toDouble(),
+        birthplaceCity:
+            birthDetails?['birthplace_city_municipality'] as String?,
         birthplaceProvince: birthDetails?['birthplace_province'] as String?,
       );
 
-      final latestGrowth = growthResponse != null 
-          ? GrowthRecord.fromJson(growthResponse) 
-          : null;
+      final latestGrowth =
+          growthResponse != null ? GrowthRecord.fromJson(growthResponse) : null;
 
       final immunizations = (immunizationResponse as List)
           .map((json) => ImmunizationRecord.fromJson(json))
@@ -178,22 +173,25 @@ class ChildService {
 
       final heightValues = growthRecords.map((r) => r.height).toList();
       final weightValues = growthRecords.map((r) => r.weight).toList();
-      final labels = growthRecords.asMap().entries.map((e) => '${e.key + 1}').toList();
+      final labels =
+          growthRecords.asMap().entries.map((e) => '${e.key + 1}').toList();
 
       final heightStart = heightValues.isNotEmpty ? heightValues.first : null;
       final heightLatest = heightValues.isNotEmpty ? heightValues.last : null;
-      final heightGain = heightStart != null && heightLatest != null 
-          ? (heightLatest - heightStart).toStringAsFixed(1) 
+      final heightGain = heightStart != null && heightLatest != null
+          ? (heightLatest - heightStart).toStringAsFixed(1)
           : null;
 
       final weightStart = weightValues.isNotEmpty ? weightValues.first : null;
       final weightLatest = weightValues.isNotEmpty ? weightValues.last : null;
-      final weightGain = weightStart != null && weightLatest != null 
-          ? (weightLatest - weightStart).toStringAsFixed(1) 
+      final weightGain = weightStart != null && weightLatest != null
+          ? (weightLatest - weightStart).toStringAsFixed(1)
           : null;
 
       return {
-        'child_name': '${childResponse['first_name']} ${childResponse['last_name']}'.trim(),
+        'child_name':
+            '${childResponse['first_name']} ${childResponse['last_name']}'
+                .trim(),
         'gender': childResponse['sex'],
         'height': {
           'values': heightValues,
@@ -216,7 +214,8 @@ class ChildService {
   }
 
   // Fetch immunization records for a child
-  static Future<List<ImmunizationRecord>> fetchImmunizations(int childId) async {
+  static Future<List<ImmunizationRecord>> fetchImmunizations(
+      int childId) async {
     try {
       final response = await client
           .from('immunization_record')

@@ -1,6 +1,6 @@
 // lib/screens/midwife/midwife_mothers_screen.dart
 
-import 'dart:async';  // ← ADD THIS IMPORT FOR Timer
+import 'dart:async'; // ← ADD THIS IMPORT FOR Timer
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
@@ -25,12 +25,12 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   int _currentPage = 0;
   static const int _pageSize = 8;
   String? _error;
-  
+
   // Search
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   Timer? _searchDebounceTimer;
-  
+
   // Scroll controller for pagination
   final ScrollController _scrollController = ScrollController();
 
@@ -66,7 +66,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       if (!_isLoadingMore && _hasMoreData && !_isLoading) {
         _loadMoreMothers();
       }
@@ -75,14 +76,14 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 
   Future<void> _loadMoreMothers() async {
     if (_isLoadingMore || !_hasMoreData) return;
-    
+
     setState(() {
       _isLoadingMore = true;
     });
-    
+
     _currentPage++;
     await _loadMothers(reset: false);
-    
+
     if (mounted) {
       setState(() {
         _isLoadingMore = false;
@@ -92,7 +93,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 
   Future<void> _loadMothers({bool reset = true}) async {
     if (!mounted) return;
-    
+
     if (reset) {
       setState(() {
         _isLoading = true;
@@ -101,42 +102,41 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         _mothers = [];
       });
     }
-    
+
     try {
       // Calculate offset for pagination
       final int offset = _currentPage * _pageSize;
-      
+
       // Step 1: Get mother accounts with pagination
       var query = SupabaseService.client
           .from('accounts')
-          .select('account_id, first_name, last_name, phone_number, email_address')
+          .select(
+              'account_id, first_name, last_name, phone_number, email_address')
           .eq('account_type', 'mother')
           .eq('is_verified', true);
-      
+
       // Apply search filter if exists
       if (_searchQuery.isNotEmpty) {
-        query = query.or(
-          'first_name.ilike.%$_searchQuery%,'
-          'last_name.ilike.%$_searchQuery%,'
-          'phone_number.ilike.%$_searchQuery%,'
-          'email_address.ilike.%$_searchQuery%'
-        );
+        query = query.or('first_name.ilike.%$_searchQuery%,'
+            'last_name.ilike.%$_searchQuery%,'
+            'phone_number.ilike.%$_searchQuery%,'
+            'email_address.ilike.%$_searchQuery%');
       }
-      
+
       // Get total count first for pagination
       final List<dynamic> allResults = await query;
       final int totalCount = allResults.length;
-      
+
       // Apply pagination
       final List<dynamic> accountsResponse = await query
           .order('first_name', ascending: true)
           .range(offset, offset + _pageSize - 1);
-      
+
       if (!mounted) return;
-      
+
       // Check if we have more data
       _hasMoreData = (offset + _pageSize) < totalCount;
-      
+
       // Step 2: Get all mother records for these accounts
       final List<int> accountIds = [];
       for (var account in accountsResponse) {
@@ -144,17 +144,18 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           accountIds.add(account['account_id'] as int);
         }
       }
-      
+
       List<Map<String, dynamic>> mothersData = [];
       if (accountIds.isNotEmpty) {
         final mothersResponse = await SupabaseService.client
             .from('mothers')
-            .select('mother_id, account_id, birthdate, barangay, city_municipality, province')
+            .select(
+                'mother_id, account_id, birthdate, barangay, city_municipality, province')
             .inFilter('account_id', accountIds);
-        
+
         mothersData = List<Map<String, dynamic>>.from(mothersResponse);
-        }
-      
+      }
+
       // Step 3: Get all ongoing pregnancies
       final List<int> motherIds = [];
       for (var mother in mothersData) {
@@ -163,7 +164,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           motherIds.add(mid);
         }
       }
-      
+
       Map<int, Map<String, dynamic>> pregnancyMap = {};
       if (motherIds.isNotEmpty) {
         final pregnanciesResponse = await SupabaseService.client
@@ -171,7 +172,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             .select('mother_id, last_menstrual_period')
             .eq('status', 'ongoing')
             .inFilter('mother_id', motherIds);
-        
+
         for (var pregnancy in pregnanciesResponse) {
           final int? mid = pregnancy['mother_id'] as int?;
           if (mid != null) {
@@ -179,7 +180,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           }
         }
       }
-      
+
       // Step 4: Build mother map for quick lookup
       final Map<int, Map<String, dynamic>> motherMap = {};
       for (var mother in mothersData) {
@@ -188,21 +189,21 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           motherMap[aid] = mother;
         }
       }
-      
+
       // Step 5: Process all accounts
       final List<Map<String, dynamic>> newMothers = [];
-      
+
       for (var account in accountsResponse) {
         if (account is! Map<String, dynamic>) continue;
-        
+
         final int accountId = account['account_id'] as int;
         final Map<String, dynamic>? motherInfo = motherMap[accountId];
         final int? motherId = motherInfo?['mother_id'] as int?;
-        
+
         final String firstName = account['first_name']?.toString() ?? '';
         final String lastName = account['last_name']?.toString() ?? '';
         final String fullName = '$firstName $lastName'.trim();
-        
+
         // Calculate age
         int age = 0;
         final String? birthdateStr = motherInfo?['birthdate']?.toString();
@@ -212,12 +213,13 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             age = DateTime.now().difference(birthdate).inDays ~/ 365;
           }
         }
-        
+
         // Get pregnancy info
         int gestWeeks = 0;
         if (motherId != null) {
           final Map<String, dynamic>? pregnancy = pregnancyMap[motherId];
-          final String? lmpString = pregnancy?['last_menstrual_period'] as String?;
+          final String? lmpString =
+              pregnancy?['last_menstrual_period'] as String?;
           if (lmpString != null && lmpString.isNotEmpty) {
             final DateTime? lmpDate = DateTime.tryParse(lmpString);
             if (lmpDate != null) {
@@ -225,7 +227,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             }
           }
         }
-        
+
         newMothers.add({
           'account_id': accountId,
           'first_name': firstName,
@@ -236,13 +238,14 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           'mother_id': motherId,
           'age': age,
           'gest_weeks': gestWeeks,
-          'has_pregnancy': motherId != null && pregnancyMap.containsKey(motherId),
+          'has_pregnancy':
+              motherId != null && pregnancyMap.containsKey(motherId),
           'barangay': motherInfo?['barangay']?.toString() ?? '',
           'city': motherInfo?['city_municipality']?.toString() ?? '',
           'province': motherInfo?['province']?.toString() ?? '',
         });
       }
-      
+
       if (mounted) {
         setState(() {
           if (reset) {
@@ -302,7 +305,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                     bottom: 0,
                     top: 0,
                     child: Padding(
-                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
+                      padding: const EdgeInsets.only(
+                          right: 16.0, top: 4.0, bottom: 4.0),
                       child: Image.asset(
                         'assets/images/pregnant1.png',
                         fit: BoxFit.contain,
@@ -346,8 +350,10 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
               child: AppInputField(
                 hintText: 'Search Mother',
                 controller: _searchController,
-                trailingIcon: _searchController.text.isNotEmpty ? Icons.clear : Icons.search,
-                onTrailingTap: _searchController.text.isNotEmpty 
+                trailingIcon: _searchController.text.isNotEmpty
+                    ? Icons.clear
+                    : Icons.search,
+                onTrailingTap: _searchController.text.isNotEmpty
                     ? () {
                         _searchController.clear();
                         _searchQuery = '';
@@ -378,7 +384,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             Expanded(
               child: _isLoading && _mothers.isEmpty
                   ? const Center(
-                      child: CircularProgressIndicator(color: AppColors.brandPrimary),
+                      child: CircularProgressIndicator(
+                          color: AppColors.brandPrimary),
                     )
                   : _error != null
                       ? Center(
@@ -387,7 +394,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                                const Icon(Icons.error_outline,
+                                    size: 48, color: AppColors.error),
                                 const SizedBox(height: 12),
                                 const Text(
                                   'Failed to load mothers',
@@ -427,13 +435,16 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                               color: AppColors.brandPrimary,
                               child: ListView.builder(
                                 controller: _scrollController,
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                                itemCount: _mothers.length + (_hasMoreData ? 1 : 0),
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                                itemCount:
+                                    _mothers.length + (_hasMoreData ? 1 : 0),
                                 itemBuilder: (context, index) {
                                   // Show loading indicator at the bottom
                                   if (index == _mothers.length) {
                                     return const Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 20),
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 20),
                                       child: Center(
                                         child: SizedBox(
                                           width: 30,
@@ -446,10 +457,12 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                       ),
                                     );
                                   }
-                                  
-                                  final Map<String, dynamic> mother = _mothers[index];
-                                  final int? motherId = mother['mother_id'] as int?;
-                                  
+
+                                  final Map<String, dynamic> mother =
+                                      _mothers[index];
+                                  final int? motherId =
+                                      mother['mother_id'] as int?;
+
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
                                     child: _MotherCard(
@@ -459,7 +472,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (context) => MotherProfilePage(
+                                                  builder: (context) =>
+                                                      MotherProfilePage(
                                                     motherId: motherId,
                                                   ),
                                                 ),
@@ -526,7 +540,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             isSearching
                 ? 'Try a different search term'
                 : 'Tap + to register the first mother',
-            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            style:
+                const TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -545,24 +560,24 @@ class _MotherCard extends StatelessWidget {
 
   String _getInitials(String fullName) {
     if (fullName.isEmpty || fullName == 'Unknown Mother') return '?';
-    
+
     final String trimmed = fullName.trim();
     if (trimmed.isEmpty) return '?';
-    
+
     final List<String> parts = trimmed.split(' ');
     if (parts.isEmpty) return '?';
-    
+
     final String firstPart = parts[0];
     if (firstPart.isEmpty) return '?';
     final String firstInitial = firstPart[0].toUpperCase();
-    
+
     if (parts.length > 1) {
       final String secondPart = parts[1];
       if (secondPart.isNotEmpty) {
         return '$firstInitial${secondPart[0].toUpperCase()}';
       }
     }
-    
+
     return firstInitial;
   }
 
@@ -574,7 +589,7 @@ class _MotherCard extends StatelessWidget {
     final bool hasPregnancy = mother['has_pregnancy'] as bool? ?? false;
 
     final String displayName = fullName.isEmpty ? 'Unknown Mother' : fullName;
-    
+
     final StringBuffer subtitleBuffer = StringBuffer();
     if (age > 0) {
       subtitleBuffer.write('$age Years old');

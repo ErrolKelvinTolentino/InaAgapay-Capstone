@@ -23,40 +23,49 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
   String? _errorMessage;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  
+
   // Dashboard data
   int _registeredMothers = 0;
   int _registeredChildren = 0;
   int _ferrousGiven = 0;
   int _calciumGiven = 0;
   int _tdDosesGiven = 0;
-  
+
   // Pregnancy statistics
   int _totalPregnancies = 0;
   int _firstTrimester = 0;
   int _secondTrimester = 0;
   int _thirdTrimester = 0;
-  
+
   // Recent visits
   List<MidwifeVisitItem> _recentVisits = [];
-  
+
   // Priority Tasks
   List<PriorityTask> _priorityTasks = [];
-  
+
   // Search data
   List<Map<String, dynamic>> _allMothers = [];
   List<Map<String, dynamic>> _allChildren = [];
-  
+
   // Search results
   List<Map<String, dynamic>> _searchResults = [];
   bool _showSearchResults = false;
-  
+
   // BHC Visit data for chart
   List<double> _bhcVisitValues = [0, 0, 0, 0, 0, 0, 0];
-  final List<String> _bhcVisitDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  
+  final List<String> _bhcVisitDays = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun'
+  ];
+
   // Computed RHU Visits this week
-  int get _rhuVisitsThisWeek => _bhcVisitValues.fold(0, (sum, val) => sum + val.toInt());
+  int get _rhuVisitsThisWeek =>
+      _bhcVisitValues.fold(0, (sum, val) => sum + val.toInt());
 
   // Midwife info
   String _midwifeName = 'Midwife';
@@ -100,17 +109,20 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       final fullName = '$firstName $lastName'.toLowerCase();
       final phone = (mother['phone_number'] ?? '').toLowerCase();
       final email = (mother['email_address'] ?? '').toLowerCase();
-      
-      if (fullName.contains(query) || 
-          firstName.contains(query) || 
+
+      if (fullName.contains(query) ||
+          firstName.contains(query) ||
           lastName.contains(query) ||
           phone.contains(query) ||
           email.contains(query)) {
         results.add({
           'type': 'mother',
           'id': mother['mother_id'],
-          'title': '${mother['first_name'] ?? ''} ${mother['last_name'] ?? ''}'.trim(),
-          'subtitle': email.isNotEmpty ? email : (phone.isNotEmpty ? phone : 'No contact'),
+          'title': '${mother['first_name'] ?? ''} ${mother['last_name'] ?? ''}'
+              .trim(),
+          'subtitle': email.isNotEmpty
+              ? email
+              : (phone.isNotEmpty ? phone : 'No contact'),
           'icon': Icons.pregnant_woman,
           'matchText': fullName,
         });
@@ -122,14 +134,15 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       final firstName = (child['first_name'] ?? '').toLowerCase();
       final lastName = (child['last_name'] ?? '').toLowerCase();
       final fullName = '$firstName $lastName'.toLowerCase();
-      
-      if (fullName.contains(query) || 
-          firstName.contains(query) || 
+
+      if (fullName.contains(query) ||
+          firstName.contains(query) ||
           lastName.contains(query)) {
         results.add({
           'type': 'child',
           'id': child['child_id'],
-          'title': '${child['first_name'] ?? ''} ${child['last_name'] ?? ''}'.trim(),
+          'title':
+              '${child['first_name'] ?? ''} ${child['last_name'] ?? ''}'.trim(),
           'subtitle': 'Child record',
           'icon': Icons.child_care,
           'matchText': fullName,
@@ -164,22 +177,25 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       // Get midwife context
       final accountId = await AuthStorage.getUserId();
       if (accountId == null) throw Exception('Not authenticated');
-      
+
       final contextResult = await SupabaseService.getMidwifeContext(accountId);
-      if (!contextResult['success']) throw Exception('Failed to load midwife context');
-      
+      if (!contextResult['success'])
+        throw Exception('Failed to load midwife context');
+
       final assignedBhcId = contextResult['assigned_bhc_id'] as int?;
       _bhcName = contextResult['bhc_name']?.toString() ?? 'Unknown BHC';
-      
+
       // Get midwife name from accounts
       final accountResponse = await SupabaseService.client
           .from('accounts')
           .select('first_name, last_name')
           .eq('account_id', accountId)
           .maybeSingle();
-      
+
       if (accountResponse != null) {
-        _midwifeName = '${accountResponse['first_name'] ?? ''} ${accountResponse['last_name'] ?? ''}'.trim();
+        _midwifeName =
+            '${accountResponse['first_name'] ?? ''} ${accountResponse['last_name'] ?? ''}'
+                .trim();
         if (_midwifeName.isEmpty) _midwifeName = 'Midwife';
       }
 
@@ -188,9 +204,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       }
 
       // Get registered mothers for this BHC
-      final mothersData = await SupabaseService.client
-          .from('mothers')
-          .select('''
+      final mothersData =
+          await SupabaseService.client.from('mothers').select('''
             mother_id,
             account_id,
             birthdate,
@@ -202,13 +217,11 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
               phone_number,
               email_address
             )
-          ''')
-          .eq('assigned_bhc_id', assignedBhcId)
-          .eq('status', 'active');
-      
+          ''').eq('assigned_bhc_id', assignedBhcId).eq('status', 'active');
+
       _registeredMothers = mothersData.length;
       _motherIds = mothersData.map<int>((m) => m['mother_id'] as int).toList();
-      
+
       // Load all mothers for search
       _allMothers = [];
       for (var mother in mothersData) {
@@ -226,16 +239,14 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
 
       // Get registered children count and load for search
       if (_motherIds.isNotEmpty) {
-        final childrenResponse = await SupabaseService.client
-            .from('children')
-            .select('''
+        final childrenResponse =
+            await SupabaseService.client.from('children').select('''
               child_id,
               first_name,
               last_name,
               mother_id
-            ''')
-            .inFilter('mother_id', _motherIds);
-        
+            ''').inFilter('mother_id', _motherIds);
+
         _registeredChildren = childrenResponse.length;
         _allChildren = List<Map<String, dynamic>>.from(childrenResponse);
       } else {
@@ -267,18 +278,21 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
             .select('pregnancy_id, last_menstrual_period, status')
             .eq('status', 'ongoing')
             .inFilter('mother_id', _motherIds);
-        
+
         _totalPregnancies = pregnanciesResponse.length;
-        final pregnancyIds = pregnanciesResponse.map<int>((p) => p['pregnancy_id'] as int).toList();
+        final pregnancyIds = pregnanciesResponse
+            .map<int>((p) => p['pregnancy_id'] as int)
+            .toList();
 
         // Calculate trimesters
         _firstTrimester = 0;
         _secondTrimester = 0;
         _thirdTrimester = 0;
-        
+
         final now = DateTime.now();
         for (var pregnancy in pregnanciesResponse) {
-          final lmp = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
+          final lmp =
+              DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
           if (lmp != null) {
             final weeks = now.difference(lmp).inDays / 7;
             if (weeks <= 13) {
@@ -305,7 +319,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
 
         // Get recent visits (last 7 days)
         final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
-        
+
         final checkupsResponse = await SupabaseService.client
             .from('prenatal_checkups')
             .select('''
@@ -315,37 +329,38 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
             .gte('checkup_datetime', sevenDaysAgo.toIso8601String())
             .order('checkup_datetime', ascending: false)
             .limit(10);
-        
+
         _recentVisits = [];
-        
+
         for (var checkup in checkupsResponse) {
           try {
             final pregnancyIdValue = checkup['pregnancy_id'] as int;
-            
+
             final pregnancyData = await SupabaseService.client
                 .from('pregnancies')
                 .select('mother_id')
                 .eq('pregnancy_id', pregnancyIdValue)
                 .maybeSingle();
-            
+
             if (pregnancyData == null) continue;
-            
+
             final motherId = pregnancyData['mother_id'] as int;
-            
+
             // Find mother in our cached data
             final motherInfo = _allMothers.firstWhere(
               (m) => m['mother_id'] == motherId,
               orElse: () => {},
             );
-            
-            final fullName = motherInfo.isNotEmpty 
-                ? '${motherInfo['first_name']} ${motherInfo['last_name']}'.trim()
+
+            final fullName = motherInfo.isNotEmpty
+                ? '${motherInfo['first_name']} ${motherInfo['last_name']}'
+                    .trim()
                 : 'Unknown Mother';
-            
+
             final dateTime = DateTime.parse(checkup['checkup_datetime']);
             final nowTime = DateTime.now();
             final difference = nowTime.difference(dateTime);
-            
+
             String timeLabel;
             if (difference.inDays == 0) {
               timeLabel = 'Today';
@@ -354,7 +369,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
             } else {
               timeLabel = '${difference.inDays} days ago';
             }
-            
+
             _recentVisits.add(MidwifeVisitItem(
               fullName: fullName.isNotEmpty ? fullName : 'Unknown Mother',
               visitType: 'Prenatal Check-up',
@@ -368,29 +383,29 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
         // Get BHC visit data
         if (pregnancyIds.isNotEmpty) {
           final List<double> dailyVisits = List.filled(7, 0);
-          
+
           for (int i = 0; i < 7; i++) {
             final day = DateTime.now().subtract(Duration(days: i));
             final startOfDay = DateTime(day.year, day.month, day.day);
             final endOfDay = startOfDay.add(const Duration(days: 1));
-            
+
             final dayVisitsResponse = await SupabaseService.client
                 .from('prenatal_checkups')
                 .select('prenatal_checkup_id')
                 .gte('checkup_datetime', startOfDay.toIso8601String())
                 .lt('checkup_datetime', endOfDay.toIso8601String())
                 .inFilter('pregnancy_id', pregnancyIds);
-            
+
             int chartIndex;
             if (day.weekday == 7) {
               chartIndex = 6;
             } else {
               chartIndex = day.weekday - 1;
             }
-            
+
             dailyVisits[chartIndex] = dayVisitsResponse.length.toDouble();
           }
-          
+
           _bhcVisitValues = dailyVisits;
         } else {
           _bhcVisitValues = [0, 0, 0, 0, 0, 0, 0];
@@ -416,7 +431,6 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       setState(() {
         _isLoading = false;
       });
-
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -430,9 +444,9 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
 
   Future<void> _loadPriorityTasks(List<int> pregnancyIds) async {
     _priorityTasks = [];
-    
+
     if (pregnancyIds.isEmpty) return;
-    
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -452,30 +466,34 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       for (var checkup in upcomingCheckups) {
         final nextDate = DateTime.parse(checkup['next_schedule']);
         final daysUntil = nextDate.difference(today).inDays;
-        
+
         if (daysUntil <= 7) {
-          String urgency = daysUntil == 0 ? 'urgent' : (daysUntil <= 2 ? 'warning' : 'normal');
-          
+          String urgency = daysUntil == 0
+              ? 'urgent'
+              : (daysUntil <= 2 ? 'warning' : 'normal');
+
           final pregnancyData = await SupabaseService.client
               .from('pregnancies')
               .select('mother_id')
               .eq('pregnancy_id', checkup['pregnancy_id'])
               .maybeSingle();
-          
+
           if (pregnancyData != null) {
             final motherInfo = _allMothers.firstWhere(
               (m) => m['mother_id'] == pregnancyData['mother_id'],
               orElse: () => {},
             );
-            
-            final name = motherInfo.isNotEmpty 
-                ? '${motherInfo['first_name']} ${motherInfo['last_name']}'.trim()
+
+            final name = motherInfo.isNotEmpty
+                ? '${motherInfo['first_name']} ${motherInfo['last_name']}'
+                    .trim()
                 : 'Unknown Mother';
-            
+
             _priorityTasks.add(PriorityTask(
               id: checkup['prenatal_checkup_id'],
               title: 'Prenatal Checkup Scheduled',
-              description: '$name has a checkup scheduled for ${DateFormat('MMM d, yyyy').format(nextDate)}',
+              description:
+                  '$name has a checkup scheduled for ${DateFormat('MMM d, yyyy').format(nextDate)}',
               urgency: urgency,
               type: 'checkup',
               action: 'View Schedule',
@@ -500,11 +518,11 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
           (m) => m['mother_id'] == pregnancy['mother_id'],
           orElse: () => {},
         );
-        
-        final name = motherInfo.isNotEmpty 
+
+        final name = motherInfo.isNotEmpty
             ? '${motherInfo['first_name']} ${motherInfo['last_name']}'.trim()
             : 'Unknown Mother';
-        
+
         _priorityTasks.add(PriorityTask(
           id: pregnancy['pregnancy_id'],
           title: 'High-Risk Pregnancy',
@@ -565,9 +583,9 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
         maxIndex = i;
       }
     }
-    
+
     final bestDay = _bhcVisitDays[maxIndex];
-    
+
     if (maxValue == 0) {
       return 'No visits recorded in the last 7 days.';
     } else if (maxValue == 1) {
@@ -577,7 +595,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
     }
   }
 
-  Widget _buildStatCard({required int value, required String label, required IconData iconData}) {
+  Widget _buildStatCard(
+      {required int value, required String label, required IconData iconData}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
       decoration: BoxDecoration(
@@ -633,7 +652,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
         child: _isLoading
             ? const Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
                 ),
               )
             : _errorMessage != null
@@ -667,7 +687,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                           Text(
                             _errorMessage!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: AppColors.textSecondary),
+                            style:
+                                const TextStyle(color: AppColors.textSecondary),
                           ),
                           const SizedBox(height: 24),
                           ElevatedButton.icon(
@@ -699,11 +720,12 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                       child: Column(
                         children: [
                           const SizedBox(height: 16),
-                          
+
                           // Hero Card with Search
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 24, horizontal: 16),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(24),
@@ -728,8 +750,11 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                     child: Image.asset(
                                       'assets/images/midwife.png',
                                       fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) =>
-                                          const Icon(Icons.person, size: 60, color: AppColors.brandPrimary),
+                                      errorBuilder: (context, error,
+                                              stackTrace) =>
+                                          const Icon(Icons.person,
+                                              size: 60,
+                                              color: AppColors.brandPrimary),
                                     ),
                                   ),
                                 ),
@@ -751,28 +776,35 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                   ),
                                 ),
                                 const SizedBox(height: 16),
-                                
+
                                 // Global Search Bar
                                 Container(
                                   decoration: BoxDecoration(
                                     color: AppColors.bgSecondary,
                                     borderRadius: BorderRadius.circular(30),
-                                    border: Border.all(color: AppColors.borderPrimary),
+                                    border: Border.all(
+                                        color: AppColors.borderPrimary),
                                   ),
                                   child: TextField(
                                     controller: _searchController,
                                     focusNode: _searchFocusNode,
                                     decoration: InputDecoration(
                                       hintText: 'Search mothers, children...',
-                                      prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                                      suffixIcon: _searchController.text.isNotEmpty
+                                      prefixIcon: const Icon(Icons.search,
+                                          color: AppColors.textSecondary),
+                                      suffixIcon: _searchController
+                                              .text.isNotEmpty
                                           ? IconButton(
-                                              icon: const Icon(Icons.clear, color: AppColors.textSecondary),
+                                              icon: const Icon(Icons.clear,
+                                                  color:
+                                                      AppColors.textSecondary),
                                               onPressed: _clearSearch,
                                             )
                                           : null,
                                       border: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              vertical: 14),
                                     ),
                                   ),
                                 ),
@@ -781,7 +813,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                           ),
 
                           // Search Results
-                          if (_showSearchResults && _searchResults.isNotEmpty) ...[
+                          if (_showSearchResults &&
+                              _searchResults.isNotEmpty) ...[
                             const SizedBox(height: 16),
                             Container(
                               decoration: BoxDecoration(
@@ -803,26 +836,35 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                   ),
                                   const Divider(height: 1),
                                   ..._searchResults.map((result) => ListTile(
-                                    leading: CircleAvatar(
-                                      backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
-                                      child: Icon(result['icon'], color: AppColors.brandPrimary),
-                                    ),
-                                    title: Text(
-                                      result['title'],
-                                      style: const TextStyle(fontWeight: FontWeight.w500),
-                                    ),
-                                    subtitle: Text(
-                                      result['subtitle'],
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                    trailing: const Icon(Icons.chevron_right, size: 20),
-                                    onTap: () => _navigateToSearchResult(result),
-                                  )),
+                                        leading: CircleAvatar(
+                                          backgroundColor: AppColors
+                                              .brandPrimary
+                                              .withValues(alpha: 0.1),
+                                          child: Icon(result['icon'],
+                                              color: AppColors.brandPrimary),
+                                        ),
+                                        title: Text(
+                                          result['title'],
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w500),
+                                        ),
+                                        subtitle: Text(
+                                          result['subtitle'],
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                        trailing: const Icon(
+                                            Icons.chevron_right,
+                                            size: 20),
+                                        onTap: () =>
+                                            _navigateToSearchResult(result),
+                                      )),
                                 ],
                               ),
                             ),
                             const SizedBox(height: 16),
-                          ] else if (_showSearchResults && _searchResults.isEmpty && _searchController.text.isNotEmpty) ...[
+                          ] else if (_showSearchResults &&
+                              _searchResults.isEmpty &&
+                              _searchController.text.isNotEmpty) ...[
                             const SizedBox(height: 16),
                             Container(
                               padding: const EdgeInsets.all(24),
@@ -833,16 +875,21 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                               child: const Center(
                                 child: Column(
                                   children: [
-                                    Icon(Icons.search_off, size: 48, color: AppColors.textSecondary),
+                                    Icon(Icons.search_off,
+                                        size: 48,
+                                        color: AppColors.textSecondary),
                                     SizedBox(height: 12),
                                     Text(
                                       'No results found',
-                                      style: TextStyle(color: AppColors.textSecondary),
+                                      style: TextStyle(
+                                          color: AppColors.textSecondary),
                                     ),
                                     SizedBox(height: 4),
                                     Text(
                                       'Try a different search term',
-                                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondary),
                                     ),
                                   ],
                                 ),
@@ -857,7 +904,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: const [
-                              Icon(Icons.local_hospital, color: AppColors.brandPrimary, size: 22),
+                              Icon(Icons.local_hospital,
+                                  color: AppColors.brandPrimary, size: 22),
                               SizedBox(width: 8),
                               Text(
                                 'Health Center Overview',
@@ -876,15 +924,24 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                           Row(
                             children: [
                               Expanded(
-                                child: _buildStatCard(value: _registeredChildren, label: 'Registered\nChildren', iconData: Icons.child_care),
+                                child: _buildStatCard(
+                                    value: _registeredChildren,
+                                    label: 'Registered\nChildren',
+                                    iconData: Icons.child_care),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: _buildStatCard(value: _registeredMothers, label: 'Registered\nMothers', iconData: Icons.pregnant_woman),
+                                child: _buildStatCard(
+                                    value: _registeredMothers,
+                                    label: 'Registered\nMothers',
+                                    iconData: Icons.pregnant_woman),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: _buildStatCard(value: _rhuVisitsThisWeek, label: 'RHU Visits\nThis week', iconData: Icons.medical_services),
+                                child: _buildStatCard(
+                                    value: _rhuVisitsThisWeek,
+                                    label: 'RHU Visits\nThis week',
+                                    iconData: Icons.medical_services),
                               ),
                             ],
                           ),
@@ -905,15 +962,24 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                           Row(
                             children: [
                               Expanded(
-                                child: _buildStatCard(value: _ferrousGiven, label: 'Ferrous FA\ngiven', iconData: Icons.medication),
+                                child: _buildStatCard(
+                                    value: _ferrousGiven,
+                                    label: 'Ferrous FA\ngiven',
+                                    iconData: Icons.medication),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: _buildStatCard(value: _calciumGiven, label: 'Calcium\ngiven', iconData: Icons.local_pharmacy),
+                                child: _buildStatCard(
+                                    value: _calciumGiven,
+                                    label: 'Calcium\ngiven',
+                                    iconData: Icons.local_pharmacy),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: _buildStatCard(value: _tdDosesGiven, label: 'TD Vaccine\ndoses given', iconData: Icons.vaccines),
+                                child: _buildStatCard(
+                                    value: _tdDosesGiven,
+                                    label: 'TD Vaccine\ndoses given',
+                                    iconData: Icons.vaccines),
                               ),
                             ],
                           ),
@@ -927,7 +993,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.borderPrimary),
+                                border:
+                                    Border.all(color: AppColors.borderPrimary),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -936,7 +1003,9 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                     padding: EdgeInsets.all(16),
                                     child: Row(
                                       children: [
-                                        Icon(Icons.priority_high, color: AppColors.brandPrimary, size: 22),
+                                        Icon(Icons.priority_high,
+                                            color: AppColors.brandPrimary,
+                                            size: 22),
                                         SizedBox(width: 8),
                                         Text(
                                           'Priority Tasks',
@@ -950,7 +1019,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                     ),
                                   ),
                                   const Divider(height: 1),
-                                  ..._priorityTasks.take(5).map((task) => _PriorityTaskTile(task: task)),
+                                  ..._priorityTasks.take(5).map(
+                                      (task) => _PriorityTaskTile(task: task)),
                                   if (_priorityTasks.length > 5)
                                     Padding(
                                       padding: const EdgeInsets.all(12),
@@ -982,7 +1052,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.borderPrimary),
+                                border:
+                                    Border.all(color: AppColors.borderPrimary),
                               ),
                               child: const Column(
                                 children: [
@@ -1037,7 +1108,8 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.borderPrimary),
+                                border:
+                                    Border.all(color: AppColors.borderPrimary),
                               ),
                               child: const Column(
                                 children: [
@@ -1105,18 +1177,25 @@ class _PriorityTaskTile extends StatelessWidget {
 
   Color _getUrgencyColor() {
     switch (task.urgency) {
-      case 'urgent': return AppColors.error;
-      case 'warning': return AppColors.warning;
-      default: return AppColors.info;
+      case 'urgent':
+        return AppColors.error;
+      case 'warning':
+        return AppColors.warning;
+      default:
+        return AppColors.info;
     }
   }
 
   IconData _getTaskIcon() {
     switch (task.type) {
-      case 'checkup': return Icons.medical_services;
-      case 'high_risk': return Icons.warning_amber;
-      case 'vaccine': return Icons.vaccines;
-      default: return Icons.task_alt;
+      case 'checkup':
+        return Icons.medical_services;
+      case 'high_risk':
+        return Icons.warning_amber;
+      case 'vaccine':
+        return Icons.vaccines;
+      default:
+        return Icons.task_alt;
     }
   }
 
@@ -1126,7 +1205,8 @@ class _PriorityTaskTile extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
+          bottom:
+              BorderSide(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
         ),
       ),
       child: Row(

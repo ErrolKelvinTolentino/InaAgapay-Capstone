@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
 import '../../services/gemini_service.dart';
+import '../../models/gemini_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/progressive_step_indicator.dart';
@@ -344,6 +345,263 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     _loadingModalVisible = false;
   }
 
+  List<String> _dedupePreserveOrder(Iterable<String> values) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final raw in values) {
+      final cleaned = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+      final key = cleaned.toLowerCase();
+      if (cleaned.isEmpty || seen.contains(key)) continue;
+      seen.add(key);
+      result.add(cleaned);
+    }
+    return result;
+  }
+
+  List<String> _truncateList(List<String> values, int max) {
+    if (values.length <= max) return values;
+    return values.sublist(0, max);
+  }
+
+  String _labResultStatus(LabResult item) {
+    if (item.isAbnormal) return 'ABNORMAL';
+    if (item.isNormal) return 'NORMAL';
+    return 'UNKNOWN';
+  }
+
+  String _buildConciseLabInsight(GeminiResponse result) {
+    final lines = <String>[];
+
+    final assessment = (result.overallAssessment ?? '').trim();
+    if (assessment.isNotEmpty) {
+      lines.add('OVERALL ASSESSMENT: $assessment');
+    }
+
+    final fullLabResults = _dedupePreserveOrder(
+      (result.labResults ?? const <LabResult>[]).map((item) =>
+          '${item.testName}: ${item.value} [${_labResultStatus(item)}]'),
+    );
+    if (fullLabResults.isNotEmpty) {
+      lines.add('LABORATORY RESULTS:');
+      for (final item in fullLabResults) {
+        lines.add('• $item');
+      }
+    }
+
+    final abnormal = _dedupePreserveOrder([
+      ...(result.abnormalFindings ?? const <String>[]),
+      ...(result.labResults ?? const <LabResult>[])
+          .where((item) => item.isAbnormal)
+          .map((item) => '${item.testName}: ${item.value}'),
+    ]);
+    if (abnormal.isNotEmpty) {
+      lines.add('KEY ABNORMAL FINDINGS:');
+      for (final item in _truncateList(abnormal, 5)) {
+        lines.add('• $item');
+      }
+    }
+
+    final normals = _dedupePreserveOrder([
+      ...(result.normalRanges ?? const <String>[]),
+      ...(result.labResults ?? const <LabResult>[])
+          .where((item) => item.isNormal)
+          .map((item) => '${item.testName}: ${item.value}'),
+    ]);
+    if (normals.isNotEmpty) {
+      lines.add('IMPORTANT NORMAL / IN-RANGE:');
+      for (final item in _truncateList(normals, 4)) {
+        lines.add('• $item');
+      }
+    }
+
+    final actions = _dedupePreserveOrder(
+      result.recommendations ?? const <String>[],
+    );
+    if (actions.isNotEmpty) {
+      lines.add('RECOMMENDED NEXT ACTIONS:');
+      for (final item in _truncateList(actions, 4)) {
+        lines.add('• $item');
+      }
+    }
+
+    if (lines.isEmpty && assessment.isEmpty && fullLabResults.isEmpty) {
+      return result.description.trim().isEmpty
+          ? 'AI output unavailable. Manual review required.'
+          : result.description.trim();
+    }
+
+    return lines.join('\n').trim();
+  }
+
+  Map<String, List<String>> _parseInsightSections(String insightText) {
+    final sections = <String, List<String>>{};
+    String? current;
+
+    for (final rawLine in insightText.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      if (line.endsWith(':')) {
+        current = line.substring(0, line.length - 1).trim();
+        sections.putIfAbsent(current, () => <String>[]);
+        continue;
+      }
+
+      if (line.contains(':') && !line.startsWith('•')) {
+        final idx = line.indexOf(':');
+        final key = line.substring(0, idx).trim();
+        final value = line.substring(idx + 1).trim();
+        sections[key] = <String>[value];
+        current = null;
+        continue;
+      }
+
+      final content = line.replaceFirst(RegExp(r'^\s*[•\-*]\s*'), '').trim();
+      if (content.isEmpty) continue;
+      if (current != null) {
+        sections.putIfAbsent(current, () => <String>[]).add(content);
+      }
+    }
+
+    return sections;
+  }
+
+  Widget _buildInsightCard({
+    required String title,
+    required IconData icon,
+    required List<String> items,
+    required Color color,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final item in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '• $item',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.textPrimary,
+                  height: 1.35,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmartInsightView(String insightText) {
+    final sections = _parseInsightSections(insightText);
+
+    final cards = <Widget>[];
+    final assessment = sections['OVERALL ASSESSMENT'] ?? const <String>[];
+    if (assessment.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Overall Assessment',
+          icon: Icons.summarize_outlined,
+          items: assessment,
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    final abnormal = sections['KEY ABNORMAL FINDINGS'] ?? const <String>[];
+    if (abnormal.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Abnormal Findings',
+          icon: Icons.warning_amber_rounded,
+          items: _showAllAi ? abnormal : _truncateList(abnormal, 4),
+          color: AppColors.error,
+        ),
+      );
+    }
+
+    final labResults = sections['LABORATORY RESULTS'] ?? const <String>[];
+    if (labResults.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Laboratory Results',
+          icon: Icons.science_outlined,
+          items: _showAllAi ? labResults : _truncateList(labResults, 6),
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    final normals = sections['IMPORTANT NORMAL / IN-RANGE'] ?? const <String>[];
+    if (normals.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'In-Range Results',
+          icon: Icons.check_circle_outline,
+          items: _showAllAi ? normals : _truncateList(normals, 3),
+          color: AppColors.success,
+        ),
+      );
+    }
+
+    final actions = sections['RECOMMENDED NEXT ACTIONS'] ?? const <String>[];
+    if (actions.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Recommended Actions',
+          icon: Icons.assignment_turned_in_outlined,
+          items: actions,
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    if (cards.isEmpty) {
+      return Text(
+        insightText,
+        maxLines: _showAllAi ? null : 14,
+        overflow: _showAllAi ? TextOverflow.visible : TextOverflow.fade,
+        style: const TextStyle(
+          height: 1.45,
+          fontSize: 14,
+          color: AppColors.textPrimary,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...cards,
+      ],
+    );
+  }
+
   Future<void> _runAiAnalysis() async {
     if (_images.isEmpty) {
       _showMessage('Please add at least one image before AI analysis.');
@@ -361,14 +619,30 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
         'Image count: ${_images.length}',
       ].join('\n');
 
-      final result = await _geminiService.analyzeLabTestImages(_images);
+      final result = await _geminiService.analyzeLabTestImages(
+        _images,
+        selectedLabType: _selectedLabType,
+        notes: _notesCtrl.text.trim(),
+      );
       if (!mounted || _cancelledRequests.contains(requestId)) return;
 
       _closeAiLoadingModalIfNeeded();
 
       final insight = result.description.trim().isEmpty
           ? 'No AI insights generated.'
-          : result.description.trim();
+          : _buildConciseLabInsight(result);
+
+      final isUnrelated = RegExp(
+        r'RELEVANCE\s*CHECK\s*:\s*UNRELATED',
+        caseSensitive: false,
+      ).hasMatch(result.description);
+      if (isUnrelated) {
+        _showMessage(
+          'AI flagged the upload as unrelated or unreadable. Please attach clearer lab result images.',
+          type: AppSnackType.warning,
+        );
+        return;
+      }
 
       setState(() {
         _aiDraftInsight = insight;
@@ -555,18 +829,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                                     ),
                                   ],
                                 )
-                              : Text(
-                                  _aiDraftInsight!,
-                                  maxLines: _showAllAi ? null : 14,
-                                  overflow: _showAllAi
-                                      ? TextOverflow.visible
-                                      : TextOverflow.fade,
-                                  style: const TextStyle(
-                                    height: 1.45,
-                                    fontSize: 14,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
+                              : _buildSmartInsightView(_aiDraftInsight!),
                         ),
                       ),
                       const Divider(height: 1),
@@ -741,7 +1004,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
               'reference_table': 'lab_tests',
               'reference_id': labTestId,
               'ai_model': 'Gemini 1.5 Flash',
-              'confidence_score': 0.92,
+              'confidence_score': null,
               'response': approvedAiText,
               'response_category': 'analysis',
               'status': 'approved',

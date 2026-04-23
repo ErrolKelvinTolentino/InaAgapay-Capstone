@@ -239,11 +239,29 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     try {
       _lastAiPrompt = [
         'Ultrasound AI analysis request',
+        'Health worker name: ${_healthWorkerNameController.text.trim().isEmpty ? 'Not specified' : _healthWorkerNameController.text.trim()}',
+        'Health worker institution: ${_healthWorkerInstitutionController.text.trim().isEmpty ? 'Not specified' : _healthWorkerInstitutionController.text.trim()}',
+        'Health worker profession: ${_healthWorkerProfessionController.text.trim().isEmpty ? 'Not specified' : _healthWorkerProfessionController.text.trim()}',
         'Image count: ${_selectedImages.length}',
       ].join('\n');
 
-      final result =
-          await _geminiService.analyzeUltrasoundImages(_selectedImages);
+      final result = await _geminiService.analyzeUltrasoundImages(
+        _selectedImages,
+        clinicalContext: _lastAiPrompt,
+      );
+
+      final isUnrelated = RegExp(
+        r'RELEVANCE\s*CHECK\s*:\s*UNRELATED',
+        caseSensitive: false,
+      ).hasMatch(result.description);
+      if (isUnrelated) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage =
+              'AI flagged the upload as unrelated or unreadable. Please attach clearer ultrasound images.';
+        });
+        return;
+      }
 
       setState(() {
         _combinedResponse = result;
@@ -361,7 +379,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             'reference_table': 'ultrasounds',
             'reference_id': ultrasoundId,
             'ai_model': 'Gemini 1.5 Flash',
-            'confidence_score': 0.92,
+            'confidence_score': null,
             'response': finalAiText,
             'response_category': 'analysis',
             'status': 'approved',

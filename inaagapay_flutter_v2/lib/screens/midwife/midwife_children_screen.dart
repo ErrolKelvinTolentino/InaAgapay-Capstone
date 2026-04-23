@@ -17,7 +17,7 @@ class MidwifeChildrenScreen extends StatefulWidget {
 
 class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
   final TextEditingController _searchController = TextEditingController();
-  
+
   List<Map<String, dynamic>> _children = [];
   List<Map<String, dynamic>> _filteredChildren = [];
   bool _loading = true;
@@ -41,7 +41,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     try {
       final accountId = await AuthStorage.getUserId();
       if (accountId == null) throw Exception('Not authenticated');
-      
+
       final result = await Supabase.instance.client
           .from('midwives')
           .select('midwife_id, assigned_bhc_id')
@@ -49,7 +49,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
           .single();
 
       _assignedBhcId = result['assigned_bhc_id'] as int;
-      
+
       await _fetchChildren();
     } catch (e) {
       setState(() {
@@ -61,7 +61,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
 
   Future<void> _fetchChildren() async {
     if (_assignedBhcId == null) return;
-    
+
     setState(() {
       _loading = true;
       _errorMessage = null;
@@ -72,12 +72,12 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
           .from('mothers')
           .select('mother_id')
           .eq('assigned_bhc_id', _assignedBhcId!);
-      
+
       final List<int> motherIds = [];
       for (var mother in mothersResponse) {
         motherIds.add(mother['mother_id'] as int);
       }
-      
+
       if (motherIds.isEmpty) {
         setState(() {
           _children = [];
@@ -86,7 +86,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         });
         return;
       }
-      
+
       final childrenResponse = await Supabase.instance.client
           .from('children')
           .select('''
@@ -106,7 +106,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
           ''')
           .inFilter('mother_id', motherIds)
           .order('added_at', ascending: false);
-      
+
       setState(() {
         _children = List<Map<String, dynamic>>.from(childrenResponse);
         _filteredChildren = List<Map<String, dynamic>>.from(childrenResponse);
@@ -129,10 +129,13 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     } else {
       setState(() {
         _filteredChildren = _children.where((child) {
-          final firstName = (child['first_name'] ?? '').toString().toLowerCase();
+          final firstName =
+              (child['first_name'] ?? '').toString().toLowerCase();
           final lastName = (child['last_name'] ?? '').toString().toLowerCase();
           final fullName = '$firstName $lastName';
-          return fullName.contains(query) || firstName.contains(query) || lastName.contains(query);
+          return fullName.contains(query) ||
+              firstName.contains(query) ||
+              lastName.contains(query);
         }).toList();
       });
     }
@@ -143,16 +146,17 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     final now = DateTime.now();
     int years = now.year - birthdate.year;
     int months = now.month - birthdate.month;
-    
+
     if (months < 0) {
       years--;
       months += 12;
     }
-    
+
     if (years <= 0) {
       return '$months month${months != 1 ? 's' : ''} old';
     } else {
-      return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'.trim();
+      return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'
+          .trim();
     }
   }
 
@@ -168,25 +172,26 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
 
   Future<void> _addChild() async {
     if (_assignedBhcId == null) return;
-    
+
     final mothersResponse = await Supabase.instance.client
         .from('mothers')
         .select('mother_id, account:account_id (first_name, last_name)')
         .eq('assigned_bhc_id', _assignedBhcId!);
-    
+
     if (mothersResponse.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No mothers found in your BHC. Please add a mother first.'),
+          content:
+              Text('No mothers found in your BHC. Please add a mother first.'),
           backgroundColor: AppColors.warning,
         ),
       );
       return;
     }
-    
+
     final List<Map<String, dynamic>> mothers = List.from(mothersResponse);
-    
+
     final int? selectedMotherId = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -200,7 +205,8 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
               final mother = mothers[index];
               final account = mother['account'] as Map<String, dynamic>?;
               final name = account != null
-                  ? '${account['first_name'] ?? ''} ${account['last_name'] ?? ''}'.trim()
+                  ? '${account['first_name'] ?? ''} ${account['last_name'] ?? ''}'
+                      .trim()
                   : 'Mother ${mother['mother_id']}';
               final motherIdValue = mother['mother_id'] as int;
               return ListTile(
@@ -218,14 +224,14 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         ],
       ),
     );
-    
+
     if (selectedMotherId != null && mounted) {
-      final selectedMother = mothers.firstWhere((m) => m['mother_id'] == selectedMotherId);
+      final selectedMother =
+          mothers.firstWhere((m) => m['mother_id'] == selectedMotherId);
       final account = selectedMother['account'] as Map<String, dynamic>?;
-      final motherFirstName = account != null
-          ? (account['first_name']?.toString() ?? '')
-          : '';
-      
+      final motherFirstName =
+          account != null ? (account['first_name']?.toString() ?? '') : '';
+
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
@@ -271,7 +277,8 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                     bottom: 0,
                     top: 0,
                     child: Padding(
-                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
+                      padding: const EdgeInsets.only(
+                          right: 16.0, top: 4.0, bottom: 4.0),
                       child: Image.asset(
                         'assets/images/baby.png',
                         fit: BoxFit.contain,
@@ -410,20 +417,27 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                                 ),
                               )
                             : ListView.separated(
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 8),
                                 itemCount: _filteredChildren.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final child = _filteredChildren[index];
-                                  final firstName = child['first_name']?.toString() ?? '';
-                                  final lastName = child['last_name']?.toString() ?? '';
-                                  final birthDetails = child['birth_details'] as Map<String, dynamic>?;
-                                  final birthdate = birthDetails != null && birthDetails['birthdate'] != null
-                                      ? DateTime.parse(birthDetails['birthdate'])
+                                  final firstName =
+                                      child['first_name']?.toString() ?? '';
+                                  final lastName =
+                                      child['last_name']?.toString() ?? '';
+                                  final birthDetails = child['birth_details']
+                                      as Map<String, dynamic>?;
+                                  final birthdate = birthDetails != null &&
+                                          birthDetails['birthdate'] != null
+                                      ? DateTime.parse(
+                                          birthDetails['birthdate'])
                                       : null;
                                   final age = _formatAge(birthdate);
                                   final motherName = _getMotherName(child);
-                                  
+
                                   return _ChildCard(
                                     firstName: firstName,
                                     lastName: lastName,
@@ -533,7 +547,7 @@ class _ChildCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  
+
                   // Child Info
                   Expanded(
                     child: Column(
@@ -581,7 +595,7 @@ class _ChildCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  
+
                   // Arrow
                   const Icon(
                     Icons.chevron_right,

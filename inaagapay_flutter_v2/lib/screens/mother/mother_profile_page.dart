@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/auth_storage.dart';
-import '../midwife/ultrasound_analyzer_screen.dart';
+import '../midwife/add_ultrasound_page.dart';
 import '../midwife/lab_test_analyzer_screen.dart';
 import '../midwife/add_prenatal_checkup_screen.dart';
 import '../../widgets/headline.dart';
@@ -76,14 +76,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     setState(() {});
   }
 
-  // Navigate to ultrasound analyzer
-  void _goToUltrasoundAnalyzer(Map<String, dynamic> pregnancy) {
+  // Navigate to add ultrasound form
+  void _goToAddUltrasound() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => UltrasoundAnalyzerScreen(
+        builder: (context) => AddUltrasoundPage(
           motherId: widget.motherId,
-          pregnancyId: pregnancy['pregnancy_id'],
         ),
       ),
     ).then((_) => _refresh());
@@ -3478,7 +3477,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           'Ultrasound',
                           Icons.photo,
                           Colors.purple,
-                          () => _goToUltrasoundAnalyzer(pregnancy),
+                          _goToAddUltrasound,
                         ),
                       ),
                     ],

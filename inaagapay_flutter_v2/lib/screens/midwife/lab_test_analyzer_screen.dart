@@ -693,7 +693,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               'reference_table': 'lab_tests',
               'reference_id': labTestId,
               'ai_model': 'Gemini 1.5 Flash',
-              'confidence_score': 0.92,
+              'confidence_score': null,
               'response': finalAiText,
               'response_category': 'analysis',
               'status': 'approved',

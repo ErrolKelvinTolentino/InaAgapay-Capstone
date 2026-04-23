@@ -224,19 +224,18 @@ Return ONLY the JSON, no markdown formatting.
       debugPrint('AI Analysis error: $e');
       _analysis = AIAnalysis(
         summary:
-            'Based on ${_growthRecords.length} growth records, the child is developing within expected ranges.',
-        trend: 'Normal',
+            'Automated growth interpretation is currently unavailable. Please review recorded measurements manually.',
+        trend: 'Insufficient Data',
         recommendations: [
-          'Continue regular growth monitoring every 2-4 weeks.',
-          'Ensure proper nutrition and physical activity.',
-          'Schedule regular pediatric check-ups.',
+          'Review weight, height, and BMI trends manually in the chart.',
+          'Repeat measurements if values appear inconsistent or unexpected.',
+          'Escalate to pediatric evaluation when there are concerning trends.',
         ],
         insights: {
           'records_analyzed': _growthRecords.length,
-          'age_range':
-              '${_growthRecords.first.ageInWeeks} to ${_growthRecords.last.ageInWeeks} weeks',
+          'status': 'ai_unavailable',
         },
-        confidenceScore: 0.85,
+        confidenceScore: 0.0,
       );
       _aiAnalysisError =
           'AI analysis temporarily unavailable. Showing basic summary.';

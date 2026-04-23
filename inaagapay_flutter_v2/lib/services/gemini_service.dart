@@ -61,7 +61,10 @@ class GeminiService {
   }
 
   // Ultrasound Analysis
-  Future<GeminiResponse> analyzeUltrasoundImages(List<XFile> imageFiles) async {
+  Future<GeminiResponse> analyzeUltrasoundImages(
+    List<XFile> imageFiles, {
+    String? clinicalContext,
+  }) async {
     if (imageFiles.isEmpty) {
       throw Exception('No images selected');
     }
@@ -75,36 +78,53 @@ class GeminiService {
       await checkAvailableModels();
     }
 
+    final normalizedContext = (clinicalContext ?? '').trim();
+
     final String prompt = """
-You are an AI assistant that helps analyze ultrasound images for maternal and child health.
+  You are an AI assistant that helps summarize ultrasound findings for maternal and child health support.
 
-IMPORTANT DISCLAIMER: You are not making a medical diagnosis. You are providing observations based on standard fetal biometry reference ranges. Always consult with a healthcare professional.
+  IMPORTANT DISCLAIMER:
+  - You are not making a diagnosis.
+  - Use only what is visible in images and provided context.
+  - If evidence is unclear or missing, say so explicitly.
 
-I am providing you with ${imageFiles.length} ultrasound images of the same patient/pregnancy. 
-Please analyze ALL images together and provide a COMPREHENSIVE HEALTH ASSESSMENT that includes:
+  I am providing ${imageFiles.length} ultrasound image(s) of the same pregnancy.
+  Clinical context: ${normalizedContext.isEmpty ? 'Not provided' : normalizedContext}
 
-1. OVERALL HEALTH STATUS: Based on all images, provide a clear assessment:
-   - HEALTHY/NORMAL: All measurements within normal ranges
-   - REQUIRES MONITORING: Some measurements slightly outside normal ranges
-   - CONSULT SPECIALIST: Multiple measurements significantly outside normal ranges
+  First do a relevance check.
+  If images are unrelated, unreadable, or not suitable for interpretation, set relevance_check to UNRELATED and explain briefly.
 
-2. DETAILED MEASUREMENTS ASSESSMENT:
-   List all visible measurements (BPD, HC, AC, FL, Heart Rate, etc.) and indicate if they are NORMAL, BORDERLINE, or CONCERNING
+  Return ONLY valid JSON in this exact schema:
+  {
+    "relevance_check": "RELATED|UNRELATED",
+    "relevance_reason": "string",
+    "overall_health_status": "HEALTHY_NORMAL|REQUIRES_MONITORING|CONSULT_SPECIALIST|INSUFFICIENT_DATA",
+    "measurements": [
+     {
+      "name": "string",
+      "value": "string",
+      "status": "NORMAL|BORDERLINE|CONCERNING|UNKNOWN",
+      "evidence": "string"
+     }
+    ],
+    "gestational_age_assessment": "string",
+    "anatomical_findings": [
+     {
+      "structure": "string",
+      "status": "NORMAL|UNCERTAIN|CONCERNING",
+      "note": "string"
+     }
+    ],
+    "key_observations": ["string"],
+    "recommendations": ["string"],
+    "confidence_score": 0.0
+  }
 
-3. GESTATIONAL AGE ASSESSMENT:
-   Provide estimated gestational age based on measurements
-
-4. ANATOMICAL ASSESSMENT:
-   List visible structures and indicate if they appear normal (use ✓ for normal)
-
-5. KEY OBSERVATIONS:
-   Note any important findings
-
-6. HEALTH SUMMARY:
-   Overall assessment and recommendations
-
-Format your response with clear sections and use ✓ for normal findings.
-""";
+  Rules:
+  - Do not fabricate measurements.
+  - Keep confidence_score between 0 and 1.
+  - If uncertain, use INSUFFICIENT_DATA and include what is missing.
+  """;
 
     return _makeMultiImageRequest(imageFiles, apiKey, prompt);
   }
@@ -132,45 +152,52 @@ Format your response with clear sections and use ✓ for normal findings.
     final normalizedNotes = (notes ?? '').trim();
 
     final String prompt = """
-You are an AI assistant that helps analyze laboratory test results for maternal and child health.
+You are an AI assistant that helps summarize laboratory test records for maternal and child health support.
 
-IMPORTANT DISCLAIMER: You are not making a medical diagnosis. You are extracting and organizing lab values for healthcare provider review. Always consult with a healthcare professional.
+IMPORTANT DISCLAIMER:
+- You are not making a diagnosis.
+- Extract and organize values for healthcare worker review.
+- Use only visible evidence and provided context.
 
-I am providing you with ${imageFiles.length} laboratory test result images.
+I am providing ${imageFiles.length} laboratory image(s).
 Selected lab test type: ${normalizedType.isEmpty ? 'Not specified' : normalizedType}
 Notes entered by user: ${normalizedNotes.isEmpty ? 'None provided' : normalizedNotes}
 
-Perform a strict relevance check first:
-- If the uploaded images are not laboratory results, are unreadable, or appear unrelated to the selected lab test context, return:
-  RELEVANCE CHECK: UNRELATED
-  RELEVANCE REASON: [brief reason]
-  RECOMMENDATION: Upload clear and related laboratory result images only.
-  Then stop and do not fabricate results.
-- If relevant, return:
-  RELEVANCE CHECK: RELATED
+Perform strict relevance checking.
+If unrelated or unreadable, set relevance_check to UNRELATED and do not fabricate values.
 
-Please analyze ALL images and provide a COMPREHENSIVE LABORATORY ANALYSIS that includes:
+Return ONLY valid JSON in this exact schema:
+{
+  "relevance_check": "RELATED|UNRELATED",
+  "relevance_reason": "string",
+  "lab_results": [
+    {
+      "test_name": "string",
+      "value": "string",
+      "unit": "string",
+      "reference_range": "string",
+      "status": "NORMAL|BORDERLINE|ABNORMAL|UNKNOWN",
+      "evidence": "string"
+    }
+  ],
+  "abnormal_findings": ["string"],
+  "normal_ranges": ["string"],
+  "overall_assessment": "string",
+  "recommendations": ["string"],
+  "confidence_score": 0.0
+}
 
-1. LABORATORY RESULTS:
-   List each test and its value in this format:
-   • [Test Name]: [Value] [Unit] [Status]
-   Status should be:
-   - NORMAL if within reference range
-   - ⚠️ ABNORMAL if outside reference range
-
-2. ABNORMAL FINDINGS:
-   List all abnormal values and their potential implications
-
-3. NORMAL RANGES:
-   Provide standard reference ranges for pregnant women where applicable
-
-4. OVERALL ASSESSMENT:
-   Brief summary of key findings
-
-5. RECOMMENDATIONS:
-   General recommendations based on findings
-
-Format your response with clear sections and use bullet points for easy reading.
+Rules:
+- Do not invent results.
+- Keep confidence_score between 0 and 1.
+- If image quality blocks extraction, say so in relevance_reason.
+- Keep output concise and non-redundant.
+- Max 5 items in abnormal_findings.
+- Max 5 items in normal_ranges.
+- Max 4 items in recommendations.
+- Do not repeat the same finding across multiple arrays.
+- Include all distinct detected laboratory results in lab_results.
+- Prefer short, direct phrasing for quick midwife review.
 """;
 
     return _makeMultiImageRequest(imageFiles, apiKey, prompt);
@@ -456,7 +483,7 @@ Rules:
         {"parts": parts}
       ],
       "generationConfig": {
-        "temperature": 0.2,
+        "temperature": 0.1,
         "topK": 32,
         "topP": 1,
         "maxOutputTokens": 8192,

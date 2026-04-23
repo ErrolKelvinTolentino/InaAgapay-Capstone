@@ -1,11 +1,11 @@
-// lib/models/gemini_response.dart
+import 'dart:convert';
 
 class GeminiResponse {
   final String description;
   final List<String>? measurements;
   final List<String>? labels;
   final double? confidence;
-  
+
   // Fields for ultrasound assessment
   final String? healthStatus;
   final List<String>? normalFindings;
@@ -19,6 +19,7 @@ class GeminiResponse {
   final String? overallAssessment;
   final List<String>? abnormalFindings;
   final List<String>? normalRanges;
+  final List<String>? recommendations;
 
   GeminiResponse({
     required this.description,
@@ -35,159 +36,511 @@ class GeminiResponse {
     this.overallAssessment,
     this.abnormalFindings,
     this.normalRanges,
+    this.recommendations,
   });
 
   factory GeminiResponse.fromJson(Map<String, dynamic> json) {
-    String text = "";
+    final text = _extractText(json);
+
+    if (text.isEmpty) {
+      return GeminiResponse(
+        description: 'AI output unavailable. Manual review required.',
+      );
+    }
+
+    final structured = _decodeStructuredJson(text);
+    if (structured != null) {
+      return _fromStructuredJson(structured);
+    }
+
+    return _fromFreeText(text);
+  }
+
+  static String _extractText(Map<String, dynamic> json) {
+    try {
+      final candidates = json['candidates'] as List?;
+      if (candidates == null || candidates.isEmpty) {
+        return '';
+      }
+
+      final candidate = candidates.first as Map<String, dynamic>;
+      final content = candidate['content'] as Map<String, dynamic>?;
+      final parts = content?['parts'] as List?;
+      if (parts == null || parts.isEmpty) {
+        return '';
+      }
+
+      return (parts.first as Map<String, dynamic>)['text']?.toString().trim() ??
+          '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static Map<String, dynamic>? _decodeStructuredJson(String raw) {
+    var text = raw.trim();
+
+    if (text.startsWith('```')) {
+      text = text
+          .replaceAll(RegExp(r'^```[a-zA-Z0-9_-]*\n?'), '')
+          .replaceAll(RegExp(r'\n?```$'), '')
+          .trim();
+    }
 
     try {
-      if (json['candidates'] != null && json['candidates'].isNotEmpty) {
-        final candidate = json['candidates'][0];
-        
-        if (candidate['content'] != null &&
-            candidate['content']['parts'] != null &&
-            candidate['content']['parts'].isNotEmpty) {
-          
-          text = candidate['content']['parts'][0]['text'] ?? "";
-        }
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
       }
-    } catch (e) {
-      text = "Error parsing response";
+    } catch (_) {
+      // Try to recover JSON object from mixed text.
     }
 
-    // Extract health status from text
-    String? healthStatus;
-    if (text.contains('OVERALL HEALTH STATUS: HEALTHY/NORMAL')) {
-      healthStatus = 'HEALTHY ✓';
-    } else if (text.contains('OVERALL HEALTH STATUS: REQUIRES MONITORING')) {
-      healthStatus = 'REQUIRES MONITORING ⚠️';
-    } else if (text.contains('OVERALL HEALTH STATUS: CONSULT SPECIALIST')) {
-      healthStatus = 'CONSULT SPECIALIST ⚠️⚠️';
+    final start = text.indexOf('{');
+    final end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      final candidate = text.substring(start, end + 1);
+      try {
+        final decoded = jsonDecode(candidate);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+      } catch (_) {}
     }
 
-    // Extract measurements for ultrasound
-    List<String> extractedMeasurements = [];
-    List<String> normalList = [];
-    List<String> concernsList = [];
-    String? ga;
-    String? fw;
-    String? hr;
+    return null;
+  }
 
-    if (text.isNotEmpty) {
-      // Look for common ultrasound measurements
-      final measurementPatterns = [
-        RegExp(r'BPD[:\s]*(\d+(?:\.\d+)?\s*mm)', caseSensitive: false),
-        RegExp(r'HC[:\s]*(\d+(?:\.\d+)?\s*mm)', caseSensitive: false),
-        RegExp(r'AC[:\s]*(\d+(?:\.\d+)?\s*mm)', caseSensitive: false),
-        RegExp(r'FL[:\s]*(\d+(?:\.\d+)?\s*mm)', caseSensitive: false),
-        RegExp(r'Fetal Heart Rate[:\s]*(\d+(?:\.\d+)?\s*bpm)', caseSensitive: false),
-        RegExp(r'Estimated Fetal Weight[:\s]*(\d+(?:\.\d+)?\s*(?:g|kg))', caseSensitive: false),
-        RegExp(r'Amniotic Fluid[:\s]*(\d+(?:\.\d+)?\s*cm)', caseSensitive: false),
-      ];
+  static GeminiResponse _fromStructuredJson(Map<String, dynamic> json) {
+    final relevance = _safeText(json['relevance_check']).toUpperCase();
+    final relevanceReason = _safeText(json['relevance_reason']);
+    final confidence = _toBoundedDouble(json['confidence_score']);
 
-      for (var pattern in measurementPatterns) {
-        final matches = pattern.allMatches(text);
-        for (var match in matches) {
-          if (match.group(0) != null) {
-            extractedMeasurements.add(match.group(0)!);
-            
-            if (match.group(0)!.contains('bpm')) {
-              hr = match.group(0);
-            } else if (match.group(0)!.contains('kg') || match.group(0)!.contains('g')) {
-              fw = match.group(0);
-            }
-          }
+    final measurements = <String>[];
+    final normalFindings = <String>[];
+    final concerns = <String>[];
+    final labResults = <LabResult>[];
+    final abnormalFindings = _toStringList(json['abnormal_findings']);
+    final normalRanges = _toStringList(json['normal_ranges']);
+    final recommendations = _toStringList(json['recommendations']);
+    final keyObservations = _toStringList(json['key_observations']);
+
+    String? fetalWeight;
+    String? heartRate;
+
+    final rawMeasurements = json['measurements'];
+    if (rawMeasurements is List) {
+      for (final item in rawMeasurements) {
+        if (item is! Map) continue;
+        final name = _safeText(item['name']);
+        final value = _safeText(item['value']);
+        final status = _safeText(item['status']).toUpperCase();
+        if (name.isEmpty && value.isEmpty) continue;
+
+        final summary =
+            '${name.isEmpty ? 'Measurement' : name}: ${value.isEmpty ? 'n/a' : value} [$status]';
+        measurements.add(summary);
+
+        if (status == 'NORMAL') {
+          normalFindings.add(summary);
         }
-      }
-
-      // Extract gestational age
-      final gaMatch = RegExp(r'Gestational Age[:\s]*(\d+\s*(?:weeks?|wks?)[^\n]*)', caseSensitive: false).firstMatch(text);
-      if (gaMatch != null) {
-        ga = gaMatch.group(1);
-      }
-
-      // Look for normal findings (lines with ✓)
-      final normalMatches = RegExp(r'✓([^\n]+)').allMatches(text);
-      for (var match in normalMatches) {
-        if (match.group(1) != null) {
-          normalList.add(match.group(1)!.trim());
+        if (status == 'CONCERNING') {
+          concerns.add(summary);
         }
-      }
 
-      // Look for concerns
-      if (text.contains('REQUIRES MONITORING') || text.contains('CONSULT SPECIALIST')) {
-        final concernSection = text.split('KEY OBSERVATIONS:').last.split('HEALTH SUMMARY:').first;
-        final concernLines = concernSection.split('\n').where((line) => 
-          line.contains('⚠️') || line.contains('borderline') || line.contains('concerning')
-        ).toList();
-        concernsList = concernLines;
+        if (name.toLowerCase().contains('weight') && value.isNotEmpty) {
+          fetalWeight = value;
+        }
+        if (name.toLowerCase().contains('heart') && value.isNotEmpty) {
+          heartRate = value;
+        }
       }
     }
 
-    // Extract lab results for lab test analysis
-    List<LabResult> labResults = [];
-    String? overallAssessment;
-    List<String> abnormalFindings = [];
-    List<String> normalRanges = [];
+    final rawAnatomical = json['anatomical_findings'];
+    if (rawAnatomical is List) {
+      for (final item in rawAnatomical) {
+        if (item is! Map) continue;
+        final structure = _safeText(item['structure']);
+        final status = _safeText(item['status']).toUpperCase();
+        final note = _safeText(item['note']);
+        if (structure.isEmpty) continue;
 
-    if (text.isNotEmpty) {
-      // Parse lab results if present
-      final labResultPattern = RegExp(r'•\s*([^:]+):\s*([^•]+)');
-      final matches = labResultPattern.allMatches(text);
-      
-      for (var match in matches) {
-        if (match.group(1) != null && match.group(2) != null) {
-          String testName = match.group(1)!.trim();
-          String value = match.group(2)!.trim();
-          
-          // Check if it contains status indicators
-          bool isNormal = !value.contains('⚠️') && !value.contains('ABNORMAL');
-          bool isAbnormal = value.contains('⚠️') || value.contains('ABNORMAL');
-          
-          labResults.add(LabResult(
-            testName: testName,
-            value: value.replaceAll('⚠️', '').replaceAll('ABNORMAL', '').trim(),
-            isNormal: isNormal,
-            isAbnormal: isAbnormal,
-          ));
+        final summary = note.isEmpty
+            ? '$structure [$status]'
+            : '$structure [$status] - $note';
+
+        if (status == 'NORMAL') {
+          normalFindings.add(summary);
+        } else if (status == 'CONCERNING') {
+          concerns.add(summary);
         }
       }
-
-      // Extract overall assessment
-      final assessmentMatch = RegExp(r'OVERALL ASSESSMENT:([^\n]*(?:\n[^\n]*)*?)(?=\n\n|\Z)', caseSensitive: false).firstMatch(text);
-      if (assessmentMatch != null) {
-        overallAssessment = assessmentMatch.group(1)?.trim();
-      }
-
-      // Extract abnormal findings
-      final abnormalSection = text.split('ABNORMAL FINDINGS:').last.split('NORMAL RANGES:').first;
-      final abnormalLines = abnormalSection.split('\n').where((line) => 
-        line.contains('•') && !line.contains('NORMAL')
-      ).toList();
-      abnormalFindings = abnormalLines.map((l) => l.replaceAll('•', '').trim()).toList();
-
-      // Extract normal ranges
-      final normalSection = text.split('NORMAL RANGES:').last.split('RECOMMENDATIONS:').first;
-      final normalLines = normalSection.split('\n').where((line) => line.contains('•')).toList();
-      normalRanges = normalLines.map((l) => l.replaceAll('•', '').trim()).toList();
     }
+
+    final rawLabResults = json['lab_results'];
+    if (rawLabResults is List) {
+      for (final item in rawLabResults) {
+        if (item is! Map) continue;
+        final testName = _safeText(item['test_name']);
+        final value = _safeText(item['value']);
+        final unit = _safeText(item['unit']);
+        final status = _safeText(item['status']).toUpperCase();
+        final displayValue =
+            [value, unit].where((part) => part.isNotEmpty).join(' ').trim();
+
+        if (testName.isEmpty && displayValue.isEmpty) continue;
+
+        labResults.add(
+          LabResult(
+            testName: testName.isEmpty ? 'Unknown test' : testName,
+            value: displayValue,
+            isNormal: status == 'NORMAL',
+            isAbnormal: status == 'ABNORMAL' || status == 'CONCERNING',
+          ),
+        );
+      }
+    }
+
+    final healthStatus = _safeText(json['overall_health_status']).toUpperCase();
+    final gestationalAge = _safeText(json['gestational_age_assessment']);
+    final overallAssessment = _safeText(json['overall_assessment']);
+
+    final description = _buildStructuredDescription(
+      relevance: relevance,
+      relevanceReason: relevanceReason,
+      healthStatus: healthStatus,
+      measurements: measurements,
+      gestationalAge: gestationalAge,
+      normalFindings: normalFindings,
+      concerns: concerns,
+      keyObservations: keyObservations,
+      labResults: labResults,
+      abnormalFindings: abnormalFindings,
+      normalRanges: normalRanges,
+      overallAssessment: overallAssessment,
+      recommendations: recommendations,
+    );
 
     return GeminiResponse(
-      description: text.isEmpty ? "No description available" : text,
-      measurements: extractedMeasurements.isNotEmpty ? extractedMeasurements.toSet().toList() : null,
-      labels: [],
-      confidence: 1.0,
-      healthStatus: healthStatus,
-      normalFindings: normalList.isNotEmpty ? normalList : null,
-      concerns: concernsList.isNotEmpty ? concernsList : null,
-      gestationalAge: ga,
-      fetalWeight: fw,
-      heartRate: hr,
-      labResults: labResults.isNotEmpty ? labResults : null,
-      overallAssessment: overallAssessment,
-      abnormalFindings: abnormalFindings.isNotEmpty ? abnormalFindings : null,
-      normalRanges: normalRanges.isNotEmpty ? normalRanges : null,
+      description: description,
+      measurements: measurements.isEmpty ? null : measurements,
+      labels: const [],
+      confidence: confidence,
+      healthStatus: healthStatus.isEmpty ? null : healthStatus,
+      normalFindings: normalFindings.isEmpty ? null : normalFindings,
+      concerns: concerns.isEmpty ? null : concerns,
+      gestationalAge: gestationalAge.isEmpty ? null : gestationalAge,
+      fetalWeight: fetalWeight,
+      heartRate: heartRate,
+      labResults: labResults.isEmpty ? null : labResults,
+      overallAssessment: overallAssessment.isEmpty ? null : overallAssessment,
+      abnormalFindings:
+          abnormalFindings.isEmpty ? null : abnormalFindings.toList(),
+      normalRanges: normalRanges.isEmpty ? null : normalRanges.toList(),
+      recommendations:
+          recommendations.isEmpty ? null : recommendations.toList(),
     );
+  }
+
+  static GeminiResponse _fromFreeText(String text) {
+    String? healthStatus;
+    if (RegExp(r'HEALTHY[_\s-]?NORMAL', caseSensitive: false).hasMatch(text)) {
+      healthStatus = 'HEALTHY_NORMAL';
+    } else if (RegExp(r'REQUIRES[_\s-]?MONITORING', caseSensitive: false)
+        .hasMatch(text)) {
+      healthStatus = 'REQUIRES_MONITORING';
+    } else if (RegExp(r'CONSULT[_\s-]?SPECIALIST', caseSensitive: false)
+        .hasMatch(text)) {
+      healthStatus = 'CONSULT_SPECIALIST';
+    }
+
+    final measurements = <String>[];
+    final measurementPatterns = [
+      RegExp(r'BPD[:\s]*(\d+(?:\.\d+)?\s*mm)', caseSensitive: false),
+      RegExp(r'HC[:\s]*(\d+(?:\.\d+)?\s*mm)', caseSensitive: false),
+      RegExp(r'AC[:\s]*(\d+(?:\.\d+)?\s*mm)', caseSensitive: false),
+      RegExp(r'FL[:\s]*(\d+(?:\.\d+)?\s*mm)', caseSensitive: false),
+      RegExp(r'Fetal Heart Rate[:\s]*(\d+(?:\.\d+)?\s*bpm)',
+          caseSensitive: false),
+      RegExp(r'Estimated Fetal Weight[:\s]*(\d+(?:\.\d+)?\s*(?:g|kg))',
+          caseSensitive: false),
+    ];
+
+    for (final pattern in measurementPatterns) {
+      for (final match in pattern.allMatches(text)) {
+        final value = match.group(0);
+        if (value != null && value.trim().isNotEmpty) {
+          measurements.add(value.trim());
+        }
+      }
+    }
+
+    final normalFindings = RegExp(r'✓([^\n]+)')
+        .allMatches(text)
+        .map((m) => (m.group(1) ?? '').trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+
+    final concerns =
+        RegExp(r'(?:⚠|concerning|borderline)([^\n]*)', caseSensitive: false)
+            .allMatches(text)
+            .map((m) => (m.group(0) ?? '').trim())
+            .where((value) => value.isNotEmpty)
+            .toList();
+
+    final gestationalAge = RegExp(
+      r'Gestational Age[:\s]*(\d+\s*(?:weeks?|wks?)[^\n]*)',
+      caseSensitive: false,
+    ).firstMatch(text)?.group(1);
+
+    final labResults = <LabResult>[];
+    final labMatches = RegExp(r'•\s*([^:\n]+):\s*([^\n]+)')
+        .allMatches(text)
+        .toList(growable: false);
+    for (final match in labMatches) {
+      final testName = (match.group(1) ?? '').trim();
+      final value = (match.group(2) ?? '').trim();
+      if (testName.isEmpty || value.isEmpty) continue;
+      final upper = value.toUpperCase();
+      labResults.add(
+        LabResult(
+          testName: testName,
+          value: value,
+          isNormal: upper.contains('NORMAL') && !upper.contains('ABNORMAL'),
+          isAbnormal:
+              upper.contains('ABNORMAL') || upper.contains('CONCERNING'),
+        ),
+      );
+    }
+
+    final abnormalFindings =
+        _extractSectionLines(text, 'ABNORMAL FINDINGS:', 'NORMAL RANGES:');
+    final normalRanges =
+        _extractSectionLines(text, 'NORMAL RANGES:', 'RECOMMENDATIONS:');
+    final recommendations = _extractSectionLines(
+      text,
+      'RECOMMENDATIONS:',
+      'OVERALL ASSESSMENT:',
+    );
+    final overallAssessment =
+        _extractSectionText(text, 'OVERALL ASSESSMENT:', 'RECOMMENDATIONS:');
+
+    return GeminiResponse(
+      description: text,
+      measurements: measurements.isEmpty ? null : measurements.toSet().toList(),
+      labels: const [],
+      confidence: null,
+      healthStatus: healthStatus,
+      normalFindings: normalFindings.isEmpty ? null : normalFindings,
+      concerns: concerns.isEmpty ? null : concerns,
+      gestationalAge: gestationalAge,
+      fetalWeight: measurements
+              .firstWhere(
+                (m) => RegExp(r'weight', caseSensitive: false).hasMatch(m),
+                orElse: () => '',
+              )
+              .isEmpty
+          ? null
+          : measurements.firstWhere(
+              (m) => RegExp(r'weight', caseSensitive: false).hasMatch(m),
+            ),
+      heartRate: measurements
+              .firstWhere(
+                (m) => RegExp(r'heart', caseSensitive: false).hasMatch(m),
+                orElse: () => '',
+              )
+              .isEmpty
+          ? null
+          : measurements.firstWhere(
+              (m) => RegExp(r'heart', caseSensitive: false).hasMatch(m),
+            ),
+      labResults: labResults.isEmpty ? null : labResults,
+      overallAssessment: overallAssessment.isEmpty ? null : overallAssessment,
+      abnormalFindings: abnormalFindings.isEmpty ? null : abnormalFindings,
+      normalRanges: normalRanges.isEmpty ? null : normalRanges,
+      recommendations: recommendations.isEmpty ? null : recommendations,
+    );
+  }
+
+  static String _buildStructuredDescription({
+    required String relevance,
+    required String relevanceReason,
+    required String healthStatus,
+    required List<String> measurements,
+    required String gestationalAge,
+    required List<String> normalFindings,
+    required List<String> concerns,
+    required List<String> keyObservations,
+    required List<LabResult> labResults,
+    required List<String> abnormalFindings,
+    required List<String> normalRanges,
+    required String overallAssessment,
+    required List<String> recommendations,
+  }) {
+    final dedupedMeasurements = _dedupeStable(measurements);
+    final dedupedNormalFindings = _dedupeStable(normalFindings);
+    final dedupedConcerns = _dedupeStable(concerns);
+    final dedupedObservations = _dedupeStable(keyObservations);
+    final dedupedAbnormalFindings = _dedupeStable(abnormalFindings);
+    final dedupedNormalRanges = _dedupeStable(normalRanges);
+    final dedupedRecommendations = _dedupeStable(recommendations);
+
+    final lines = <String>[];
+
+    if (relevance.isNotEmpty) {
+      lines.add('RELEVANCE CHECK: $relevance');
+    }
+    if (relevanceReason.isNotEmpty) {
+      lines.add('RELEVANCE REASON: $relevanceReason');
+    }
+
+    if (relevance == 'UNRELATED') {
+      lines.add(
+          'RECOMMENDATION: Upload clear and related medical record images only.');
+      return lines.join('\n');
+    }
+
+    if (healthStatus.isNotEmpty) {
+      lines.add('OVERALL HEALTH STATUS: $healthStatus');
+    }
+
+    if (dedupedMeasurements.isNotEmpty) {
+      lines.add('DETAILED MEASUREMENTS ASSESSMENT:');
+      for (final item in dedupedMeasurements) {
+        lines.add('• $item');
+      }
+    }
+
+    if (gestationalAge.isNotEmpty) {
+      lines.add('GESTATIONAL AGE ASSESSMENT: $gestationalAge');
+    }
+
+    if (dedupedNormalFindings.isNotEmpty) {
+      lines.add('ANATOMICAL ASSESSMENT:');
+      for (final item in dedupedNormalFindings) {
+        lines.add('• $item');
+      }
+    }
+
+    if (dedupedObservations.isNotEmpty) {
+      lines.add('KEY OBSERVATIONS:');
+      for (final item in dedupedObservations) {
+        lines.add('• $item');
+      }
+    }
+
+    if (labResults.isNotEmpty) {
+      lines.add('LABORATORY RESULTS:');
+      for (final result in labResults) {
+        final status = result.isAbnormal
+            ? 'ABNORMAL'
+            : (result.isNormal ? 'NORMAL' : 'UNKNOWN');
+        lines.add('• ${result.testName}: ${result.value} [$status]');
+      }
+    }
+
+    final mergedAbnormal = _dedupeStable(
+      <String>[...dedupedConcerns, ...dedupedAbnormalFindings],
+    );
+    if (mergedAbnormal.isNotEmpty) {
+      lines.add('ABNORMAL FINDINGS:');
+      for (final item in mergedAbnormal) {
+        lines.add('• $item');
+      }
+    }
+
+    if (dedupedNormalRanges.isNotEmpty) {
+      lines.add('NORMAL RANGES:');
+      for (final item in dedupedNormalRanges) {
+        lines.add('• $item');
+      }
+    }
+
+    if (overallAssessment.isNotEmpty) {
+      lines.add('OVERALL ASSESSMENT: $overallAssessment');
+    }
+
+    if (dedupedRecommendations.isNotEmpty) {
+      lines.add('RECOMMENDATIONS:');
+      for (final item in dedupedRecommendations) {
+        lines.add('• $item');
+      }
+    }
+
+    return lines.join('\n').trim();
+  }
+
+  static String _safeText(Object? value) {
+    return value?.toString().trim() ?? '';
+  }
+
+  static List<String> _toStringList(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .map((item) => item?.toString().trim() ?? '')
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static List<String> _dedupeStable(List<String> values) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final value in values) {
+      final normalized = value.trim().toLowerCase();
+      if (normalized.isEmpty || seen.contains(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      result.add(value.trim());
+    }
+    return result;
+  }
+
+  static double? _toBoundedDouble(Object? value) {
+    if (value is num) {
+      final parsed = value.toDouble();
+      if (parsed < 0) return 0;
+      if (parsed > 1) return 1;
+      return parsed;
+    }
+
+    final parsed = double.tryParse(_safeText(value));
+    if (parsed == null) return null;
+    if (parsed < 0) return 0;
+    if (parsed > 1) return 1;
+    return parsed;
+  }
+
+  static List<String> _extractSectionLines(
+    String source,
+    String start,
+    String end,
+  ) {
+    final body = _extractSectionText(source, start, end);
+    if (body.isEmpty) return const [];
+
+    return body
+        .split('\n')
+        .map((line) =>
+            line.replaceFirst(RegExp(r'^\s*(?:•|-|\*)\s*'), '').trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static String _extractSectionText(String source, String start, String end) {
+    final startIndex = source.toUpperCase().indexOf(start.toUpperCase());
+    if (startIndex < 0) return '';
+
+    final contentStart = startIndex + start.length;
+    final endIndex =
+        source.toUpperCase().indexOf(end.toUpperCase(), contentStart);
+
+    final text = endIndex > contentStart
+        ? source.substring(contentStart, endIndex)
+        : source.substring(contentStart);
+
+    return text.trim();
   }
 }
 

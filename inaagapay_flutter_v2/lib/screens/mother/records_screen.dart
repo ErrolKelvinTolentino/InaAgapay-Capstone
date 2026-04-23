@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
+import '../../services/mother_profile_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/headline.dart';
 import '../../widgets/main_button.dart';
@@ -22,12 +23,15 @@ class _RecordsScreenState extends State<RecordsScreen>
   String? _errorMessage;
   int? _motherId;
 
+  List<Map<String, dynamic>> _checkups = [];
   List<Map<String, dynamic>> _ultrasounds = [];
   List<Map<String, dynamic>> _labTests = [];
 
   String _selectedFilter = 'all';
   String _sortOrder = 'desc';
   String _searchQuery = '';
+  final Set<String> _expandedLabInsightAspects = <String>{};
+  StateSetter? _recordDetailsModalSetState;
 
   late TabController _tabController;
 
@@ -42,6 +46,16 @@ class _RecordsScreenState extends State<RecordsScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _refreshRecordDetailsUi() {
+    final modalSetState = _recordDetailsModalSetState;
+    if (modalSetState != null) {
+      modalSetState(() {});
+      return;
+    }
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _loadMotherData() async {
@@ -86,6 +100,12 @@ class _RecordsScreenState extends State<RecordsScreen>
 
   Future<void> _loadRecordsForPregnancies(List<int> pregnancyIds) async {
     if (pregnancyIds.isNotEmpty) {
+      final checkupsResponse = await SupabaseService.client
+          .from('prenatal_checkups')
+          .select('*')
+          .inFilter('pregnancy_id', pregnancyIds)
+          .order('checkup_datetime', ascending: false);
+
       final ultrasoundsResponse = await SupabaseService.client
           .from('ultrasounds')
           .select('*')
@@ -99,6 +119,7 @@ class _RecordsScreenState extends State<RecordsScreen>
           .order('lab_test_date', ascending: false);
 
       setState(() {
+        _checkups = List<Map<String, dynamic>>.from(checkupsResponse);
         _ultrasounds = List<Map<String, dynamic>>.from(ultrasoundsResponse);
         _labTests = List<Map<String, dynamic>>.from(labTestsResponse);
       });
@@ -113,6 +134,17 @@ class _RecordsScreenState extends State<RecordsScreen>
       return DateFormat('MMM d, yyyy').format(parsed);
     } catch (e) {
       return date.toString();
+    }
+  }
+
+  String _formatDateTime(dynamic dateTime) {
+    if (dateTime == null) return '—';
+    try {
+      final parsed = DateTime.tryParse(dateTime.toString());
+      if (parsed == null) return dateTime.toString();
+      return DateFormat('MMM d, yyyy h:mm a').format(parsed);
+    } catch (e) {
+      return dateTime.toString();
     }
   }
 
@@ -135,6 +167,27 @@ class _RecordsScreenState extends State<RecordsScreen>
     return urls;
   }
 
+  ({String cleanRemarks, String? extractedAi}) _splitLabRemarksAndAi(
+      String? rawRemarks) {
+    final source = rawRemarks?.trim() ?? '';
+    if (source.isEmpty) {
+      return (cleanRemarks: '', extractedAi: null);
+    }
+
+    final marker = RegExp(r'\bAI\s*Analysis\s*:', caseSensitive: false);
+    final match = marker.firstMatch(source);
+    if (match == null) {
+      return (cleanRemarks: source, extractedAi: null);
+    }
+
+    final notesPart = source.substring(0, match.start).trim();
+    final aiPart = source.substring(match.end).trim();
+    return (
+      cleanRemarks: notesPart,
+      extractedAi: aiPart.isEmpty ? null : aiPart,
+    );
+  }
+
   void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
     Navigator.push(
       context,
@@ -154,277 +207,948 @@ class _RecordsScreenState extends State<RecordsScreen>
     String? subtitle,
     List<String>? imageUrls,
     String? aiAnalysis,
+    bool useStructuredAiInsights = false,
   }) {
+    _expandedLabInsightAspects.clear();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
+      builder: (_) => StatefulBuilder(
+        builder: (context, modalSetState) {
+          _recordDetailsModalSetState = modalSetState;
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.9,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: AppColors.bgSecondary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(icon, color: AppColors.brandPrimary),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                        Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: AppColors.bgSecondary,
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              if (subtitle != null && subtitle.isNotEmpty)
-                                Text(
-                                  subtitle,
-                                  style: const TextStyle(
-                                      color: AppColors.textSecondary),
-                                ),
-                            ],
-                          ),
+                              child: Icon(icon, color: AppColors.brandPrimary),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (subtitle != null && subtitle.isNotEmpty)
+                                    Text(
+                                      subtitle,
+                                      style: const TextStyle(
+                                          color: AppColors.textSecondary),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (imageUrls != null && imageUrls.isNotEmpty) ...[
-                      SizedBox(
-                        height: 200,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: imageUrls.length,
-                          itemBuilder: (context, index) {
-                            return GestureDetector(
-                              onTap: () =>
-                                  _showFullScreenImage(imageUrls, index),
-                              child: Container(
-                                width: 200,
-                                margin: const EdgeInsets.only(right: 12),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      Image.network(
-                                        imageUrls[index],
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => Container(
-                                          color: AppColors.bgSecondary,
-                                          child: const Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(Icons.broken_image,
-                                                    size: 32,
-                                                    color: Colors.grey),
-                                                SizedBox(height: 4),
-                                                Text(
-                                                  'Image not available',
-                                                  style:
-                                                      TextStyle(fontSize: 10),
-                                                  textAlign: TextAlign.center,
+                        const SizedBox(height: 16),
+                        if (imageUrls != null && imageUrls.isNotEmpty) ...[
+                          SizedBox(
+                            height: 200,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: imageUrls.length,
+                              itemBuilder: (context, index) {
+                                return GestureDetector(
+                                  onTap: () =>
+                                      _showFullScreenImage(imageUrls, index),
+                                  child: Container(
+                                    width: 200,
+                                    margin: const EdgeInsets.only(right: 12),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          Image.network(
+                                            imageUrls[index],
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                Container(
+                                              color: AppColors.bgSecondary,
+                                              child: const Center(
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.broken_image,
+                                                        size: 32,
+                                                        color: Colors.grey),
+                                                    SizedBox(height: 4),
+                                                    Text(
+                                                      'Image not available',
+                                                      style: TextStyle(
+                                                          fontSize: 10),
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        loadingBuilder:
-                                            (context, child, loadingProgress) {
-                                          if (loadingProgress == null)
-                                            return child;
-                                          return Container(
-                                            color: AppColors.bgSecondary,
-                                            child: const Center(
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor:
-                                                    AlwaysStoppedAnimation<
-                                                            Color>(
-                                                        AppColors.brandPrimary),
                                               ),
                                             ),
-                                          );
-                                        },
+                                            loadingBuilder: (context, child,
+                                                loadingProgress) {
+                                              if (loadingProgress == null) {
+                                                return child;
+                                              }
+                                              return Container(
+                                                color: AppColors.bgSecondary,
+                                                child: const Center(
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                                Color>(
+                                                            AppColors
+                                                                .brandPrimary),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                          if (imageUrls.length > 1 &&
+                                              index == 0)
+                                            Positioned(
+                                              top: 8,
+                                              right: 8,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black
+                                                      .withOpacity(0.6),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  '+${imageUrls.length - 1} more',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
-                                      if (imageUrls.length > 1 && index == 0)
-                                        Positioned(
-                                          top: 8,
-                                          right: 8,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  Colors.black.withOpacity(0.6),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSecondary,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.borderPrimary),
+                          ),
+                          child: Column(
+                            children: rows
+                                .map((entry) => Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 6),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SizedBox(
+                                            width: 120,
                                             child: Text(
-                                              '+${imageUrls.length - 1} more',
+                                              entry.key,
                                               style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
+                                                color: AppColors.textSecondary,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: Text(
+                                              entry.value,
+                                              style: const TextStyle(
+                                                fontSize: 13,
                                                 fontWeight: FontWeight.w500,
                                               ),
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.borderPrimary),
-                      ),
-                      child: Column(
-                        children: rows
-                            .map((entry) => Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 6),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      SizedBox(
-                                        width: 120,
-                                        child: Text(
-                                          entry.key,
-                                          style: const TextStyle(
-                                            color: AppColors.textSecondary,
-                                            fontSize: 13,
-                                          ),
-                                        ),
+                                        ],
                                       ),
-                                      Expanded(
-                                        child: Text(
-                                          entry.value,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ))
-                            .toList(),
-                      ),
-                    ),
-                    if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3E5F5),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                              color: const Color(0xFF7E57C2)
-                                  .withValues(alpha: 0.2)),
+                                    ))
+                                .toList(),
+                          ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.psychology_rounded,
-                                    color: const Color(0xFF7E57C2), size: 20),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'AI-Powered Insights',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF5E35B1),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              aiAnalysis,
-                              style: const TextStyle(fontSize: 13, height: 1.5),
-                            ),
-                            const SizedBox(height: 12),
+                        if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          if (useStructuredAiInsights)
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'Note: This is AI-generated analysis for informational purposes only.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
-                                  fontStyle: FontStyle.italic,
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: AppColors.borderPrimary,
+                                  width: 1.5,
                                 ),
                               ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.bgSecondary,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: const Icon(
+                                          Icons.medical_information,
+                                          color: AppColors.brandPrimary,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'Clinical Assessment',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildStructuredAiInsights(aiAnalysis),
+                                ],
+                              ),
+                            )
+                          else
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3E5F5),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                    color: const Color(0xFF7E57C2)
+                                        .withValues(alpha: 0.2)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.psychology_rounded,
+                                          color: const Color(0xFF7E57C2),
+                                          size: 20),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'AI-Powered Insights',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF5E35B1),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    aiAnalysis,
+                                    style: const TextStyle(
+                                        fontSize: 13, height: 1.5),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.7),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'Note: This is AI-generated analysis for informational purposes only.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ).whenComplete(() {
+      _recordDetailsModalSetState = null;
+      _expandedLabInsightAspects.clear();
+    });
+  }
+
+  String _normalizeMarkdownLine(String input) {
+    var line = input;
+    line = line.replaceFirst(RegExp(r'^\s*#{1,6}\s*'), '');
+    line = line.replaceFirst(RegExp(r'^\s*(?:[-*])\s+'), '');
+    return line;
+  }
+
+  String _cleanResidualMarkdown(String input) {
+    var text = input;
+    text = text.replaceAll('**', '');
+    text = text.replaceAll('##', '');
+    text = text.replaceAll(RegExp(r'(?<!\*)\*(?!\*)'), '');
+    return text;
+  }
+
+  List<TextSpan> _parseInlineMarkdown(String input) {
+    final spans = <TextSpan>[];
+    final pattern = RegExp(r'\*\*(.+?)\*\*');
+    int current = 0;
+
+    for (final match in pattern.allMatches(input)) {
+      if (match.start > current) {
+        spans.add(TextSpan(
+          text: _cleanResidualMarkdown(input.substring(current, match.start)),
+        ));
+      }
+
+      final boldText = match.group(1) ?? '';
+      spans.add(TextSpan(
+        text: boldText,
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ));
+      current = match.end;
+    }
+
+    if (current < input.length) {
+      spans.add(TextSpan(
+        text: _cleanResidualMarkdown(input.substring(current)),
+      ));
+    }
+
+    if (spans.isEmpty) {
+      spans.add(TextSpan(text: _cleanResidualMarkdown(input)));
+    }
+
+    return spans;
+  }
+
+  Widget _buildFormattedAiText(String text) {
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    final lines = text.split('\n');
+    final List<TextSpan> spans = [];
+
+    for (int i = 0; i < lines.length; i++) {
+      final normalizedLine = _normalizeMarkdownLine(lines[i]);
+      spans.addAll(_parseInlineMarkdown(normalizedLine));
+      if (i < lines.length - 1) {
+        spans.add(const TextSpan(text: '\n'));
+      }
+    }
+
+    return RichText(
+      text: TextSpan(
+        style:
+            const TextStyle(color: Colors.black87, fontSize: 15, height: 1.5),
+        children: spans,
+      ),
+    );
+  }
+
+  Map<String, List<String>> _extractAiSections(String rawText) {
+    final lines = rawText
+        .split('\n')
+        .map((l) => _cleanResidualMarkdown(_normalizeMarkdownLine(l)).trim())
+        .toList();
+
+    final Map<String, List<String>> sections = {};
+    String currentSection = 'Summary';
+    sections[currentSection] = [];
+
+    final headingPattern = RegExp(
+      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|LABORATORY RESULTS|ABNORMAL FINDINGS|NORMAL RANGES|REFERENCE RANGES|OVERALL ASSESSMENT|RECOMMENDATIONS|KEY OBSERVATIONS)\s*:\s*(.*)$',
+      caseSensitive: false,
+    );
+
+    for (final line in lines) {
+      if (line.isEmpty) continue;
+      if (line.toUpperCase() == 'COMPREHENSIVE LABORATORY ANALYSIS') continue;
+      if (RegExp(r'^[-_=]{2,}$').hasMatch(line.replaceAll(' ', ''))) {
+        continue;
+      }
+
+      final heading = headingPattern.firstMatch(line);
+      if (heading != null) {
+        currentSection = heading.group(1)!.toUpperCase();
+        if (currentSection == 'REFERENCE RANGES') {
+          currentSection = 'NORMAL RANGES';
+        }
+        sections.putIfAbsent(currentSection, () => []);
+        final inlineContent = heading.group(2)?.trim() ?? '';
+        if (inlineContent.isNotEmpty) {
+          sections[currentSection]!.add(inlineContent);
+        }
+        continue;
+      }
+
+      sections.putIfAbsent(currentSection, () => []);
+      sections[currentSection]!.add(line);
+    }
+
+    sections.removeWhere((_, value) => value.isEmpty);
+    return sections;
+  }
+
+  bool _isConcerningAnalyte(String text) {
+    final t = text.toLowerCase();
+    return RegExp(
+      r'protein|glucose|ketone|nitrite|leukocyte|blood|pus|bacteria|bilirubin|hiv|hbsag|vdrl|rpr|syphilis|infection|pathogen',
+      caseSensitive: false,
+    ).hasMatch(t);
+  }
+
+  String _classifyLabStatus(String testName, String rawValue) {
+    final test = testName.toLowerCase();
+    final value = rawValue.toLowerCase();
+    final merged = '$test $value';
+
+    final hasWithinNormal = RegExp(
+      r'within normal limits|within normal range|normal range|wnl',
+      caseSensitive: false,
+    ).hasMatch(value);
+    if (hasWithinNormal) return 'WITHIN NORMAL LIMITS';
+
+    final isColorFinding = test.contains('color') || test.contains('colour');
+    if (isColorFinding) {
+      if (RegExp(r'\byellow\b|\bstraw\b|\bpale\b|\bclear\b',
+              caseSensitive: false)
+          .hasMatch(value)) {
+        return 'WITHIN NORMAL LIMITS';
+      }
+      if (RegExp(r'\bdark\b|\bamber\b|\bbrown\b|\bred\b|\bbloody\b',
+              caseSensitive: false)
+          .hasMatch(value)) {
+        return 'ABNORMAL (REVIEW)';
+      }
+      return 'OBSERVE';
+    }
+
+    if (RegExp(r'\bpositive\b', caseSensitive: false).hasMatch(value)) {
+      if (_isConcerningAnalyte(merged)) return 'POSITIVE (REVIEW)';
+      if (RegExp(r'pregnancy|hcg', caseSensitive: false).hasMatch(test)) {
+        return 'POSITIVE (EXPECTED)';
+      }
+      return 'POSITIVE';
+    }
+
+    if (RegExp(r'\bnegative\b', caseSensitive: false).hasMatch(value)) {
+      if (RegExp(r'pregnancy|hcg', caseSensitive: false).hasMatch(test)) {
+        return 'NEGATIVE (REVIEW)';
+      }
+      if (_isConcerningAnalyte(merged)) return 'NEGATIVE (REASSURING)';
+      return 'NEGATIVE';
+    }
+
+    if (RegExp(r'\btrace\b|\bfew\b|\bslight\b|\bmild\b|\bborderline\b',
+            caseSensitive: false)
+        .hasMatch(value)) {
+      return 'BORDERLINE';
+    }
+
+    if (RegExp(
+      r'\babnormal\b|\bcritical\b|outside normal range|higher than normal|lower than normal|\belevated\b|\bdecreased\b|\bincreased\b|!',
+      caseSensitive: false,
+    ).hasMatch(value)) {
+      return 'ABNORMAL (REVIEW)';
+    }
+
+    if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
+      return 'NORMAL';
+    }
+
+    return 'OBSERVE';
+  }
+
+  bool _isConcerningStatus(String status) {
+    final s = status.toUpperCase();
+    return s.contains('REVIEW') || s == 'ABNORMAL';
+  }
+
+  bool _isCautionStatus(String status) {
+    final s = status.toUpperCase();
+    return s == 'OBSERVE' || s == 'BORDERLINE' || s == 'POSITIVE';
+  }
+
+  Color _statusChipBackground(String status) {
+    if (_isConcerningStatus(status)) return Colors.red.shade50;
+    if (_isCautionStatus(status)) return Colors.orange.shade50;
+    return Colors.green.shade50;
+  }
+
+  Color _statusChipBorder(String status) {
+    if (_isConcerningStatus(status)) return Colors.red.shade200;
+    if (_isCautionStatus(status)) return Colors.orange.shade200;
+    return Colors.green.shade200;
+  }
+
+  Color _statusChipTextColor(String status) {
+    if (_isConcerningStatus(status)) return Colors.red;
+    if (_isCautionStatus(status)) return Colors.orange.shade800;
+    return Colors.green;
+  }
+
+  String _statusMeaning(String status) {
+    switch (status.toUpperCase()) {
+      case 'WITHIN NORMAL LIMITS':
+        return 'Consistent with expected findings for this test.';
+      case 'NORMAL':
+        return 'Reported as normal for this parameter.';
+      case 'ABNORMAL (REVIEW)':
+      case 'ABNORMAL':
+        return 'May need clinician review with symptoms and history.';
+      case 'BORDERLINE':
+        return 'Near threshold. Monitor trends and correlate clinically.';
+      case 'OBSERVE':
+        return 'Not clearly high-risk. Observe and compare with references.';
+      case 'POSITIVE (REVIEW)':
+        return 'Positive finding that may be clinically significant.';
+      case 'POSITIVE (EXPECTED)':
+        return 'Positive finding can be expected for this test context.';
+      case 'NEGATIVE (REASSURING)':
+        return 'No concerning marker detected for this parameter.';
+      case 'NEGATIVE (REVIEW)':
+        return 'Negative may be unexpected for this context; verify clinically.';
+      case 'POSITIVE':
+      case 'NEGATIVE':
+        return 'Interpret this result based on the specific test context.';
+      default:
+        return 'Interpret this result together with reference ranges and overall assessment.';
+    }
+  }
+
+  ({String testName, String value, String status}) _parseLabResultLine(
+      String line) {
+    final cleaned =
+        _safeText(line).replaceFirst(RegExp(r'^[-\-*]\s*'), '').trim();
+    final colonIndex = cleaned.indexOf(':');
+    if (colonIndex == -1) {
+      return (testName: cleaned, value: '', status: 'UNKNOWN');
+    }
+
+    final testName = cleaned.substring(0, colonIndex).trim();
+    final rawValue = _safeText(cleaned.substring(colonIndex + 1)).trim();
+    final status = _classifyLabStatus(testName, rawValue);
+
+    final value = rawValue
+        .replaceAll('!', '')
+        .replaceAll(RegExp(r'\bABNORMAL\b', caseSensitive: false), '')
+        .trim();
+
+    return (
+      testName: _stripDecorativeDashes(testName),
+      value: _stripDecorativeDashes(value),
+      status: status
+    );
+  }
+
+  String _safeText(Object? value) => value?.toString() ?? '';
+
+  String _stripDecorativeDashes(String value) {
+    final trimmed = value.trim();
+    if (RegExp(r'^[-_=]{2,}$').hasMatch(trimmed)) {
+      return '';
+    }
+    return trimmed.replaceAll(RegExp(r'\s+--+\s+'), ' ').trim();
+  }
+
+  String _normalizeAspectKey(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  bool _lineMatchesAspect(String line, String aspect) {
+    final a = _normalizeAspectKey(_safeText(aspect));
+    final l = _normalizeAspectKey(_safeText(line));
+    return a.isNotEmpty && l.contains(a);
+  }
+
+  String _buildAspectDetails(
+      String aspect, List<String> abnormalLines, List<String> rangeLines) {
+    final matches = <String>[];
+    for (final line in abnormalLines) {
+      if (_lineMatchesAspect(line, aspect)) {
+        matches.add(line);
+      }
+    }
+    for (final line in rangeLines) {
+      if (_lineMatchesAspect(line, aspect)) {
+        matches.add('Reference: $line');
+      }
+    }
+    return matches.join('\n\n').trim();
+  }
+
+  Widget _buildLabResultsSummaryCard(Map<String, List<String>> sections) {
+    final labLines = sections['LABORATORY RESULTS'] ?? const <String>[];
+    final abnormalLines = sections['ABNORMAL FINDINGS'] ?? const <String>[];
+    final rangeLines = sections['NORMAL RANGES'] ?? const <String>[];
+
+    final rows = labLines
+        .map(_parseLabResultLine)
+        .where((r) => r.testName.isNotEmpty && r.status != 'UNKNOWN')
+        .toList();
+
+    if (rows.isEmpty) {
+      return _buildAiSectionCard('LABORATORY RESULTS', labLines);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.science_outlined,
+                  size: 18, color: AppColors.brandPrimary),
+              SizedBox(width: 8),
+              Text(
+                'Laboratory Results',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.brandPrimary,
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.bgSecondary,
+              borderRadius: BorderRadius.circular(8),
             ),
-          ],
-        ),
+            child: const Text(
+              'Status guide: REVIEW = needs clinician review, BORDERLINE/OBSERVE = monitor and correlate, WITHIN NORMAL LIMITS = reassuring in context.',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...rows.map((row) {
+            final details = _buildAspectDetails(
+              row.testName,
+              abnormalLines,
+              rangeLines,
+            );
+            final aspectKey = _normalizeAspectKey(row.testName);
+            final isExpanded = _expandedLabInsightAspects.contains(aspectKey);
+            final expandedDetails = details.isNotEmpty
+                ? details
+                : 'No additional abnormal/reference details were attached for this test.';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.borderPrimary),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          row.testName,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 24,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          splashRadius: 16,
+                          onPressed: () {
+                            if (isExpanded) {
+                              _expandedLabInsightAspects.remove(aspectKey);
+                            } else {
+                              _expandedLabInsightAspects.add(aspectKey);
+                            }
+                            _refreshRecordDetailsUi();
+                          },
+                          icon: Icon(
+                            isExpanded ? Icons.expand_less : Icons.expand_more,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _statusChipBackground(row.status),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: _statusChipBorder(row.status),
+                          ),
+                        ),
+                        child: Text(
+                          row.status,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _statusChipTextColor(row.status),
+                          ),
+                        ),
+                      ),
+                      if (row.value.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSecondary,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            row.value,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _statusMeaning(row.status),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (isExpanded)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.only(top: 10),
+                      child: _buildFormattedAiText(expandedDetails),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
       ),
+    );
+  }
+
+  String _friendlyAiSectionTitle(String title) {
+    switch (title) {
+      case 'LABORATORY RESULTS':
+        return 'Laboratory Results';
+      case 'ABNORMAL FINDINGS':
+        return 'Abnormal Findings';
+      case 'NORMAL RANGES':
+        return 'Reference Ranges';
+      case 'OVERALL ASSESSMENT':
+        return 'Overall Assessment';
+      case 'RECOMMENDATIONS':
+        return 'Recommendations';
+      case 'RELEVANCE CHECK':
+        return 'Relevance Check';
+      case 'RELEVANCE REASON':
+        return 'Relevance Reason';
+      case 'KEY OBSERVATIONS':
+        return 'Key Observations';
+      default:
+        return title
+            .split(' ')
+            .map(
+                (w) => w.isEmpty ? w : '${w[0]}${w.substring(1).toLowerCase()}')
+            .join(' ');
+    }
+  }
+
+  Widget _buildAiSectionCard(String title, List<String> lines) {
+    final safeTitle = title.toUpperCase();
+    final isAbnormal = safeTitle.contains('ABNORMAL');
+    final isRecommendation = safeTitle.contains('RECOMMENDATION');
+    final isAssessment = safeTitle.contains('ASSESSMENT');
+
+    final Color accent = isAbnormal
+        ? Colors.red
+        : isRecommendation
+            ? Colors.blue
+            : isAssessment
+                ? Colors.deepPurple
+                : AppColors.brandPrimary;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _friendlyAiSectionTitle(safeTitle),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...lines.map((line) {
+            final cleaned = line.replaceFirst(RegExp(r'^[-*]\s*'), '').trim();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _buildFormattedAiText(cleaned),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStructuredAiInsights(String text) {
+    final sections = _extractAiSections(text);
+    if (sections.isEmpty) return _buildFormattedAiText(text);
+
+    const sectionOrder = [
+      'OVERALL ASSESSMENT',
+      'LABORATORY RESULTS',
+      'ABNORMAL FINDINGS',
+      'NORMAL RANGES',
+      'KEY OBSERVATIONS',
+      'RECOMMENDATIONS',
+      'SUMMARY',
+    ];
+
+    final orderedEntries = <MapEntry<String, List<String>>>[];
+    for (final key in sectionOrder) {
+      if (sections.containsKey(key)) {
+        orderedEntries.add(MapEntry(key, sections[key]!));
+      }
+    }
+    for (final entry in sections.entries) {
+      if (!sectionOrder.contains(entry.key)) {
+        orderedEntries.add(entry);
+      }
+    }
+
+    final widgets = <Widget>[];
+    for (final entry in orderedEntries) {
+      if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON') {
+        continue;
+      }
+
+      if (entry.key == 'LABORATORY RESULTS') {
+        widgets.add(_buildLabResultsSummaryCard(sections));
+        continue;
+      }
+
+      if (entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
+        continue;
+      }
+      widgets.add(_buildAiSectionCard(entry.key, entry.value));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
     );
   }
 
@@ -455,27 +1179,124 @@ class _RecordsScreenState extends State<RecordsScreen>
     return buffer.toString();
   }
 
-  String _generateLabTestAIInsights(Map<String, dynamic> labTest) {
-    final remarks = labTest['remarks']?.toString().toLowerCase() ?? '';
-    final buffer = StringBuffer();
+  String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
+    final bpSys = _toDouble(checkup['blood_pressure_systolic']);
+    final bpDia = _toDouble(checkup['blood_pressure_diastolic']);
+    final weight = _toDouble(checkup['checkup_weight']);
+    final edemaRaw = _formatValue(checkup['edema']);
+    final edema = edemaRaw.toLowerCase();
+    final tdDose = _formatValue(checkup['td_vaccine_dose']);
 
-    buffer.write('🤖 Lab Test AI Analysis:\n\n');
+    final fhrRaw = _formatValue(checkup['fetal_heart_beat']);
+    final fhr = int.tryParse(fhrRaw);
 
-    if (remarks.contains('normal')) {
-      buffer.write('✅ **All results are within normal range.**\n\n');
-    } else if (remarks.contains('abnormal') || remarks.contains('borderline')) {
-      buffer.write('⚠️ **Some values require attention.**\n\n');
+    String overallAssessment =
+        'Current prenatal checkup findings appear stable overall.';
+    if (bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) {
+      overallAssessment =
+          'Blood pressure is elevated and needs closer monitoring for hypertensive disorders of pregnancy.';
+    } else if (bpSys != null && bpDia != null && (bpSys < 90 || bpDia < 60)) {
+      overallAssessment =
+          'Blood pressure is lower than typical range; monitor hydration, symptoms, and follow-up trends.';
+    } else if (fhr != null && (fhr < 120 || fhr > 160)) {
+      overallAssessment =
+          'Fetal heart rate is outside the usual expected range and should be reviewed clinically.';
+    } else if (edema != '—' && edema != 'none') {
+      overallAssessment =
+          'Mild edema is noted; monitor progression and correlate with blood pressure and symptoms.';
     }
 
-    buffer.write('🏥 **Recommendations**:\n');
-    buffer.write('• Review results with your healthcare provider\n');
-    buffer.write('• Follow any prescribed treatment plans\n');
+    final buffer = StringBuffer();
+    buffer.write('OVERALL ASSESSMENT: $overallAssessment\n\n');
 
-    return buffer.toString();
+    buffer.write('KEY OBSERVATIONS:\n');
+    if (bpSys != null && bpDia != null) {
+      if (bpSys >= 140 || bpDia >= 90) {
+        buffer.write(
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [REVIEW].\n');
+      } else if (bpSys < 90 || bpDia < 60) {
+        buffer.write(
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [MONITOR].\n');
+      } else {
+        buffer.write(
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [WITHIN NORMAL LIMITS].\n');
+      }
+    } else {
+      buffer.write(
+          '- Maternal Vitals - Blood Pressure: Not documented in this record.\n');
+    }
+
+    if (weight != null) {
+      buffer.write(
+          '- Maternal Vitals - Weight: ${weight.toStringAsFixed(1)} kg.\n');
+    }
+
+    if (fhr != null) {
+      if (fhr >= 120 && fhr <= 160) {
+        buffer.write(
+            '- Fetal Status - Heart Rate: $fhr bpm [WITHIN NORMAL LIMITS].\n');
+      } else {
+        buffer.write('- Fetal Status - Heart Rate: $fhr bpm [REVIEW].\n');
+      }
+    } else if (fhrRaw != '—') {
+      buffer.write('- Fetal Status - Heart Rate: $fhrRaw [REVIEW MANUALLY].\n');
+    }
+
+    final fetalPosition = _formatValue(checkup['fetal_position']);
+    if (fetalPosition != '—') {
+      buffer.write('- Fetal Status - Position: $fetalPosition.\n');
+    }
+
+    if (edemaRaw != '—') {
+      if (edema == 'none') {
+        buffer.write('- Maternal Observation - Edema: None reported.\n');
+      } else {
+        buffer.write('- Maternal Observation - Edema: $edemaRaw [MONITOR].\n');
+      }
+    }
+
+    if (tdDose != '—') {
+      buffer.write('- Preventive Care - TD Vaccine: $tdDose documented.\n');
+    }
+
+    final nextSchedule = _formatDate(checkup['next_schedule']);
+    if (nextSchedule != '—') {
+      buffer.write('- Follow-up - Next Schedule: $nextSchedule.\n');
+    }
+
+    buffer.write('\nRECOMMENDATIONS:\n');
+    buffer.write('- Continue scheduled prenatal follow-up visits.\n');
+    buffer
+        .write('- Monitor maternal warning signs and fetal movement daily.\n');
+    if ((bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) ||
+        (fhr != null && (fhr < 120 || fhr > 160))) {
+      buffer.write(
+          '- Prioritize clinician review for blood pressure and/or fetal heart findings.\n');
+    }
+    if (edema != '—' && edema != 'none') {
+      buffer.write('- Reassess edema severity in next checkup.\n');
+    }
+
+    return buffer.toString().trim();
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    return double.tryParse(value.toString());
   }
 
   List<Map<String, dynamic>> _getFilteredAndSortedRecords() {
     List<Map<String, dynamic>> allRecords = [];
+
+    for (var checkup in _checkups) {
+      allRecords.add({
+        ...checkup,
+        'record_type': 'checkup',
+        'record_date': checkup['checkup_datetime'],
+      });
+    }
 
     for (var ultrasound in _ultrasounds) {
       allRecords.add({
@@ -502,24 +1323,42 @@ class _RecordsScreenState extends State<RecordsScreen>
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       allRecords = allRecords.where((record) {
+        if (record['record_type'] == 'checkup') {
+          return _formatDateTime(record['checkup_datetime'])
+                  .toLowerCase()
+                  .contains(query) ||
+              (record['remarks']?.toString().toLowerCase().contains(query) ??
+                  false) ||
+              (record['blood_pressure_systolic']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains(query) ??
+                  false) ||
+              (record['blood_pressure_diastolic']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains(query) ??
+                  false);
+        }
+
         if (record['record_type'] == 'ultrasound') {
           return _formatDate(record['ultrasound_date'])
                   .toLowerCase()
                   .contains(query) ||
               (record['remarks']?.toString().toLowerCase().contains(query) ??
                   false);
-        } else {
-          return _formatDate(record['lab_test_date'])
-                  .toLowerCase()
-                  .contains(query) ||
-              (record['lab_test_type']
-                      ?.toString()
-                      .toLowerCase()
-                      .contains(query) ??
-                  false) ||
-              (record['remarks']?.toString().toLowerCase().contains(query) ??
-                  false);
         }
+
+        return _formatDate(record['lab_test_date'])
+                .toLowerCase()
+                .contains(query) ||
+            (record['lab_test_type']
+                    ?.toString()
+                    .toLowerCase()
+                    .contains(query) ??
+                false) ||
+            (record['remarks']?.toString().toLowerCase().contains(query) ??
+                false);
       }).toList();
     }
 
@@ -659,6 +1498,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                           DropdownMenuItem(
                               value: 'all', child: Text('All Records')),
                           DropdownMenuItem(
+                              value: 'checkup', child: Text('Checkups Only')),
+                          DropdownMenuItem(
                               value: 'ultrasound',
                               child: Text('Ultrasounds Only')),
                           DropdownMenuItem(
@@ -744,6 +1585,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                     itemCount: allRecords.length,
                     itemBuilder: (context, index) {
                       final record = allRecords[index];
+                      final isCheckup = record['record_type'] == 'checkup';
                       final isUltrasound =
                           record['record_type'] == 'ultrasound';
 
@@ -754,21 +1596,32 @@ class _RecordsScreenState extends State<RecordsScreen>
                           leading: Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: isUltrasound
-                                  ? Colors.purple.withOpacity(0.1)
-                                  : Colors.orange.withOpacity(0.1),
+                              color: isCheckup
+                                  ? AppColors.brandPrimary.withOpacity(0.1)
+                                  : isUltrasound
+                                      ? Colors.purple.withOpacity(0.1)
+                                      : Colors.orange.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
-                              isUltrasound ? Icons.photo : Icons.science,
-                              color:
-                                  isUltrasound ? Colors.purple : Colors.orange,
+                              isCheckup
+                                  ? Icons.medical_services
+                                  : isUltrasound
+                                      ? Icons.photo
+                                      : Icons.science,
+                              color: isCheckup
+                                  ? AppColors.brandPrimary
+                                  : isUltrasound
+                                      ? Colors.purple
+                                      : Colors.orange,
                             ),
                           ),
                           title: Text(
-                            isUltrasound
-                                ? 'Ultrasound'
-                                : (record['lab_test_type'] ?? 'Lab Test'),
+                            isCheckup
+                                ? 'Prenatal Checkup'
+                                : isUltrasound
+                                    ? 'Ultrasound'
+                                    : (record['lab_test_type'] ?? 'Lab Test'),
                             style: const TextStyle(
                               fontWeight: FontWeight.w600,
                             ),
@@ -778,14 +1631,27 @@ class _RecordsScreenState extends State<RecordsScreen>
                             children: [
                               const SizedBox(height: 4),
                               Text(
-                                _formatDate(isUltrasound
-                                    ? record['ultrasound_date']
-                                    : record['lab_test_date']),
+                                isCheckup
+                                    ? _formatDateTime(
+                                        record['checkup_datetime'])
+                                    : _formatDate(isUltrasound
+                                        ? record['ultrasound_date']
+                                        : record['lab_test_date']),
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: AppColors.textSecondary,
                                 ),
                               ),
+                              if (isCheckup) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'BP: ${_formatValue(record['blood_pressure_systolic'])}/${_formatValue(record['blood_pressure_diastolic'])}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                               if (record['health_worker_name'] != null) ...[
                                 const SizedBox(height: 2),
                                 Text(
@@ -802,8 +1668,44 @@ class _RecordsScreenState extends State<RecordsScreen>
                             Icons.chevron_right,
                             color: AppColors.textSecondary,
                           ),
-                          onTap: () {
-                            if (isUltrasound) {
+                          onTap: () async {
+                            if (isCheckup) {
+                              final bpSys = _formatValue(
+                                  record['blood_pressure_systolic']);
+                              final bpDia = _formatValue(
+                                  record['blood_pressure_diastolic']);
+                              _showRecordDetails(
+                                title: 'Prenatal Checkup',
+                                subtitle:
+                                    _formatDateTime(record['checkup_datetime']),
+                                icon: Icons.medical_services,
+                                rows: [
+                                  MapEntry(
+                                      'Date',
+                                      _formatDateTime(
+                                          record['checkup_datetime'])),
+                                  MapEntry('Age of Gestation',
+                                      _formatValue(record['age_of_gestation'])),
+                                  MapEntry('Weight (kg)',
+                                      _formatValue(record['checkup_weight'])),
+                                  MapEntry('Blood Pressure', '$bpSys/$bpDia'),
+                                  MapEntry('Fetal Position',
+                                      _formatValue(record['fetal_position'])),
+                                  MapEntry('Fetal Heart Beat',
+                                      _formatValue(record['fetal_heart_beat'])),
+                                  MapEntry('TD Vaccine',
+                                      _formatValue(record['td_vaccine_dose'])),
+                                  MapEntry(
+                                      'Edema', _formatValue(record['edema'])),
+                                  MapEntry('Remarks',
+                                      _formatValue(record['remarks'])),
+                                  MapEntry('Next Schedule',
+                                      _formatDate(record['next_schedule'])),
+                                ],
+                                aiAnalysis: _generatePrenatalAIInsights(record),
+                                useStructuredAiInsights: true,
+                              );
+                            } else if (isUltrasound) {
                               final imageUrls =
                                   _parseImageUrls(record['ultrasound_image']);
                               _showRecordDetails(
@@ -841,6 +1743,23 @@ class _RecordsScreenState extends State<RecordsScreen>
                             } else {
                               final imageUrls =
                                   _parseImageUrls(record['lab_test_image']);
+                              final split = _splitLabRemarksAndAi(
+                                  record['remarks']?.toString());
+
+                              String? aiAnalysis;
+                              final labTestId = record['lab_test_id'];
+                              if (labTestId is int) {
+                                aiAnalysis = await MotherProfileService
+                                    .getLabTestAIAnalysis(
+                                  labTestId,
+                                );
+                              }
+
+                              aiAnalysis = (aiAnalysis != null &&
+                                      aiAnalysis.trim().isNotEmpty)
+                                  ? aiAnalysis.trim()
+                                  : split.extractedAi;
+
                               _showRecordDetails(
                                 title: record['lab_test_type'] ?? 'Lab Test',
                                 subtitle: _formatDate(record['lab_test_date']),
@@ -869,9 +1788,11 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       _formatValue(
                                           record['health_worker_profession'])),
                                   MapEntry('Remarks',
-                                      _formatValue(record['remarks'])),
+                                      _formatValue(split.cleanRemarks)),
                                 ],
-                                aiAnalysis: _generateLabTestAIInsights(record),
+                                aiAnalysis: aiAnalysis,
+                                useStructuredAiInsights:
+                                    aiAnalysis != null && aiAnalysis.isNotEmpty,
                               );
                             }
                           },
@@ -886,34 +1807,33 @@ class _RecordsScreenState extends State<RecordsScreen>
   }
 
   Widget _buildStatisticsTab() {
+    final totalCheckups = _checkups.length;
     final totalUltrasounds = _ultrasounds.length;
     final totalLabTests = _labTests.length;
-    final totalRecords = totalUltrasounds + totalLabTests;
+    final totalRecords = totalCheckups + totalUltrasounds + totalLabTests;
 
     final allRecords = _getFilteredAndSortedRecords();
     final latestRecord = allRecords.isNotEmpty ? allRecords.first : null;
 
     final now = DateTime.now();
-    final last6Months = List.generate(6, (i) {
-      return DateTime(now.year, now.month - i, 1);
-    }).reversed.toList();
+    final last6Months =
+        List.generate(6, (i) => DateTime(now.year, now.month - i, 1))
+            .reversed
+            .toList();
 
-    Map<String, int> recordsByMonth = {};
-    for (var month in last6Months) {
-      final monthKey = DateFormat('MMM yyyy').format(month);
-      recordsByMonth[monthKey] = 0;
+    final Map<String, int> recordsByMonth = {};
+    for (final month in last6Months) {
+      recordsByMonth[DateFormat('MMM yyyy').format(month)] = 0;
     }
 
-    for (var record in allRecords) {
+    for (final record in allRecords) {
       final dateStr = record['record_date'];
-      if (dateStr != null) {
-        final date = DateTime.tryParse(dateStr);
-        if (date != null) {
-          final monthKey = DateFormat('MMM yyyy').format(date);
-          if (recordsByMonth.containsKey(monthKey)) {
-            recordsByMonth[monthKey] = (recordsByMonth[monthKey] ?? 0) + 1;
-          }
-        }
+      if (dateStr == null) continue;
+      final date = DateTime.tryParse(dateStr);
+      if (date == null) continue;
+      final monthKey = DateFormat('MMM yyyy').format(date);
+      if (recordsByMonth.containsKey(monthKey)) {
+        recordsByMonth[monthKey] = (recordsByMonth[monthKey] ?? 0) + 1;
       }
     }
 
@@ -935,10 +1855,10 @@ class _RecordsScreenState extends State<RecordsScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: _buildStatCard(
-                  'Ultrasounds',
-                  totalUltrasounds.toString(),
-                  Icons.photo,
-                  Colors.purple,
+                  'Checkups',
+                  totalCheckups.toString(),
+                  Icons.medical_services,
+                  AppColors.brandPrimary,
                 ),
               ),
             ],
@@ -948,19 +1868,19 @@ class _RecordsScreenState extends State<RecordsScreen>
             children: [
               Expanded(
                 child: _buildStatCard(
-                  'Lab Tests',
-                  totalLabTests.toString(),
-                  Icons.science,
-                  Colors.orange,
+                  'Ultrasounds',
+                  totalUltrasounds.toString(),
+                  Icons.photo,
+                  Colors.purple,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _buildStatCard(
-                  'With Images',
-                  '${_ultrasounds.where((u) => u['ultrasound_image'] != null).length + _labTests.where((l) => l['lab_test_image'] != null).length}',
-                  Icons.image,
-                  Colors.green,
+                  'Lab Tests',
+                  totalLabTests.toString(),
+                  Icons.science,
+                  Colors.orange,
                 ),
               ),
             ],
@@ -997,17 +1917,23 @@ class _RecordsScreenState extends State<RecordsScreen>
                     decoration: BoxDecoration(
                       color: (latestRecord['record_type'] == 'ultrasound'
                               ? Colors.purple
-                              : Colors.orange)
+                              : latestRecord['record_type'] == 'checkup'
+                                  ? AppColors.brandPrimary
+                                  : Colors.orange)
                           .withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       latestRecord['record_type'] == 'ultrasound'
                           ? Icons.photo
-                          : Icons.science,
+                          : latestRecord['record_type'] == 'checkup'
+                              ? Icons.medical_services
+                              : Icons.science,
                       color: latestRecord['record_type'] == 'ultrasound'
                           ? Colors.purple
-                          : Colors.orange,
+                          : latestRecord['record_type'] == 'checkup'
+                              ? AppColors.brandPrimary
+                              : Colors.orange,
                       size: 24,
                     ),
                   ),
@@ -1017,9 +1943,12 @@ class _RecordsScreenState extends State<RecordsScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          latestRecord['record_type'] == 'ultrasound'
-                              ? 'Ultrasound'
-                              : (latestRecord['lab_test_type'] ?? 'Lab Test'),
+                          latestRecord['record_type'] == 'checkup'
+                              ? 'Prenatal Checkup'
+                              : latestRecord['record_type'] == 'ultrasound'
+                                  ? 'Ultrasound'
+                                  : (latestRecord['lab_test_type'] ??
+                                      'Lab Test'),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1027,40 +1956,15 @@ class _RecordsScreenState extends State<RecordsScreen>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _formatDate(latestRecord['record_date']),
+                          latestRecord['record_type'] == 'checkup'
+                              ? _formatDateTime(latestRecord['record_date'])
+                              : _formatDate(latestRecord['record_date']),
                           style: const TextStyle(
                             fontSize: 13,
                             color: AppColors.textSecondary,
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: latestRecord['ultrasound_image'] != null ||
-                              latestRecord['lab_test_image'] != null
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      latestRecord['ultrasound_image'] != null ||
-                              latestRecord['lab_test_image'] != null
-                          ? 'Has Images'
-                          : 'No Images',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: latestRecord['ultrasound_image'] != null ||
-                                latestRecord['lab_test_image'] != null
-                            ? Colors.green
-                            : Colors.grey,
-                      ),
                     ),
                   ),
                 ],
@@ -1109,7 +2013,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                               MediaQuery.of(context).size.width *
                               0.5,
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
+                            gradient: const LinearGradient(
                               colors: [
                                 AppColors.brandPrimary,
                                 AppColors.brandSecondary,
@@ -1170,7 +2074,39 @@ class _RecordsScreenState extends State<RecordsScreen>
                   children: [
                     Expanded(
                       child: _buildActionButton(
-                        'View All Ultrasounds',
+                        'View Checkups',
+                        Icons.medical_services,
+                        AppColors.brandPrimary,
+                        () {
+                          setState(() {
+                            _selectedFilter = 'checkup';
+                            _tabController.animateTo(0);
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildActionButton(
+                        'View Lab Tests',
+                        Icons.science,
+                        Colors.orange,
+                        () {
+                          setState(() {
+                            _selectedFilter = 'labtest';
+                            _tabController.animateTo(0);
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildActionButton(
+                        'View Ultrasounds',
                         Icons.photo,
                         Colors.purple,
                         () {
@@ -1182,19 +2118,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildActionButton(
-                        'View All Lab Tests',
-                        Icons.science,
-                        Colors.orange,
-                        () {
-                          setState(() {
-                            _selectedFilter = 'labtest';
-                            _tabController.animateTo(0);
-                          });
-                        },
-                      ),
-                    ),
+                    const Expanded(child: SizedBox.shrink()),
                   ],
                 ),
               ],
