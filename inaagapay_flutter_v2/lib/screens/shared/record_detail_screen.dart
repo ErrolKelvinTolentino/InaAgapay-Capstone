@@ -30,6 +30,11 @@ class RecordDetailScreen extends StatefulWidget {
 class _RecordDetailScreenState extends State<RecordDetailScreen> {
   final Set<String> _expandedLabInsightAspects = <String>{};
 
+  // Section accent colors — pink palette variations
+  static const _accentRecord = Color(0xFFE6398D); // deep rose
+  static const _accentWorker = Color(0xFFD44B8A); // medium pink
+  static const _accentNotes  = Color(0xFFC7607E); // warm coral-pink
+
   @override
   Widget build(BuildContext context) {
     final hasAi =
@@ -38,21 +43,25 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0.5,
         title: Text(widget.title),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (widget.imageUrls != null && widget.imageUrls!.isNotEmpty) ...[
                 _buildImageGallery(widget.imageUrls!),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
               ],
               _buildDetailsCard(),
               if (hasAi) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 _buildAiCard(widget.aiAnalysis!.trim()),
               ],
             ],
@@ -64,22 +73,57 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
   Widget _buildImageGallery(List<String> imageUrls) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Attached Images',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFF0F5), Color(0xFFFFE4EE)],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.photo_library_outlined,
+                    size: 16, color: AppColors.brandAccent),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Attached Images',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${imageUrls.length} file${imageUrls.length > 1 ? 's' : ''}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           SizedBox(
-            height: 200,
+            height: 180,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: imageUrls.length,
@@ -97,23 +141,43 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                     );
                   },
                   child: Container(
-                    width: 200,
-                    margin: const EdgeInsets.only(right: 12),
+                    width: 180,
+                    margin: const EdgeInsets.only(right: 10),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: AppColors.borderPrimary),
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        imageUrls[index],
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: AppColors.bgSecondary,
-                          alignment: Alignment.center,
-                          child: const Text('Image not available'),
+                    child: Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(9),
+                          child: Image.network(
+                            imageUrls[index],
+                            width: 180,
+                            height: 180,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: AppColors.bgSecondary,
+                              alignment: Alignment.center,
+                              child: const Icon(Icons.broken_image_outlined,
+                                  color: AppColors.textSecondary, size: 28),
+                            ),
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          bottom: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.zoom_in,
+                                size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -125,41 +189,57 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     );
   }
 
+  Color _sectionAccent(String title) {
+    final t = title.toLowerCase();
+    if (t.contains('health worker')) return _accentWorker;
+    if (t.contains('notes')) return _accentNotes;
+    return _accentRecord;
+  }
+
+  IconData _sectionIcon(String title) {
+    final t = title.toLowerCase();
+    if (t.contains('health worker')) return Icons.person_outline;
+    if (t.contains('notes')) return Icons.sticky_note_2_outlined;
+    if (t.contains('ultrasound')) return Icons.monitor_heart_outlined;
+    if (t.contains('checkup')) return Icons.medical_services_outlined;
+    return Icons.biotech_outlined;
+  }
+
   Widget _buildDetailsCard() {
     final rows = _normalizedDisplayRows();
     final sections = _groupRows(rows);
     final sectionEntries =
         sections.entries.where((e) => e.value.isNotEmpty).toList();
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borderPrimary),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Record Details',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          if (rows.isEmpty)
-            const Text(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (rows.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Text(
               'No additional details available.',
               style: TextStyle(color: AppColors.textSecondary),
-            )
-          else
-            for (int i = 0; i < sectionEntries.length; i++) ...[
-              _buildDetailSection(
-                  sectionEntries[i].key, sectionEntries[i].value),
-              if (i < sectionEntries.length - 1) const SizedBox(height: 12),
-            ],
-        ],
-      ),
+            ),
+          )
+        else
+          for (int i = 0; i < sectionEntries.length; i++) ...[
+            _buildDetailSection(sectionEntries[i].key, sectionEntries[i].value),
+            if (i < sectionEntries.length - 1) const SizedBox(height: 10),
+          ],
+      ],
     );
   }
 
@@ -208,35 +288,72 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
   Widget _buildDetailSection(
       String title, List<MapEntry<String, String>> rows) {
+    final accent = _sectionAccent(title);
+    final icon = _sectionIcon(title);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.bgSecondary,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.brandText,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: accent, width: 3.5),
             ),
           ),
-          const SizedBox(height: 10),
-          for (int i = 0; i < rows.length; i++) ...[
-            _buildDetailRow(rows[i].key, rows[i].value),
-            if (i < rows.length - 1)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Divider(height: 1, color: AppColors.borderPrimary),
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Icon(icon, size: 15, color: accent),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-          ],
-        ],
+              const SizedBox(height: 12),
+              for (int i = 0; i < rows.length; i++) ...[
+                _buildDetailRow(rows[i].key, rows[i].value),
+                if (i < rows.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(
+                      height: 1,
+                      color: AppColors.borderPrimary,
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -276,6 +393,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Widget _buildDetailRow(String label, String value) {
+    final isNotProvided = value.toLowerCase() == 'not provided';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Column(
@@ -292,10 +410,13 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: AppColors.textPrimary,
+              color: isNotProvided
+                  ? AppColors.textSecondary
+                  : AppColors.textPrimary,
+              fontStyle: isNotProvided ? FontStyle.italic : FontStyle.normal,
               height: 1.35,
             ),
           ),
@@ -311,18 +432,38 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.auto_awesome, color: AppColors.brandPrimary),
-              SizedBox(width: 8),
-              Text(
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFF0F5), Color(0xFFFFE4EE)],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.auto_awesome,
+                    size: 16, color: AppColors.brandPrimary),
+              ),
+              const SizedBox(width: 10),
+              const Text(
                 'AI Insights',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ],
           ),
