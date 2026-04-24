@@ -1,10 +1,10 @@
 // lib/screens/auth/forgot_password.dart
-
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/page_title.dart';
+import '../../widgets/dialog_box.dart';
 import '../../services/supabase_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -43,25 +43,39 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      // ✅ FIX: Show success message and navigate to verification screen
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message']),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
+      // ✅ FIX: Show Dialog Box instead of snackbar
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          title: 'Verification Code Sent',
+          content: 'A 6-digit verification code has been sent to $email.\nPlease check your email inbox.',
+          buttonText: 'Continue',
+          type: DialogType.success,
+          onPressed: () {
+            Navigator.pop(context);
+            // ✅ Navigate to verification page
+            Navigator.pushNamed(
+              context,
+              '/forgot-password-verify',
+              arguments: email,
+            );
+          },
         ),
       );
-      
-      // ✅ FIX: Navigate to verification screen
-      Navigator.pushNamed(
-        context,
-        '/forgot-password-verify',
-        arguments: email,
-      );
     } else {
-      setState(() {
-        _errorMessage = result['message'];
-      });
+      // ✅ FIX: Show validation message for non-existent email
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          title: 'Email Not Found',
+          content: result['message'] ?? 'No account found with this email address.',
+          buttonText: 'OK',
+          type: DialogType.warning,
+          onPressed: () => Navigator.pop(context),
+        ),
+      );
     }
   }
 
@@ -75,8 +89,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           child: Column(
             children: [
               const SizedBox(height: 40),
-              
-              // App Logo/Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
@@ -85,24 +97,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   color: Color(0xFFFF68A5),
                 ),
               ),
-              
               const SizedBox(height: 40),
-              
               const PageTitle(
                 title: 'Reset Password',
                 leadingIcon: Icons.lock_reset,
               ),
-              
               const SizedBox(height: 16),
-              
               const Text(
                 'Enter your email address and we\'ll send you a verification code',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary),
               ),
-              
               const SizedBox(height: 32),
-              
               AppInputField(
                 hintText: 'Email Address',
                 controller: _emailController,
@@ -115,16 +121,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   }
                 },
               ),
-              
               const SizedBox(height: 32),
-              
               MainButton(
                 label: _isLoading ? 'Sending...' : 'Send Reset Code',
                 onPressed: _isLoading ? null : _handleSubmit,
               ),
-              
               const SizedBox(height: 16),
-              
               TextButton(
                 onPressed: () {
                   Navigator.pushNamedAndRemoveUntil(

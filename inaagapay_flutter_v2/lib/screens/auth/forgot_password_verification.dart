@@ -1,25 +1,21 @@
 // lib/screens/auth/forgot_password_verification.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/otp_input_field.dart';
-import '../../widgets/validation_message.dart';
-import '../../widgets/clickable_text.dart';
 import '../../widgets/page_title.dart';
+import '../../widgets/dialog_box.dart';
 import '../../services/supabase_service.dart';
 
 class ForgotPasswordVerificationScreen extends StatefulWidget {
   const ForgotPasswordVerificationScreen({super.key});
 
   @override
-  State<ForgotPasswordVerificationScreen> createState() =>
-      _ForgotPasswordVerificationScreenState();
+  State<ForgotPasswordVerificationScreen> createState() => _ForgotPasswordVerificationScreenState();
 }
 
-class _ForgotPasswordVerificationScreenState
-    extends State<ForgotPasswordVerificationScreen> {
+class _ForgotPasswordVerificationScreenState extends State<ForgotPasswordVerificationScreen> {
   static const int _initialSeconds = 300;
 
   late String email;
@@ -46,7 +42,6 @@ class _ForgotPasswordVerificationScreenState
   void _startTimer() {
     _timer?.cancel();
     _secondsRemaining = _initialSeconds;
-
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining == 0) {
         timer.cancel();
@@ -77,7 +72,6 @@ class _ForgotPasswordVerificationScreenState
       _errorMessage = '';
     });
 
-    // ✅ FIX: Verify the reset code
     final isValid = await SupabaseService.verifyResetCode(email, _code);
 
     if (!mounted) return;
@@ -91,10 +85,10 @@ class _ForgotPasswordVerificationScreenState
     });
 
     if (isValid) {
-      // ✅ FIX: Navigate to change password screen
+      // ✅ Navigate to change password screen
       Navigator.pushNamed(
         context,
-        '/change-forgot-password',
+        '/reset-password',
         arguments: email,
       );
     }
@@ -111,19 +105,28 @@ class _ForgotPasswordVerificationScreenState
 
     if (result['success'] == true) {
       _startTimer();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message']),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
+      // ✅ Show dialog instead of snackbar
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          title: 'Code Resent',
+          content: 'A new verification code has been sent to your email.',
+          buttonText: 'OK',
+          type: DialogType.success,
+          onPressed: () => Navigator.pop(context),
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message'] ?? 'Failed to resend code'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          title: 'Resend Failed',
+          content: result['message'] ?? 'Failed to resend code. Please try again.',
+          buttonText: 'OK',
+          type: DialogType.error,
+          onPressed: () => Navigator.pop(context),
         ),
       );
     }
@@ -139,7 +142,6 @@ class _ForgotPasswordVerificationScreenState
           child: Column(
             children: [
               const SizedBox(height: 40),
-              
               const Text(
                 'Inaagapay',
                 style: TextStyle(
@@ -148,24 +150,18 @@ class _ForgotPasswordVerificationScreenState
                   color: Color(0xFFFF68A5),
                 ),
               ),
-              
               const SizedBox(height: 32),
-              
               const PageTitle(
                 title: 'Verify Code',
                 leadingIcon: Icons.mail,
               ),
-              
               const SizedBox(height: 16),
-              
               Text(
                 'Enter the 6-digit code sent to\n$email',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.textSecondary),
               ),
-              
               const SizedBox(height: 32),
-              
               OtpInputField(
                 onChanged: (value) {
                   setState(() {
@@ -176,18 +172,29 @@ class _ForgotPasswordVerificationScreenState
                 },
                 showError: _hasError,
               ),
-              
-              if (_hasError)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: ValidationMessage(
-                    message: _errorMessage,
-                    type: ValidationType.error,
+              if (_hasError) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: AppColors.error, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorMessage,
+                          style: const TextStyle(color: AppColors.error, fontSize: 13),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              
+              ],
               const SizedBox(height: 32),
-              
               MainButton(
                 label: _isVerifying ? 'Verifying...' : 'Verify',
                 showIcons: false,
@@ -195,26 +202,25 @@ class _ForgotPasswordVerificationScreenState
                     ? _verifyCode
                     : null,
               ),
-              
               const SizedBox(height: 24),
-              
               if (_isVerifying)
                 const CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF68A5)),
                 )
               else if (_secondsRemaining == 0)
-                ClickableText(
-                  text: 'Resend Code',
-                  onTap: _resendCode,
+                TextButton(
+                  onPressed: _resendCode,
+                  child: const Text(
+                    'Resend Code',
+                    style: TextStyle(color: AppColors.brandPrimary),
+                  ),
                 )
               else
                 Text(
                   'Resend Code in $_formattedTime',
                   style: const TextStyle(color: AppColors.textSecondary),
                 ),
-              
               const SizedBox(height: 16),
-              
               TextButton(
                 onPressed: () {
                   Navigator.pushNamedAndRemoveUntil(

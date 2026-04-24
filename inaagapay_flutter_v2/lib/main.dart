@@ -1,5 +1,4 @@
 ﻿// lib/main.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -11,6 +10,7 @@ import 'screens/auth/mother_registration.dart';
 import 'screens/auth/account_verification_registration.dart';
 import 'screens/auth/forgot_password.dart';
 import 'screens/auth/forgot_password_verification.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/change_forgot_password.dart';
 import 'screens/mother/complete_profile.dart';
 import 'screens/mother/welcome_screen.dart';
@@ -42,8 +42,7 @@ void main() async {
   try {
     await Supabase.initialize(
       url: 'https://buvseyqcdacctlupznya.supabase.co',
-      anonKey:
-          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw',
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw',
     );
   } catch (e) {
     if (kDebugMode) print('Supabase init error: $e');
@@ -78,7 +77,6 @@ class InaagapayApp extends StatelessWidget {
       
       if (accountId != null) {
         try {
-          // Get the created_by field and check if mother record exists
           final accountResponse = await SupabaseService.client
               .from('accounts')
               .select('created_by, first_name, last_name, phone_number')
@@ -87,7 +85,6 @@ class InaagapayApp extends StatelessWidget {
           
           final createdBy = accountResponse?['created_by'] as String? ?? 'self';
           
-          // Check if mother record exists with BHC assignment
           final motherResponse = await SupabaseService.client
               .from('mothers')
               .select('mother_id, assigned_bhc_id, birthdate')
@@ -95,53 +92,29 @@ class InaagapayApp extends StatelessWidget {
               .maybeSingle();
           
           final hasValidMother = motherResponse != null;
-          final hasBHC = hasValidMother && motherResponse['assigned_bhc_id'] != null;
+          final hasBHC = hasValidMother && motherResponse?['assigned_bhc_id'] != null;
           
-          if (kDebugMode) {
-            debugPrint('Startup check - created_by: $createdBy');
-            debugPrint('Startup check - hasValidMother: $hasValidMother');
-            debugPrint('Startup check - hasBHC: $hasBHC');
-            debugPrint('Startup check - motherResponse: $motherResponse');
-          }
-          
-          // If mother exists but no mother_id in storage, save it
-          if (hasValidMother && motherId == null) {
+          if (hasValidMother && motherId == null && motherResponse != null) {
             final newMotherId = motherResponse['mother_id'] as int;
             await AuthStorage.saveMotherId(newMotherId);
-            if (kDebugMode) {
-              debugPrint('Saved missing mother_id: $newMotherId');
-            }
           }
           
-          // For midwife-created accounts, always allow access
           if (createdBy == 'midwife') {
             if (!profileComplete) {
               await AuthStorage.saveProfileComplete(true);
             }
             
             if (needsPasswordChange) {
-              if (kDebugMode) {
-                debugPrint('Midwife account needs password change - redirecting to ChangeTemporaryPasswordScreen');
-              }
               return const ChangeTemporaryPasswordScreen();
             }
             
-            if (kDebugMode) {
-              debugPrint('Midwife account ready - going to dashboard');
-            }
             return const MotherDashboardShell();
           }
           
-          // For self-registered accounts
-          // If mother doesn't have BHC assigned, show the dashboard shell which will show the warning dialog
           if (!hasBHC) {
-            if (kDebugMode) {
-              debugPrint('Self-registered account without BHC - showing dashboard with warning');
-            }
             return const MotherDashboardShell();
           }
           
-          // Check if profile is complete (has all required fields)
           final hasFirstName = accountResponse?['first_name'] != null && 
                                (accountResponse?['first_name']?.toString() ?? '').isNotEmpty;
           final hasLastName = accountResponse?['last_name'] != null && 
@@ -152,37 +125,18 @@ class InaagapayApp extends StatelessWidget {
           
           final isActuallyComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
           
-          if (kDebugMode) {
-            debugPrint('Self-registered profile completeness check:');
-            debugPrint('  hasFirstName: $hasFirstName');
-            debugPrint('  hasLastName: $hasLastName');
-            debugPrint('  hasBirthdate: $hasBirthdate');
-            debugPrint('  hasPhone: $hasPhone');
-            debugPrint('  isActuallyComplete: $isActuallyComplete');
-            debugPrint('  stored profileComplete flag: $profileComplete');
-          }
-          
           if (isActuallyComplete && !profileComplete) {
             await AuthStorage.saveProfileComplete(true);
           }
           
           if (!isActuallyComplete && !profileComplete) {
-            if (kDebugMode) {
-              debugPrint('Self-registered account incomplete - showing CompleteProfileScreen');
-            }
             return const CompleteProfileScreen();
           }
           
           if (needsPasswordChange) {
-            if (kDebugMode) {
-              debugPrint('Self-registered account needs password change - redirecting to ChangeTemporaryPasswordScreen');
-            }
             return const ChangeTemporaryPasswordScreen();
           }
           
-          if (kDebugMode) {
-            debugPrint('Self-registered account ready - going to dashboard');
-          }
           return const MotherDashboardShell();
         } catch (e) {
           if (kDebugMode) {
@@ -192,27 +146,15 @@ class InaagapayApp extends StatelessWidget {
         }
       }
       
-      if (kDebugMode) {
-        debugPrint('Missing accountId - defaulting to login');
-      }
       return const LoginScreen();
     }
 
     switch (role) {
       case 'midwife':
-        if (kDebugMode) {
-          debugPrint('Midwife role - going to MidwifeShell');
-        }
         return const MidwifeShell();
       case 'admin':
-        if (kDebugMode) {
-          debugPrint('Admin role - going to AdminDashboard');
-        }
         return const AdminDashboard();
       default:
-        if (kDebugMode) {
-          debugPrint('Unknown role - going to LoginScreen');
-        }
         return const LoginScreen();
     }
   }
@@ -258,38 +200,20 @@ class InaagapayApp extends StatelessWidget {
           ),
           home: snapshot.data ?? const LoginScreen(),
           routes: {
-            // ============================================
-            // AUTHENTICATION ROUTES
-            // ============================================
-            
-            // Login & Registration
             '/login': (context) => const LoginScreen(),
             '/register': (context) => const MotherRegistrationScreen(),
             '/verify-registration': (context) => const AccountVerificationRegistration(),
-            
-            // Forgot Password Flow
             '/forgot-password': (context) => const ForgotPasswordScreen(),
             '/forgot-password-verify': (context) => const ForgotPasswordVerificationScreen(),
+            '/reset-password': (context) => const ResetPasswordScreen(),
             '/change-forgot-password': (context) => const ChangeForgotPasswordScreen(),
-
-            // ============================================
-            // MOTHER ONBOARDING ROUTES
-            // ============================================
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
             '/change-password': (context) => const ChangePasswordScreen(),
             '/change-temporary-password': (context) => const ChangeTemporaryPasswordScreen(),
-
-            // ============================================
-            // DASHBOARD ROUTES
-            // ============================================
             '/mother-dashboard': (context) => const MotherDashboardShell(),
             '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
-
-            // ============================================
-            // MOTHER FEATURE ROUTES
-            // ============================================
             '/mother-profile': (context) {
               final args = ModalRoute.of(context)!.settings.arguments;
               if (args is int) {
@@ -300,44 +224,34 @@ class InaagapayApp extends StatelessWidget {
             '/mother-records': (context) => const RecordsScreen(),
             '/mother-journal': (context) => const MotherJournalScreen(),
             '/mother-children': (context) => const MotherChildrenScreen(),
-
-            // ============================================
-            // MIDWIFE FEATURE ROUTES
-            // ============================================
             '/midwife-mothers': (context) => const MidwifeMothersScreen(),
             '/midwife-children': (context) => const MidwifeChildrenScreen(),
             '/midwife-schedules': (context) => const MidwifeSchedulesScreen(),
             '/midwife-add-mother': (context) => const MidwifeAddMotherScreen(),
           },
           onGenerateRoute: (settings) {
-            // Handle ultrasound analyzer route with parameters
             if (settings.name == '/ultrasound-analyzer') {
-              final args = settings.arguments as Map<String, int>;
-              return MaterialPageRoute(
-                builder: (_) => UltrasoundAnalyzerScreen(
-                  motherId: args['motherId']!,
-                  pregnancyId: args['pregnancyId']!,
-                ),
-              );
+              final args = settings.arguments as Map<String, int>?;
+              if (args != null) {
+                return MaterialPageRoute(
+                  builder: (_) => UltrasoundAnalyzerScreen(
+                    motherId: args['motherId']!,
+                    pregnancyId: args['pregnancyId']!,
+                  ),
+                );
+              }
             }
             
-            // Handle lab test analyzer route with parameters
             if (settings.name == '/lab-test-analyzer') {
-              final args = settings.arguments as Map<String, int>;
-              return MaterialPageRoute(
-                builder: (_) => LabTestAnalyzerScreen(
-                  motherId: args['motherId']!,
-                  pregnancyId: args['pregnancyId']!,
-                ),
-              );
-            }
-            
-            // Handle child profile route
-            if (settings.name == '/child-profile') {
-              final childId = settings.arguments as int;
-              return MaterialPageRoute(
-                builder: (_) => const MidwifeChildrenScreen(),
-              );
+              final args = settings.arguments as Map<String, int>?;
+              if (args != null) {
+                return MaterialPageRoute(
+                  builder: (_) => LabTestAnalyzerScreen(
+                    motherId: args['motherId']!,
+                    pregnancyId: args['pregnancyId']!,
+                  ),
+                );
+              }
             }
             
             return null;

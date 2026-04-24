@@ -1,5 +1,4 @@
 // lib/screens/auth/reset_password_screen.dart
-
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
@@ -31,7 +30,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _email = ModalRoute.of(context)!.settings.arguments as String;
+    final args = ModalRoute.of(context)!.settings.arguments;
+    if (args is String) {
+      _email = args;
+    } else {
+      _email = '';
+    }
   }
 
   @override
@@ -74,9 +78,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
 
     if (!mounted) return;
-    setState(() => _isLoading = false);
     
-    if (response['success']) {
+    setState(() => _isLoading = false);
+
+    if (response['success'] == true) {
       await showDialog(
         context: context,
         barrierDismissible: false,
@@ -96,10 +101,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(response['message'] ?? 'Failed to reset password'),
-          backgroundColor: AppColors.error,
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          title: 'Reset Failed',
+          content: response['message'] ?? 'Failed to reset password. Please try again.',
+          buttonText: 'OK',
+          type: DialogType.error,
+          onPressed: () => Navigator.pop(context),
         ),
       );
     }
@@ -117,7 +127,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           child: Column(
             children: [
               const SizedBox(height: 40),
-              
               const Text(
                 'Inaagapay',
                 style: TextStyle(
@@ -126,9 +135,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   color: Color(0xFFFF68A5),
                 ),
               ),
-              
               const SizedBox(height: 40),
-              
               const PageTitle(
                 title: 'New Password',
                 leadingIcon: Icons.lock,
@@ -140,8 +147,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 style: TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 32),
-              
-              // New Password
               AppInputField(
                 hintText: 'New Password',
                 controller: _newPasswordController,
@@ -152,6 +157,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 onTrailingTap: () {
                   setState(() => _obscureNewPassword = !_obscureNewPassword);
                 },
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 8),
               Align(
@@ -161,8 +167,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               const SizedBox(height: 12),
               PasswordConstraints(password: _newPasswordController.text),
               const SizedBox(height: 20),
-              
-              // Confirm Password
               AppInputField(
                 hintText: 'Confirm Password',
                 controller: _confirmPasswordController,
@@ -173,8 +177,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 onTrailingTap: () {
                   setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
                 },
+                onChanged: (_) => setState(() {}),
               ),
-              
               if (_confirmPasswordController.text.isNotEmpty && !_passwordsMatch) ...[
                 const SizedBox(height: 8),
                 const Padding(
@@ -185,14 +189,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ),
                 ),
               ],
-              
               const SizedBox(height: 32),
-              
               MainButton(
                 label: _isLoading ? 'Resetting...' : 'Reset Password',
                 onPressed: _canSubmit ? _handleReset : null,
               ),
-              
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () {
