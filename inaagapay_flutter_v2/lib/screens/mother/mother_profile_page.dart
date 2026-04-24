@@ -541,7 +541,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return buffer.toString();
   }
 
-  ({String cleanRemarks, String? extractedAi}) _splitLabRemarksAndAi(
+  ({String cleanRemarks, String? extractedAi}) _splitRemarksAndAi(
       String? rawRemarks) {
     final source = rawRemarks?.trim() ?? '';
     if (source.isEmpty) {
@@ -561,6 +561,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       cleanRemarks: notesPart,
       extractedAi: aiPart.isEmpty ? null : aiPart,
     );
+  }
+
+  ({String cleanRemarks, String? extractedAi}) _splitLabRemarksAndAi(
+      String? rawRemarks) {
+    return _splitRemarksAndAi(rawRemarks);
   }
 
   Map<String, dynamic>? _latestRecordByDate(List records, String dateField) {
@@ -3714,6 +3719,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             }
           }
 
+          final split = _splitRemarksAndAi(ultrasound['remarks']?.toString());
+
           String? aiAnalysis;
           final ultrasoundId = ultrasound['ultrasound_id'];
           if (ultrasoundId is int) {
@@ -3723,7 +3730,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           }
           aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
               ? aiAnalysis.trim()
-              : _generateUltrasoundAIInsights(ultrasound);
+              : split.extractedAi ?? _generateUltrasoundAIInsights(ultrasound);
 
           _showRecordDetails(
             title: 'Ultrasound',
@@ -3731,16 +3738,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             icon: Icons.monitor_heart,
             imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
             rows: [
-              MapEntry('Date', _formatDate(ultrasound['ultrasound_date'])),
+              MapEntry('Ultrasound Date',
+                  _formatDate(ultrasound['ultrasound_date'])),
               MapEntry(
                   'Location', _formatValue(ultrasound['ultrasound_location'])),
-              MapEntry('Health Worker',
-                  _formatValue(ultrasound['health_worker_name'])),
+              MapEntry(
+                  'Full Name', _formatValue(ultrasound['health_worker_name'])),
               MapEntry('Institution',
                   _formatValue(ultrasound['health_worker_institution'])),
-              MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
+              MapEntry('Profession',
+                  _formatValue(ultrasound['health_worker_profession'])),
+              MapEntry('Remarks', _formatValue(split.cleanRemarks)),
             ],
             aiAnalysis: aiAnalysis,
+            useStructuredAiInsights:
+                aiAnalysis != null && aiAnalysis.isNotEmpty,
           );
         },
       ),
@@ -3782,7 +3794,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             }
           }
 
-          final split = _splitLabRemarksAndAi(labTest['remarks']?.toString());
+          final split = _splitRemarksAndAi(labTest['remarks']?.toString());
 
           String? aiAnalysis;
           final labTestId = labTest['lab_test_id'];
@@ -3802,12 +3814,15 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             icon: Icons.science,
             imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
             rows: [
-              MapEntry('Type', type),
-              MapEntry('Date', _formatDate(labTest['lab_test_date'])),
-              MapEntry('Location', _formatValue(labTest['lab_test_location'])),
+              MapEntry('Lab Test Type', type),
+              MapEntry('Lab Test Date', _formatDate(labTest['lab_test_date'])),
               MapEntry(
-                  'Health Worker', _formatValue(labTest['health_worker_name'])),
-              MapEntry('Remarks', _formatValue(split.cleanRemarks)),
+                  'Full Name', _formatValue(labTest['health_worker_name'])),
+              MapEntry('Institution',
+                  _formatValue(labTest['health_worker_institution'])),
+              MapEntry('Profession',
+                  _formatValue(labTest['health_worker_profession'])),
+              MapEntry('Notes', _formatValue(split.cleanRemarks)),
             ],
             aiAnalysis: aiAnalysis,
             useStructuredAiInsights:

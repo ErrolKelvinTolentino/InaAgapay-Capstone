@@ -127,6 +127,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
   Widget _buildDetailsCard() {
     final rows = _normalizedDisplayRows();
+    final sections = _groupRows(rows);
+    final sectionEntries =
+        sections.entries.where((e) => e.value.isNotEmpty).toList();
 
     return Container(
       width: double.infinity,
@@ -150,14 +153,89 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               style: TextStyle(color: AppColors.textSecondary),
             )
           else
-            for (int i = 0; i < rows.length; i++) ...[
-              _buildDetailRow(rows[i].key, rows[i].value),
-              if (i < rows.length - 1)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Divider(height: 1, color: AppColors.borderPrimary),
-                ),
+            for (int i = 0; i < sectionEntries.length; i++) ...[
+              _buildDetailSection(
+                  sectionEntries[i].key, sectionEntries[i].value),
+              if (i < sectionEntries.length - 1) const SizedBox(height: 12),
             ],
+        ],
+      ),
+    );
+  }
+
+  String _recordInfoTitle() {
+    final t = widget.title.toLowerCase();
+    if (t.contains('ultrasound')) return 'Ultrasound Information';
+    if (t.contains('checkup')) return 'Checkup Information';
+    return 'Lab Test Information';
+  }
+
+  String _labelKey(String label) {
+    return _normalizeForCompare(label);
+  }
+
+  Map<String, List<MapEntry<String, String>>> _groupRows(
+      List<MapEntry<String, String>> rows) {
+    final record = <MapEntry<String, String>>[];
+    final worker = <MapEntry<String, String>>[];
+    final notes = <MapEntry<String, String>>[];
+
+    for (final row in rows) {
+      final key = _labelKey(row.key);
+      if (key.contains('remarks') || key.contains('notes')) {
+        notes.add(row);
+        continue;
+      }
+
+      if (key.contains('healthworker') ||
+          key == 'fullname' ||
+          key == 'name' ||
+          key == 'institution' ||
+          key == 'profession') {
+        worker.add(row);
+        continue;
+      }
+
+      record.add(row);
+    }
+
+    return {
+      _recordInfoTitle(): record,
+      'Health Worker Information': worker,
+      'Notes': notes,
+    };
+  }
+
+  Widget _buildDetailSection(
+      String title, List<MapEntry<String, String>> rows) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.brandText,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (int i = 0; i < rows.length; i++) ...[
+            _buildDetailRow(rows[i].key, rows[i].value),
+            if (i < rows.length - 1)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(height: 1, color: AppColors.borderPrimary),
+              ),
+          ],
         ],
       ),
     );
@@ -168,8 +246,6 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   List<MapEntry<String, String>> _normalizedDisplayRows() {
-    final titleKey = _normalizeForCompare(widget.title);
-    final subtitleKey = _normalizeForCompare(widget.subtitle ?? '');
     final filtered = <MapEntry<String, String>>[];
 
     for (final row in widget.rows) {
@@ -180,16 +256,14 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       final labelKey = _normalizeForCompare(label);
       final valueKey = _normalizeForCompare(value);
 
-      final isTypeLabel = labelKey == 'type' ||
-          labelKey == 'recordtype' ||
-          labelKey == 'labtesttype';
-      final isDateLabel = labelKey == 'date' || labelKey == 'recorddate';
-
-      if (isTypeLabel && titleKey.isNotEmpty && valueKey == titleKey) {
+      final isEmptyValue = value.isEmpty || value == '-' || value == '—';
+      if (isEmptyValue &&
+          !(labelKey.contains('remarks') || labelKey.contains('notes'))) {
         continue;
       }
 
-      if (isDateLabel && subtitleKey.isNotEmpty && valueKey == subtitleKey) {
+      if ((labelKey == 'location' || labelKey == 'labtestlocation') &&
+          valueKey == 'mobileupload') {
         continue;
       }
 
@@ -219,10 +293,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 17,
+              fontSize: 15,
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
-              height: 1.2,
+              height: 1.35,
             ),
           ),
         ],

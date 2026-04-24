@@ -168,7 +168,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     return urls;
   }
 
-  ({String cleanRemarks, String? extractedAi}) _splitLabRemarksAndAi(
+  ({String cleanRemarks, String? extractedAi}) _splitRemarksAndAi(
       String? rawRemarks) {
     final source = rawRemarks?.trim() ?? '';
     if (source.isEmpty) {
@@ -187,6 +187,11 @@ class _RecordsScreenState extends State<RecordsScreen>
       cleanRemarks: notesPart,
       extractedAi: aiPart.isEmpty ? null : aiPart,
     );
+  }
+
+  ({String cleanRemarks, String? extractedAi}) _splitLabRemarksAndAi(
+      String? rawRemarks) {
+    return _splitRemarksAndAi(rawRemarks);
   }
 
   void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
@@ -1398,6 +1403,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                             } else if (isUltrasound) {
                               final imageUrls =
                                   _parseImageUrls(record['ultrasound_image']);
+                              final split = _splitRemarksAndAi(
+                                  record['remarks']?.toString());
                               String? aiAnalysis;
                               final ultrasoundId = record['ultrasound_id'];
                               if (ultrasoundId is int) {
@@ -1409,7 +1416,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                               aiAnalysis = (aiAnalysis != null &&
                                       aiAnalysis.trim().isNotEmpty)
                                   ? aiAnalysis.trim()
-                                  : _generateUltrasoundAIInsights(record);
+                                  : split.extractedAi ??
+                                      _generateUltrasoundAIInsights(record);
                               _showRecordDetails(
                                 title: 'Ultrasound',
                                 subtitle:
@@ -1418,14 +1426,14 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 imageUrls:
                                     imageUrls.isNotEmpty ? imageUrls : null,
                                 rows: [
-                                  MapEntry('Date',
+                                  MapEntry('Ultrasound Date',
                                       _formatDate(record['ultrasound_date'])),
                                   MapEntry(
                                       'Location',
                                       _formatValue(
                                           record['ultrasound_location'])),
                                   MapEntry(
-                                      'Health Worker',
+                                      'Full Name',
                                       _formatValue(
                                           record['health_worker_name'])),
                                   MapEntry(
@@ -1437,14 +1445,16 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       _formatValue(
                                           record['health_worker_profession'])),
                                   MapEntry('Remarks',
-                                      _formatValue(record['remarks'])),
+                                      _formatValue(split.cleanRemarks)),
                                 ],
                                 aiAnalysis: aiAnalysis,
+                                useStructuredAiInsights:
+                                    aiAnalysis != null && aiAnalysis.isNotEmpty,
                               );
                             } else {
                               final imageUrls =
                                   _parseImageUrls(record['lab_test_image']);
-                              final split = _splitLabRemarksAndAi(
+                              final split = _splitRemarksAndAi(
                                   record['remarks']?.toString());
 
                               String? aiAnalysis;
@@ -1468,16 +1478,12 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 imageUrls:
                                     imageUrls.isNotEmpty ? imageUrls : null,
                                 rows: [
-                                  MapEntry('Type',
+                                  MapEntry('Lab Test Type',
                                       _formatValue(record['lab_test_type'])),
-                                  MapEntry('Date',
+                                  MapEntry('Lab Test Date',
                                       _formatDate(record['lab_test_date'])),
                                   MapEntry(
-                                      'Location',
-                                      _formatValue(
-                                          record['lab_test_location'])),
-                                  MapEntry(
-                                      'Health Worker',
+                                      'Full Name',
                                       _formatValue(
                                           record['health_worker_name'])),
                                   MapEntry(
@@ -1488,7 +1494,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       'Profession',
                                       _formatValue(
                                           record['health_worker_profession'])),
-                                  MapEntry('Remarks',
+                                  MapEntry('Notes',
                                       _formatValue(split.cleanRemarks)),
                                 ],
                                 aiAnalysis: aiAnalysis,
