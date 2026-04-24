@@ -1144,7 +1144,10 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     return matches.join('\n\n').trim();
   }
 
-  Widget _buildCombinedLabResultsCard(Map<String, List<String>> sections) {
+  Widget _buildCombinedLabResultsCard(
+    Map<String, List<String>> sections, {
+    VoidCallback? onInteraction,
+  }) {
     final labLines = sections['LABORATORY RESULTS'] ?? const <String>[];
     final abnormalLines = sections['ABNORMAL FINDINGS'] ?? const <String>[];
     final rangeLines = sections['NORMAL RANGES'] ?? const <String>[];
@@ -1233,28 +1236,27 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(
-                        width: 24,
-                        child: IconButton(
+                      if (hasDetails)
+                        IconButton(
                           padding: EdgeInsets.zero,
                           splashRadius: 16,
-                          onPressed: hasDetails
-                              ? () {
-                                  setState(() {
-                                    if (isExpanded) {
-                                      _expandedAspects.remove(aspectKey);
-                                    } else {
-                                      _expandedAspects.add(aspectKey);
-                                    }
-                                  });
-                                }
-                              : null,
+                          constraints: const BoxConstraints.tightFor(
+                              width: 24, height: 24),
+                          onPressed: () {
+                            setState(() {
+                              if (isExpanded) {
+                                _expandedAspects.remove(aspectKey);
+                              } else {
+                                _expandedAspects.add(aspectKey);
+                              }
+                            });
+                            onInteraction?.call();
+                          },
                           icon: Icon(
                             isExpanded ? Icons.expand_less : Icons.expand_more,
                             size: 18,
                           ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -1519,13 +1521,14 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     );
   }
 
-  Widget _buildStructuredInsights(String text) {
+  Widget _buildStructuredInsights(
+    String text, {
+    VoidCallback? onInteraction,
+  }) {
     final sections = _extractInsightSections(text);
     if (sections.isEmpty) return _buildFormattedText(text);
 
     const sectionOrder = [
-      'RELEVANCE CHECK',
-      'RELEVANCE REASON',
       'OVERALL ASSESSMENT',
       'LABORATORY RESULTS',
       'ABNORMAL FINDINGS',
@@ -1549,8 +1552,18 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
     final widgets = <Widget>[];
     for (final entry in orderedEntries) {
+      // Hide relevance check/reason from display (validation logic still runs)
+      if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON') {
+        continue;
+      }
+
       if (entry.key == 'LABORATORY RESULTS') {
-        widgets.add(_buildCombinedLabResultsCard(sections));
+        widgets.add(
+          _buildCombinedLabResultsCard(
+            sections,
+            onInteraction: onInteraction,
+          ),
+        );
         continue;
       }
 
@@ -1802,7 +1815,10 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       Expanded(
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.all(16),
-                          child: _buildStructuredInsights(summaryDraft.text),
+                          child: _buildStructuredInsights(
+                            summaryDraft.text,
+                            onInteraction: () => setModalState(() {}),
+                          ),
                         ),
                       ),
                       const Divider(height: 1),

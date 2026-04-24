@@ -16,6 +16,7 @@ import '../../widgets/overview_info.dart';
 import '../../widgets/risk_panel.dart';
 import '../../services/risk_engine.dart';
 import '../../models/add_mother_form_data.dart';
+import '../shared/record_detail_screen.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 
 class MotherProfilePage extends StatefulWidget {
@@ -1584,7 +1585,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // Show record details modal
+  // Show record details on a full screen page
   void _showRecordDetails({
     required String title,
     required List<MapEntry<String, String>> rows,
@@ -1594,352 +1595,20 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     String? aiAnalysis,
     bool useStructuredAiInsights = false,
   }) {
-    _expandedLabInsightAspects.clear();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(
-        builder: (context, modalSetState) {
-          _recordDetailsModalSetState = modalSetState;
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.9,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            child: Column(
-              children: [
-                // Handle
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Header
-                        Row(
-                          children: [
-                            Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                color: AppColors.bgSecondary,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(icon, color: AppColors.brandPrimary),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    title,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  if (subtitle != null && subtitle.isNotEmpty)
-                                    Text(
-                                      subtitle,
-                                      style: const TextStyle(
-                                          color: AppColors.textSecondary),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Image Gallery if available
-                        if (imageUrls != null && imageUrls.isNotEmpty) ...[
-                          SizedBox(
-                            height: 200,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: imageUrls.length,
-                              itemBuilder: (context, index) {
-                                return GestureDetector(
-                                  onTap: () =>
-                                      _showFullScreenImage(imageUrls, index),
-                                  child: Container(
-                                    width: 200,
-                                    margin: const EdgeInsets.only(right: 12),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Stack(
-                                        fit: StackFit.expand,
-                                        children: [
-                                          Image.network(
-                                            imageUrls[index],
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
-                                                Container(
-                                              color: AppColors.bgSecondary,
-                                              child: const Center(
-                                                child: Column(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(Icons.broken_image,
-                                                        size: 32,
-                                                        color: Colors.grey),
-                                                    SizedBox(height: 4),
-                                                    Text(
-                                                      'Image not available',
-                                                      style: TextStyle(
-                                                          fontSize: 10),
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            loadingBuilder: (context, child,
-                                                loadingProgress) {
-                                              if (loadingProgress == null) {
-                                                return child;
-                                              }
-                                              return Container(
-                                                color: AppColors.bgSecondary,
-                                                child: const Center(
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    valueColor:
-                                                        AlwaysStoppedAnimation<
-                                                                Color>(
-                                                            AppColors
-                                                                .brandPrimary),
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                          // Image counter overlay
-                                          if (imageUrls.length > 1 &&
-                                              index == 0)
-                                            Positioned(
-                                              top: 8,
-                                              right: 8,
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black
-                                                      .withOpacity(0.6),
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                ),
-                                                child: Text(
-                                                  '+${imageUrls.length - 1} more',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Details
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.bgSecondary,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.borderPrimary),
-                          ),
-                          child: Column(
-                            children: rows
-                                .map((entry) => Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 6),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          SizedBox(
-                                            width: 120,
-                                            child: Text(
-                                              entry.key,
-                                              style: const TextStyle(
-                                                color: AppColors.textSecondary,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Text(
-                                              entry.value,
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ))
-                                .toList(),
-                          ),
-                        ),
-
-                        // AI Analysis if available
-                        if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          if (useStructuredAiInsights)
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: AppColors.borderPrimary,
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.bgSecondary,
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                        ),
-                                        child: Icon(
-                                          Icons.medical_information,
-                                          color: AppColors.brandPrimary,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      const Text(
-                                        'Clinical Assessment',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildStructuredAiInsights(aiAnalysis),
-                                ],
-                              ),
-                            )
-                          else
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF3E5F5),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                    color: const Color(0xFF7E57C2)
-                                        .withValues(alpha: 0.2)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(Icons.psychology_rounded,
-                                          color: const Color(0xFF7E57C2),
-                                          size: 20),
-                                      const SizedBox(width: 8),
-                                      const Text(
-                                        'AI-Powered Insights',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF5E35B1),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    aiAnalysis,
-                                    style: const TextStyle(
-                                        fontSize: 13, height: 1.5),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.7),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Text(
-                                      'Note: This is AI-generated analysis for informational purposes only.',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textSecondary,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecordDetailScreen(
+          title: title,
+          rows: rows,
+          icon: icon,
+          subtitle: subtitle,
+          imageUrls: imageUrls,
+          aiAnalysis: aiAnalysis,
+          useStructuredAiInsights: useStructuredAiInsights,
+        ),
       ),
-    ).whenComplete(() {
-      _recordDetailsModalSetState = null;
-      _expandedLabInsightAspects.clear();
-    });
+    );
   }
 
   // Show conclude pregnancy dialog
@@ -3973,6 +3642,16 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         onTap: () async {
           final aog = _formatValue(checkup['age_of_gestation']);
           final weight = _formatValue(checkup['checkup_weight']);
+          String? aiAnalysis;
+          final checkupId = checkup['prenatal_checkup_id'];
+          if (checkupId is int) {
+            aiAnalysis = await MotherProfileService.getCheckupAIAnalysis(
+              checkupId,
+            );
+          }
+          aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
+              ? aiAnalysis.trim()
+              : _generatePrenatalAIInsights(checkup);
 
           _showRecordDetails(
             title: 'Prenatal Checkup',
@@ -3992,7 +3671,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               MapEntry('Remarks', _formatValue(checkup['remarks'])),
               MapEntry('Next Schedule', _formatDate(checkup['next_schedule'])),
             ],
-            aiAnalysis: _generatePrenatalAIInsights(checkup),
+            aiAnalysis: aiAnalysis,
             useStructuredAiInsights: true,
           );
         },
@@ -4035,6 +3714,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             }
           }
 
+          String? aiAnalysis;
+          final ultrasoundId = ultrasound['ultrasound_id'];
+          if (ultrasoundId is int) {
+            aiAnalysis = await MotherProfileService.getUltrasoundAIAnalysis(
+              ultrasoundId,
+            );
+          }
+          aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
+              ? aiAnalysis.trim()
+              : _generateUltrasoundAIInsights(ultrasound);
+
           _showRecordDetails(
             title: 'Ultrasound',
             subtitle: date,
@@ -4050,7 +3740,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   _formatValue(ultrasound['health_worker_institution'])),
               MapEntry('Remarks', _formatValue(ultrasound['remarks'])),
             ],
-            aiAnalysis: _generateUltrasoundAIInsights(ultrasound),
+            aiAnalysis: aiAnalysis,
           );
         },
       ),
