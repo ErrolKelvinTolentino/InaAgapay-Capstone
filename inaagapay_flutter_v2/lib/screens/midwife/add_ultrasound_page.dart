@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
 import '../../services/gemini_service.dart';
+import '../../models/gemini_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/app_snackbar.dart';
@@ -403,6 +404,295 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
     _loadingModalVisible = false;
   }
 
+  List<String> _dedupePreserveOrder(Iterable<String> values) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final raw in values) {
+      final cleaned = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+      final key = cleaned.toLowerCase();
+      if (cleaned.isEmpty || seen.contains(key)) continue;
+      seen.add(key);
+      result.add(cleaned);
+    }
+    return result;
+  }
+
+  List<String> _truncateList(List<String> values, int max) {
+    if (values.length <= max) return values;
+    return values.sublist(0, max);
+  }
+
+  String _buildConciseUltrasoundInsight(GeminiResponse result) {
+    final lines = <String>[];
+
+    final healthStatus = (result.healthStatus ?? '').trim();
+    if (healthStatus.isNotEmpty) {
+      lines.add('OVERALL HEALTH STATUS: $healthStatus');
+    }
+
+    final assessment = (result.overallAssessment ?? '').trim();
+    if (assessment.isNotEmpty) {
+      lines.add('OVERALL ASSESSMENT: $assessment');
+    }
+
+    final gestAge = (result.gestationalAge ?? '').trim();
+    if (gestAge.isNotEmpty) {
+      lines.add('GESTATIONAL AGE ASSESSMENT: $gestAge');
+    }
+
+    final measurements =
+        _dedupePreserveOrder(result.measurements ?? const <String>[]);
+    if (measurements.isNotEmpty) {
+      lines.add('DETAILED MEASUREMENTS ASSESSMENT:');
+      for (final item in measurements) {
+        lines.add('• $item');
+      }
+    }
+
+    final anatomical =
+        _dedupePreserveOrder(result.normalFindings ?? const <String>[]);
+    if (anatomical.isNotEmpty) {
+      lines.add('ANATOMICAL ASSESSMENT:');
+      for (final item in anatomical) {
+        lines.add('• $item');
+      }
+    }
+
+    final abnormal = _dedupePreserveOrder([
+      ...(result.concerns ?? const <String>[]),
+      ...(result.abnormalFindings ?? const <String>[]),
+    ]);
+    if (abnormal.isNotEmpty) {
+      lines.add('ABNORMAL FINDINGS:');
+      for (final item in _truncateList(abnormal, 5)) {
+        lines.add('• $item');
+      }
+    }
+
+    final actions =
+        _dedupePreserveOrder(result.recommendations ?? const <String>[]);
+    if (actions.isNotEmpty) {
+      lines.add('RECOMMENDED NEXT ACTIONS:');
+      for (final item in _truncateList(actions, 4)) {
+        lines.add('• $item');
+      }
+    }
+
+    if (lines.isEmpty) {
+      return result.description.trim().isEmpty
+          ? 'AI output unavailable. Manual review required.'
+          : result.description.trim();
+    }
+
+    return lines.join('\n').trim();
+  }
+
+  Map<String, List<String>> _parseInsightSections(String insightText) {
+    final sections = <String, List<String>>{};
+    String? current;
+
+    for (final rawLine in insightText.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      if (line.endsWith(':')) {
+        current = line.substring(0, line.length - 1).trim();
+        sections.putIfAbsent(current, () => <String>[]);
+        continue;
+      }
+
+      if (line.contains(':') && !line.startsWith('•')) {
+        final idx = line.indexOf(':');
+        final key = line.substring(0, idx).trim();
+        final value = line.substring(idx + 1).trim();
+        sections[key] = <String>[value];
+        current = null;
+        continue;
+      }
+
+      final content = line.replaceFirst(RegExp(r'^\s*[•\-*]\s*'), '').trim();
+      if (content.isEmpty) continue;
+      if (current != null) {
+        sections.putIfAbsent(current, () => <String>[]).add(content);
+      }
+    }
+
+    return sections;
+  }
+
+  Widget _buildInsightCard({
+    required String title,
+    required IconData icon,
+    required List<String> items,
+    required Color color,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final item in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '• $item',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.textPrimary,
+                  height: 1.35,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmartInsightView(String insightText) {
+    final sections = _parseInsightSections(insightText);
+
+    final cards = <Widget>[];
+
+    final healthStatus = sections['OVERALL HEALTH STATUS'] ?? const <String>[];
+    if (healthStatus.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Health Status',
+          icon: Icons.monitor_heart_outlined,
+          items: healthStatus,
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    final assessment = sections['OVERALL ASSESSMENT'] ?? const <String>[];
+    if (assessment.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Overall Assessment',
+          icon: Icons.summarize_outlined,
+          items: assessment,
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    final gestAge = sections['GESTATIONAL AGE ASSESSMENT'] ?? const <String>[];
+    if (gestAge.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Gestational Age',
+          icon: Icons.calendar_month_outlined,
+          items: gestAge,
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    final measurements =
+        sections['DETAILED MEASUREMENTS ASSESSMENT'] ?? const <String>[];
+    if (measurements.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Measurements',
+          icon: Icons.straighten_outlined,
+          items: _showAllAi ? measurements : _truncateList(measurements, 4),
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    var anatomical = sections['ANATOMICAL ASSESSMENT'] ?? const <String>[];
+    if (measurements.isNotEmpty && anatomical.isNotEmpty) {
+      final normalizedMeasurements =
+          measurements.map((m) => m.trim().toLowerCase()).toSet();
+      anatomical = anatomical
+          .where(
+              (a) => !normalizedMeasurements.contains(a.trim().toLowerCase()))
+          .toList();
+    }
+
+    if (anatomical.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Anatomical Findings',
+          icon: Icons.child_care_outlined,
+          items: _showAllAi ? anatomical : _truncateList(anatomical, 4),
+          color: AppColors.success,
+        ),
+      );
+    }
+
+    final abnormal = sections['ABNORMAL FINDINGS'] ?? const <String>[];
+    if (abnormal.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Abnormal Findings/Concerns',
+          icon: Icons.warning_amber_rounded,
+          items: _showAllAi ? abnormal : _truncateList(abnormal, 4),
+          color: AppColors.error,
+        ),
+      );
+    }
+
+    final actions = sections['RECOMMENDED NEXT ACTIONS'] ??
+        sections['RECOMMENDATIONS'] ??
+        const <String>[];
+    if (actions.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Recommended Actions',
+          icon: Icons.assignment_turned_in_outlined,
+          items: actions,
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    if (cards.isEmpty) {
+      return Text(
+        insightText,
+        maxLines: _showAllAi ? null : 14,
+        overflow: _showAllAi ? TextOverflow.visible : TextOverflow.fade,
+        style: const TextStyle(
+          height: 1.45,
+          fontSize: 14,
+          color: AppColors.textPrimary,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...cards,
+      ],
+    );
+  }
+
   Future<void> _runAiAnalysis() async {
     if (_images.isEmpty) {
       _showMessage('Please add at least one image before AI analysis.');
@@ -432,12 +722,12 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
 
       final insight = result.description.trim().isEmpty
           ? 'No AI insights generated.'
-          : result.description.trim();
+          : _buildConciseUltrasoundInsight(result);
 
       final isUnrelated = RegExp(
         r'RELEVANCE\s*CHECK\s*:\s*UNRELATED',
         caseSensitive: false,
-      ).hasMatch(insight);
+      ).hasMatch(result.description);
       if (isUnrelated) {
         _showMessage(
           'AI flagged the upload as unrelated or unreadable. Please attach clearer ultrasound images.',
@@ -631,18 +921,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
                                     ),
                                   ],
                                 )
-                              : Text(
-                                  _aiDraftInsight!,
-                                  maxLines: _showAllAi ? null : 14,
-                                  overflow: _showAllAi
-                                      ? TextOverflow.visible
-                                      : TextOverflow.fade,
-                                  style: const TextStyle(
-                                    height: 1.45,
-                                    fontSize: 14,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
+                              : _buildSmartInsightView(_aiDraftInsight!),
                         ),
                       ),
                       const Divider(height: 1),
@@ -712,9 +991,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
           'ultrasound_${DateTime.now().millisecondsSinceEpoch}_${paths.length}.jpg';
       final filePath = 'ultrasounds/${widget.motherId}/$fileName';
 
-      await Supabase.instance.client.storage
-          .from('medical-images')
-          .uploadBinary(
+      await Supabase.instance.client.storage.from('files').uploadBinary(
             filePath,
             bytes,
             fileOptions:
@@ -722,7 +999,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
           );
 
       final publicUrl =
-          Supabase.instance.client.storage.from('medical-images').getPublicUrl(
+          Supabase.instance.client.storage.from('files').getPublicUrl(
                 filePath,
               );
 
@@ -767,11 +1044,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
       final paths = upload['paths'] ?? <String>[];
 
       final checkupNotes = _checkupCtrl.text.trim();
-      final remarks = _aiApprovedInsight != null
-          ? (checkupNotes.isEmpty
-              ? _aiApprovedInsight!
-              : '$checkupNotes\n\nAI Analysis:\n${_aiApprovedInsight!}')
-          : (checkupNotes.isEmpty ? null : checkupNotes);
+      final remarks = checkupNotes.isEmpty ? null : checkupNotes;
 
       final inserted = await Supabase.instance.client
           .from('ultrasounds')
@@ -793,7 +1066,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
       if (userId != null) {
         for (final path in paths) {
           await Supabase.instance.client.from('files').insert({
-            'bucket_name': 'medical-images',
+            'bucket_name': 'files',
             'file_path': path,
             'file_name': path.split('/').last,
             'file_category': 'ultrasound_image',
@@ -928,7 +1201,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
       hintText: hintText,
       errorText: errorText,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: AppColors.bgSecondary.withValues(alpha: 0.5),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -1090,16 +1363,9 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppColors.bgSecondary.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppColors.borderPrimary),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
                     ),
                     child: Row(
                       children: [
@@ -1140,20 +1406,22 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
               children: [
                 _fieldLabel('Health Worker Name'),
                 const SizedBox(height: 8),
-                AppInputField(
-                  hintText: 'Enter full name',
+                TextField(
                   controller: _workerNameCtrl,
-                  isRequired: true,
-                  errorText: _workerNameError,
+                  decoration: _fieldDecoration(
+                    hintText: 'Enter full name',
+                    errorText: _workerNameError,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 _fieldLabel('Health Worker Institution'),
                 const SizedBox(height: 8),
-                AppInputField(
-                  hintText: 'Enter institution or clinic name',
+                TextField(
                   controller: _institutionCtrl,
-                  isRequired: true,
-                  errorText: _institutionError,
+                  decoration: _fieldDecoration(
+                    hintText: 'Enter institution or clinic name',
+                    errorText: _institutionError,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 _fieldLabel('Health Worker Profession'),
@@ -1196,10 +1464,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Image Layout',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Image Layout'),
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
@@ -1220,19 +1485,15 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Checkup Notes',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Checkup Notes'),
               const SizedBox(height: 8),
               TextField(
                 controller: _checkupCtrl,
                 minLines: 4,
                 maxLines: 8,
                 maxLength: 1000,
-                decoration: const InputDecoration(
+                decoration: _fieldDecoration(
                   hintText: 'Type checkup observations here...',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 8),
@@ -1275,12 +1536,51 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderPrimary),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'AI Insight Summary',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brandPrimary,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _showAllAi = !_showAllAi;
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              minimumSize: Size.zero,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(_showAllAi ? 'Show Less' : 'Show All'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSmartInsightView(_aiApprovedInsight!),
+                    ],
+                  ),
+                ),
               ],
               const SizedBox(height: 16),
-              const Text(
-                'Summary',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Summary'),
               const SizedBox(height: 8),
               _summaryRow(
                 'Date',

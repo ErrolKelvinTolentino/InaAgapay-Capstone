@@ -33,7 +33,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   // Section accent colors — pink palette variations
   static const _accentRecord = Color(0xFFE6398D); // deep rose
   static const _accentWorker = Color(0xFFD44B8A); // medium pink
-  static const _accentNotes  = Color(0xFFC7607E); // warm coral-pink
+  static const _accentNotes = Color(0xFFC7607E); // warm coral-pink
 
   @override
   Widget build(BuildContext context) {
@@ -564,7 +564,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     sections[currentSection] = [];
 
     final headingPattern = RegExp(
-      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|LABORATORY RESULTS|ABNORMAL FINDINGS|NORMAL RANGES|REFERENCE RANGES|OVERALL ASSESSMENT|RECOMMENDATIONS|KEY OBSERVATIONS)\s*:\s*(.*)$',
+      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|LABORATORY RESULTS|ABNORMAL FINDINGS|NORMAL RANGES|REFERENCE RANGES|OVERALL ASSESSMENT|OVERALL HEALTH STATUS|RECOMMENDATIONS|KEY OBSERVATIONS|DETAILED MEASUREMENTS ASSESSMENT|ANATOMICAL ASSESSMENT|GESTATIONAL AGE ASSESSMENT)\s*:\s*(.*)$',
       caseSensitive: false,
     );
 
@@ -1011,24 +1011,58 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Widget _buildAiSectionCard(String title, List<String> lines) {
+    final friendlyTitle = _friendlyAiSectionTitle(title);
+    Color color = AppColors.brandPrimary;
+    IconData icon = Icons.info_outline;
+
+    final normalized = title.trim().toUpperCase();
+    if (normalized == 'OVERALL ASSESSMENT') {
+      icon = Icons.summarize_outlined;
+    } else if (normalized == 'OVERALL HEALTH STATUS') {
+      icon = Icons.monitor_heart_outlined;
+    } else if (normalized == 'GESTATIONAL AGE ASSESSMENT') {
+      icon = Icons.calendar_month_outlined;
+    } else if (normalized == 'DETAILED MEASUREMENTS ASSESSMENT') {
+      icon = Icons.straighten_outlined;
+    } else if (normalized == 'ANATOMICAL ASSESSMENT') {
+      icon = Icons.accessibility_new_outlined;
+    } else if (normalized == 'ABNORMAL FINDINGS') {
+      icon = Icons.warning_amber_outlined;
+      color = Colors.orange;
+    } else if (normalized == 'RECOMMENDATIONS') {
+      icon = Icons.medical_information_outlined;
+    } else if (normalized == 'KEY OBSERVATIONS') {
+      icon = Icons.visibility_outlined;
+    } else if (normalized == 'SUMMARY') {
+      icon = Icons.analytics_outlined;
+    }
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.bgSecondary,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderPrimary),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _friendlyAiSectionTitle(title),
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              color: AppColors.brandText,
-            ),
+          Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  friendlyTitle,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           _buildFormattedAiText(lines.join('\n')),
@@ -1041,8 +1075,32 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     final sections = _extractAiSections(text);
     if (sections.isEmpty) return _buildFormattedAiText(text);
 
+    // Eliminate redundancy between measurements and anatomical findings
+    if (sections.containsKey('ANATOMICAL ASSESSMENT') &&
+        sections.containsKey('DETAILED MEASUREMENTS ASSESSMENT')) {
+      final measurements = sections['DETAILED MEASUREMENTS ASSESSMENT']!;
+      final anatomical = sections['ANATOMICAL ASSESSMENT']!;
+
+      final normalizedMeasurements =
+          measurements.map((m) => m.trim().toLowerCase()).toSet();
+      final filteredAnatomical = anatomical
+          .where(
+              (a) => !normalizedMeasurements.contains(a.trim().toLowerCase()))
+          .toList();
+
+      if (filteredAnatomical.isEmpty) {
+        sections.remove('ANATOMICAL ASSESSMENT');
+      } else {
+        sections['ANATOMICAL ASSESSMENT'] = filteredAnatomical;
+      }
+    }
+
     const sectionOrder = [
       'OVERALL ASSESSMENT',
+      'OVERALL HEALTH STATUS',
+      'GESTATIONAL AGE ASSESSMENT',
+      'DETAILED MEASUREMENTS ASSESSMENT',
+      'ANATOMICAL ASSESSMENT',
       'LABORATORY RESULTS',
       'ABNORMAL FINDINGS',
       'NORMAL RANGES',
@@ -1075,7 +1133,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       }
 
       if (entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
-        continue;
+        if (sections.containsKey('LABORATORY RESULTS')) {
+          continue;
+        }
       }
 
       widgets.add(_buildAiSectionCard(entry.key, entry.value));
@@ -1094,6 +1154,8 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     switch (normalized) {
       case 'OVERALL ASSESSMENT':
         return 'Overall Assessment';
+      case 'OVERALL HEALTH STATUS':
+        return 'Overall Health Status';
       case 'LABORATORY RESULTS':
         return 'Laboratory Results';
       case 'ABNORMAL FINDINGS':
@@ -1104,6 +1166,12 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
         return 'Key Observations';
       case 'RECOMMENDATIONS':
         return 'Recommendations';
+      case 'DETAILED MEASUREMENTS ASSESSMENT':
+        return 'Measurements';
+      case 'ANATOMICAL ASSESSMENT':
+        return 'Anatomical Assessment';
+      case 'GESTATIONAL AGE ASSESSMENT':
+        return 'Gestational Age';
       default:
         return raw
             .toLowerCase()

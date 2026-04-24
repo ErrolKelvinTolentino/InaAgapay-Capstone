@@ -141,13 +141,6 @@ class GeminiResponse {
             '${name.isEmpty ? 'Measurement' : name}: ${value.isEmpty ? 'n/a' : value} [$status]';
         measurements.add(summary);
 
-        if (status == 'NORMAL') {
-          normalFindings.add(summary);
-        }
-        if (status == 'CONCERNING') {
-          concerns.add(summary);
-        }
-
         if (name.toLowerCase().contains('weight') && value.isNotEmpty) {
           fetalWeight = value;
         }

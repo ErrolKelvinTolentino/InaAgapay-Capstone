@@ -899,9 +899,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           'lab_${DateTime.now().millisecondsSinceEpoch}_${paths.length}.jpg';
       final filePath = 'lab-tests/${widget.motherId}/$fileName';
 
-      await Supabase.instance.client.storage
-          .from('medical-images')
-          .uploadBinary(
+      await Supabase.instance.client.storage.from('files').uploadBinary(
             filePath,
             bytes,
             fileOptions:
@@ -909,7 +907,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           );
 
       final publicUrl =
-          Supabase.instance.client.storage.from('medical-images').getPublicUrl(
+          Supabase.instance.client.storage.from('files').getPublicUrl(
                 filePath,
               );
 
@@ -953,11 +951,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
       final paths = upload['paths'] ?? <String>[];
 
       final notes = _notesCtrl.text.trim();
-      final remarks = _aiApprovedInsight != null
-          ? (notes.isEmpty
-              ? _aiApprovedInsight!
-              : '$notes\n\nAI Analysis:\n${_aiApprovedInsight!}')
-          : (notes.isEmpty ? null : notes);
+      final remarks = notes.isEmpty ? null : notes;
 
       final inserted = await Supabase.instance.client
           .from('lab_tests')
@@ -977,7 +971,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
       if (userId != null) {
         for (final path in paths) {
           await Supabase.instance.client.from('files').insert({
-            'bucket_name': 'medical-images',
+            'bucket_name': 'files',
             'file_path': path,
             'file_name': path.split('/').last,
             'file_category': 'lab_test_image',
@@ -1065,6 +1059,68 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     }
   }
 
+  Widget _fieldLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration({String? hintText, String? errorText}) {
+    return InputDecoration(
+      hintText: hintText,
+      errorText: errorText,
+      filled: true,
+      fillColor: AppColors.bgSecondary.withValues(alpha: 0.5),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.borderPrimary),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.borderPrimary),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: AppColors.brandPrimary.withValues(alpha: 0.75),
+          width: 1.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 108,
+            child: Text(
+              label,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: valueColor ?? AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStep1() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1075,10 +1131,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Lab Test Date',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Lab Test Date'),
               const SizedBox(height: 8),
               InkWell(
                 onTap: _pickDate,
@@ -1087,7 +1140,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                   decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
+                    color: AppColors.bgSecondary.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.borderPrimary),
                   ),
@@ -1112,17 +1165,14 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
-                'Lab Test Type',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Lab Test Type'),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: _selectedLabType,
-                decoration: const InputDecoration(
+                decoration: _fieldDecoration(
                   hintText: 'Select pregnancy-related lab test',
-                  border: OutlineInputBorder(),
                 ),
+                dropdownColor: Colors.white,
                 items: _pregnancyLabTests
                     .map((type) => DropdownMenuItem(
                           value: type,
@@ -1229,10 +1279,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Image Layout',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Image Layout'),
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
@@ -1253,19 +1300,15 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Notes',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Notes'),
               const SizedBox(height: 8),
               TextField(
                 controller: _notesCtrl,
                 minLines: 4,
                 maxLines: 8,
                 maxLength: 1000,
-                decoration: const InputDecoration(
+                decoration: _fieldDecoration(
                   hintText: 'Type your notes here...',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 8),
@@ -1307,7 +1350,71 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderPrimary),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'AI Insight Summary',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brandPrimary,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _showAllAi = !_showAllAi;
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              minimumSize: Size.zero,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(_showAllAi ? 'Show Less' : 'Show All'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSmartInsightView(_aiApprovedInsight!),
+                    ],
+                  ),
+                ),
               ],
+              const SizedBox(height: 16),
+              _fieldLabel('Summary'),
+              const SizedBox(height: 8),
+              _summaryRow(
+                'Date',
+                _date == null
+                    ? 'Not set'
+                    : DateFormat('yyyy-MM-dd').format(_date!),
+              ),
+              _summaryRow(
+                'Test Type',
+                _selectedLabType ?? 'Not set',
+              ),
+              _summaryRow(
+                'Image',
+                _images.isEmpty
+                    ? 'No image attached'
+                    : '${_images.length} image(s) ready to upload',
+                valueColor: _images.isEmpty
+                    ? AppColors.textSecondary
+                    : AppColors.success,
+              ),
             ],
           ),
         ),
