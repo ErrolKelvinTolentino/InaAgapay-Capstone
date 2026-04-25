@@ -91,8 +91,8 @@ class InaagapayApp extends StatelessWidget {
               .eq('account_id', accountId)
               .maybeSingle();
           
-          final hasValidMother = motherResponse != null;
-          final hasBHC = hasValidMother && motherResponse?['assigned_bhc_id'] != null;
+          final bool hasValidMother = motherResponse != null;
+          final bool hasBHC = hasValidMother && motherResponse!['assigned_bhc_id'] != null;
           
           if (hasValidMother && motherId == null && motherResponse != null) {
             final newMotherId = motherResponse['mother_id'] as int;
@@ -115,15 +115,15 @@ class InaagapayApp extends StatelessWidget {
             return const MotherDashboardShell();
           }
           
-          final hasFirstName = accountResponse?['first_name'] != null && 
-                               (accountResponse?['first_name']?.toString() ?? '').isNotEmpty;
-          final hasLastName = accountResponse?['last_name'] != null && 
-                              (accountResponse?['last_name']?.toString() ?? '').isNotEmpty;
-          final hasBirthdate = motherResponse != null && motherResponse['birthdate'] != null;
-          final hasPhone = accountResponse?['phone_number'] != null && 
-                           (accountResponse?['phone_number']?.toString() ?? '').isNotEmpty;
+          final bool hasFirstName = accountResponse?['first_name'] != null && 
+                                    (accountResponse?['first_name']?.toString() ?? '').isNotEmpty;
+          final bool hasLastName = accountResponse?['last_name'] != null && 
+                                   (accountResponse?['last_name']?.toString() ?? '').isNotEmpty;
+          final bool hasBirthdate = motherResponse != null && motherResponse['birthdate'] != null;
+          final bool hasPhone = accountResponse?['phone_number'] != null && 
+                                (accountResponse?['phone_number']?.toString() ?? '').isNotEmpty;
           
-          final isActuallyComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
+          final bool isActuallyComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
           
           if (isActuallyComplete && !profileComplete) {
             await AuthStorage.saveProfileComplete(true);
