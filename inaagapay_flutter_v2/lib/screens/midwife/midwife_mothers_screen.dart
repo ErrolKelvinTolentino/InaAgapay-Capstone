@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../services/supabase_service.dart';
-import '../../services/auth_storage.dart';
+
 import '../mother/mother_profile_page.dart';
 import 'midwife_add_mother_screen.dart';
 
@@ -40,8 +40,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   // Scroll controller
   final ScrollController _scrollController = ScrollController();
   
-  // Profile picture cache
-  final Map<int, String?> _profilePictureCache = {};
+
 
   @override
   void initState() {
@@ -59,20 +58,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
     super.dispose();
   }
 
-  Future<String?> _loadProfilePicture(int motherId) async {
-    if (_profilePictureCache.containsKey(motherId)) {
-      return _profilePictureCache[motherId];
-    }
-    
-    try {
-      final url = await SupabaseService.getProfilePictureUrl(motherId);
-      _profilePictureCache[motherId] = url;
-      return url;
-    } catch (e) {
-      debugPrint('Error loading profile picture for mother $motherId: $e');
-      return null;
-    }
-  }
+
 
   void _onSearchChanged() {
     if (_searchDebounceTimer?.isActive ?? false) {
@@ -184,7 +170,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         _currentPage = 0;
         _allMothers = [];
         _filteredMothers = [];
-        _profilePictureCache.clear();
+
       });
     }
     
@@ -304,11 +290,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           }
         }
         
-        String? profilePictureUrl;
-        if (motherId != null) {
-          profilePictureUrl = await _loadProfilePicture(motherId);
-        }
-        
         newMothers.add({
           'account_id': accountId,
           'first_name': firstName,
@@ -323,7 +304,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           'expected_due_date': expectedDueDate,
           'has_pregnancy': motherId != null && pregnancyMap.containsKey(motherId),
           'barangay': motherInfo?['barangay']?.toString() ?? '',
-          'profile_picture': profilePictureUrl,
         });
       }
       
@@ -745,37 +725,11 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                   
                                   final mother = _filteredMothers[index];
                                   final int? motherId = mother['mother_id'] as int?;
-                                  final riskLevel = mother['risk_level']?.toString() ?? 'low';
-                                  final riskColor = _getRiskColor(riskLevel);
-                                  final riskLabel = _getRiskLabel(riskLevel);
-                                  final expectedDueDate = mother['expected_due_date'] as String?;
-                                  final profilePictureUrl = mother['profile_picture'] as String?;
-                                  final barangay = mother['barangay']?.toString() ?? '';
-                                  
-                                  String? dueDateText;
-                                  if (expectedDueDate != null && expectedDueDate.isNotEmpty) {
-                                    final edd = DateTime.tryParse(expectedDueDate);
-                                    if (edd != null) {
-                                      final daysUntil = edd.difference(DateTime.now()).inDays;
-                                      if (daysUntil >= 0 && daysUntil <= 14) {
-                                        dueDateText = 'Due in $daysUntil days';
-                                      } else if (daysUntil > 14) {
-                                        dueDateText = 'Due in $daysUntil days';
-                                      } else if (daysUntil < 0) {
-                                        dueDateText = 'Past due date';
-                                      }
-                                    }
-                                  }
-                                  
+
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
                                     child: _MotherCard(
                                       mother: mother,
-                                      riskColor: riskColor,
-                                      riskLabel: riskLabel,
-                                      dueDateText: dueDateText,
-                                      profilePictureUrl: profilePictureUrl,
-                                      barangay: barangay,
                                       onTap: motherId != null
                                           ? () {
                                               Navigator.push(
@@ -868,42 +822,32 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 class _MotherCard extends StatelessWidget {
   final Map<String, dynamic> mother;
   final VoidCallback? onTap;
-  final Color riskColor;
-  final String riskLabel;
-  final String? dueDateText;
-  final String? profilePictureUrl;
-  final String barangay;
 
   const _MotherCard({
     required this.mother,
-    required this.riskColor,
-    required this.riskLabel,
-    this.dueDateText,
-    this.profilePictureUrl,
-    required this.barangay,
     this.onTap,
   });
 
   String _getInitials(String fullName) {
     if (fullName.isEmpty || fullName == 'Unknown Mother') return '?';
-    
+
     final String trimmed = fullName.trim();
     if (trimmed.isEmpty) return '?';
-    
+
     final List<String> parts = trimmed.split(' ');
     if (parts.isEmpty) return '?';
-    
+
     final String firstPart = parts[0];
     if (firstPart.isEmpty) return '?';
     final String firstInitial = firstPart[0].toUpperCase();
-    
+
     if (parts.length > 1) {
       final String secondPart = parts[1];
       if (secondPart.isNotEmpty) {
         return '$firstInitial${secondPart[0].toUpperCase()}';
       }
     }
-    
+
     return firstInitial;
   }
 
@@ -915,177 +859,89 @@ class _MotherCard extends StatelessWidget {
     final bool hasPregnancy = mother['has_pregnancy'] as bool? ?? false;
 
     final String displayName = fullName.isEmpty ? 'Unknown Mother' : fullName;
-    
+
     final StringBuffer subtitleBuffer = StringBuffer();
     if (age > 0) {
-      subtitleBuffer.write('$age years old');
+      subtitleBuffer.write('$age Years old');
     } else {
       subtitleBuffer.write('Age unknown');
     }
 
     if (hasPregnancy && gestWeeks > 0) {
-      subtitleBuffer.write(' • $gestWeeks weeks pregnant');
-    }
-    
-    if (barangay.isNotEmpty) {
-      subtitleBuffer.write(' • $barangay');
+      subtitleBuffer.write(' - $gestWeeks weeks pregnant');
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(30),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(30),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 20, 16),
             child: Row(
               children: [
                 Container(
-                  width: 56,
-                  height: 56,
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        riskColor.withValues(alpha: 0.3),
-                        riskColor.withValues(alpha: 0.2),
+                        AppColors.brandPrimary.withValues(alpha: 0.3),
+                        AppColors.brandAccent.withValues(alpha: 0.2),
                       ],
                     ),
                     shape: BoxShape.circle,
                   ),
-                  child: ClipOval(
-                    child: profilePictureUrl != null && profilePictureUrl!.isNotEmpty
-                        ? Image.network(
-                            profilePictureUrl!,
-                            width: 56,
-                            height: 56,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Center(
-                                child: Text(
-                                  _getInitials(displayName),
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: riskColor,
-                                  ),
-                                ),
-                              );
-                            },
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: riskColor,
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : Center(
-                            child: Text(
-                              _getInitials(displayName),
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: riskColor,
-                              ),
-                            ),
-                          ),
+                  child: Center(
+                    child: Text(
+                      _getInitials(displayName),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandPrimary,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 14),
-                
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        spacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              displayName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: AppColors.textPrimary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: riskColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: riskColor.withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Text(
-                              riskLabel,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: riskColor,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         subtitleBuffer.toString(),
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.textSecondary,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (dueDateText != null) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.event_available,
-                              size: 12,
-                              color: Colors.purple,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              dueDateText!,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.purple,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
                   ),
                 ),
-                
                 const Icon(
                   Icons.chevron_right,
                   color: AppColors.brandPrimary,
