@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../services/supabase_service.dart';
-
+import '../../services/auth_storage.dart';
 import '../mother/mother_profile_page.dart';
 import 'midwife_add_mother_screen.dart';
 
@@ -25,22 +25,29 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   int _currentPage = 0;
   static const int _pageSize = 10;
   String? _error;
-  
+
   // Search and Filter
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedRiskFilter = 'All';
   String _selectedBarangayFilter = 'All';
   Timer? _searchDebounceTimer;
-  
+
   // Filter options
-  final List<String> _riskFilters = ['All', 'High Risk', 'Medium Risk', 'Low Risk', 'Due Soon'];
+  final List<String> _riskFilters = [
+    'All',
+    'High Risk',
+    'Medium Risk',
+    'Low Risk',
+    'Due Soon'
+  ];
   List<String> _barangayFilters = ['All'];
-  
+
   // Scroll controller
   final ScrollController _scrollController = ScrollController();
-  
 
+  // Profile picture cache
+  final Map<int, String?> _profilePictureCache = {};
 
   @override
   void initState() {
@@ -58,7 +65,20 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
     super.dispose();
   }
 
+  Future<String?> _loadProfilePicture(int motherId) async {
+    if (_profilePictureCache.containsKey(motherId)) {
+      return _profilePictureCache[motherId];
+    }
 
+    try {
+      final url = await SupabaseService.getProfilePictureUrl(motherId);
+      _profilePictureCache[motherId] = url;
+      return url;
+    } catch (e) {
+      debugPrint('Error loading profile picture for mother $motherId: $e');
+      return null;
+    }
+  }
 
   void _onSearchChanged() {
     if (_searchDebounceTimer?.isActive ?? false) {
@@ -74,7 +94,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 
   void _applyFilters() {
     List<Map<String, dynamic>> results = List.from(_allMothers);
-    
+
     // Apply search filter
     if (_searchQuery.isNotEmpty) {
       results = results.where((mother) {
@@ -82,11 +102,11 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         final phone = mother['phone_number']?.toString().toLowerCase() ?? '';
         final email = mother['email_address']?.toString().toLowerCase() ?? '';
         return fullName.contains(_searchQuery) ||
-               phone.contains(_searchQuery) ||
-               email.contains(_searchQuery);
+            phone.contains(_searchQuery) ||
+            email.contains(_searchQuery);
       }).toList();
     }
-    
+
     // Apply risk filter
     if (_selectedRiskFilter != 'All') {
       if (_selectedRiskFilter == 'Due Soon') {
@@ -101,7 +121,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
       } else {
         final filterLower = _selectedRiskFilter.toLowerCase();
         results = results.where((mother) {
-          final riskLevel = mother['risk_level']?.toString().toLowerCase() ?? 'low';
+          final riskLevel =
+              mother['risk_level']?.toString().toLowerCase() ?? 'low';
           if (filterLower == 'high risk') return riskLevel == 'high';
           if (filterLower == 'medium risk') return riskLevel == 'medium';
           if (filterLower == 'low risk') return riskLevel == 'low';
@@ -109,7 +130,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         }).toList();
       }
     }
-    
+
     // Apply barangay filter
     if (_selectedBarangayFilter != 'All') {
       results = results.where((mother) {
@@ -117,7 +138,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         return barangay == _selectedBarangayFilter;
       }).toList();
     }
-    
+
     setState(() {
       _filteredMothers = results;
     });
@@ -136,8 +157,14 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      if (!_isLoadingMore && _hasMoreData && !_isLoading && _searchQuery.isEmpty && _selectedRiskFilter == 'All' && _selectedBarangayFilter == 'All') {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      if (!_isLoadingMore &&
+          _hasMoreData &&
+          !_isLoading &&
+          _searchQuery.isEmpty &&
+          _selectedRiskFilter == 'All' &&
+          _selectedBarangayFilter == 'All') {
         _loadMoreMothers();
       }
     }
@@ -145,14 +172,14 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 
   Future<void> _loadMoreMothers() async {
     if (_isLoadingMore || !_hasMoreData) return;
-    
+
     setState(() {
       _isLoadingMore = true;
     });
-    
+
     _currentPage++;
     await _loadMothers(reset: false);
-    
+
     if (mounted) {
       setState(() {
         _isLoadingMore = false;
@@ -162,7 +189,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 
   Future<void> _loadMothers({bool reset = true}) async {
     if (!mounted) return;
-    
+
     if (reset) {
       setState(() {
         _isLoading = true;
@@ -170,56 +197,56 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         _currentPage = 0;
         _allMothers = [];
         _filteredMothers = [];
-
+        _profilePictureCache.clear();
       });
     }
-    
+
     try {
       final int offset = _currentPage * _pageSize;
-      
+
       var query = SupabaseService.client
           .from('accounts')
-          .select('account_id, first_name, last_name, phone_number, email_address')
+          .select(
+              'account_id, first_name, last_name, phone_number, email_address')
           .eq('account_type', 'mother')
           .eq('is_verified', true);
-      
+
       if (_searchQuery.isNotEmpty && reset) {
-        query = query.or(
-          'first_name.ilike.%$_searchQuery%,'
-          'last_name.ilike.%$_searchQuery%,'
-          'phone_number.ilike.%$_searchQuery%,'
-          'email_address.ilike.%$_searchQuery%'
-        );
+        query = query.or('first_name.ilike.%$_searchQuery%,'
+            'last_name.ilike.%$_searchQuery%,'
+            'phone_number.ilike.%$_searchQuery%,'
+            'email_address.ilike.%$_searchQuery%');
       }
-      
+
       final List<dynamic> allResults = await query;
       final int totalCount = allResults.length;
-      
+
       final List<dynamic> accountsResponse = await query
           .order('first_name', ascending: true)
           .range(offset, offset + _pageSize - 1);
-      
+
       if (!mounted) return;
-      
+
       _hasMoreData = (offset + _pageSize) < totalCount;
-      
+
       final List<int> accountIds = [];
       for (var account in accountsResponse) {
         if (account is Map<String, dynamic>) {
           accountIds.add(account['account_id'] as int);
         }
       }
-      
+
       List<Map<String, dynamic>> mothersData = [];
       if (accountIds.isNotEmpty) {
         final mothersResponse = await SupabaseService.client
             .from('mothers')
-            .select('mother_id, account_id, birthdate, barangay, city_municipality, province, height, weight, blood_type')
+            .select(
+                'mother_id, account_id, birthdate, barangay, city_municipality, province, height, weight, blood_type')
             .inFilter('account_id', accountIds);
-        
+
         mothersData = List<Map<String, dynamic>>.from(mothersResponse);
       }
-      
+
       final List<int> motherIds = [];
       for (var mother in mothersData) {
         final int? mid = mother['mother_id'] as int?;
@@ -227,15 +254,16 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           motherIds.add(mid);
         }
       }
-      
+
       Map<int, Map<String, dynamic>> pregnancyMap = {};
       if (motherIds.isNotEmpty) {
         final pregnanciesResponse = await SupabaseService.client
             .from('pregnancies')
-            .select('mother_id, last_menstrual_period, pregnancy_risk_level, expected_date_of_delivery')
+            .select(
+                'mother_id, last_menstrual_period, pregnancy_risk_level, expected_date_of_delivery')
             .eq('status', 'ongoing')
             .inFilter('mother_id', motherIds);
-        
+
         for (var pregnancy in pregnanciesResponse) {
           final int? mid = pregnancy['mother_id'] as int?;
           if (mid != null) {
@@ -243,7 +271,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           }
         }
       }
-      
+
       final Map<int, Map<String, dynamic>> motherMap = {};
       for (var mother in mothersData) {
         final int? aid = mother['account_id'] as int?;
@@ -251,20 +279,20 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           motherMap[aid] = mother;
         }
       }
-      
+
       final List<Map<String, dynamic>> newMothers = [];
-      
+
       for (var account in accountsResponse) {
         if (account is! Map<String, dynamic>) continue;
-        
+
         final int accountId = account['account_id'] as int;
         final Map<String, dynamic>? motherInfo = motherMap[accountId];
         final int? motherId = motherInfo?['mother_id'] as int?;
-        
+
         final String firstName = account['first_name']?.toString() ?? '';
         final String lastName = account['last_name']?.toString() ?? '';
         final String fullName = '$firstName $lastName'.trim();
-        
+
         int age = 0;
         final String? birthdateStr = motherInfo?['birthdate']?.toString();
         if (birthdateStr != null && birthdateStr.isNotEmpty) {
@@ -273,7 +301,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             age = DateTime.now().difference(birthdate).inDays ~/ 365;
           }
         }
-        
+
         int gestWeeks = 0;
         String riskLevel = 'low';
         String? expectedDueDate;
@@ -281,7 +309,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           final Map<String, dynamic>? pregnancy = pregnancyMap[motherId];
           riskLevel = pregnancy?['pregnancy_risk_level'] as String? ?? 'low';
           expectedDueDate = pregnancy?['expected_date_of_delivery'] as String?;
-          final String? lmpString = pregnancy?['last_menstrual_period'] as String?;
+          final String? lmpString =
+              pregnancy?['last_menstrual_period'] as String?;
           if (lmpString != null && lmpString.isNotEmpty) {
             final DateTime? lmpDate = DateTime.tryParse(lmpString);
             if (lmpDate != null) {
@@ -289,7 +318,12 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             }
           }
         }
-        
+
+        String? profilePictureUrl;
+        if (motherId != null) {
+          profilePictureUrl = await _loadProfilePicture(motherId);
+        }
+
         newMothers.add({
           'account_id': accountId,
           'first_name': firstName,
@@ -302,11 +336,13 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           'gest_weeks': gestWeeks,
           'risk_level': riskLevel,
           'expected_due_date': expectedDueDate,
-          'has_pregnancy': motherId != null && pregnancyMap.containsKey(motherId),
+          'has_pregnancy':
+              motherId != null && pregnancyMap.containsKey(motherId),
           'barangay': motherInfo?['barangay']?.toString() ?? '',
+          'profile_picture': profilePictureUrl,
         });
       }
-      
+
       if (mounted) {
         setState(() {
           if (reset) {
@@ -344,17 +380,23 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 
   Color _getRiskColor(String riskLevel) {
     switch (riskLevel.toLowerCase()) {
-      case 'high': return Colors.red;
-      case 'medium': return Colors.orange;
-      default: return Colors.green;
+      case 'high':
+        return Colors.red;
+      case 'medium':
+        return Colors.orange;
+      default:
+        return Colors.green;
     }
   }
 
   String _getRiskLabel(String riskLevel) {
     switch (riskLevel.toLowerCase()) {
-      case 'high': return 'HIGH RISK';
-      case 'medium': return 'MEDIUM RISK';
-      default: return 'LOW RISK';
+      case 'high':
+        return 'HIGH RISK';
+      case 'medium':
+        return 'MEDIUM RISK';
+      default:
+        return 'LOW RISK';
     }
   }
 
@@ -412,7 +454,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                     bottom: 0,
                     top: 0,
                     child: Padding(
-                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
+                      padding: const EdgeInsets.only(
+                          right: 16.0, top: 4.0, bottom: 4.0),
                       child: Image.asset(
                         'assets/images/pregnant1.png',
                         fit: BoxFit.contain,
@@ -443,7 +486,9 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                             color: AppColors.brandPrimary,
                           ),
                         ),
-                        if (_searchQuery.isNotEmpty || _selectedRiskFilter != 'All' || _selectedBarangayFilter != 'All')
+                        if (_searchQuery.isNotEmpty ||
+                            _selectedRiskFilter != 'All' ||
+                            _selectedBarangayFilter != 'All')
                           Text(
                             '(from ${_allMothers.length} total)',
                             style: const TextStyle(
@@ -465,8 +510,9 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                 hintText: 'Search Mother by name, phone, or email',
                 controller: _searchController,
                 leadingIcon: Icons.search,
-                trailingIcon: _searchController.text.isNotEmpty ? Icons.clear : null,
-                onTrailingTap: _searchController.text.isNotEmpty 
+                trailingIcon:
+                    _searchController.text.isNotEmpty ? Icons.clear : null,
+                onTrailingTap: _searchController.text.isNotEmpty
                     ? () {
                         _searchController.clear();
                         _searchQuery = '';
@@ -495,7 +541,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                         child: DropdownButton<String>(
                           value: _selectedRiskFilter,
                           isExpanded: true,
-                          icon: const Icon(Icons.arrow_drop_down, color: AppColors.brandPrimary),
+                          icon: const Icon(Icons.arrow_drop_down,
+                              color: AppColors.brandPrimary),
                           items: _riskFilters.map((filter) {
                             return DropdownMenuItem(
                               value: filter,
@@ -533,7 +580,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                         child: DropdownButton<String>(
                           value: _selectedBarangayFilter,
                           isExpanded: true,
-                          icon: const Icon(Icons.arrow_drop_down, color: AppColors.brandPrimary),
+                          icon: const Icon(Icons.arrow_drop_down,
+                              color: AppColors.brandPrimary),
                           items: _barangayFilters.map((barangay) {
                             return DropdownMenuItem(
                               value: barangay,
@@ -542,14 +590,16 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                   Icon(
                                     Icons.location_on_outlined,
                                     size: 16,
-                                    color: barangay == 'All' 
-                                        ? AppColors.textSecondary 
+                                    color: barangay == 'All'
+                                        ? AppColors.textSecondary
                                         : AppColors.brandPrimary,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      barangay == 'All' ? 'All Barangays' : barangay,
+                                      barangay == 'All'
+                                          ? 'All Barangays'
+                                          : barangay,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -572,9 +622,12 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             ),
 
             // Clear Filters Button (only show when filters are active)
-            if (_selectedRiskFilter != 'All' || _selectedBarangayFilter != 'All' || _searchQuery.isNotEmpty)
+            if (_selectedRiskFilter != 'All' ||
+                _selectedBarangayFilter != 'All' ||
+                _searchQuery.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
@@ -589,9 +642,12 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
               ),
 
             // Results Count
-            if (_searchQuery.isNotEmpty || _selectedRiskFilter != 'All' || _selectedBarangayFilter != 'All')
+            if (_searchQuery.isNotEmpty ||
+                _selectedRiskFilter != 'All' ||
+                _selectedBarangayFilter != 'All')
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -624,7 +680,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             Expanded(
               child: _isLoading && _allMothers.isEmpty
                   ? const Center(
-                      child: CircularProgressIndicator(color: AppColors.brandPrimary),
+                      child: CircularProgressIndicator(
+                          color: AppColors.brandPrimary),
                     )
                   : _error != null
                       ? Center(
@@ -633,7 +690,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                                const Icon(Icons.error_outline,
+                                    size: 48, color: AppColors.error),
                                 const SizedBox(height: 12),
                                 const Text(
                                   'Failed to load mothers',
@@ -678,7 +736,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                             ? Icons.calendar_today
                                             : Icons.pregnant_woman_rounded),
                                     size: 64,
-                                    color: AppColors.brandPrimary.withValues(alpha: 0.4),
+                                    color: AppColors.brandPrimary
+                                        .withValues(alpha: 0.4),
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
@@ -704,12 +763,24 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                               color: AppColors.brandPrimary,
                               child: ListView.builder(
                                 controller: _scrollController,
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                                itemCount: _filteredMothers.length + (_hasMoreData && _searchQuery.isEmpty && _selectedRiskFilter == 'All' && _selectedBarangayFilter == 'All' ? 1 : 0),
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                                itemCount: _filteredMothers.length +
+                                    (_hasMoreData &&
+                                            _searchQuery.isEmpty &&
+                                            _selectedRiskFilter == 'All' &&
+                                            _selectedBarangayFilter == 'All'
+                                        ? 1
+                                        : 0),
                                 itemBuilder: (context, index) {
-                                  if (index == _filteredMothers.length && _hasMoreData && _searchQuery.isEmpty && _selectedRiskFilter == 'All' && _selectedBarangayFilter == 'All') {
+                                  if (index == _filteredMothers.length &&
+                                      _hasMoreData &&
+                                      _searchQuery.isEmpty &&
+                                      _selectedRiskFilter == 'All' &&
+                                      _selectedBarangayFilter == 'All') {
                                     return const Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 20),
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 20),
                                       child: Center(
                                         child: SizedBox(
                                           width: 30,
@@ -722,20 +793,55 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                       ),
                                     );
                                   }
-                                  
+
                                   final mother = _filteredMothers[index];
-                                  final int? motherId = mother['mother_id'] as int?;
+                                  final int? motherId =
+                                      mother['mother_id'] as int?;
+                                  final riskLevel =
+                                      mother['risk_level']?.toString() ?? 'low';
+                                  final riskColor = _getRiskColor(riskLevel);
+                                  final riskLabel = _getRiskLabel(riskLevel);
+                                  final expectedDueDate =
+                                      mother['expected_due_date'] as String?;
+                                  final profilePictureUrl =
+                                      mother['profile_picture'] as String?;
+                                  final barangay =
+                                      mother['barangay']?.toString() ?? '';
+
+                                  String? dueDateText;
+                                  if (expectedDueDate != null &&
+                                      expectedDueDate.isNotEmpty) {
+                                    final edd =
+                                        DateTime.tryParse(expectedDueDate);
+                                    if (edd != null) {
+                                      final daysUntil =
+                                          edd.difference(DateTime.now()).inDays;
+                                      if (daysUntil >= 0 && daysUntil <= 14) {
+                                        dueDateText = 'Due in $daysUntil days';
+                                      } else if (daysUntil > 14) {
+                                        dueDateText = 'Due in $daysUntil days';
+                                      } else if (daysUntil < 0) {
+                                        dueDateText = 'Past due date';
+                                      }
+                                    }
+                                  }
 
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
                                     child: _MotherCard(
                                       mother: mother,
+                                      riskColor: riskColor,
+                                      riskLabel: riskLabel,
+                                      dueDateText: dueDateText,
+                                      profilePictureUrl: profilePictureUrl,
+                                      barangay: barangay,
                                       onTap: motherId != null
                                           ? () {
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (context) => MotherProfilePage(
+                                                  builder: (context) =>
+                                                      MotherProfilePage(
                                                     motherId: motherId,
                                                   ),
                                                 ),
@@ -805,7 +911,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           ),
         );
       case 'Due Soon':
-        return const Icon(Icons.event_available, size: 14, color: Colors.purple);
+        return const Icon(Icons.event_available,
+            size: 14, color: Colors.purple);
       default:
         return Container(
           width: 10,
@@ -822,9 +929,19 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 class _MotherCard extends StatelessWidget {
   final Map<String, dynamic> mother;
   final VoidCallback? onTap;
+  final Color riskColor;
+  final String riskLabel;
+  final String? dueDateText;
+  final String? profilePictureUrl;
+  final String barangay;
 
   const _MotherCard({
     required this.mother,
+    required this.riskColor,
+    required this.riskLabel,
+    this.dueDateText,
+    this.profilePictureUrl,
+    required this.barangay,
     this.onTap,
   });
 
@@ -862,83 +979,171 @@ class _MotherCard extends StatelessWidget {
 
     final StringBuffer subtitleBuffer = StringBuffer();
     if (age > 0) {
-      subtitleBuffer.write('$age Years old');
+      subtitleBuffer.write('$age years old');
     } else {
       subtitleBuffer.write('Age unknown');
     }
 
     if (hasPregnancy && gestWeeks > 0) {
-      subtitleBuffer.write(' - $gestWeeks weeks pregnant');
+      subtitleBuffer.write(' • $gestWeeks weeks pregnant');
+    }
+
+    if (barangay.isNotEmpty) {
+      subtitleBuffer.write(' • $barangay');
     }
 
     return Container(
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(20),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 20, 16),
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 Container(
-                  width: 50,
-                  height: 50,
+                  width: 56,
+                  height: 56,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppColors.brandPrimary.withValues(alpha: 0.3),
-                        AppColors.brandAccent.withValues(alpha: 0.2),
+                        riskColor.withValues(alpha: 0.3),
+                        riskColor.withValues(alpha: 0.2),
                       ],
                     ),
                     shape: BoxShape.circle,
                   ),
-                  child: Center(
-                    child: Text(
-                      _getInitials(displayName),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brandPrimary,
-                      ),
-                    ),
+                  child: ClipOval(
+                    child: profilePictureUrl != null &&
+                            profilePictureUrl!.isNotEmpty
+                        ? Image.network(
+                            profilePictureUrl!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Center(
+                                child: Text(
+                                  _getInitials(displayName),
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: riskColor,
+                                  ),
+                                ),
+                              );
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: riskColor,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Center(
+                            child: Text(
+                              _getInitials(displayName),
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: riskColor,
+                              ),
+                            ),
+                          ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: AppColors.textPrimary,
-                        ),
+                      Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              displayName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: riskColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: riskColor.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Text(
+                              riskLabel,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: riskColor,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
                         subtitleBuffer.toString(),
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.textSecondary,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      if (dueDateText != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.event_available,
+                              size: 12,
+                              color: Colors.purple,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              dueDateText!,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.purple,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
