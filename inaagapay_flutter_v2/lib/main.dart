@@ -1,5 +1,4 @@
-﻿// lib/main.dart
-
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -11,6 +10,7 @@ import 'screens/auth/mother_registration.dart';
 import 'screens/auth/account_verification_registration.dart';
 import 'screens/auth/forgot_password.dart';
 import 'screens/auth/forgot_password_verification.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/change_forgot_password.dart';
 import 'screens/mother/complete_profile.dart';
 import 'screens/mother/welcome_screen.dart';
@@ -37,6 +37,7 @@ void main() async {
   const fallbackSupabaseAnonKey =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw';
 
+  // Load environment variables with fallback for non-production environments
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
@@ -53,13 +54,26 @@ void main() async {
           ? envSupabaseAnonKey
           : fallbackSupabaseAnonKey;
 
+  // Initialize Supabase with the determined credentials
   try {
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
     );
+    if (kDebugMode) print('Supabase initialized successfully');
   } catch (e) {
     if (kDebugMode) print('Supabase init error: $e');
+    // Attempt fallback initialization if primary failed
+    try {
+      await Supabase.initialize(
+        url: fallbackSupabaseUrl,
+        anonKey: fallbackSupabaseAnonKey,
+      );
+      if (kDebugMode) print('Supabase initialized with fallback credentials');
+    } catch (fallbackError) {
+      if (kDebugMode)
+        print('Fallback Supabase init also failed: $fallbackError');
+    }
   }
 
   runApp(const InaagapayApp());
@@ -92,7 +106,6 @@ class InaagapayApp extends StatelessWidget {
 
       if (motherId != null && accountId != null) {
         try {
-          // Get the created_by field to know how account was created
           final accountResponse = await SupabaseService.client
               .from('accounts')
               .select('created_by, first_name, last_name, phone_number')
@@ -184,7 +197,7 @@ class InaagapayApp extends StatelessWidget {
           return const MotherDashboardShell();
         } catch (e) {
           if (kDebugMode) {
-            print('Error checking mother profile completeness: $e');
+            print('Error checking mother profile: $e');
           }
           return const MotherDashboardShell();
         }
@@ -198,19 +211,10 @@ class InaagapayApp extends StatelessWidget {
 
     switch (role) {
       case 'midwife':
-        if (kDebugMode) {
-          debugPrint('Midwife role - going to MidwifeShell');
-        }
         return const MidwifeShell();
       case 'admin':
-        if (kDebugMode) {
-          debugPrint('Admin role - going to AdminDashboard');
-        }
         return const AdminDashboard();
       default:
-        if (kDebugMode) {
-          debugPrint('Unknown role - going to LoginScreen');
-        }
         return const LoginScreen();
     }
   }
@@ -256,7 +260,6 @@ class InaagapayApp extends StatelessWidget {
           ),
           home: snapshot.data ?? const LoginScreen(),
           routes: {
-            // Authentication Routes
             '/login': (context) => const LoginScreen(),
             '/register': (context) => const MotherRegistrationScreen(),
             '/verify-registration': (context) =>
@@ -264,10 +267,9 @@ class InaagapayApp extends StatelessWidget {
             '/forgot-password': (context) => const ForgotPasswordScreen(),
             '/forgot-password-verify': (context) =>
                 const ForgotPasswordVerificationScreen(),
+            '/reset-password': (context) => const ResetPasswordScreen(),
             '/change-forgot-password': (context) =>
                 const ChangeForgotPasswordScreen(),
-
-            // Mother Onboarding Routes
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
             '/change-password': (context) => const ChangePasswordScreen(),
@@ -278,8 +280,6 @@ class InaagapayApp extends StatelessWidget {
             '/mother-dashboard': (context) => const MotherDashboardShell(),
             '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
-
-            // Mother Feature Routes
             '/mother-profile': (context) {
               final args = ModalRoute.of(context)!.settings.arguments;
               if (args is int) {
@@ -290,41 +290,36 @@ class InaagapayApp extends StatelessWidget {
             '/mother-records': (context) => const RecordsScreen(),
             '/mother-journal': (context) => const MotherJournalScreen(),
             '/mother-children': (context) => const MotherChildrenScreen(),
-
-            // Midwife Feature Routes
             '/midwife-mothers': (context) => const MidwifeMothersScreen(),
             '/midwife-children': (context) => const MidwifeChildrenScreen(),
             '/midwife-schedules': (context) => const MidwifeSchedulesScreen(),
             '/midwife-add-mother': (context) => const MidwifeAddMotherScreen(),
           },
           onGenerateRoute: (settings) {
-            // Handle ultrasound analyzer route
             if (settings.name == '/ultrasound-analyzer') {
-              final args = settings.arguments as Map<String, int>;
-              return MaterialPageRoute(
-                builder: (_) => UltrasoundAnalyzerScreen(
-                  motherId: args['motherId']!,
-                  pregnancyId: args['pregnancyId']!,
-                ),
-              );
+              final args = settings.arguments as Map<String, int>?;
+              if (args != null) {
+                return MaterialPageRoute(
+                  builder: (_) => UltrasoundAnalyzerScreen(
+                    motherId: args['motherId']!,
+                    pregnancyId: args['pregnancyId']!,
+                  ),
+                );
+              }
             }
-            // Handle lab test analyzer route
+
             if (settings.name == '/lab-test-analyzer') {
-              final args = settings.arguments as Map<String, int>;
-              return MaterialPageRoute(
-                builder: (_) => LabTestAnalyzerScreen(
-                  motherId: args['motherId']!,
-                  pregnancyId: args['pregnancyId']!,
-                ),
-              );
+              final args = settings.arguments as Map<String, int>?;
+              if (args != null) {
+                return MaterialPageRoute(
+                  builder: (_) => LabTestAnalyzerScreen(
+                    motherId: args['motherId']!,
+                    pregnancyId: args['pregnancyId']!,
+                  ),
+                );
+              }
             }
-            // Handle child profile route
-            if (settings.name == '/child-profile') {
-              return MaterialPageRoute(
-                builder: (_) => const MidwifeChildrenScreen(),
-                // Note: You'll need to pass childId to the screen
-              );
-            }
+
             return null;
           },
         );

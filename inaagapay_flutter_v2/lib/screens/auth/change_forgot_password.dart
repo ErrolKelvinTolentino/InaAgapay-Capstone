@@ -1,5 +1,6 @@
+// lib/screens/auth/change_forgot_password.dart
+
 import 'package:flutter/material.dart';
-// Change these:
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
@@ -7,6 +8,7 @@ import '../../widgets/page_title.dart';
 import '../../widgets/password_constraints.dart';
 import '../../widgets/password_strength_indicator.dart';
 import '../../models/password_strength.dart';
+import '../../services/supabase_service.dart';
 
 class ChangeForgotPasswordScreen extends StatefulWidget {
   const ChangeForgotPasswordScreen({super.key});
@@ -16,12 +18,26 @@ class ChangeForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ChangeForgotPasswordScreenState extends State<ChangeForgotPasswordScreen> {
-  final _newPasswordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
   
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
+  String? _errorMessage;
+  
+  late String _email;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)!.settings.arguments;
+    if (args is String) {
+      _email = args;
+    } else {
+      _email = '';
+    }
+  }
 
   @override
   void dispose() {
@@ -36,9 +52,10 @@ class _ChangeForgotPasswordScreenState extends State<ChangeForgotPasswordScreen>
     if (RegExp(r'\d').hasMatch(password)) met++;
     if (RegExp(r'[A-Z]').hasMatch(password)) met++;
     if (RegExp(r'[a-z]').hasMatch(password)) met++;
+    if (RegExp(r'[!@#\$%^&*]').hasMatch(password)) met++;
 
-    if (met <= 1) return PasswordStrength.weak;
-    if (met <= 3) return PasswordStrength.medium;
+    if (met <= 2) return PasswordStrength.weak;
+    if (met <= 4) return PasswordStrength.medium;
     return PasswordStrength.strong;
   }
 
@@ -54,24 +71,39 @@ class _ChangeForgotPasswordScreenState extends State<ChangeForgotPasswordScreen>
   Future<void> _handleSubmit() async {
     if (!_canSubmit) return;
     
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    // TODO: Update password in Supabase
-    await Future.delayed(const Duration(seconds: 1)); // Simulate API call
+    final result = await SupabaseService.resetPasswordWithNew(
+      _email,
+      _newPasswordController.text,
+    );
 
     if (!mounted) return;
+    
     setState(() => _isLoading = false);
-    
-    // Show success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Password updated successfully!'),
-        backgroundColor: Colors.green,
-      ),
-    );
-    
-    // Navigate to login
-    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+
+    if (result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password reset successfully!'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/login',
+        (route) => false,
+      );
+    } else {
+      setState(() {
+        _errorMessage = result['message'] ?? 'Failed to reset password';
+      });
+    }
   }
 
   @override
@@ -87,13 +119,12 @@ class _ChangeForgotPasswordScreenState extends State<ChangeForgotPasswordScreen>
             children: [
               const SizedBox(height: 40),
               
-              // App Name (text instead of image)
               const Text(
                 'Inaagapay',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFDE3A53),
+                  color: Color(0xFFFF68A5),
                 ),
               ),
               
@@ -103,42 +134,89 @@ class _ChangeForgotPasswordScreenState extends State<ChangeForgotPasswordScreen>
                 title: 'New Password',
                 leadingIcon: Icons.lock,
               ),
+              
+              const SizedBox(height: 16),
+              
+              const Text(
+                'Enter your new password below',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              
               const SizedBox(height: 32),
+              
+              // New Password
               AppInputField(
                 hintText: 'New Password',
                 controller: _newPasswordController,
                 obscureText: _obscureNewPassword,
                 leadingIcon: Icons.lock_outline,
+                isRequired: true,
                 trailingIcon: _obscureNewPassword ? Icons.visibility_off : Icons.visibility,
                 onTrailingTap: () {
                   setState(() => _obscureNewPassword = !_obscureNewPassword);
                 },
+                onChanged: (_) => setState(() {}),
               ),
+              
               const SizedBox(height: 8),
+              
               Align(
                 alignment: Alignment.centerRight,
                 child: PasswordStrengthIndicator(strength: strength),
               ),
+              
               const SizedBox(height: 12),
+              
               PasswordConstraints(password: _newPasswordController.text),
+              
               const SizedBox(height: 20),
+              
+              // Confirm Password
               AppInputField(
                 hintText: 'Confirm Password',
                 controller: _confirmPasswordController,
                 obscureText: _obscureConfirmPassword,
                 leadingIcon: Icons.lock_outline,
+                isRequired: true,
                 trailingIcon: _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
                 onTrailingTap: () {
                   setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
                 },
+                onChanged: (_) => setState(() {}),
               ),
+              
+              if (_confirmPasswordController.text.isNotEmpty && !_passwordsMatch) ...[
+                const SizedBox(height: 8),
+                const Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: Text(
+                    'Passwords do not match',
+                    style: TextStyle(fontSize: 12, color: AppColors.error),
+                  ),
+                ),
+              ],
+              
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(fontSize: 12, color: AppColors.error),
+                  ),
+                ),
+              ],
+              
               const SizedBox(height: 32),
+              
               MainButton(
-                label: _isLoading ? 'Updating...' : 'Update Password',
-                showIcons: false,
+                label: _isLoading ? 'Resetting...' : 'Reset Password',
                 onPressed: _canSubmit ? _handleSubmit : null,
               ),
+              
               const SizedBox(height: 16),
+              
               TextButton(
                 onPressed: () {
                   Navigator.pushNamedAndRemoveUntil(
