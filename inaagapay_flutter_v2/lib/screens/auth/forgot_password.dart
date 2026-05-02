@@ -1,10 +1,10 @@
 // lib/screens/auth/forgot_password.dart
-
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/page_title.dart';
+import '../../widgets/dialog_box.dart';
 import '../../services/supabase_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -17,35 +17,63 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final TextEditingController _emailController = TextEditingController();
   bool _isLoading = false;
+  String? _errorMessage;
 
   Future<void> _handleSubmit() async {
-    if (_emailController.text.isEmpty) return;
+    final email = _emailController.text.trim();
+    
+    if (email.isEmpty) {
+      setState(() => _errorMessage = 'Please enter your email address');
+      return;
+    }
+    
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+      setState(() => _errorMessage = 'Please enter a valid email address');
+      return;
+    }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    // Use the correct method name: forgotPassword (not resetPassword)
-    final result = await SupabaseService.forgotPassword(_emailController.text.trim());
+    final result = await SupabaseService.forgotPassword(email);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message']),
-          backgroundColor: AppColors.success,
+    if (result['success'] == true) {
+      // ✅ FIX: Show Dialog Box instead of snackbar
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          title: 'Verification Code Sent',
+          content: 'A 6-digit verification code has been sent to $email.\nPlease check your email inbox.',
+          buttonText: 'Continue',
+          type: DialogType.success,
+          onPressed: () {
+            Navigator.pop(context);
+            // ✅ Navigate to verification page
+            Navigator.pushNamed(
+              context,
+              '/forgot-password-verify',
+              arguments: email,
+            );
+          },
         ),
       );
-      Navigator.pushNamed(
-        context,
-        '/reset-password-verify',
-        arguments: _emailController.text.trim(),
-      );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message']),
-          backgroundColor: AppColors.error,
+      // ✅ FIX: Show validation message for non-existent email
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          title: 'Email Not Found',
+          content: result['message'] ?? 'No account found with this email address.',
+          buttonText: 'OK',
+          type: DialogType.warning,
+          onPressed: () => Navigator.pop(context),
         ),
       );
     }
@@ -86,6 +114,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 leadingIcon: Icons.email_outlined,
+                errorText: _errorMessage,
+                onChanged: (_) {
+                  if (_errorMessage != null) {
+                    setState(() => _errorMessage = null);
+                  }
+                },
               ),
               const SizedBox(height: 32),
               MainButton(

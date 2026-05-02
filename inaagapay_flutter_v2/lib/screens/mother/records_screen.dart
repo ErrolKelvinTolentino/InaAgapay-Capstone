@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
 import '../../services/mother_profile_service.dart';
@@ -18,8 +19,7 @@ class RecordsScreen extends StatefulWidget {
   State<RecordsScreen> createState() => _RecordsScreenState();
 }
 
-class _RecordsScreenState extends State<RecordsScreen>
-    with SingleTickerProviderStateMixin {
+class _RecordsScreenState extends State<RecordsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   int? _motherId;
@@ -27,9 +27,9 @@ class _RecordsScreenState extends State<RecordsScreen>
   List<Map<String, dynamic>> _checkups = [];
   List<Map<String, dynamic>> _ultrasounds = [];
   List<Map<String, dynamic>> _labTests = [];
-
+  List<Map<String, dynamic>> _prenatalCheckups = [];
+  
   String _selectedFilter = 'all';
-  String _sortOrder = 'desc';
   String _searchQuery = '';
   final Set<String> _expandedLabInsightAspects = <String>{};
   StateSetter? _recordDetailsModalSetState;
@@ -39,7 +39,6 @@ class _RecordsScreenState extends State<RecordsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadMotherData();
   }
 
@@ -67,7 +66,7 @@ class _RecordsScreenState extends State<RecordsScreen>
 
     try {
       _motherId = await AuthStorage.getMotherId();
-
+      
       if (_motherId == null) {
         throw Exception('Mother ID not found');
       }
@@ -119,10 +118,29 @@ class _RecordsScreenState extends State<RecordsScreen>
           .inFilter('pregnancy_id', pregnancyIds)
           .order('lab_test_date', ascending: false);
 
+      final prenatalResponse = await SupabaseService.client
+          .from('prenatal_checkups')
+          .select('''
+            *,
+            pregnancy:pregnancy_id (
+              mother_id
+            )
+          ''')
+          .inFilter('pregnancy_id', pregnancyIds)
+          .order('checkup_datetime', ascending: false);
+
       setState(() {
         _checkups = List<Map<String, dynamic>>.from(checkupsResponse);
         _ultrasounds = List<Map<String, dynamic>>.from(ultrasoundsResponse);
         _labTests = List<Map<String, dynamic>>.from(labTestsResponse);
+        _prenatalCheckups = List<Map<String, dynamic>>.from(prenatalResponse);
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
       });
     }
   }
@@ -135,6 +153,17 @@ class _RecordsScreenState extends State<RecordsScreen>
       return DateFormat('MMM d, yyyy').format(parsed);
     } catch (e) {
       return date.toString();
+    }
+  }
+
+  String _formatDateTime(dynamic dateTime) {
+    if (dateTime == null) return '—';
+    try {
+      final parsed = DateTime.tryParse(dateTime.toString());
+      if (parsed == null) return dateTime.toString();
+      return DateFormat('MMM d, yyyy h:mm a').format(parsed);
+    } catch (e) {
+      return dateTime.toString();
     }
   }
 
@@ -838,24 +867,20 @@ class _RecordsScreenState extends State<RecordsScreen>
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
     final remarks = ultrasound['remarks']?.toString().toLowerCase() ?? '';
     final buffer = StringBuffer();
-
-    buffer.write('🤖 Ultrasound AI Insights:\n\n');
-
+    
+    buffer.write('Ultrasound AI Insights:\n\n');
+    
     if (remarks.contains('normal') || remarks.contains('healthy')) {
-      buffer.write(
-          '✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
+      buffer.write('✓ Normal Findings: Ultrasound appears normal with healthy fetal development.\n\n');
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
-      buffer.write(
-          '📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
+      buffer.write('📊 Follow-up Recommended: Some findings require additional observation.\n\n');
     } else if (remarks.contains('concern') || remarks.contains('abnormal')) {
-      buffer.write(
-          '🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
+      buffer.write('🔍 Further Evaluation Needed: Discuss findings with healthcare provider.\n\n');
     } else {
-      buffer.write(
-          '📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
+      buffer.write('📋 Diagnostic Information: The ultrasound provides important diagnostic information.\n\n');
     }
 
-    buffer.write('💡 **Key Recommendations**:\n');
+    buffer.write('Key Recommendations:\n');
     buffer.write('• Discuss findings with your healthcare provider\n');
     buffer.write('• Continue all scheduled prenatal appointments\n');
 
@@ -970,7 +995,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     return double.tryParse(value.toString());
   }
 
-  List<Map<String, dynamic>> _getFilteredAndSortedRecords() {
+  List<Map<String, dynamic>> _getFilteredRecords() {
     List<Map<String, dynamic>> allRecords = [];
 
     for (var checkup in _checkups) {
@@ -984,25 +1009,53 @@ class _RecordsScreenState extends State<RecordsScreen>
     for (var ultrasound in _ultrasounds) {
       allRecords.add({
         ...ultrasound,
-        'record_type': 'ultrasound',
-        'record_date': ultrasound['ultrasound_date'],
+        'type': 'ultrasound',
+        'type_display': 'Ultrasound',
+        'date': ultrasound['ultrasound_date'],
+        'title': 'Ultrasound',
+        'icon': Icons.photo,
+        'iconColor': Colors.purple,
+        'subtitle': _formatDate(ultrasound['ultrasound_date']),
+        'health_worker': ultrasound['health_worker_name'],
       });
     }
-
+    
+    // Add lab tests
     for (var labTest in _labTests) {
       allRecords.add({
         ...labTest,
-        'record_type': 'labtest',
-        'record_date': labTest['lab_test_date'],
+        'type': 'labtest',
+        'type_display': 'Lab Test',
+        'date': labTest['lab_test_date'],
+        'title': labTest['lab_test_type'] ?? 'Lab Test',
+        'icon': Icons.science,
+        'iconColor': Colors.orange,
+        'subtitle': _formatDate(labTest['lab_test_date']),
+        'health_worker': labTest['health_worker_name'],
       });
     }
-
-    if (_selectedFilter != 'all') {
-      allRecords = allRecords
-          .where((record) => record['record_type'] == _selectedFilter)
-          .toList();
+    
+    // Add prenatal checkups
+    for (var checkup in _prenatalCheckups) {
+      allRecords.add({
+        ...checkup,
+        'type': 'prenatal',
+        'type_display': 'Prenatal Checkup',
+        'date': checkup['checkup_datetime'],
+        'title': 'Prenatal Checkup',
+        'icon': Icons.medical_services,
+        'iconColor': AppColors.brandPrimary,
+        'subtitle': _formatDateTime(checkup['checkup_datetime']),
+        'health_worker': null,
+      });
     }
-
+    
+    // Apply filter
+    if (_selectedFilter != 'all') {
+      allRecords = allRecords.where((record) => record['type'] == _selectedFilter).toList();
+    }
+    
+    // Apply search
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       allRecords = allRecords.where((record) {
@@ -1044,96 +1097,94 @@ class _RecordsScreenState extends State<RecordsScreen>
                 false);
       }).toList();
     }
-
+    
+    // Sort by date (newest first)
     allRecords.sort((a, b) {
-      final dateA = DateTime.tryParse(a['record_date'] ?? '');
-      final dateB = DateTime.tryParse(b['record_date'] ?? '');
+      final dateA = DateTime.tryParse(a['date'] ?? '');
+      final dateB = DateTime.tryParse(b['date'] ?? '');
       if (dateA == null || dateB == null) return 0;
-      return _sortOrder == 'desc'
-          ? dateB.compareTo(dateA)
-          : dateA.compareTo(dateB);
+      return dateB.compareTo(dateA);
     });
-
+    
     return allRecords;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
-        ),
-      );
-    }
+    final records = _getFilteredRecords();
+    final totalCount = _ultrasounds.length + _labTests.length + _prenatalCheckups.length;
+    final filteredCount = records.length;
 
-    if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  shape: BoxShape.circle,
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+
+            // Stats Card with Pink Background Image
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              height: 110,
+              decoration: BoxDecoration(
+                image: const DecorationImage(
+                  image: AssetImage('assets/images/pinkbg.png'),
+                  fit: BoxFit.cover,
                 ),
-                child: const Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: Colors.red,
-                ),
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(height: 16),
-              const Headline(text: 'Failed to Load Records'),
-              const SizedBox(height: 8),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    top: 0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
+                      child: Image.asset(
+                        'assets/images/records.png',
+                        height: 100,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.folder,
+                          size: 80,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 24,
+                    top: 0,
+                    bottom: 0,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'You have',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        Text(
+                          '$totalCount Medical ${totalCount == 1 ? 'Record' : 'Records'}',
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.brandPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 24),
-              MainButton(
-                label: 'Retry',
-                onPressed: _loadMotherData,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final allRecords = _getFilteredAndSortedRecords();
-
-    return Column(
-      children: [
-        Container(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            indicatorColor: AppColors.brandPrimary,
-            labelColor: AppColors.brandPrimary,
-            unselectedLabelColor: AppColors.textSecondary,
-            tabs: const [
-              Tab(text: 'All Records'),
-              Tab(text: 'Statistics'),
-            ],
-          ),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildRecordsTab(allRecords),
-              _buildStatisticsTab(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+            ),
 
   Widget _buildRecordsTab(List<Map<String, dynamic>> allRecords) {
     return Column(
@@ -1829,88 +1880,6 @@ class _RecordsScreenState extends State<RecordsScreen>
                   ],
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-      String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const Spacer(),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton(
-      String label, IconData icon, Color color, VoidCallback onTap) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color.withOpacity(0.1),
-        foregroundColor: color,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 16),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
             ),
           ),
         ],

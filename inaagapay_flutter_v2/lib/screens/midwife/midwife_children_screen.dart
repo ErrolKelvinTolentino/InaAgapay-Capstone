@@ -1,12 +1,10 @@
-// lib/screens/midwife/midwife_children_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../services/auth_storage.dart';
 import 'child_profile_page.dart';
-import 'add_child_step3_child.dart';
+import 'add_child_choice.dart';
 
 class MidwifeChildrenScreen extends StatefulWidget {
   const MidwifeChildrenScreen({super.key});
@@ -17,7 +15,7 @@ class MidwifeChildrenScreen extends StatefulWidget {
 
 class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
   final TextEditingController _searchController = TextEditingController();
-
+  
   List<Map<String, dynamic>> _children = [];
   List<Map<String, dynamic>> _filteredChildren = [];
   bool _loading = true;
@@ -41,7 +39,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     try {
       final accountId = await AuthStorage.getUserId();
       if (accountId == null) throw Exception('Not authenticated');
-
+      
       final result = await Supabase.instance.client
           .from('midwives')
           .select('midwife_id, assigned_bhc_id')
@@ -49,7 +47,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
           .single();
 
       _assignedBhcId = result['assigned_bhc_id'] as int;
-
+      
       await _fetchChildren();
     } catch (e) {
       setState(() {
@@ -61,33 +59,60 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
 
   Future<void> _fetchChildren() async {
     if (_assignedBhcId == null) return;
-
+    
     setState(() {
       _loading = true;
       _errorMessage = null;
     });
 
     try {
+      // Get all mothers in this BHC
       final mothersResponse = await Supabase.instance.client
           .from('mothers')
           .select('mother_id')
           .eq('assigned_bhc_id', _assignedBhcId!);
-
+      
       final List<int> motherIds = [];
       for (var mother in mothersResponse) {
         motherIds.add(mother['mother_id'] as int);
       }
-
-      if (motherIds.isEmpty) {
-        setState(() {
-          _children = [];
-          _filteredChildren = [];
-          _loading = false;
-        });
-        return;
+      
+      // Fetch children linked to mothers (existing)
+      List<Map<String, dynamic>> childrenList = [];
+      
+      // Get children linked to registered mothers in this BHC
+      if (motherIds.isNotEmpty) {
+        final childrenWithMother = await Supabase.instance.client
+            .from('children')
+            .select('''
+              *,
+              mother:mother_id (
+                mother_id,
+                account:account_id (
+                  first_name,
+                  last_name
+                )
+              ),
+              guardian:guardian_id (
+                guardian_id,
+                first_name,
+                last_name,
+                relationship
+              ),
+              birth_details (
+                birthdate,
+                birth_weight,
+                birth_length
+              )
+            ''')
+            .inFilter('mother_id', motherIds);
+        
+        childrenList.addAll(List<Map<String, dynamic>>.from(childrenWithMother));
       }
-
-      final childrenResponse = await Supabase.instance.client
+      
+      // ALSO get children linked to guardians (these may not have a mother_id)
+      // Using filter with 'not' condition
+      final childrenWithGuardianOnly = await Supabase.instance.client
           .from('children')
           .select('''
             *,
@@ -98,21 +123,52 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                 last_name
               )
             ),
+            guardian:guardian_id (
+              guardian_id,
+              first_name,
+              last_name,
+              relationship
+            ),
             birth_details (
               birthdate,
               birth_weight,
               birth_length
             )
           ''')
-          .inFilter('mother_id', motherIds)
-          .order('added_at', ascending: false);
-
+          .filter('mother_id', 'is', null)
+          .not('guardian_id', 'is', null);
+      
+      childrenList.addAll(List<Map<String, dynamic>>.from(childrenWithGuardianOnly));
+      
+      // Remove duplicates (just in case)
+      final seenIds = <int>{};
+      childrenList = childrenList.where((child) {
+        final id = child['child_id'] as int;
+        if (seenIds.contains(id)) return false;
+        seenIds.add(id);
+        return true;
+      }).toList();
+      
+      // Sort by added date (newest first)
+      childrenList.sort((a, b) {
+        final dateA = DateTime.tryParse(a['added_at'] ?? '');
+        final dateB = DateTime.tryParse(b['added_at'] ?? '');
+        if (dateA == null || dateB == null) return 0;
+        return dateB.compareTo(dateA);
+      });
+      
       setState(() {
-        _children = List<Map<String, dynamic>>.from(childrenResponse);
-        _filteredChildren = List<Map<String, dynamic>>.from(childrenResponse);
+        _children = childrenList;
+        _filteredChildren = childrenList;
         _loading = false;
       });
+      
+      debugPrint('Total children loaded: ${childrenList.length}');
+      debugPrint('Children with mothers: ${childrenList.where((c) => c['mother_id'] != null).length}');
+      debugPrint('Children with guardians only: ${childrenList.where((c) => c['guardian_id'] != null && c['mother_id'] == null).length}');
+      
     } catch (e) {
+      debugPrint('Error fetching children: $e');
       setState(() {
         _errorMessage = e.toString();
         _loading = false;
@@ -129,13 +185,10 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     } else {
       setState(() {
         _filteredChildren = _children.where((child) {
-          final firstName =
-              (child['first_name'] ?? '').toString().toLowerCase();
+          final firstName = (child['first_name'] ?? '').toString().toLowerCase();
           final lastName = (child['last_name'] ?? '').toString().toLowerCase();
           final fullName = '$firstName $lastName';
-          return fullName.contains(query) ||
-              firstName.contains(query) ||
-              lastName.contains(query);
+          return fullName.contains(query) || firstName.contains(query) || lastName.contains(query);
         }).toList();
       });
     }
@@ -146,106 +199,41 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     final now = DateTime.now();
     int years = now.year - birthdate.year;
     int months = now.month - birthdate.month;
-
+    
     if (months < 0) {
       years--;
       months += 12;
     }
-
+    
     if (years <= 0) {
       return '$months month${months != 1 ? 's' : ''} old';
     } else {
-      return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'
-          .trim();
+      return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'.trim();
     }
   }
 
-  String _getMotherName(Map<String, dynamic> child) {
+  String _getParentName(Map<String, dynamic> child) {
+    // Check if linked to registered mother
     final mother = child['mother'] as Map<String, dynamic>?;
-    if (mother == null) return 'Unknown';
-    final account = mother['account'] as Map<String, dynamic>?;
-    if (account == null) return 'Unknown';
-    final firstName = account['first_name']?.toString() ?? '';
-    final lastName = account['last_name']?.toString() ?? '';
-    return '$firstName $lastName'.trim();
-  }
-
-  Future<void> _addChild() async {
-    if (_assignedBhcId == null) return;
-
-    final mothersResponse = await Supabase.instance.client
-        .from('mothers')
-        .select('mother_id, account:account_id (first_name, last_name)')
-        .eq('assigned_bhc_id', _assignedBhcId!);
-
-    if (mothersResponse.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('No mothers found in your BHC. Please add a mother first.'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
-
-    final List<Map<String, dynamic>> mothers = List.from(mothersResponse);
-
-    final int? selectedMotherId = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Select Mother'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300,
-          child: ListView.builder(
-            itemCount: mothers.length,
-            itemBuilder: (ctx, index) {
-              final mother = mothers[index];
-              final account = mother['account'] as Map<String, dynamic>?;
-              final name = account != null
-                  ? '${account['first_name'] ?? ''} ${account['last_name'] ?? ''}'
-                      .trim()
-                  : 'Mother ${mother['mother_id']}';
-              final motherIdValue = mother['mother_id'] as int;
-              return ListTile(
-                title: Text(name),
-                onTap: () => Navigator.pop(ctx, motherIdValue),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-
-    if (selectedMotherId != null && mounted) {
-      final selectedMother =
-          mothers.firstWhere((m) => m['mother_id'] == selectedMotherId);
-      final account = selectedMother['account'] as Map<String, dynamic>?;
-      final motherFirstName =
-          account != null ? (account['first_name']?.toString() ?? '') : '';
-
-      final result = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AddChildStep3Child(
-            motherId: selectedMotherId,
-            isExistingMother: true,
-            motherFirstName: motherFirstName,
-          ),
-        ),
-      );
-      if (result == true && mounted) {
-        _fetchChildren();
+    if (mother != null) {
+      final account = mother['account'] as Map<String, dynamic>?;
+      if (account != null) {
+        final firstName = account['first_name']?.toString() ?? '';
+        final lastName = account['last_name']?.toString() ?? '';
+        return 'Mother: $firstName $lastName';
       }
     }
+    
+    // Check if linked to guardian
+    final guardian = child['guardian'] as Map<String, dynamic>?;
+    if (guardian != null) {
+      final firstName = guardian['first_name']?.toString() ?? '';
+      final lastName = guardian['last_name']?.toString() ?? '';
+      final relationship = guardian['relationship']?.toString() ?? 'Guardian';
+      return '$relationship: $firstName $lastName';
+    }
+    
+    return 'No parent record';
   }
 
   @override
@@ -277,8 +265,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                     bottom: 0,
                     top: 0,
                     child: Padding(
-                      padding: const EdgeInsets.only(
-                          right: 16.0, top: 4.0, bottom: 4.0),
+                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
                       child: Image.asset(
                         'assets/images/baby.png',
                         fit: BoxFit.contain,
@@ -407,7 +394,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     const Text(
-                                      'Children will appear here once registered',
+                                      'Tap the + button to add a child',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: AppColors.textSecondary,
@@ -417,32 +404,29 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                                 ),
                               )
                             : ListView.separated(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                                 itemCount: _filteredChildren.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 12),
+                                separatorBuilder: (_, __) => const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final child = _filteredChildren[index];
-                                  final firstName =
-                                      child['first_name']?.toString() ?? '';
-                                  final lastName =
-                                      child['last_name']?.toString() ?? '';
-                                  final birthDetails = child['birth_details']
-                                      as Map<String, dynamic>?;
-                                  final birthdate = birthDetails != null &&
-                                          birthDetails['birthdate'] != null
-                                      ? DateTime.parse(
-                                          birthDetails['birthdate'])
+                                  final firstName = child['first_name']?.toString() ?? '';
+                                  final lastName = child['last_name']?.toString() ?? '';
+                                  final birthDetails = child['birth_details'] as Map<String, dynamic>?;
+                                  final birthdate = birthDetails != null && birthDetails['birthdate'] != null
+                                      ? DateTime.parse(birthDetails['birthdate'])
                                       : null;
                                   final age = _formatAge(birthdate);
-                                  final motherName = _getMotherName(child);
-
+                                  final parentName = _getParentName(child);
+                                  
+                                  // Determine badge color based on parent type
+                                  final isGuardianChild = child['guardian_id'] != null && child['mother_id'] == null;
+                                  
                                   return _ChildCard(
                                     firstName: firstName,
                                     lastName: lastName,
                                     age: age,
-                                    motherName: motherName,
+                                    parentName: parentName,
+                                    isGuardianChild: isGuardianChild,
                                     onTap: () {
                                       Navigator.push(
                                         context,
@@ -464,7 +448,17 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addChild,
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AddChildChoicePage(),
+            ),
+          );
+          if (result == true && mounted) {
+            _fetchChildren();
+          }
+        },
         backgroundColor: AppColors.brandPrimary,
         foregroundColor: Colors.white,
         tooltip: 'Add Child',
@@ -478,14 +472,16 @@ class _ChildCard extends StatelessWidget {
   final String firstName;
   final String lastName;
   final String age;
-  final String motherName;
+  final String parentName;
+  final bool isGuardianChild;
   final VoidCallback onTap;
 
   const _ChildCard({
     required this.firstName,
     required this.lastName,
     required this.age,
-    required this.motherName,
+    required this.parentName,
+    required this.isGuardianChild,
     required this.onTap,
   });
 
@@ -527,12 +523,14 @@ class _ChildCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 16, 20, 16),
               child: Row(
                 children: [
-                  // Avatar - Pink background with pink text initials (matching mother list)
+                  // Avatar - Different color for guardian children
                   Container(
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                      color: isGuardianChild
+                          ? AppColors.success.withValues(alpha: 0.3)
+                          : AppColors.brandPrimary.withValues(alpha: 0.3),
                       shape: BoxShape.circle,
                     ),
                     child: Center(
@@ -541,27 +539,56 @@ class _ChildCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.brandPrimary,
+                          color: isGuardianChild
+                              ? AppColors.success
+                              : AppColors.brandPrimary,
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 16),
-
+                  
                   // Child Info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          fullName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                            color: AppColors.textPrimary,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                fullName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            if (isGuardianChild) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.success.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppColors.success.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Guardian',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.success,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -574,15 +601,15 @@ class _ChildCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            const Icon(
-                              Icons.person_outline,
+                            Icon(
+                              isGuardianChild ? Icons.person_outline : Icons.pregnant_woman,
                               size: 12,
                               color: AppColors.textSecondary,
                             ),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
-                                motherName,
+                                parentName,
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: AppColors.textSecondary,
@@ -595,7 +622,7 @@ class _ChildCard extends StatelessWidget {
                       ],
                     ),
                   ),
-
+                  
                   // Arrow
                   const Icon(
                     Icons.chevron_right,

@@ -1,5 +1,5 @@
 // lib/screens/auth/mother_registration.dart
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
@@ -30,6 +30,9 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
+  bool _emailExists = false;
+  bool _checkingEmail = false;
+  Timer? _emailTimer;
 
   late final AnimationController _shakeController;
   late final Animation<double> _shakeAnimation;
@@ -43,6 +46,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
     _passwordController.addListener(() => setState(() {}));
     _confirmPasswordController.addListener(() => setState(() {}));
+    _emailController.addListener(_onEmailChanged);
 
     _shakeController = AnimationController(
       vsync: this,
@@ -61,11 +65,45 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
   @override
   void dispose() {
+    _emailTimer?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _shakeController.dispose();
     super.dispose();
+  }
+
+  void _onEmailChanged() {
+    _emailTimer?.cancel();
+    final email = _emailController.text.trim();
+    
+    if (email.isEmpty) {
+      setState(() {
+        _emailExists = false;
+        _checkingEmail = false;
+      });
+      return;
+    }
+    
+    final isValid = RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
+    if (!isValid) {
+      setState(() {
+        _emailExists = false;
+        _checkingEmail = false;
+      });
+      return;
+    }
+    
+    setState(() => _checkingEmail = true);
+    _emailTimer = Timer(const Duration(milliseconds: 500), () async {
+      final exists = await SupabaseService.isEmailAvailable(email);
+      if (mounted) {
+        setState(() {
+          _emailExists = !exists;
+          _checkingEmail = false;
+        });
+      }
+    });
   }
 
   PasswordStrength _calculateStrength(String password) {
@@ -85,6 +123,8 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
   }
 
+  bool get _isEmailAvailable => !_emailExists && _isEmailValid;
+
   bool get _passwordsMatch =>
       _confirmPasswordController.text.isNotEmpty &&
       _passwordController.text == _confirmPasswordController.text;
@@ -93,10 +133,11 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       _confirmPasswordController.text.isNotEmpty && !_passwordsMatch;
 
   bool get _canSubmit =>
-      _isEmailValid &&
+      _isEmailAvailable &&
       _calculateStrength(_passwordController.text) == PasswordStrength.strong &&
       _passwordsMatch &&
-      !_isLoading;
+      !_isLoading &&
+      !_checkingEmail;
 
   Future<void> _handleSubmit() async {
     if (!_canSubmit) {
@@ -107,7 +148,6 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     setState(() => _isLoading = true);
 
     try {
-      // ✅ CHANGED: Use registerWithOTP instead of register
       final result = await SupabaseService.registerWithOTP(
         _emailController.text.trim(),
         _passwordController.text,
@@ -118,7 +158,6 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       if (!mounted) return;
 
       if (result['success'] == true) {
-        // Show success dialog
         await showDialog(
           context: context,
           barrierDismissible: false,
@@ -132,7 +171,6 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
         );
 
         if (mounted) {
-          // Navigate to verification screen
           Navigator.pushNamed(
             context,
             '/verify-registration',
@@ -140,7 +178,6 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
           );
         }
       } else {
-        // Show error
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message'] ?? 'Registration failed'),
@@ -217,10 +254,16 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                           if (_emailController.text.isEmpty) {
                             return const SizedBox.shrink();
                           }
+                          if (_checkingEmail) {
+                            return _infoRow('Checking email availability...', isInfo: true);
+                          }
+                          if (_emailExists) {
+                            return _errorRow('Email already exists');
+                          }
                           if (!_isEmailValid) {
                             return _errorRow('Enter a valid email address');
                           }
-                          return _successRow('Email looks good');
+                          return _successRow('Email is available');
                         },
                       ),
                     ),
@@ -412,6 +455,28 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
           child: Text(
             text, 
             style: const TextStyle(fontSize: 13, color: AppColors.success),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow(String text, {bool isInfo = true}) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 13,
+          height: 13,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: AppColors.brandAccent,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text, 
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
         ),
       ],

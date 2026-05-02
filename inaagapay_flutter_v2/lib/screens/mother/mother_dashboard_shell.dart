@@ -1,6 +1,7 @@
 // lib/screens/mother/mother_dashboard_shell.dart
 
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
@@ -23,6 +24,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
   String? _profilePictureUrl;
   int? _motherId;
   final ImagePicker _picker = ImagePicker();
+  
+  bool _showBHCRequiredDialog = false;
 
   final List<Widget> _screens = const [
     MotherDashboard(),
@@ -41,11 +44,182 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
   @override
   void initState() {
     super.initState();
-    _loadProfilePicture();
+    _loadMotherData();
+  }
+
+  Future<void> _loadMotherData() async {
+    _motherId = await AuthStorage.getMotherId();
+    if (_motherId != null) {
+      final url = await SupabaseService.getProfilePictureUrl(_motherId!);
+      if (mounted) {
+        setState(() {
+          _profilePictureUrl = url;
+        });
+      }
+    } else {
+      _checkAndShowBHCRequiredDialog();
+    }
+  }
+
+  Future<void> _checkAndShowBHCRequiredDialog() async {
+    if (_showBHCRequiredDialog) return;
+    
+    final accountId = await AuthStorage.getUserId();
+    if (accountId == null) return;
+    
+    try {
+      final motherResponse = await SupabaseService.client
+          .from('mothers')
+          .select('mother_id, assigned_bhc_id')
+          .eq('account_id', accountId)
+          .maybeSingle();
+      
+      if (motherResponse == null || motherResponse['assigned_bhc_id'] == null) {
+        _showBHCRequiredDialog = true;
+        if (mounted) {
+          await _showBHCRequiredMessage();
+        }
+      } else {
+        final motherId = motherResponse['mother_id'] as int;
+        await AuthStorage.saveMotherId(motherId);
+        setState(() {
+          _motherId = motherId;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error checking mother record: $e');
+    }
+  }
+
+  Future<void> _showBHCRequiredMessage() async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.info_outline_rounded,
+                  size: 48,
+                  color: AppColors.warning,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Account Setup Incomplete',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Your account has been created but needs to be linked to a Barangay Health Center (BHC) before you can fully access the system.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.medical_services_outlined,
+                      size: 20,
+                      color: AppColors.brandPrimary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Please visit your Barangay Health Center (BHC) and ask a midwife to complete your account registration.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.brandPrimary,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _logout();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        side: const BorderSide(color: AppColors.borderPrimary),
+                      ),
+                      child: const Text('Logout'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.brandPrimary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: const Text('Continue'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _logout() async {
+    await AuthStorage.clearAll();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
   Future<void> _loadProfilePicture() async {
-    _motherId = await AuthStorage.getMotherId();
     if (_motherId != null) {
       final url = await SupabaseService.getProfilePictureUrl(_motherId!);
       if (mounted) {
@@ -56,171 +230,17 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     }
   }
 
-  Future<void> _logout() async {
-    await AuthStorage.clearAll();
-    if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-  }
-
-  void _showProfileMenu(BuildContext context) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry entry;
-
-    entry = OverlayEntry(
-      builder: (_) => Stack(
-        children: [
-          GestureDetector(
-            onTap: () => entry.remove(),
-            child: Container(
-              color: Colors.black.withOpacity(0.35),
-            ),
-          ),
-          Positioned(
-            top: 90,
-            right: 16,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: 200,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    _MenuItem(
-                      icon: Icons.photo_camera_outlined,
-                      label: 'Change Profile Picture',
-                      onTap: () {
-                        entry.remove();
-                        _showChangePhotoDialog(context);
-                      },
-                    ),
-                    _MenuItem(
-                      icon: Icons.person_outline,
-                      label: 'View Profile',
-                      onTap: () {
-                        entry.remove();
-                        if (_motherId != null && mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  MotherProfilePage(motherId: _motherId!),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                    _MenuItem(
-                      icon: Icons.settings_outlined,
-                      label: 'Settings',
-                      onTap: () {
-                        entry.remove();
-                        Navigator.pushNamed(context, '/settings');
-                      },
-                    ),
-                    _MenuItem(
-                      icon: Icons.help_outline,
-                      label: 'Help',
-                      onTap: () {
-                        entry.remove();
-                        Navigator.pushNamed(context, '/help');
-                      },
-                    ),
-                    const Divider(height: 8),
-                    _MenuItem(
-                      icon: Icons.logout_rounded,
-                      label: 'Log out',
-                      isDanger: true,
-                      onTap: () {
-                        entry.remove();
-                        _confirmLogout(context);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    overlay.insert(entry);
-  }
-
-  void _showChangePhotoDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change Profile Picture'),
-        content: const Text('Would you like to change your profile picture?'),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('No'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showImageSourceDialog(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandPrimary,
-            ),
-            child: const Text('Yes'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showImageSourceDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Choose Source'),
-        content: const Text('Select where to get your photo from:'),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _pickImage(ImageSource.gallery);
-            },
-            icon: const Icon(Icons.photo_library),
-            label: const Text('Gallery'),
-          ),
-          TextButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _pickImage(ImageSource.camera);
-            },
-            icon: const Icon(Icons.camera_alt),
-            label: const Text('Camera'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _pickImage(ImageSource source) async {
+    if (_motherId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please complete your account setup with a midwife first.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+    
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
@@ -230,7 +250,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
       );
 
       if (image != null && _motherId != null) {
-        // Show loading
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -240,12 +259,11 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
         );
 
         final bytes = await image.readAsBytes();
-        final url =
-            await SupabaseService.uploadProfilePicture(_motherId!, bytes);
+        final url = await SupabaseService.uploadProfilePicture(_motherId!, bytes);
 
         if (mounted) {
-          Navigator.pop(context); // Close loading
-
+          Navigator.pop(context);
+          
           if (url != null) {
             setState(() {
               _profilePictureUrl = url;
@@ -269,6 +287,147 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
         );
       }
     }
+  }
+
+  void _showProfileMenu(BuildContext context) {
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          GestureDetector(
+            onTap: () => entry.remove(),
+            child: Container(
+              color: Colors.black.withOpacity(0.35),
+            ),
+          ),
+          Positioned(
+            top: 80,
+            right: 16,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 220,  // ← FIXED: Increased width slightly
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,  // ← FIXED: Use min size
+                  children: [
+                    _MenuItem(
+                      icon: Icons.photo_camera_outlined,
+                      label: 'Change Photo',
+                      onTap: () {
+                        entry.remove();
+                        _showImageSourceDialog(context);
+                      },
+                    ),
+                    _MenuItem(
+                      icon: Icons.person_outline,
+                      label: 'View Profile',
+                      onTap: () {
+                        entry.remove();
+                        if (_motherId != null && mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MotherProfilePage(motherId: _motherId!),
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please complete your account setup with a midwife first.'),
+                              backgroundColor: AppColors.warning,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    _MenuItem(
+                      icon: Icons.settings_outlined,
+                      label: 'Settings',
+                      onTap: () {
+                        entry.remove();
+                        Navigator.pushNamed(context, '/settings');
+                      },
+                    ),
+                    _MenuItem(
+                      icon: Icons.help_outline,
+                      label: 'Help',
+                      onTap: () {
+                        entry.remove();
+                        Navigator.pushNamed(context, '/help');
+                      },
+                    ),
+                    const Divider(height: 1, thickness: 1),  // ← FIXED: Thinner divider
+                    _MenuItem(
+                      icon: Icons.logout_rounded,
+                      label: 'Log out',
+                      isDanger: true,
+                      onTap: () {
+                        entry.remove();
+                        _confirmLogout(context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    overlay.insert(entry);
+  }
+
+  void _showImageSourceDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choose Source'),
+        content: const Text('Select where to get your photo from:'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickImage(ImageSource.gallery);
+            },
+            icon: const Icon(Icons.photo_library, size: 18),
+            label: const Text('Gallery'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.brandPrimary,
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickImage(ImageSource.camera);
+            },
+            icon: const Icon(Icons.camera_alt, size: 18),
+            label: const Text('Camera'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.brandPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmLogout(BuildContext context) {
@@ -377,10 +536,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                     child: Image.asset(
                       'assets/images/logo.png',
                       height: 36,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.favorite,
-                          color: AppColors.brandPrimary,
-                          size: 30),
+                      errorBuilder: (context, error, stackTrace) => 
+                        const Icon(Icons.favorite, color: AppColors.brandPrimary, size: 30),
                     ),
                   ),
                   Text(
@@ -431,7 +588,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 ],
               ),
             ),
-
+            
             // Content
             Expanded(
               child: IndexedStack(
@@ -513,8 +670,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color =
-        isActive ? AppColors.brandPrimary : AppColors.textSecondary;
+    final Color color = isActive ? AppColors.brandPrimary : AppColors.textSecondary;
 
     return GestureDetector(
       onTap: onTap,
@@ -577,12 +733,14 @@ class _MenuItem extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: color,
+            Expanded(  // ← FIXED: Added Expanded to prevent overflow
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
               ),
             ),
           ],

@@ -1,5 +1,3 @@
-// lib/screens/midwife/child_profile_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -35,6 +33,8 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
   Map<String, dynamic>? birthData;
   Map<String, dynamic>? latestGrowth;
   List<Map<String, dynamic>> immunizations = [];
+  Map<String, dynamic>? guardianData;
+  bool hasGuardian = false;
 
   @override
   void initState() {
@@ -46,7 +46,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
     setState(() => loading = true);
 
     try {
-      // Fetch child details with mother info
       final childResponse = await Supabase.instance.client
           .from('children')
           .select('''
@@ -58,14 +57,30 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                 last_name,
                 middle_name
               )
+            ),
+            guardian:guardian_id (
+              guardian_id,
+              first_name,
+              last_name,
+              middle_name,
+              extension_name,
+              phone_number,
+              address,
+              relationship
             )
           ''')
           .eq('child_id', widget.childId)
           .single();
 
       childData = childResponse;
+      
+      final guardian = childResponse['guardian'] as Map<String, dynamic>?;
+      hasGuardian = guardian != null && childResponse['mother_id'] == null;
+      
+      if (hasGuardian && guardian != null) {
+        guardianData = guardian;
+      }
 
-      // Fetch birth details
       final birthResponse = await Supabase.instance.client
           .from('birth_details')
           .select('*')
@@ -74,7 +89,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
 
       birthData = birthResponse;
 
-      // Fetch latest growth record
       final growthResponse = await Supabase.instance.client
           .from('child_details')
           .select('*')
@@ -85,7 +99,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
 
       latestGrowth = growthResponse;
 
-      // Fetch recent immunizations (last 5)
       final immunizationResponse = await Supabase.instance.client
           .from('immunization_record')
           .select('''
@@ -149,28 +162,55 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
     }
   }
 
-  String getMotherName() {
+  String getParentName() {
+    if (hasGuardian && guardianData != null) {
+      final firstName = guardianData!['first_name']?.toString() ?? '';
+      final lastName = guardianData!['last_name']?.toString() ?? '';
+      final relationship = guardianData!['relationship']?.toString() ?? 'Guardian';
+      return '$firstName $lastName';
+    }
+    
     final mother = childData?['mother'] as Map<String, dynamic>?;
-    if (mother == null) return 'Unknown';
-    final account = mother['account'] as Map<String, dynamic>?;
-    if (account == null) return 'Unknown';
-    final firstName = account['first_name']?.toString() ?? '';
-    final lastName = account['last_name']?.toString() ?? '';
-    return '$firstName $lastName'.trim();
+    if (mother != null) {
+      final account = mother['account'] as Map<String, dynamic>?;
+      if (account != null) {
+        final firstName = account['first_name']?.toString() ?? '';
+        final lastName = account['last_name']?.toString() ?? '';
+        return '$firstName $lastName';
+      }
+    }
+    
+    return 'Unknown';
+  }
+
+  String getParentRelationship() {
+    if (hasGuardian && guardianData != null) {
+      return guardianData!['relationship']?.toString() ?? 'Guardian';
+    }
+    return 'Mother';
+  }
+
+  String getGuardianPhone() {
+    if (hasGuardian && guardianData != null) {
+      return guardianData!['phone_number']?.toString() ?? 'Not recorded';
+    }
+    return 'Not recorded';
+  }
+
+  String getGuardianAddress() {
+    if (hasGuardian && guardianData != null) {
+      return guardianData!['address']?.toString() ?? 'Not recorded';
+    }
+    return 'Not recorded';
   }
 
   String getBirthPlace() {
     final city = birthData?['birthplace_city_municipality']?.toString() ?? '';
     final province = birthData?['birthplace_province']?.toString() ?? '';
+    final facility = birthData?['birthplace_facility']?.toString() ?? '';
     
-    if (city.isNotEmpty && province.isNotEmpty) {
-      return '$city, $province';
-    } else if (city.isNotEmpty) {
-      return city;
-    } else if (province.isNotEmpty) {
-      return province;
-    }
-    return 'Not recorded';
+    final parts = [facility, city, province].where((p) => p.isNotEmpty);
+    return parts.isNotEmpty ? parts.join(', ') : 'Not recorded';
   }
 
   @override
@@ -224,6 +264,8 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
     final age = calculateAge();
     final sex = (childData!['sex'] ?? '').toString().toUpperCase();
     final birthPlace = getBirthPlace();
+    final parentName = getParentName();
+    final parentRelationship = getParentRelationship();
 
     final displayHeight = latestGrowth != null
         ? '${(latestGrowth!['child_height'] as num?)?.toStringAsFixed(1) ?? '0'} cm'
@@ -258,6 +300,99 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
 
               const SizedBox(height: 24),
 
+              // Parent/Guardian Card
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: hasGuardian 
+                      ? AppColors.success.withValues(alpha: 0.08)
+                      : AppColors.brandPrimary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: hasGuardian
+                        ? AppColors.success.withValues(alpha: 0.3)
+                        : AppColors.brandPrimary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: hasGuardian 
+                                ? AppColors.success.withValues(alpha: 0.15)
+                                : AppColors.brandPrimary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            hasGuardian ? Icons.person_outline : Icons.pregnant_woman,
+                            color: hasGuardian ? AppColors.success : AppColors.brandPrimary,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          hasGuardian ? 'Guardian Information' : 'Mother Information',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: hasGuardian ? AppColors.success : AppColors.brandPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Name Row
+                    _buildParentInfoCard(
+                      icon: Icons.person_outline,
+                      label: 'Name',
+                      value: parentName,
+                      color: hasGuardian ? AppColors.success : AppColors.brandPrimary,
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Relationship Row
+                    _buildParentInfoCard(
+                      icon: Icons.family_restroom,
+                      label: 'Relationship',
+                      value: parentRelationship,
+                      color: hasGuardian ? AppColors.success : AppColors.brandPrimary,
+                    ),
+                    
+                    if (hasGuardian) ...[
+                      const SizedBox(height: 12),
+                      
+                      // Phone Row
+                      _buildParentInfoCard(
+                        icon: Icons.phone_outlined,
+                        label: 'Phone',
+                        value: getGuardianPhone(),
+                        color: hasGuardian ? AppColors.success : AppColors.brandPrimary,
+                      ),
+                      
+                      if (getGuardianAddress() != 'Not recorded') ...[
+                        const SizedBox(height: 12),
+                        
+                        // Address Row
+                        _buildParentInfoCard(
+                          icon: Icons.location_on_outlined,
+                          label: 'Address',
+                          value: getGuardianAddress(),
+                          color: hasGuardian ? AppColors.success : AppColors.brandPrimary,
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+
               // Birth Details Card
               RecordsDisplayCard(
                 title: 'Birth Details',
@@ -286,11 +421,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                     value: birthData?['head_circumference'] != null
                         ? '${birthData!['head_circumference']} cm'
                         : 'Not recorded',
-                  ),
-                  RecordItem(
-                    leadingIcon: Icons.person_outline,
-                    label: 'Mother',
-                    value: getMotherName(),
                   ),
                 ],
               ),
@@ -456,6 +586,64 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildParentInfoCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              size: 16,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: color.withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

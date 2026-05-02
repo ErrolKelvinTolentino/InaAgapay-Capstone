@@ -1,6 +1,7 @@
+// lib/screens/auth/account_verification_registration.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
-// Change these:
 import '../../theme/app_colors.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/otp_input_field.dart';
@@ -30,6 +31,7 @@ class _AccountVerificationRegistrationState
   String _code = '';
   bool _hasError = false;
   bool _isVerifying = false;
+  String _errorMessage = '';
 
   @override
   void didChangeDependencies() {
@@ -58,9 +60,18 @@ class _AccountVerificationRegistrationState
   }
 
   Future<void> _verifyCode() async {
+    if (_code.length != 6) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Please enter the 6-digit verification code';
+      });
+      return;
+    }
+
     setState(() {
       _isVerifying = true;
       _hasError = false;
+      _errorMessage = '';
     });
 
     final success = await SupabaseService.verifyCode(email, _code);
@@ -70,6 +81,9 @@ class _AccountVerificationRegistrationState
     setState(() {
       _isVerifying = false;
       _hasError = !success;
+      if (!success) {
+        _errorMessage = 'Incorrect or expired code. Please try again.';
+      }
     });
 
     if (success) {
@@ -77,8 +91,8 @@ class _AccountVerificationRegistrationState
         context: context,
         barrierDismissible: false,
         builder: (_) => DialogBox(
-          title: 'Verification Successful',
-          content: 'Your account has been verified. You can now log in.',
+          title: 'Account Verified!',
+          content: 'Your account has been successfully created and verified. You can now log in.',
           buttonText: 'Go to Login',
           type: DialogType.success,
           onPressed: () {
@@ -138,7 +152,7 @@ class _AccountVerificationRegistrationState
             children: [
               const SizedBox(height: 32),
               
-              // App Name (text instead of image)
+              // App Name
               const Text(
                 'Inaagapay',
                 style: TextStyle(
@@ -167,15 +181,16 @@ class _AccountVerificationRegistrationState
                   setState(() {
                     _code = value;
                     _hasError = false;
+                    _errorMessage = '';
                   });
                 },
                 showError: _hasError,
               ),
               if (_hasError)
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
                   child: ValidationMessage(
-                    message: 'Incorrect or expired code. Please try again.',
+                    message: _errorMessage,
                     type: ValidationType.error,
                   ),
                 ),
