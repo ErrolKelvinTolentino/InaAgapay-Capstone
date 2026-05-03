@@ -1269,7 +1269,15 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          _buildFormattedAiText(lines.join('\n')),
+          _buildFormattedAiText(lines.map((line) {
+            String cleaned = line.trim();
+            if (RegExp(r'^[A-Z_]+$').hasMatch(cleaned)) {
+              cleaned = cleaned.replaceAll('_', ' ').split(' ').map((word) => 
+                word.isEmpty ? '' : '${word[0]}${word.substring(1).toLowerCase()}'
+              ).join(' ');
+            }
+            return cleaned;
+          }).join('\n')),
         ],
       ),
     );

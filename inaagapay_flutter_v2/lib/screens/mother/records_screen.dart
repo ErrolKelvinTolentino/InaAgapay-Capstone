@@ -979,7 +979,12 @@ class _RecordsScreenState extends State<RecordsScreen>
           ),
           const SizedBox(height: 8),
           ...lines.map((line) {
-            final cleaned = line.replaceFirst(RegExp(r'^[-*]\s*'), '').trim();
+            String cleaned = line.replaceFirst(RegExp(r'^[-*]\s*'), '').trim();
+            if (RegExp(r'^[A-Z_]+$').hasMatch(cleaned)) {
+              cleaned = cleaned.replaceAll('_', ' ').split(' ').map((word) => 
+                word.isEmpty ? '' : '${word[0]}${word.substring(1).toLowerCase()}'
+              ).join(' ');
+            }
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: _buildFormattedAiText(cleaned),
