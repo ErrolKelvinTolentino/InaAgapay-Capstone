@@ -6,8 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
-import '../../services/gemini_service.dart';
-import '../../models/gemini_response.dart';
+import '../../services/groq_service.dart';
+import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/progressive_step_indicator.dart';
@@ -26,7 +26,7 @@ class AddLabTestPage extends StatefulWidget {
 
 class _AddLabTestPageState extends State<AddLabTestPage> {
   final ImagePicker _picker = ImagePicker();
-  final GeminiService _geminiService = GeminiService();
+  final GroqService _groqService = GroqService();
   final TextEditingController _notesCtrl = TextEditingController();
 
   DateTime? _date;
@@ -369,7 +369,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     return 'UNKNOWN';
   }
 
-  String _buildConciseLabInsight(GeminiResponse result) {
+  String _buildConciseLabInsight(GroqResponse result) {
     final lines = <String>[];
 
     final assessment = (result.overallAssessment ?? '').trim();
@@ -619,7 +619,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
         'Image count: ${_images.length}',
       ].join('\n');
 
-      final result = await _geminiService.analyzeLabTestImages(
+      final result = await _groqService.analyzeLabTestImages(
         _images,
         selectedLabType: _selectedLabType,
         notes: _notesCtrl.text.trim(),

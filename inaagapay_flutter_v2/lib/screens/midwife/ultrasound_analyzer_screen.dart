@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/gemini_service.dart';
+import '../../services/groq_service.dart';
 import '../../services/auth_storage.dart';
-import '../../models/gemini_response.dart';
+import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/main_button.dart';
@@ -31,11 +31,11 @@ class UltrasoundAnalyzerScreen extends StatefulWidget {
 
 class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   final ImagePicker _picker = ImagePicker();
-  final GeminiService _geminiService = GeminiService();
+  final GroqService _groqService = GroqService();
   final DateFormat _dateFormat = DateFormat('MMMM d, yyyy');
 
   final List<XFile> _selectedImages = [];
-  GeminiResponse? _combinedResponse;
+  GroqResponse? _combinedResponse;
   bool _isLoading = false;
   bool _isSaving = false;
   String? _errorMessage;
@@ -245,7 +245,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         'Image count: ${_selectedImages.length}',
       ].join('\n');
 
-      final result = await _geminiService.analyzeUltrasoundImages(
+      final result = await _groqService.analyzeUltrasoundImages(
         _selectedImages,
         clinicalContext: _lastAiPrompt,
       );
@@ -1065,12 +1065,17 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   bool _isConcerningStatus(String status) {
     final s = status.toUpperCase();
-    return s.contains('REVIEW') || s.contains('ABNORMAL') || s.contains('CONCERNING');
+    return s.contains('REVIEW') ||
+        s.contains('ABNORMAL') ||
+        s.contains('CONCERNING');
   }
 
   bool _isCautionStatus(String status) {
     final s = status.toUpperCase();
-    return s == 'OBSERVE' || s == 'BORDERLINE' || s == 'POSITIVE' || s == 'MONITOR';
+    return s == 'OBSERVE' ||
+        s == 'BORDERLINE' ||
+        s == 'POSITIVE' ||
+        s == 'MONITOR';
   }
 
   Color _statusChipBackground(String status) {
@@ -1093,8 +1098,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   String _safeText(Object? value) => value?.toString() ?? '';
 
-  ({String testName, String value, String status, String remark}) _parseUltrasoundMetricLine(String line) {
-    final cleaned = _safeText(line).replaceFirst(RegExp(r'^[-\*•]\s*'), '').trim();
+  ({String testName, String value, String status, String remark})
+      _parseUltrasoundMetricLine(String line) {
+    final cleaned =
+        _safeText(line).replaceFirst(RegExp(r'^[-\*•]\s*'), '').trim();
 
     String testName = '';
     String value = '';
@@ -1102,15 +1109,15 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     String remark = '';
 
     final bracketMatch = RegExp(r'\[(.*?)\]').firstMatch(cleaned);
-    
+
     if (bracketMatch != null) {
       status = bracketMatch.group(1)!.trim().toUpperCase();
       testName = cleaned.substring(0, bracketMatch.start).trim();
-      
+
       final colonIdx = testName.indexOf(':');
       if (colonIdx != -1) {
-         value = testName.substring(colonIdx + 1).trim();
-         testName = testName.substring(0, colonIdx).trim();
+        value = testName.substring(colonIdx + 1).trim();
+        testName = testName.substring(0, colonIdx).trim();
       }
 
       remark = cleaned.substring(bracketMatch.end).trim();
@@ -1127,50 +1134,68 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           rest = rest.substring(0, parenMatch.start).trim();
         }
 
-        if (rest.startsWith('✓') || rest.toLowerCase() == 'normal' || rest.toLowerCase() == 'present') {
+        if (rest.startsWith('✓') ||
+            rest.toLowerCase() == 'normal' ||
+            rest.toLowerCase() == 'present') {
           value = 'Present / Normal';
           status = 'NORMAL';
           if (rest.startsWith('✓')) rest = rest.substring(1).trim();
-        } else if (rest.startsWith('X') || rest.startsWith('✗') || rest.toLowerCase() == 'abnormal' || rest.toLowerCase() == 'absent') {
+        } else if (rest.startsWith('X') ||
+            rest.startsWith('✗') ||
+            rest.toLowerCase() == 'abnormal' ||
+            rest.toLowerCase() == 'absent') {
           value = 'Absent / Abnormal';
           status = 'ABNORMAL';
-          if (rest.startsWith('X') || rest.startsWith('✗')) rest = rest.substring(1).trim();
+          if (rest.startsWith('X') || rest.startsWith('✗'))
+            rest = rest.substring(1).trim();
         } else {
           final dashIndex = rest.lastIndexOf('-');
           if (dashIndex != -1) {
-            final possibleStatus = rest.substring(dashIndex + 1).trim().toUpperCase();
-            if (possibleStatus == 'NORMAL' || possibleStatus == 'ABNORMAL' || possibleStatus == 'REVIEW' || possibleStatus == 'MONITOR' || possibleStatus == 'BORDERLINE' || possibleStatus == 'CONCERNING') {
+            final possibleStatus =
+                rest.substring(dashIndex + 1).trim().toUpperCase();
+            if (possibleStatus == 'NORMAL' ||
+                possibleStatus == 'ABNORMAL' ||
+                possibleStatus == 'REVIEW' ||
+                possibleStatus == 'MONITOR' ||
+                possibleStatus == 'BORDERLINE' ||
+                possibleStatus == 'CONCERNING') {
               status = possibleStatus;
               value = rest.substring(0, dashIndex).trim();
             } else {
-               value = rest;
+              value = rest;
             }
           } else {
-             value = rest;
+            value = rest;
           }
         }
       } else {
-         return (testName: cleaned, value: '', status: 'UNKNOWN', remark: '');
+        return (testName: cleaned, value: '', status: 'UNKNOWN', remark: '');
       }
     }
-    
+
     if (status == 'CONCERNING') status = 'ABNORMAL';
-    
+
     if (status == 'UNKNOWN' || status.isEmpty) {
-        if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
-            status = 'NORMAL';
-        } else if (RegExp(r'\babnormal\b|\bcritical\b|outside normal range|concerning', caseSensitive: false).hasMatch(value)) {
-            status = 'ABNORMAL';
-        } else {
-            status = 'INFO';
-        }
+      if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
+        status = 'NORMAL';
+      } else if (RegExp(
+              r'\babnormal\b|\bcritical\b|outside normal range|concerning',
+              caseSensitive: false)
+          .hasMatch(value)) {
+        status = 'ABNORMAL';
+      } else {
+        status = 'INFO';
+      }
     }
 
     return (testName: testName, value: value, status: status, remark: remark);
   }
 
   Widget _buildMetricsList(List<String> lines) {
-    final rows = lines.map(_parseUltrasoundMetricLine).where((r) => r.testName.isNotEmpty).toList();
+    final rows = lines
+        .map(_parseUltrasoundMetricLine)
+        .where((r) => r.testName.isNotEmpty)
+        .toList();
 
     if (rows.isEmpty) {
       return Column(
@@ -1234,7 +1259,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 children: [
                   if (row.status != 'UNKNOWN' && row.status != 'INFO')
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: _statusChipBackground(row.status),
                         borderRadius: BorderRadius.circular(999),
@@ -1251,9 +1277,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         ),
                       ),
                     ),
-                  if (row.value.isNotEmpty && row.value != 'Present / Normal' && row.value != 'Absent / Abnormal')
+                  if (row.value.isNotEmpty &&
+                      row.value != 'Present / Normal' &&
+                      row.value != 'Absent / Abnormal')
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: AppColors.bgSecondary,
                         borderRadius: BorderRadius.circular(999),

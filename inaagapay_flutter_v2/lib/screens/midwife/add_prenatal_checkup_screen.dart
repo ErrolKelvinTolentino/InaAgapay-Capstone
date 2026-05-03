@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
-import '../../services/gemini_service.dart';
+import '../../services/groq_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
@@ -195,7 +195,7 @@ enum _BpStatus {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
-  final _geminiService = GeminiService();
+  final _groqService = GroqService();
   final _aiAssessmentCtrl = TextEditingController();
   final _aiAssessmentEditCtrl = TextEditingController();
   final _symptomSearchCtrl = TextEditingController();
@@ -1424,7 +1424,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
     try {
       final prompt = _buildAiPrompt(draft);
       _lastRiskAiPrompt = prompt;
-      final aiText = await _geminiService.generateTextInsight(
+      final aiText = await _groqService.generateTextInsight(
         prompt: prompt,
         temperature: 0.1,
         maxOutputTokens: 2600,
@@ -4524,3 +4524,5 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
     );
   }
 }
+
+

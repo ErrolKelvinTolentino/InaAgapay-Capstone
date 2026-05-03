@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-class GeminiResponse {
+class GroqResponse {
   final String description;
   final List<String>? measurements;
   final List<String>? labels;
@@ -21,7 +21,7 @@ class GeminiResponse {
   final List<String>? normalRanges;
   final List<String>? recommendations;
 
-  GeminiResponse({
+  GroqResponse({
     required this.description,
     this.measurements,
     this.labels,
@@ -39,11 +39,11 @@ class GeminiResponse {
     this.recommendations,
   });
 
-  factory GeminiResponse.fromJson(Map<String, dynamic> json) {
+  factory GroqResponse.fromJson(Map<String, dynamic> json) {
     final text = _extractText(json);
 
     if (text.isEmpty) {
-      return GeminiResponse(
+      return GroqResponse(
         description: 'AI output unavailable. Manual review required.',
       );
     }
@@ -111,7 +111,7 @@ class GeminiResponse {
     return null;
   }
 
-  static GeminiResponse _fromStructuredJson(Map<String, dynamic> json) {
+  static GroqResponse _fromStructuredJson(Map<String, dynamic> json) {
     final relevance = _safeText(json['relevance_check']).toUpperCase();
     final relevanceReason = _safeText(json['relevance_reason']);
     final confidence = _toBoundedDouble(json['confidence_score']);
@@ -215,7 +215,7 @@ class GeminiResponse {
       recommendations: recommendations,
     );
 
-    return GeminiResponse(
+    return GroqResponse(
       description: description,
       measurements: measurements.isEmpty ? null : measurements,
       labels: const [],
@@ -236,7 +236,7 @@ class GeminiResponse {
     );
   }
 
-  static GeminiResponse _fromFreeText(String text) {
+  static GroqResponse _fromFreeText(String text) {
     String? healthStatus;
     if (RegExp(r'HEALTHY[_\s-]?NORMAL', caseSensitive: false).hasMatch(text)) {
       healthStatus = 'HEALTHY_NORMAL';
@@ -319,7 +319,7 @@ class GeminiResponse {
     final overallAssessment =
         _extractSectionText(text, 'OVERALL ASSESSMENT:', 'RECOMMENDATIONS:');
 
-    return GeminiResponse(
+    return GroqResponse(
       description: text,
       measurements: measurements.isEmpty ? null : measurements.toSet().toList(),
       labels: const [],
@@ -550,3 +550,4 @@ class LabResult {
     required this.isAbnormal,
   });
 }
+

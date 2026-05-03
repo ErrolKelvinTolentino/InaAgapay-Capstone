@@ -8,7 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../models/ocr_result.dart';
 import '../../services/auth_storage.dart';
-import '../../services/gemini_service.dart';
+import '../../services/groq_service.dart';
 import '../../services/supabase_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
@@ -263,7 +263,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   DateTime? _edd;
 
   // ── OCR ─────────────────────────────────────────────
-  final _geminiService = GeminiService();
+  final _groqService = GroqService();
 
   // ── Lifecycle ───────────────────────────────────────
 
@@ -2991,7 +2991,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     StateSetter? setS;
 
     void startOcr() {
-      _geminiService.extractMotherRegistrationData(imageFile).then((r) {
+      _groqService.extractMotherRegistrationData(imageFile).then((r) {
         setS?.call(() {
           if (!r.hasAnyValue) {
             ocrError =
@@ -3734,3 +3734,5 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     );
   }
 }
+
+

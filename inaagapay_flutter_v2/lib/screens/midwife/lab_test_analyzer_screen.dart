@@ -8,9 +8,9 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/gemini_service.dart';
+import '../../services/groq_service.dart';
 import '../../services/auth_storage.dart';
-import '../../models/gemini_response.dart';
+import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/progressive_step_indicator.dart';
@@ -31,11 +31,11 @@ class LabTestAnalyzerScreen extends StatefulWidget {
 
 class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   final ImagePicker _picker = ImagePicker();
-  final GeminiService _geminiService = GeminiService();
+  final GroqService _groqService = GroqService();
   final DateFormat _dateFormat = DateFormat('MMMM d, yyyy');
 
   final List<XFile> _selectedImages = [];
-  GeminiResponse? _combinedResponse;
+  GroqResponse? _combinedResponse;
   bool _isSaving = false;
   String? _errorMessage;
 
@@ -513,7 +513,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         'Extracting laboratory values from uploaded images',
       );
 
-      final result = await _geminiService.analyzeLabTestImages(
+      final result = await _groqService.analyzeLabTestImages(
         _selectedImages,
         selectedLabType: _selectedLabType,
         notes: _notesController.text.trim(),

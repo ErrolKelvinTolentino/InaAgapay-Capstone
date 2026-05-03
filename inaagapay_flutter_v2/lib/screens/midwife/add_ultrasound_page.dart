@@ -7,8 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
-import '../../services/gemini_service.dart';
-import '../../models/gemini_response.dart';
+import '../../services/groq_service.dart';
+import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/app_snackbar.dart';
@@ -28,7 +28,7 @@ class AddUltrasoundPage extends StatefulWidget {
 
 class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
   final ImagePicker _picker = ImagePicker();
-  final GeminiService _geminiService = GeminiService();
+  final GroqService _groqService = GroqService();
 
   final TextEditingController _workerNameCtrl = TextEditingController();
   final TextEditingController _institutionCtrl = TextEditingController();
@@ -422,7 +422,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
     return values.sublist(0, max);
   }
 
-  String _buildConciseUltrasoundInsight(GeminiResponse result) {
+  String _buildConciseUltrasoundInsight(GroqResponse result) {
     final lines = <String>[];
 
     final healthStatus = (result.healthStatus ?? '').trim();
@@ -712,7 +712,7 @@ class _AddUltrasoundPageState extends State<AddUltrasoundPage> {
         'Image count: ${_images.length}',
       ].join('\n');
 
-      final result = await _geminiService.analyzeUltrasoundImages(
+      final result = await _groqService.analyzeUltrasoundImages(
         _images,
         clinicalContext: _lastAiPrompt,
       );
