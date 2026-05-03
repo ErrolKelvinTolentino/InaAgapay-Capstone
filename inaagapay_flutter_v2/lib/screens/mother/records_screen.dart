@@ -313,7 +313,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     sections[currentSection] = [];
 
     final headingPattern = RegExp(
-      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|LABORATORY RESULTS|ABNORMAL FINDINGS|NORMAL RANGES|REFERENCE RANGES|OVERALL ASSESSMENT|RECOMMENDATIONS|KEY OBSERVATIONS)\s*:\s*(.*)$',
+      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|LABORATORY RESULTS|ABNORMAL FINDINGS|NORMAL RANGES|REFERENCE RANGES|OVERALL ASSESSMENT|RECOMMENDATIONS|KEY OBSERVATIONS|OVERALL HEALTH STATUS|GESTATIONAL AGE ASSESSMENT|DETAILED MEASUREMENTS ASSESSMENT|ANATOMICAL ASSESSMENT|RECOMMENDED NEXT ACTIONS)\s*:\s*(.*)$',
       caseSensitive: false,
     );
 
@@ -418,12 +418,12 @@ class _RecordsScreenState extends State<RecordsScreen>
 
   bool _isConcerningStatus(String status) {
     final s = status.toUpperCase();
-    return s.contains('REVIEW') || s == 'ABNORMAL';
+    return s.contains('REVIEW') || s.contains('ABNORMAL') || s.contains('CONCERNING');
   }
 
   bool _isCautionStatus(String status) {
     final s = status.toUpperCase();
-    return s == 'OBSERVE' || s == 'BORDERLINE' || s == 'POSITIVE';
+    return s == 'OBSERVE' || s == 'BORDERLINE' || s == 'POSITIVE' || s == 'MONITOR';
   }
 
   Color _statusChipBackground(String status) {
@@ -713,6 +713,210 @@ class _RecordsScreenState extends State<RecordsScreen>
     );
   }
 
+  ({String testName, String value, String status, String remark}) _parseUltrasoundMetricLine(String line) {
+    final cleaned = _safeText(line).replaceFirst(RegExp(r'^[-\*•]\s*'), '').trim();
+
+    String testName = '';
+    String value = '';
+    String status = 'UNKNOWN';
+    String remark = '';
+
+    final bracketMatch = RegExp(r'\[(.*?)\]').firstMatch(cleaned);
+    
+    if (bracketMatch != null) {
+      status = bracketMatch.group(1)!.trim().toUpperCase();
+      testName = cleaned.substring(0, bracketMatch.start).trim();
+      
+      final colonIdx = testName.indexOf(':');
+      if (colonIdx != -1) {
+         value = testName.substring(colonIdx + 1).trim();
+         testName = testName.substring(0, colonIdx).trim();
+      }
+
+      remark = cleaned.substring(bracketMatch.end).trim();
+      remark = remark.replaceFirst(RegExp(r'^[-:]\s*'), '').trim();
+    } else {
+      final colonIndex = cleaned.indexOf(':');
+      if (colonIndex != -1) {
+        testName = cleaned.substring(0, colonIndex).trim();
+        String rest = cleaned.substring(colonIndex + 1).trim();
+
+        final parenMatch = RegExp(r'\(([^)]+)\)$').firstMatch(rest);
+        if (parenMatch != null) {
+          remark = parenMatch.group(1)!.trim();
+          rest = rest.substring(0, parenMatch.start).trim();
+        }
+
+        if (rest.startsWith('✓') || rest.toLowerCase() == 'normal' || rest.toLowerCase() == 'present') {
+          value = 'Present / Normal';
+          status = 'NORMAL';
+          if (rest.startsWith('✓')) rest = rest.substring(1).trim();
+        } else if (rest.startsWith('X') || rest.startsWith('✗') || rest.toLowerCase() == 'abnormal' || rest.toLowerCase() == 'absent') {
+          value = 'Absent / Abnormal';
+          status = 'ABNORMAL';
+          if (rest.startsWith('X') || rest.startsWith('✗')) rest = rest.substring(1).trim();
+        } else {
+          final dashIndex = rest.lastIndexOf('-');
+          if (dashIndex != -1) {
+            final possibleStatus = rest.substring(dashIndex + 1).trim().toUpperCase();
+            if (possibleStatus == 'NORMAL' || possibleStatus == 'ABNORMAL' || possibleStatus == 'REVIEW' || possibleStatus == 'MONITOR' || possibleStatus == 'BORDERLINE' || possibleStatus == 'CONCERNING') {
+              status = possibleStatus;
+              value = rest.substring(0, dashIndex).trim();
+            } else {
+               value = rest;
+            }
+          } else {
+             value = rest;
+          }
+        }
+      } else {
+         return (testName: cleaned, value: '', status: 'UNKNOWN', remark: '');
+      }
+    }
+    
+    if (status == 'CONCERNING') status = 'ABNORMAL';
+    
+    if (status == 'UNKNOWN' || status.isEmpty) {
+        if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
+            status = 'NORMAL';
+        } else if (RegExp(r'\babnormal\b|\bcritical\b|outside normal range|concerning', caseSensitive: false).hasMatch(value)) {
+            status = 'ABNORMAL';
+        } else {
+            status = 'INFO';
+        }
+    }
+
+    return (testName: testName, value: value, status: status, remark: remark);
+  }
+
+  Widget _buildUltrasoundMetricsSummaryCard(String title, List<String> lines) {
+    if (lines.isEmpty) return _buildAiSectionCard(title, lines);
+
+    final rows = lines.map(_parseUltrasoundMetricLine).where((r) => r.testName.isNotEmpty).toList();
+
+    if (rows.isEmpty) {
+      return _buildAiSectionCard(title, lines);
+    }
+
+    IconData headerIcon = Icons.straighten_outlined;
+    Color headerColor = AppColors.brandPrimary;
+    
+    if (title.toUpperCase().contains('ANATOMICAL')) {
+      headerIcon = Icons.accessibility_new_outlined;
+    } else if (title.toUpperCase().contains('ABNORMAL')) {
+      headerIcon = Icons.warning_amber_outlined;
+      headerColor = Colors.orange;
+    } else if (title.toUpperCase().contains('NORMAL RANGES')) {
+      headerIcon = Icons.analytics_outlined;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: headerColor == Colors.orange ? Colors.orange.shade50 : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: headerColor == Colors.orange ? Colors.orange.shade200 : AppColors.borderPrimary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(headerIcon, size: 18, color: headerColor),
+              const SizedBox(width: 8),
+              Text(
+                _friendlyAiSectionTitle(title),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: headerColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...rows.map((row) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.borderPrimary),
+                color: Colors.white,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    row.testName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (row.status != 'UNKNOWN' && row.status != 'INFO')
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _statusChipBackground(row.status),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: _statusChipBorder(row.status),
+                            ),
+                          ),
+                          child: Text(
+                            row.status,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: _statusChipTextColor(row.status),
+                            ),
+                          ),
+                        ),
+                      if (row.value.isNotEmpty && row.value != 'Present / Normal' && row.value != 'Absent / Abnormal')
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSecondary,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            row.value,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (row.remark.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      row.remark,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   String _friendlyAiSectionTitle(String title) {
     switch (title) {
       case 'LABORATORY RESULTS':
@@ -743,8 +947,8 @@ class _RecordsScreenState extends State<RecordsScreen>
   Widget _buildAiSectionCard(String title, List<String> lines) {
     final safeTitle = title.toUpperCase();
     final isAbnormal = safeTitle.contains('ABNORMAL');
-    final isRecommendation = safeTitle.contains('RECOMMENDATION');
-    final isAssessment = safeTitle.contains('ASSESSMENT');
+    final isRecommendation = safeTitle.contains('RECOMMENDATION') || safeTitle.contains('RECOMMENDED');
+    final isAssessment = safeTitle.contains('ASSESSMENT') || safeTitle.contains('HEALTH STATUS');
 
     final Color accent = isAbnormal
         ? Colors.red
@@ -791,12 +995,17 @@ class _RecordsScreenState extends State<RecordsScreen>
     if (sections.isEmpty) return _buildFormattedAiText(text);
 
     const sectionOrder = [
+      'OVERALL HEALTH STATUS',
       'OVERALL ASSESSMENT',
+      'GESTATIONAL AGE ASSESSMENT',
       'LABORATORY RESULTS',
+      'DETAILED MEASUREMENTS ASSESSMENT',
+      'ANATOMICAL ASSESSMENT',
       'ABNORMAL FINDINGS',
       'NORMAL RANGES',
       'KEY OBSERVATIONS',
       'RECOMMENDATIONS',
+      'RECOMMENDED NEXT ACTIONS',
       'SUMMARY',
     ];
 
@@ -823,7 +1032,11 @@ class _RecordsScreenState extends State<RecordsScreen>
         continue;
       }
 
-      if (entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
+      if (entry.key == 'DETAILED MEASUREMENTS ASSESSMENT' || entry.key == 'ANATOMICAL ASSESSMENT' || entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
+        if ((entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') && sections.containsKey('LABORATORY RESULTS')) {
+          continue;
+        }
+        widgets.add(_buildUltrasoundMetricsSummaryCard(entry.key, entry.value));
         continue;
       }
       widgets.add(_buildAiSectionCard(entry.key, entry.value));
@@ -1413,6 +1626,12 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   ultrasoundId,
                                 );
                               }
+                              
+                              String finalRemarks = split.cleanRemarks;
+                              if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
+                                finalRemarks = '';
+                              }
+
                               aiAnalysis = (aiAnalysis != null &&
                                       aiAnalysis.trim().isNotEmpty)
                                   ? aiAnalysis.trim()
@@ -1445,7 +1664,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       _formatValue(
                                           record['health_worker_profession'])),
                                   MapEntry('Remarks',
-                                      _formatValue(split.cleanRemarks)),
+                                      _formatValue(finalRemarks)),
                                 ],
                                 aiAnalysis: aiAnalysis,
                                 useStructuredAiInsights:

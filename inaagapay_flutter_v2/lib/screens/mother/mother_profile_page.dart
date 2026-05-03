@@ -1,4 +1,4 @@
-﻿// lib/screens/mother/mother_profile_page.dart
+// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -3728,6 +3728,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               ultrasoundId,
             );
           }
+          
+          String finalRemarks = split.cleanRemarks;
+          if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
+            finalRemarks = '';
+          }
+
           aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
               ? aiAnalysis.trim()
               : split.extractedAi ?? _generateUltrasoundAIInsights(ultrasound);
@@ -3748,7 +3754,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   _formatValue(ultrasound['health_worker_institution'])),
               MapEntry('Profession',
                   _formatValue(ultrasound['health_worker_profession'])),
-              MapEntry('Remarks', _formatValue(split.cleanRemarks)),
+              MapEntry('Remarks', _formatValue(finalRemarks)),
             ],
             aiAnalysis: aiAnalysis,
             useStructuredAiInsights:
