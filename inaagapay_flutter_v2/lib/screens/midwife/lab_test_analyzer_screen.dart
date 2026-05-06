@@ -8,9 +8,9 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/gemini_service.dart';
+import '../../services/groq_service.dart';
 import '../../services/auth_storage.dart';
-import '../../models/gemini_response.dart';
+import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/progressive_step_indicator.dart';
@@ -31,11 +31,11 @@ class LabTestAnalyzerScreen extends StatefulWidget {
 
 class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   final ImagePicker _picker = ImagePicker();
-  final GeminiService _geminiService = GeminiService();
+  final GroqService _groqService = GroqService();
   final DateFormat _dateFormat = DateFormat('MMMM d, yyyy');
 
   final List<XFile> _selectedImages = [];
-  GeminiResponse? _combinedResponse;
+  GroqResponse? _combinedResponse;
   bool _isSaving = false;
   String? _errorMessage;
 
@@ -513,7 +513,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         'Extracting laboratory values from uploaded images',
       );
 
-      final result = await _geminiService.analyzeLabTestImages(
+      final result = await _groqService.analyzeLabTestImages(
         _selectedImages,
         selectedLabType: _selectedLabType,
         notes: _notesController.text.trim(),
@@ -693,7 +693,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               'reference_table': 'lab_tests',
               'reference_id': labTestId,
               'ai_model': 'Gemini 1.5 Flash',
-              'confidence_score': 0.92,
+              'confidence_score': null,
               'response': finalAiText,
               'response_category': 'analysis',
               'status': 'approved',
@@ -1144,7 +1144,10 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     return matches.join('\n\n').trim();
   }
 
-  Widget _buildCombinedLabResultsCard(Map<String, List<String>> sections) {
+  Widget _buildCombinedLabResultsCard(
+    Map<String, List<String>> sections, {
+    VoidCallback? onInteraction,
+  }) {
     final labLines = sections['LABORATORY RESULTS'] ?? const <String>[];
     final abnormalLines = sections['ABNORMAL FINDINGS'] ?? const <String>[];
     final rangeLines = sections['NORMAL RANGES'] ?? const <String>[];
@@ -1233,28 +1236,27 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(
-                        width: 24,
-                        child: IconButton(
+                      if (hasDetails)
+                        IconButton(
                           padding: EdgeInsets.zero,
                           splashRadius: 16,
-                          onPressed: hasDetails
-                              ? () {
-                                  setState(() {
-                                    if (isExpanded) {
-                                      _expandedAspects.remove(aspectKey);
-                                    } else {
-                                      _expandedAspects.add(aspectKey);
-                                    }
-                                  });
-                                }
-                              : null,
+                          constraints: const BoxConstraints.tightFor(
+                              width: 24, height: 24),
+                          onPressed: () {
+                            setState(() {
+                              if (isExpanded) {
+                                _expandedAspects.remove(aspectKey);
+                              } else {
+                                _expandedAspects.add(aspectKey);
+                              }
+                            });
+                            onInteraction?.call();
+                          },
                           icon: Icon(
                             isExpanded ? Icons.expand_less : Icons.expand_more,
                             size: 18,
                           ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -1519,13 +1521,14 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     );
   }
 
-  Widget _buildStructuredInsights(String text) {
+  Widget _buildStructuredInsights(
+    String text, {
+    VoidCallback? onInteraction,
+  }) {
     final sections = _extractInsightSections(text);
     if (sections.isEmpty) return _buildFormattedText(text);
 
     const sectionOrder = [
-      'RELEVANCE CHECK',
-      'RELEVANCE REASON',
       'OVERALL ASSESSMENT',
       'LABORATORY RESULTS',
       'ABNORMAL FINDINGS',
@@ -1549,8 +1552,18 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
     final widgets = <Widget>[];
     for (final entry in orderedEntries) {
+      // Hide relevance check/reason from display (validation logic still runs)
+      if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON') {
+        continue;
+      }
+
       if (entry.key == 'LABORATORY RESULTS') {
-        widgets.add(_buildCombinedLabResultsCard(sections));
+        widgets.add(
+          _buildCombinedLabResultsCard(
+            sections,
+            onInteraction: onInteraction,
+          ),
+        );
         continue;
       }
 
@@ -1802,7 +1815,10 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       Expanded(
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.all(16),
-                          child: _buildStructuredInsights(summaryDraft.text),
+                          child: _buildStructuredInsights(
+                            summaryDraft.text,
+                            onInteraction: () => setModalState(() {}),
+                          ),
                         ),
                       ),
                       const Divider(height: 1),

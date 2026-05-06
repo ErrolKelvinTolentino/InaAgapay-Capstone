@@ -36,14 +36,14 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   bool _loading = true;
   int _ageInWeeks = 0;
   String _gender = '';
-  
+
   double? _weightZScore;
   double? _heightZScore;
   double? _bmiZScore;
 
   String _bmiCategoryText = 'Normal';
   Color _bmiCategoryColor = AppColors.success;
-  
+
   bool _isFormValid = false;
   String? _validationMessage;
   bool _isSaving = false;
@@ -59,16 +59,13 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   Future<void> _loadChildData() async {
     try {
       // First fetch child details
-      final childResponse = await Supabase.instance.client
-          .from('children')
-          .select('''
+      final childResponse =
+          await Supabase.instance.client.from('children').select('''
             child_id,
             first_name,
             last_name,
             sex
-          ''')
-          .eq('child_id', widget.childId)
-          .single();
+          ''').eq('child_id', widget.childId).single();
 
       // Then fetch birth details separately
       final birthDetailsResponse = await Supabase.instance.client
@@ -78,20 +75,20 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
           .maybeSingle();
 
       final birthdate = birthDetailsResponse?['birthdate']?.toString();
-      
+
       if (birthdate != null) {
         final birth = DateTime.parse(birthdate);
         final now = DateTime.now();
         _ageInWeeks = (now.difference(birth).inDays / 7).floor();
       }
-      
+
       _gender = childResponse['sex']?.toString().toLowerCase() ?? '';
-      
+
       setState(() {
         _childData = childResponse;
         _loading = false;
       });
-      
+
       // After loading, trigger an initial calculation if there are values
       _onMeasurementChanged();
     } catch (e) {
@@ -123,7 +120,10 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     debugPrint('Age in weeks: $_ageInWeeks');
     debugPrint('Gender: $_gender');
 
-    if (heightCm == null || weightKg == null || heightCm == 0 || weightKg == 0) {
+    if (heightCm == null ||
+        weightKg == null ||
+        heightCm == 0 ||
+        weightKg == 0) {
       debugPrint('Invalid height or weight, resetting BMI');
       setState(() {
         _bmiController.text = '';
@@ -136,29 +136,31 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
     final double heightM = heightCm / 100;
     final double bmi = weightKg / (heightM * heightM);
-    
+
     debugPrint('Calculated BMI: $bmi');
-    
+
     setState(() {
       _bmiController.text = bmi.toStringAsFixed(1);
     });
-    
+
     if (_ageInWeeks > 0 && _gender.isNotEmpty) {
       // Calculate BMI Z-score
-      _bmiZScore = GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
-      
+      _bmiZScore =
+          GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
+
       debugPrint('BMI Z-Score: $_bmiZScore');
-      
+
       // Update status based on Z-score
       _updateBMICategory(_bmiZScore!);
     } else {
-      debugPrint('Cannot calculate Z-score: Age in weeks=$_ageInWeeks, Gender=$_gender');
+      debugPrint(
+          'Cannot calculate Z-score: Age in weeks=$_ageInWeeks, Gender=$_gender');
     }
   }
 
   void _updateBMICategory(double zScore) {
     debugPrint('Updating BMI category for Z-Score: $zScore');
-    
+
     setState(() {
       if (zScore < -2) {
         _bmiCategoryText = 'Underweight';
@@ -194,15 +196,18 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     final double? bmi = double.tryParse(_bmiController.text);
 
     if (heightCm != null && _ageInWeeks > 0 && _gender.isNotEmpty) {
-      _heightZScore = GrowthCalculator.calculateHeightZScore(heightCm, _ageInWeeks, _gender);
+      _heightZScore = GrowthCalculator.calculateHeightZScore(
+          heightCm, _ageInWeeks, _gender);
     }
-    
+
     if (weightKg != null && _ageInWeeks > 0 && _gender.isNotEmpty) {
-      _weightZScore = GrowthCalculator.calculateWeightZScore(weightKg, _ageInWeeks, _gender);
+      _weightZScore = GrowthCalculator.calculateWeightZScore(
+          weightKg, _ageInWeeks, _gender);
     }
-    
+
     if (bmi != null && _ageInWeeks > 0 && _gender.isNotEmpty) {
-      _bmiZScore = GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
+      _bmiZScore =
+          GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
       _updateBMICategory(_bmiZScore!);
     }
   }
@@ -222,7 +227,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     if (height == null || weight == null) {
       setState(() {
         _isFormValid = false;
-        _validationMessage = 'Please enter valid numbers for height and weight.';
+        _validationMessage =
+            'Please enter valid numbers for height and weight.';
       });
       return;
     }
@@ -248,14 +254,12 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       final weight = double.parse(_weightController.text);
       // BMI and remarks are NOT saved to database
 
-      await Supabase.instance.client
-          .from('child_details')
-          .insert({
-            'child_id': widget.childId,
-            'child_height': height,
-            'child_weight': weight,
-            'created_at': DateTime.now().toIso8601String(),
-          });
+      await Supabase.instance.client.from('child_details').insert({
+        'child_id': widget.childId,
+        'child_height': height,
+        'child_weight': weight,
+        'created_at': DateTime.now().toIso8601String(),
+      });
 
       return true;
     } catch (e) {
@@ -287,7 +291,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       builder: (context) {
         return ConfirmationDialogBox(
           title: 'Confirm Growth Record',
-          subtitle: 'Please make sure the details are correct. Growth records cannot be edited once added.',
+          subtitle:
+              'Please make sure the details are correct. Growth records cannot be edited once added.',
           confirmText: 'Confirm',
           cancelText: 'Cancel',
           onCancel: () => Navigator.pop(context, false),
@@ -302,7 +307,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
     try {
       final success = await _saveGrowthRecord();
-      
+
       setState(() => _isSaving = false);
 
       if (success && mounted) {
@@ -347,7 +352,9 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       );
     }
 
-    final childName = '${_childData?['first_name'] ?? ''} ${_childData?['last_name'] ?? ''}'.trim();
+    final childName =
+        '${_childData?['first_name'] ?? ''} ${_childData?['last_name'] ?? ''}'
+            .trim();
     final ageText = '$_ageInWeeks weeks old';
 
     return Scaffold(
@@ -379,7 +386,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                 ),
               )
             : SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -404,13 +412,19 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                         children: [
                           CircleAvatar(
                             radius: 24,
-                            backgroundColor: _gender == 'female' ? Colors.pink.shade100 : Colors.blue.shade100,
+                            backgroundColor: _gender == 'female'
+                                ? Colors.pink.shade100
+                                : Colors.blue.shade100,
                             child: Text(
-                              childName.isNotEmpty ? childName[0].toUpperCase() : 'C',
+                              childName.isNotEmpty
+                                  ? childName[0].toUpperCase()
+                                  : 'C',
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
-                                color: _gender == 'female' ? Colors.pink : Colors.blue,
+                                color: _gender == 'female'
+                                    ? Colors.pink
+                                    : Colors.blue,
                               ),
                             ),
                           ),
@@ -446,14 +460,16 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                       hintText: 'Height (cm)',
                       controller: _heightController,
                       leadingIcon: Icons.height,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*\.?\d*$')),
                       ],
                       onChanged: (_) => _onMeasurementChanged(),
                       isRequired: true,
                     ),
-                    
+
                     if (_heightZScore != null) ...[
                       const SizedBox(height: 4),
                       Padding(
@@ -467,7 +483,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                         ),
                       ),
                     ],
-                    
+
                     const SizedBox(height: 16),
 
                     // Weight Input
@@ -475,14 +491,16 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                       hintText: 'Weight (kg)',
                       controller: _weightController,
                       leadingIcon: Icons.monitor_weight,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*\.?\d*$')),
                       ],
                       onChanged: (_) => _onMeasurementChanged(),
                       isRequired: true,
                     ),
-                    
+
                     if (_weightZScore != null) ...[
                       const SizedBox(height: 4),
                       Padding(
@@ -496,12 +514,13 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                         ),
                       ),
                     ],
-                    
+
                     const SizedBox(height: 16),
 
                     // BMI Display with Real-time Status (calculated in app, NOT saved)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
                         color: _bmiCategoryColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
@@ -515,7 +534,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                           Row(
                             children: [
                               Icon(
-                                Icons.calculate, 
+                                Icons.calculate,
                                 color: _bmiCategoryColor,
                                 size: 22,
                               ),
@@ -528,7 +547,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
-                                    color: _bmiController.text.isEmpty 
+                                    color: _bmiController.text.isEmpty
                                         ? AppColors.textSecondary
                                         : _bmiCategoryColor,
                                   ),
@@ -536,9 +555,11 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                               ),
                               if (_bmiController.text.isNotEmpty)
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: _bmiCategoryColor.withValues(alpha: 0.2),
+                                    color: _bmiCategoryColor.withValues(
+                                        alpha: 0.2),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
@@ -552,7 +573,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                                 ),
                             ],
                           ),
-                          if (_bmiZScore != null && _bmiController.text.isNotEmpty) ...[
+                          if (_bmiZScore != null &&
+                              _bmiController.text.isNotEmpty) ...[
                             const SizedBox(height: 8),
                             Align(
                               alignment: Alignment.centerRight,
@@ -560,7 +582,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                                 'Z-Score: ${_formatZScore(_bmiZScore)}',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: _bmiCategoryColor.withValues(alpha: 0.7),
+                                  color:
+                                      _bmiCategoryColor.withValues(alpha: 0.7),
                                 ),
                               ),
                             ),
@@ -585,7 +608,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                         decoration: const InputDecoration(
                           hintText: 'Remarks (optional - not saved)',
                           border: InputBorder.none,
-                          icon: Icon(Icons.notes_rounded, color: AppColors.brandPrimary),
+                          icon: Icon(Icons.notes_rounded,
+                              color: AppColors.brandPrimary),
                         ),
                       ),
                     ),

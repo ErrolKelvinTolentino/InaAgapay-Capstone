@@ -12,7 +12,8 @@ class ResetPasswordVerifyScreen extends StatefulWidget {
   const ResetPasswordVerifyScreen({super.key});
 
   @override
-  State<ResetPasswordVerifyScreen> createState() => _ResetPasswordVerifyScreenState();
+  State<ResetPasswordVerifyScreen> createState() =>
+      _ResetPasswordVerifyScreenState();
 }
 
 class _ResetPasswordVerifyScreenState extends State<ResetPasswordVerifyScreen> {
@@ -51,7 +52,9 @@ class _ResetPasswordVerifyScreenState extends State<ResetPasswordVerifyScreen> {
       Navigator.pushNamed(context, '/reset-password', arguments: email);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid or expired code'), backgroundColor: Colors.red),
+        const SnackBar(
+            content: Text('Invalid or expired code'),
+            backgroundColor: Colors.red),
       );
     }
   }
@@ -66,23 +69,33 @@ class _ResetPasswordVerifyScreenState extends State<ResetPasswordVerifyScreen> {
           child: Column(
             children: [
               const SizedBox(height: 40),
-              const Text('Inaagapay', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFFFF68A5))),
+              const Text('Inaagapay',
+                  style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFFF68A5))),
               const SizedBox(height: 32),
               const PageTitle(title: 'Verify Code', leadingIcon: Icons.mail),
               const SizedBox(height: 16),
-              Text('Enter the 6-digit code sent to\n$email', textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary)),
+              Text('Enter the 6-digit code sent to\n$email',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.textSecondary)),
               const SizedBox(height: 32),
               OtpInputField(onChanged: (value) => _code = value),
               const SizedBox(height: 32),
-              MainButton(label: _isVerifying ? 'Verifying...' : 'Verify',
-                onPressed: _code.length == 6 && !_isVerifying ? _verifyCode : null),
+              MainButton(
+                  label: _isVerifying ? 'Verifying...' : 'Verify',
+                  onPressed:
+                      _code.length == 6 && !_isVerifying ? _verifyCode : null),
               const SizedBox(height: 24),
-              if (_secondsRemaining == 0) 
-                TextButton(onPressed: () => SupabaseService.forgotPassword(email), child: const Text('Resend Code'))
-              else 
-                Text('Resend Code in ${_secondsRemaining ~/ 60}:${(_secondsRemaining % 60).toString().padLeft(2, '0')}',
-                  style: const TextStyle(color: AppColors.textSecondary)),
+              if (_secondsRemaining == 0)
+                TextButton(
+                    onPressed: () => SupabaseService.forgotPassword(email),
+                    child: const Text('Resend Code'))
+              else
+                Text(
+                    'Resend Code in ${_secondsRemaining ~/ 60}:${(_secondsRemaining % 60).toString().padLeft(2, '0')}',
+                    style: const TextStyle(color: AppColors.textSecondary)),
             ],
           ),
         ),

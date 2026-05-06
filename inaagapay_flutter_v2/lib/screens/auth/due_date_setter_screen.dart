@@ -19,7 +19,7 @@ class DueDateSetterScreen extends StatefulWidget {
   final int? pregnancyId;
 
   const DueDateSetterScreen({
-    super.key, 
+    super.key,
     required this.mode,
     this.motherId,
     this.pregnancyId,
@@ -51,7 +51,7 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
       _motherId = widget.motherId;
       return;
     }
-    
+
     final motherId = await AuthStorage.getMotherId();
     if (motherId != null && mounted) {
       setState(() {
@@ -62,11 +62,11 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
 
   Future<void> _pickDateForBasis() async {
     final now = DateTime.now();
-    
+
     DateTime initialDate;
     DateTime firstDate;
     DateTime lastDate;
-    
+
     if (_basis == DueDateBasis.edd) {
       initialDate = _selectedDate ?? now.add(const Duration(days: 280));
       firstDate = now;
@@ -76,13 +76,13 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
       firstDate = now.subtract(const Duration(days: 365));
       lastDate = now;
     }
-    
+
     final pickedDate = await showDatePicker(
       context: context,
       initialDate: initialDate,
       firstDate: firstDate,
       lastDate: lastDate,
-      helpText: _basis == DueDateBasis.lmp 
+      helpText: _basis == DueDateBasis.lmp
           ? 'Select first day of last menstrual period'
           : 'Select estimated delivery date',
     );
@@ -107,33 +107,33 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
       _showError('Please select your last menstrual period date');
       return;
     }
-    
+
     if (_basis == DueDateBasis.edd && _selectedDate == null) {
       _showError('Please select the estimated delivery date');
       return;
     }
-    
+
     if (_basis == DueDateBasis.aog) {
       final weeks = int.tryParse(_weeksController.text.trim());
       final days = int.tryParse(_daysController.text.trim());
-      
+
       if (weeks == null || (weeks == 0 && (days == null || days == 0))) {
         _showError('Please enter the age of gestation');
         return;
       }
     }
-    
+
     if (_motherId == null) {
       _showError('Unable to identify mother account');
       return;
     }
-    
+
     setState(() => _isLoading = true);
-    
+
     try {
       DateTime? lmp;
       DateTime? edd;
-      
+
       if (_basis == DueDateBasis.lmp && _selectedDate != null) {
         lmp = _selectedDate;
         edd = _selectedDate!.add(const Duration(days: 280));
@@ -147,11 +147,11 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
         lmp = DateTime.now().subtract(Duration(days: totalDays));
         edd = lmp.add(const Duration(days: 280));
       }
-      
+
       if (lmp == null || edd == null) {
         throw Exception('Could not calculate dates');
       }
-      
+
       await SupabaseService.client.from('pregnancies').insert({
         'mother_id': _motherId,
         'last_menstrual_period': DateFormat('yyyy-MM-dd').format(lmp),
@@ -160,7 +160,7 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
         'fetal_count': 1,
         'created_at': DateTime.now().toIso8601String(),
       });
-      
+
       if (mounted) {
         Navigator.pushReplacementNamed(
           context,
@@ -173,7 +173,7 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
       setState(() => _isLoading = false);
     }
   }
-  
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -205,15 +205,12 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
           child: Column(
             children: [
               const SizedBox(height: 24),
-
               Image.asset('assets/images/logo.png', height: 90),
               const SizedBox(height: 24),
-
               Headline(
                 text: isPregnant ? 'Set Your Due Date' : 'Set Their Due Date',
               ),
               const SizedBox(height: 12),
-
               Text(
                 isPregnant
                     ? 'This helps us give you weekly updates tailored to your pregnancy journey'
@@ -225,7 +222,6 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -237,7 +233,6 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-
               CalculationDropdown(
                 value: _basis,
                 onChanged: (value) {
@@ -248,7 +243,6 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
                 },
               ),
               const SizedBox(height: 24),
-
               if (_basis == DueDateBasis.lmp || _basis == DueDateBasis.edd)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,24 +339,20 @@ class _DueDateSetterScreenState extends State<DueDateSetterScreen> {
                     ),
                   ],
                 ),
-
               if (_basis == DueDateBasis.aog)
                 AogInput(
                   weeksController: _weeksController,
                   daysController: _daysController,
                 ),
-
               const Spacer(),
-
               MainButton(
-                label: _isLoading 
-                    ? 'Saving...' 
+                label: _isLoading
+                    ? 'Saving...'
                     : (isPregnant
                         ? 'Calculate My Due Date'
                         : 'Calculate Their Due Date'),
                 onPressed: _isLoading ? null : _savePregnancy,
               ),
-              
               const SizedBox(height: 16),
             ],
           ),

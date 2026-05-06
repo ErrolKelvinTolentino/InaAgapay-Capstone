@@ -6,7 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
-import '../../services/gemini_service.dart';
+import '../../services/groq_service.dart';
+import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/progressive_step_indicator.dart';
@@ -25,7 +26,7 @@ class AddLabTestPage extends StatefulWidget {
 
 class _AddLabTestPageState extends State<AddLabTestPage> {
   final ImagePicker _picker = ImagePicker();
-  final GeminiService _geminiService = GeminiService();
+  final GroqService _groqService = GroqService();
   final TextEditingController _notesCtrl = TextEditingController();
 
   DateTime? _date;
@@ -344,6 +345,263 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     _loadingModalVisible = false;
   }
 
+  List<String> _dedupePreserveOrder(Iterable<String> values) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final raw in values) {
+      final cleaned = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+      final key = cleaned.toLowerCase();
+      if (cleaned.isEmpty || seen.contains(key)) continue;
+      seen.add(key);
+      result.add(cleaned);
+    }
+    return result;
+  }
+
+  List<String> _truncateList(List<String> values, int max) {
+    if (values.length <= max) return values;
+    return values.sublist(0, max);
+  }
+
+  String _labResultStatus(LabResult item) {
+    if (item.isAbnormal) return 'ABNORMAL';
+    if (item.isNormal) return 'NORMAL';
+    return 'UNKNOWN';
+  }
+
+  String _buildConciseLabInsight(GroqResponse result) {
+    final lines = <String>[];
+
+    final assessment = (result.overallAssessment ?? '').trim();
+    if (assessment.isNotEmpty) {
+      lines.add('OVERALL ASSESSMENT: $assessment');
+    }
+
+    final fullLabResults = _dedupePreserveOrder(
+      (result.labResults ?? const <LabResult>[]).map((item) =>
+          '${item.testName}: ${item.value} [${_labResultStatus(item)}]'),
+    );
+    if (fullLabResults.isNotEmpty) {
+      lines.add('LABORATORY RESULTS:');
+      for (final item in fullLabResults) {
+        lines.add('• $item');
+      }
+    }
+
+    final abnormal = _dedupePreserveOrder([
+      ...(result.abnormalFindings ?? const <String>[]),
+      ...(result.labResults ?? const <LabResult>[])
+          .where((item) => item.isAbnormal)
+          .map((item) => '${item.testName}: ${item.value}'),
+    ]);
+    if (abnormal.isNotEmpty) {
+      lines.add('KEY ABNORMAL FINDINGS:');
+      for (final item in _truncateList(abnormal, 5)) {
+        lines.add('• $item');
+      }
+    }
+
+    final normals = _dedupePreserveOrder([
+      ...(result.normalRanges ?? const <String>[]),
+      ...(result.labResults ?? const <LabResult>[])
+          .where((item) => item.isNormal)
+          .map((item) => '${item.testName}: ${item.value}'),
+    ]);
+    if (normals.isNotEmpty) {
+      lines.add('IMPORTANT NORMAL / IN-RANGE:');
+      for (final item in _truncateList(normals, 4)) {
+        lines.add('• $item');
+      }
+    }
+
+    final actions = _dedupePreserveOrder(
+      result.recommendations ?? const <String>[],
+    );
+    if (actions.isNotEmpty) {
+      lines.add('RECOMMENDED NEXT ACTIONS:');
+      for (final item in _truncateList(actions, 4)) {
+        lines.add('• $item');
+      }
+    }
+
+    if (lines.isEmpty && assessment.isEmpty && fullLabResults.isEmpty) {
+      return result.description.trim().isEmpty
+          ? 'AI output unavailable. Manual review required.'
+          : result.description.trim();
+    }
+
+    return lines.join('\n').trim();
+  }
+
+  Map<String, List<String>> _parseInsightSections(String insightText) {
+    final sections = <String, List<String>>{};
+    String? current;
+
+    for (final rawLine in insightText.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      if (line.endsWith(':')) {
+        current = line.substring(0, line.length - 1).trim();
+        sections.putIfAbsent(current, () => <String>[]);
+        continue;
+      }
+
+      if (line.contains(':') && !line.startsWith('•')) {
+        final idx = line.indexOf(':');
+        final key = line.substring(0, idx).trim();
+        final value = line.substring(idx + 1).trim();
+        sections[key] = <String>[value];
+        current = null;
+        continue;
+      }
+
+      final content = line.replaceFirst(RegExp(r'^\s*[•\-*]\s*'), '').trim();
+      if (content.isEmpty) continue;
+      if (current != null) {
+        sections.putIfAbsent(current, () => <String>[]).add(content);
+      }
+    }
+
+    return sections;
+  }
+
+  Widget _buildInsightCard({
+    required String title,
+    required IconData icon,
+    required List<String> items,
+    required Color color,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final item in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '• $item',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.textPrimary,
+                  height: 1.35,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmartInsightView(String insightText) {
+    final sections = _parseInsightSections(insightText);
+
+    final cards = <Widget>[];
+    final assessment = sections['OVERALL ASSESSMENT'] ?? const <String>[];
+    if (assessment.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Overall Assessment',
+          icon: Icons.summarize_outlined,
+          items: assessment,
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    final abnormal = sections['KEY ABNORMAL FINDINGS'] ?? const <String>[];
+    if (abnormal.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Abnormal Findings',
+          icon: Icons.warning_amber_rounded,
+          items: _showAllAi ? abnormal : _truncateList(abnormal, 4),
+          color: AppColors.error,
+        ),
+      );
+    }
+
+    final labResults = sections['LABORATORY RESULTS'] ?? const <String>[];
+    if (labResults.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Laboratory Results',
+          icon: Icons.science_outlined,
+          items: _showAllAi ? labResults : _truncateList(labResults, 6),
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    final normals = sections['IMPORTANT NORMAL / IN-RANGE'] ?? const <String>[];
+    if (normals.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'In-Range Results',
+          icon: Icons.check_circle_outline,
+          items: _showAllAi ? normals : _truncateList(normals, 3),
+          color: AppColors.success,
+        ),
+      );
+    }
+
+    final actions = sections['RECOMMENDED NEXT ACTIONS'] ?? const <String>[];
+    if (actions.isNotEmpty) {
+      cards.add(
+        _buildInsightCard(
+          title: 'Recommended Actions',
+          icon: Icons.assignment_turned_in_outlined,
+          items: actions,
+          color: AppColors.brandPrimary,
+        ),
+      );
+    }
+
+    if (cards.isEmpty) {
+      return Text(
+        insightText,
+        maxLines: _showAllAi ? null : 14,
+        overflow: _showAllAi ? TextOverflow.visible : TextOverflow.fade,
+        style: const TextStyle(
+          height: 1.45,
+          fontSize: 14,
+          color: AppColors.textPrimary,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...cards,
+      ],
+    );
+  }
+
   Future<void> _runAiAnalysis() async {
     if (_images.isEmpty) {
       _showMessage('Please add at least one image before AI analysis.');
@@ -361,14 +619,30 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
         'Image count: ${_images.length}',
       ].join('\n');
 
-      final result = await _geminiService.analyzeLabTestImages(_images);
+      final result = await _groqService.analyzeLabTestImages(
+        _images,
+        selectedLabType: _selectedLabType,
+        notes: _notesCtrl.text.trim(),
+      );
       if (!mounted || _cancelledRequests.contains(requestId)) return;
 
       _closeAiLoadingModalIfNeeded();
 
       final insight = result.description.trim().isEmpty
           ? 'No AI insights generated.'
-          : result.description.trim();
+          : _buildConciseLabInsight(result);
+
+      final isUnrelated = RegExp(
+        r'RELEVANCE\s*CHECK\s*:\s*UNRELATED',
+        caseSensitive: false,
+      ).hasMatch(result.description);
+      if (isUnrelated) {
+        _showMessage(
+          'AI flagged the upload as unrelated or unreadable. Please attach clearer lab result images.',
+          type: AppSnackType.warning,
+        );
+        return;
+      }
 
       setState(() {
         _aiDraftInsight = insight;
@@ -555,18 +829,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                                     ),
                                   ],
                                 )
-                              : Text(
-                                  _aiDraftInsight!,
-                                  maxLines: _showAllAi ? null : 14,
-                                  overflow: _showAllAi
-                                      ? TextOverflow.visible
-                                      : TextOverflow.fade,
-                                  style: const TextStyle(
-                                    height: 1.45,
-                                    fontSize: 14,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
+                              : _buildSmartInsightView(_aiDraftInsight!),
                         ),
                       ),
                       const Divider(height: 1),
@@ -636,9 +899,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           'lab_${DateTime.now().millisecondsSinceEpoch}_${paths.length}.jpg';
       final filePath = 'lab-tests/${widget.motherId}/$fileName';
 
-      await Supabase.instance.client.storage
-          .from('medical-images')
-          .uploadBinary(
+      await Supabase.instance.client.storage.from('files').uploadBinary(
             filePath,
             bytes,
             fileOptions:
@@ -646,7 +907,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           );
 
       final publicUrl =
-          Supabase.instance.client.storage.from('medical-images').getPublicUrl(
+          Supabase.instance.client.storage.from('files').getPublicUrl(
                 filePath,
               );
 
@@ -690,11 +951,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
       final paths = upload['paths'] ?? <String>[];
 
       final notes = _notesCtrl.text.trim();
-      final remarks = _aiApprovedInsight != null
-          ? (notes.isEmpty
-              ? _aiApprovedInsight!
-              : '$notes\n\nAI Analysis:\n${_aiApprovedInsight!}')
-          : (notes.isEmpty ? null : notes);
+      final remarks = notes.isEmpty ? null : notes;
 
       final inserted = await Supabase.instance.client
           .from('lab_tests')
@@ -714,7 +971,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
       if (userId != null) {
         for (final path in paths) {
           await Supabase.instance.client.from('files').insert({
-            'bucket_name': 'medical-images',
+            'bucket_name': 'files',
             'file_path': path,
             'file_name': path.split('/').last,
             'file_category': 'lab_test_image',
@@ -741,7 +998,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
               'reference_table': 'lab_tests',
               'reference_id': labTestId,
               'ai_model': 'Gemini 1.5 Flash',
-              'confidence_score': 0.92,
+              'confidence_score': null,
               'response': approvedAiText,
               'response_category': 'analysis',
               'status': 'approved',
@@ -802,6 +1059,68 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
     }
   }
 
+  Widget _fieldLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration({String? hintText, String? errorText}) {
+    return InputDecoration(
+      hintText: hintText,
+      errorText: errorText,
+      filled: true,
+      fillColor: AppColors.bgSecondary.withValues(alpha: 0.5),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.borderPrimary),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.borderPrimary),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: AppColors.brandPrimary.withValues(alpha: 0.75),
+          width: 1.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 108,
+            child: Text(
+              label,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: valueColor ?? AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStep1() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -812,10 +1131,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Lab Test Date',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Lab Test Date'),
               const SizedBox(height: 8),
               InkWell(
                 onTap: _pickDate,
@@ -824,7 +1140,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                   decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
+                    color: AppColors.bgSecondary.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.borderPrimary),
                   ),
@@ -849,17 +1165,14 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
-                'Lab Test Type',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Lab Test Type'),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: _selectedLabType,
-                decoration: const InputDecoration(
+                decoration: _fieldDecoration(
                   hintText: 'Select pregnancy-related lab test',
-                  border: OutlineInputBorder(),
                 ),
+                dropdownColor: Colors.white,
                 items: _pregnancyLabTests
                     .map((type) => DropdownMenuItem(
                           value: type,
@@ -966,10 +1279,7 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Image Layout',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Image Layout'),
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
@@ -990,19 +1300,15 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Notes',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              _fieldLabel('Notes'),
               const SizedBox(height: 8),
               TextField(
                 controller: _notesCtrl,
                 minLines: 4,
                 maxLines: 8,
                 maxLength: 1000,
-                decoration: const InputDecoration(
+                decoration: _fieldDecoration(
                   hintText: 'Type your notes here...',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 8),
@@ -1044,7 +1350,71 @@ class _AddLabTestPageState extends State<AddLabTestPage> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderPrimary),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'AI Insight Summary',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brandPrimary,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _showAllAi = !_showAllAi;
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              minimumSize: Size.zero,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(_showAllAi ? 'Show Less' : 'Show All'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSmartInsightView(_aiApprovedInsight!),
+                    ],
+                  ),
+                ),
               ],
+              const SizedBox(height: 16),
+              _fieldLabel('Summary'),
+              const SizedBox(height: 8),
+              _summaryRow(
+                'Date',
+                _date == null
+                    ? 'Not set'
+                    : DateFormat('yyyy-MM-dd').format(_date!),
+              ),
+              _summaryRow(
+                'Test Type',
+                _selectedLabType ?? 'Not set',
+              ),
+              _summaryRow(
+                'Image',
+                _images.isEmpty
+                    ? 'No image attached'
+                    : '${_images.length} image(s) ready to upload',
+                valueColor: _images.isEmpty
+                    ? AppColors.textSecondary
+                    : AppColors.success,
+              ),
             ],
           ),
         ),

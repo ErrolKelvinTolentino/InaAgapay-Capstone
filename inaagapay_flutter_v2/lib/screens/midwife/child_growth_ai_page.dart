@@ -10,7 +10,7 @@ import '../../widgets/tab_button.dart';
 import '../../widgets/hero_card.dart';
 import '../../widgets/chart_card.dart';
 import '../../widgets/ai_analytics_card.dart';
-import '../../services/gemini_service.dart';
+import '../../services/groq_service.dart';
 import '../../services/growth_calculator.dart';
 import '../../models/ai_analysis.dart';
 import '../../models/growth_record.dart';
@@ -29,7 +29,7 @@ class ChildGrowthAIPage extends StatefulWidget {
 }
 
 class _ChildGrowthAIPageState extends State<ChildGrowthAIPage> {
-  final GeminiService _geminiService = GeminiService();
+  final GroqService _groqService = GroqService();
 
   bool loading = true;
   int _currentTab = 0;
@@ -200,7 +200,7 @@ Based on WHO growth standards, provide a JSON response with EXACTLY these fields
 Return ONLY the JSON, no markdown formatting.
 ''';
 
-      final aiText = await _geminiService.generateTextInsight(
+      final aiText = await _groqService.generateTextInsight(
         prompt: prompt,
         temperature: 0.3,
         maxOutputTokens: 800,
@@ -224,19 +224,18 @@ Return ONLY the JSON, no markdown formatting.
       debugPrint('AI Analysis error: $e');
       _analysis = AIAnalysis(
         summary:
-            'Based on ${_growthRecords.length} growth records, the child is developing within expected ranges.',
-        trend: 'Normal',
+            'Automated growth interpretation is currently unavailable. Please review recorded measurements manually.',
+        trend: 'Insufficient Data',
         recommendations: [
-          'Continue regular growth monitoring every 2-4 weeks.',
-          'Ensure proper nutrition and physical activity.',
-          'Schedule regular pediatric check-ups.',
+          'Review weight, height, and BMI trends manually in the chart.',
+          'Repeat measurements if values appear inconsistent or unexpected.',
+          'Escalate to pediatric evaluation when there are concerning trends.',
         ],
         insights: {
           'records_analyzed': _growthRecords.length,
-          'age_range':
-              '${_growthRecords.first.ageInWeeks} to ${_growthRecords.last.ageInWeeks} weeks',
+          'status': 'ai_unavailable',
         },
-        confidenceScore: 0.85,
+        confidenceScore: 0.0,
       );
       _aiAnalysisError =
           'AI analysis temporarily unavailable. Showing basic summary.';
@@ -726,3 +725,5 @@ Return ONLY the JSON, no markdown formatting.
     );
   }
 }
+
+

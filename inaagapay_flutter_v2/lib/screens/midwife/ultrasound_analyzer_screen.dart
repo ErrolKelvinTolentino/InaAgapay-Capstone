@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/gemini_service.dart';
+import '../../services/groq_service.dart';
 import '../../services/auth_storage.dart';
-import '../../models/gemini_response.dart';
+import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/main_button.dart';
@@ -31,11 +31,11 @@ class UltrasoundAnalyzerScreen extends StatefulWidget {
 
 class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   final ImagePicker _picker = ImagePicker();
-  final GeminiService _geminiService = GeminiService();
+  final GroqService _groqService = GroqService();
   final DateFormat _dateFormat = DateFormat('MMMM d, yyyy');
 
   final List<XFile> _selectedImages = [];
-  GeminiResponse? _combinedResponse;
+  GroqResponse? _combinedResponse;
   bool _isLoading = false;
   bool _isSaving = false;
   String? _errorMessage;
@@ -239,11 +239,29 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     try {
       _lastAiPrompt = [
         'Ultrasound AI analysis request',
+        'Health worker name: ${_healthWorkerNameController.text.trim().isEmpty ? 'Not specified' : _healthWorkerNameController.text.trim()}',
+        'Health worker institution: ${_healthWorkerInstitutionController.text.trim().isEmpty ? 'Not specified' : _healthWorkerInstitutionController.text.trim()}',
+        'Health worker profession: ${_healthWorkerProfessionController.text.trim().isEmpty ? 'Not specified' : _healthWorkerProfessionController.text.trim()}',
         'Image count: ${_selectedImages.length}',
       ].join('\n');
 
-      final result =
-          await _geminiService.analyzeUltrasoundImages(_selectedImages);
+      final result = await _groqService.analyzeUltrasoundImages(
+        _selectedImages,
+        clinicalContext: _lastAiPrompt,
+      );
+
+      final isUnrelated = RegExp(
+        r'RELEVANCE\s*CHECK\s*:\s*UNRELATED',
+        caseSensitive: false,
+      ).hasMatch(result.description);
+      if (isUnrelated) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage =
+              'AI flagged the upload as unrelated or unreadable. Please attach clearer ultrasound images.';
+        });
+        return;
+      }
 
       setState(() {
         _combinedResponse = result;
@@ -361,7 +379,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             'reference_table': 'ultrasounds',
             'reference_id': ultrasoundId,
             'ai_model': 'Gemini 1.5 Flash',
-            'confidence_score': 0.92,
+            'confidence_score': null,
             'response': finalAiText,
             'response_category': 'analysis',
             'status': 'approved',
@@ -1045,6 +1063,259 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     );
   }
 
+  bool _isConcerningStatus(String status) {
+    final s = status.toUpperCase();
+    return s.contains('REVIEW') ||
+        s.contains('ABNORMAL') ||
+        s.contains('CONCERNING');
+  }
+
+  bool _isCautionStatus(String status) {
+    final s = status.toUpperCase();
+    return s == 'OBSERVE' ||
+        s == 'BORDERLINE' ||
+        s == 'POSITIVE' ||
+        s == 'MONITOR';
+  }
+
+  Color _statusChipBackground(String status) {
+    if (_isConcerningStatus(status)) return Colors.red.shade50;
+    if (_isCautionStatus(status)) return Colors.orange.shade50;
+    return Colors.green.shade50;
+  }
+
+  Color _statusChipBorder(String status) {
+    if (_isConcerningStatus(status)) return Colors.red.shade200;
+    if (_isCautionStatus(status)) return Colors.orange.shade200;
+    return Colors.green.shade200;
+  }
+
+  Color _statusChipTextColor(String status) {
+    if (_isConcerningStatus(status)) return Colors.red;
+    if (_isCautionStatus(status)) return Colors.orange.shade800;
+    return Colors.green;
+  }
+
+  String _safeText(Object? value) => value?.toString() ?? '';
+
+  ({String testName, String value, String status, String remark})
+      _parseUltrasoundMetricLine(String line) {
+    final cleaned =
+        _safeText(line).replaceFirst(RegExp(r'^[-\*•]\s*'), '').trim();
+
+    String testName = '';
+    String value = '';
+    String status = 'UNKNOWN';
+    String remark = '';
+
+    final bracketMatch = RegExp(r'\[(.*?)\]').firstMatch(cleaned);
+
+    if (bracketMatch != null) {
+      status = bracketMatch.group(1)!.trim().toUpperCase();
+      testName = cleaned.substring(0, bracketMatch.start).trim();
+
+      final colonIdx = testName.indexOf(':');
+      if (colonIdx != -1) {
+        value = testName.substring(colonIdx + 1).trim();
+        testName = testName.substring(0, colonIdx).trim();
+      }
+
+      remark = cleaned.substring(bracketMatch.end).trim();
+      remark = remark.replaceFirst(RegExp(r'^[-:]\s*'), '').trim();
+    } else {
+      final colonIndex = cleaned.indexOf(':');
+      if (colonIndex != -1) {
+        testName = cleaned.substring(0, colonIndex).trim();
+        String rest = cleaned.substring(colonIndex + 1).trim();
+
+        final parenMatch = RegExp(r'\(([^)]+)\)$').firstMatch(rest);
+        if (parenMatch != null) {
+          remark = parenMatch.group(1)!.trim();
+          rest = rest.substring(0, parenMatch.start).trim();
+        }
+
+        if (rest.startsWith('✓') ||
+            rest.toLowerCase() == 'normal' ||
+            rest.toLowerCase() == 'present') {
+          value = 'Present / Normal';
+          status = 'NORMAL';
+          if (rest.startsWith('✓')) rest = rest.substring(1).trim();
+        } else if (rest.startsWith('X') ||
+            rest.startsWith('✗') ||
+            rest.toLowerCase() == 'abnormal' ||
+            rest.toLowerCase() == 'absent') {
+          value = 'Absent / Abnormal';
+          status = 'ABNORMAL';
+          if (rest.startsWith('X') || rest.startsWith('✗'))
+            rest = rest.substring(1).trim();
+        } else {
+          final dashIndex = rest.lastIndexOf('-');
+          if (dashIndex != -1) {
+            final possibleStatus =
+                rest.substring(dashIndex + 1).trim().toUpperCase();
+            if (possibleStatus == 'NORMAL' ||
+                possibleStatus == 'ABNORMAL' ||
+                possibleStatus == 'REVIEW' ||
+                possibleStatus == 'MONITOR' ||
+                possibleStatus == 'BORDERLINE' ||
+                possibleStatus == 'CONCERNING') {
+              status = possibleStatus;
+              value = rest.substring(0, dashIndex).trim();
+            } else {
+              value = rest;
+            }
+          } else {
+            value = rest;
+          }
+        }
+      } else {
+        return (testName: cleaned, value: '', status: 'UNKNOWN', remark: '');
+      }
+    }
+
+    if (status == 'CONCERNING') status = 'ABNORMAL';
+
+    if (status == 'UNKNOWN' || status.isEmpty) {
+      if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
+        status = 'NORMAL';
+      } else if (RegExp(
+              r'\babnormal\b|\bcritical\b|outside normal range|concerning',
+              caseSensitive: false)
+          .hasMatch(value)) {
+        status = 'ABNORMAL';
+      } else {
+        status = 'INFO';
+      }
+    }
+
+    return (testName: testName, value: value, status: status, remark: remark);
+  }
+
+  Widget _buildMetricsList(List<String> lines) {
+    final rows = lines
+        .map(_parseUltrasoundMetricLine)
+        .where((r) => r.testName.isNotEmpty)
+        .toList();
+
+    if (rows.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: lines.map((line) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 6, right: 8),
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    line.replaceFirst(RegExp(r'^[-\-*]\s*'), '').trim(),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows.map((row) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.borderPrimary),
+            color: Colors.white,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                row.testName,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  if (row.status != 'UNKNOWN' && row.status != 'INFO')
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _statusChipBackground(row.status),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: _statusChipBorder(row.status),
+                        ),
+                      ),
+                      child: Text(
+                        row.status,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _statusChipTextColor(row.status),
+                        ),
+                      ),
+                    ),
+                  if (row.value.isNotEmpty &&
+                      row.value != 'Present / Normal' &&
+                      row.value != 'Absent / Abnormal')
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSecondary,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        row.value,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              if (row.remark.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  row.remark,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildDetailedFindings() {
     if (_combinedResponse == null) return const SizedBox.shrink();
 
@@ -1118,31 +1389,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  ..._combinedResponse!.measurements!.map((measurement) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            margin: const EdgeInsets.only(right: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.teal,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              measurement,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                  _buildMetricsList(_combinedResponse!.measurements!),
                 ],
               ),
             ),
@@ -1177,31 +1424,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  ..._combinedResponse!.normalFindings!.map((finding) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            margin: const EdgeInsets.only(right: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.green,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              finding,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                  _buildMetricsList(_combinedResponse!.normalFindings!),
                 ],
               ),
             ),
@@ -1235,31 +1458,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  ..._combinedResponse!.concerns!.map((concern) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            margin: const EdgeInsets.only(right: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.orange,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              concern,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                  _buildMetricsList(_combinedResponse!.concerns!),
                 ],
               ),
             ),
