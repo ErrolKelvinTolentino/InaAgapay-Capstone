@@ -1,3 +1,5 @@
+// lib/screens/midwife/add_child_step3_child.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -18,10 +20,14 @@ const List<String> _extensionOptions = ['', 'Jr.', 'Sr.', 'II', 'III', 'IV', 'V'
 
 class AddChildStep3Child extends StatefulWidget {
   final ChildParentMode mode;
+  final int? motherId;  // Optional: only used when mode is registeredMother
+  final String? motherFirstName;  // Optional: pre-fill mother info
 
   const AddChildStep3Child({
     super.key,
     required this.mode,
+    this.motherId,
+    this.motherFirstName,
   });
 
   @override
@@ -69,28 +75,66 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
   void initState() {
     super.initState();
     if (widget.mode == ChildParentMode.registeredMother) {
-      _loadAllMothers();
+      if (widget.motherId != null) {
+        // If motherId is provided, we don't need to load all mothers
+        _loadSelectedMother();
+      } else {
+        _loadAllMothers();
+      }
     }
   }
 
-  @override
-  void dispose() {
-    firstNameCtrl.dispose();
-    lastNameCtrl.dispose();
-    middleNameCtrl.dispose();
-    guardianFirstNameCtrl.dispose();
-    guardianLastNameCtrl.dispose();
-    guardianMiddleNameCtrl.dispose();
-    guardianPhoneCtrl.dispose();
-    guardianAddressCtrl.dispose();
-    super.dispose();
+  Future<void> _loadSelectedMother() async {
+    if (widget.motherId == null) return;
+    
+    setState(() => _loadingMothers = true);
+    
+    try {
+      final response = await Supabase.instance.client
+          .from('mothers')
+          .select('''
+            mother_id,
+            account_id,
+            account:account_id (
+              first_name,
+              last_name,
+              phone_number,
+              email_address
+            )
+          ''')
+          .eq('mother_id', widget.motherId!)
+          .maybeSingle();
+      
+      if (response != null) {
+        final account = response['account'] as Map<String, dynamic>?;
+        final firstName = account?['first_name']?.toString() ?? '';
+        final lastName = account?['last_name']?.toString() ?? '';
+        
+        setState(() {
+          _selectedMother = {
+            'mother_id': response['mother_id'],
+            'account_id': response['account_id'],
+            'first_name': firstName,
+            'last_name': lastName,
+            'display_name': '$firstName $lastName'.trim(),
+            'phone_number': account?['phone_number']?.toString() ?? '',
+            'email_address': account?['email_address']?.toString() ?? '',
+          };
+          _loadingMothers = false;
+        });
+      } else {
+        setState(() => _loadingMothers = false);
+      }
+    } catch (e) {
+      debugPrint('Error loading selected mother: $e');
+      setState(() => _loadingMothers = false);
+    }
   }
 
   Future<void> _loadAllMothers() async {
     setState(() => _loadingMothers = true);
 
     try {
-      // Step 1: Get ALL mother accounts from accounts table
       final accountsResponse = await Supabase.instance.client
           .from('accounts')
           .select('''
@@ -108,29 +152,15 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
           .eq('is_verified', true)
           .eq('status', 'active');
 
-      debugPrint('=== TOTAL MOTHER ACCOUNTS FOUND: ${accountsResponse.length} ===');
-      
       if (accountsResponse.isEmpty) {
-        debugPrint('No mother accounts found in accounts table!');
         setState(() {
           _allMothers = [];
           _filteredMothers = [];
           _loadingMothers = false;
         });
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No registered mothers found. Please add mothers first.'),
-              backgroundColor: AppColors.warning,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
         return;
       }
 
-      // Step 2: Get mother records to get mother_id
       final accountIds = accountsResponse.map<int>((a) => a['account_id'] as int).toList();
       
       final mothersResponse = await Supabase.instance.client
@@ -138,13 +168,11 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
           .select('mother_id, account_id')
           .inFilter('account_id', accountIds);
 
-      // Create a map for quick lookup
-      final Map<int, int> motherIdByAccountId = {};
+      final motherIdByAccountId = <int, int>{};
       for (var mother in mothersResponse) {
         motherIdByAccountId[mother['account_id'] as int] = mother['mother_id'] as int;
       }
 
-      // Step 3: Combine the data
       final List<Map<String, dynamic>> mothers = [];
       for (var account in accountsResponse) {
         final accountId = account['account_id'] as int;
@@ -166,10 +194,6 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
             'email_address': account['email_address']?.toString() ?? '',
             'display_name': displayName.isEmpty ? 'Unknown Mother' : displayName,
           });
-          
-          debugPrint('Loaded mother: $displayName (ID: $motherId, Phone: ${account['phone_number']})');
-        } else {
-          debugPrint('Warning: Account ${account['email_address']} has no mother record');
         }
       }
 
@@ -178,22 +202,9 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
         _filteredMothers = mothers;
         _loadingMothers = false;
       });
-      
-      debugPrint('=== TOTAL MOTHERS WITH VALID RECORDS: ${mothers.length} ===');
-      
     } catch (e) {
       debugPrint('Error loading mothers: $e');
       setState(() => _loadingMothers = false);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading mothers: ${e.toString()}'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
     }
   }
 
@@ -231,7 +242,6 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
               padding: const EdgeInsets.only(bottom: 20),
               child: Column(
                 children: [
-                  // Handle bar
                   Container(
                     margin: const EdgeInsets.only(top: 12),
                     width: 40,
@@ -242,8 +252,6 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
-                  // Header
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
@@ -255,8 +263,6 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                       ),
                     ),
                   ),
-                  
-                  // Count info
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: Text(
@@ -267,8 +273,6 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                       ),
                     ),
                   ),
-                  
-                  // Search field
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: TextField(
@@ -309,10 +313,7 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                       ),
                     ),
                   ),
-                  
                   const SizedBox(height: 8),
-                  
-                  // List of mothers
                   Expanded(
                     child: _loadingMothers
                         ? const Center(
@@ -752,6 +753,74 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
   }
 
   Widget _buildRegisteredMotherSection() {
+    // If motherId was provided and we already have selected mother, show info
+    if (widget.motherId != null && _selectedMother != null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.pregnant_woman, color: AppColors.brandPrimary, size: 22),
+                const SizedBox(width: 8),
+                const Text(
+                  'Selected Mother',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandText,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: AppColors.success),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Selected: ${_selectedMother!['display_name']}',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        if (_selectedMother!['phone_number'] != null && _selectedMother!['phone_number'].isNotEmpty)
+                          Text(
+                            _selectedMother!['phone_number'],
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -784,7 +853,6 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
           ),
           const SizedBox(height: 16),
 
-          // Tappable container that opens the bottom sheet
           GestureDetector(
             onTap: _loadingMothers ? null : _showMotherSelectionSheet,
             child: Container(
@@ -839,7 +907,7 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
             ),
           ),
 
-          if (_selectedMother != null)
+          if (_selectedMother != null && widget.motherId == null)
             Container(
               margin: const EdgeInsets.only(top: 12),
               padding: const EdgeInsets.all(12),

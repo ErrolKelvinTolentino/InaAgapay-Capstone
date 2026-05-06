@@ -1,10 +1,12 @@
+// lib/screens/midwife/midwife_children_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../services/auth_storage.dart';
 import 'child_profile_page.dart';
-import 'add_child_choice.dart';
+import 'add_child_step3_child.dart';
 
 class MidwifeChildrenScreen extends StatefulWidget {
   const MidwifeChildrenScreen({super.key});
@@ -66,7 +68,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     });
 
     try {
-      // Get all mothers in this BHC
       final mothersResponse = await Supabase.instance.client
           .from('mothers')
           .select('mother_id')
@@ -77,10 +78,8 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         motherIds.add(mother['mother_id'] as int);
       }
       
-      // Fetch children linked to mothers (existing)
       List<Map<String, dynamic>> childrenList = [];
       
-      // Get children linked to registered mothers in this BHC
       if (motherIds.isNotEmpty) {
         final childrenWithMother = await Supabase.instance.client
             .from('children')
@@ -110,8 +109,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         childrenList.addAll(List<Map<String, dynamic>>.from(childrenWithMother));
       }
       
-      // ALSO get children linked to guardians (these may not have a mother_id)
-      // Using filter with 'not' condition
       final childrenWithGuardianOnly = await Supabase.instance.client
           .from('children')
           .select('''
@@ -140,7 +137,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
       
       childrenList.addAll(List<Map<String, dynamic>>.from(childrenWithGuardianOnly));
       
-      // Remove duplicates (just in case)
       final seenIds = <int>{};
       childrenList = childrenList.where((child) {
         final id = child['child_id'] as int;
@@ -149,7 +145,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         return true;
       }).toList();
       
-      // Sort by added date (newest first)
       childrenList.sort((a, b) {
         final dateA = DateTime.tryParse(a['added_at'] ?? '');
         final dateB = DateTime.tryParse(b['added_at'] ?? '');
@@ -163,12 +158,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         _loading = false;
       });
       
-      debugPrint('Total children loaded: ${childrenList.length}');
-      debugPrint('Children with mothers: ${childrenList.where((c) => c['mother_id'] != null).length}');
-      debugPrint('Children with guardians only: ${childrenList.where((c) => c['guardian_id'] != null && c['mother_id'] == null).length}');
-      
     } catch (e) {
-      debugPrint('Error fetching children: $e');
       setState(() {
         _errorMessage = e.toString();
         _loading = false;
@@ -213,7 +203,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
   }
 
   String _getParentName(Map<String, dynamic> child) {
-    // Check if linked to registered mother
     final mother = child['mother'] as Map<String, dynamic>?;
     if (mother != null) {
       final account = mother['account'] as Map<String, dynamic>?;
@@ -224,7 +213,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
       }
     }
     
-    // Check if linked to guardian
     final guardian = child['guardian'] as Map<String, dynamic>?;
     if (guardian != null) {
       final firstName = guardian['first_name']?.toString() ?? '';
@@ -234,6 +222,88 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     }
     
     return 'No parent record';
+  }
+
+  Future<void> _addChild() async {
+    if (_assignedBhcId == null) return;
+
+    final mothersResponse = await Supabase.instance.client
+        .from('mothers')
+        .select('mother_id, account:account_id (first_name, last_name)')
+        .eq('assigned_bhc_id', _assignedBhcId!);
+
+    final List<Map<String, dynamic>> mothers = List.from(mothersResponse);
+    
+    if (!mounted) return;
+    final bool? useMother = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Child'),
+        content: const Text('Do you want to link this child to a registered mother?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No (Create Guardian)')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes')),
+        ],
+      ),
+    );
+
+    if (useMother == true && mothers.isNotEmpty) {
+      if (!mounted) return;
+      final int? selectedMotherId = await showDialog<int>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Select Mother'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 300,
+            child: ListView.builder(
+              itemCount: mothers.length,
+              itemBuilder: (ctx, index) {
+                final mother = mothers[index];
+                final account = mother['account'] as Map<String, dynamic>?;
+                final name = account != null
+                    ? '${account['first_name'] ?? ''} ${account['last_name'] ?? ''}'.trim()
+                    : 'Mother ${mother['mother_id']}';
+                final motherIdValue = mother['mother_id'] as int;
+                return ListTile(
+                  title: Text(name),
+                  onTap: () => Navigator.pop(ctx, motherIdValue),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ],
+        ),
+      );
+
+      if (selectedMotherId != null && mounted) {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AddChildStep3Child(
+              mode: ChildParentMode.registeredMother,
+              motherId: selectedMotherId,
+            ),
+          ),
+        );
+        if (result == true && mounted) {
+          _fetchChildren();
+        }
+      }
+    } else {
+      if (!mounted) return;
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const AddChildStep3Child(mode: ChildParentMode.newGuardian),
+        ),
+      );
+      if (result == true && mounted) {
+        _fetchChildren();
+      }
+    }
   }
 
   @override
@@ -247,7 +317,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
           children: [
             const SizedBox(height: 16),
 
-            // Stats Card - Pink background with baby image
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               height: 110,
@@ -266,10 +335,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                     top: 0,
                     child: Padding(
                       padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
-                      child: Image.asset(
-                        'assets/images/baby.png',
-                        fit: BoxFit.contain,
-                      ),
+                      child: Image.asset('assets/images/baby.png', fit: BoxFit.contain),
                     ),
                   ),
                   Positioned(
@@ -280,22 +346,8 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'There are',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        Text(
-                          '${_filteredChildren.length} Children',
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.brandPrimary,
-                          ),
-                        ),
+                        const Text('There are', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textSecondary)),
+                        Text('${_filteredChildren.length} Children', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.brandPrimary)),
                       ],
                     ),
                   ),
@@ -305,7 +357,6 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
 
             const SizedBox(height: 20),
 
-            // Search Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: AppInputField(
@@ -317,59 +368,33 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
 
             const SizedBox(height: 16),
 
-            // Helper Text
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 4, horizontal: 16),
               child: Text(
                 'Tap a child to view health records',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
 
             const SizedBox(height: 8),
 
-            // Children List
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _fetchChildren,
                 color: AppColors.brandPrimary,
                 child: _loading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.brandPrimary,
-                        ),
-                      )
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.brandPrimary))
                     : _errorMessage != null
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(
-                                  Icons.error_outline,
-                                  size: 48,
-                                  color: AppColors.error,
-                                ),
+                                const Icon(Icons.error_outline, size: 48, color: AppColors.error),
                                 const SizedBox(height: 16),
-                                Text(
-                                  _errorMessage!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
+                                Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
                                 const SizedBox(height: 16),
-                                ElevatedButton(
-                                  onPressed: _fetchChildren,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.brandPrimary,
-                                  ),
-                                  child: const Text('Retry'),
-                                ),
+                                ElevatedButton(onPressed: _fetchChildren, style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandPrimary), child: const Text('Retry')),
                               ],
                             ),
                           )
@@ -378,28 +403,11 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(
-                                      Icons.child_care_outlined,
-                                      size: 64,
-                                      color: AppColors.textSecondary,
-                                    ),
+                                    const Icon(Icons.child_care_outlined, size: 64, color: AppColors.textSecondary),
                                     const SizedBox(height: 16),
-                                    const Text(
-                                      'No children found',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
+                                    const Text('No children found', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
                                     const SizedBox(height: 8),
-                                    const Text(
-                                      'Tap the + button to add a child',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
+                                    const Text('Tap the + button to add a child', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary)),
                                   ],
                                 ),
                               )
@@ -412,13 +420,9 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                                   final firstName = child['first_name']?.toString() ?? '';
                                   final lastName = child['last_name']?.toString() ?? '';
                                   final birthDetails = child['birth_details'] as Map<String, dynamic>?;
-                                  final birthdate = birthDetails != null && birthDetails['birthdate'] != null
-                                      ? DateTime.parse(birthDetails['birthdate'])
-                                      : null;
+                                  final birthdate = birthDetails != null && birthDetails['birthdate'] != null ? DateTime.parse(birthDetails['birthdate']) : null;
                                   final age = _formatAge(birthdate);
                                   final parentName = _getParentName(child);
-                                  
-                                  // Determine badge color based on parent type
                                   final isGuardianChild = child['guardian_id'] != null && child['mother_id'] == null;
                                   
                                   return _ChildCard(
@@ -430,14 +434,8 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                                     onTap: () {
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(
-                                          builder: (_) => ChildProfilePage(
-                                            childId: child['child_id'] as int,
-                                          ),
-                                        ),
-                                      ).then((_) {
-                                        _fetchChildren();
-                                      });
+                                        MaterialPageRoute(builder: (_) => ChildProfilePage(childId: child['child_id'] as int)),
+                                      ).then((_) => _fetchChildren());
                                     },
                                   );
                                 },
@@ -448,17 +446,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AddChildChoicePage(),
-            ),
-          );
-          if (result == true && mounted) {
-            _fetchChildren();
-          }
-        },
+        onPressed: _addChild,
         backgroundColor: AppColors.brandPrimary,
         foregroundColor: Colors.white,
         tooltip: 'Add Child',
@@ -490,9 +478,7 @@ class _ChildCard extends StatelessWidget {
   String get _initials {
     final firstInitial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '';
     final lastInitial = lastName.isNotEmpty ? lastName[0].toUpperCase() : '';
-    if (firstInitial.isNotEmpty && lastInitial.isNotEmpty) {
-      return '$firstInitial$lastInitial';
-    }
+    if (firstInitial.isNotEmpty && lastInitial.isNotEmpty) return '$firstInitial$lastInitial';
     return firstInitial.isNotEmpty ? firstInitial : 'C';
   }
 
@@ -505,13 +491,7 @@ class _ChildCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Material(
           color: Colors.transparent,
@@ -523,32 +503,21 @@ class _ChildCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 16, 20, 16),
               child: Row(
                 children: [
-                  // Avatar - Different color for guardian children
                   Container(
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: isGuardianChild
-                          ? AppColors.success.withValues(alpha: 0.3)
-                          : AppColors.brandPrimary.withValues(alpha: 0.3),
+                      color: isGuardianChild ? AppColors.success.withValues(alpha: 0.3) : AppColors.brandPrimary.withValues(alpha: 0.3),
                       shape: BoxShape.circle,
                     ),
                     child: Center(
                       child: Text(
                         _initials,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isGuardianChild
-                              ? AppColors.success
-                              : AppColors.brandPrimary,
-                        ),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isGuardianChild ? AppColors.success : AppColors.brandPrimary),
                       ),
                     ),
                   ),
                   const SizedBox(width: 16),
-                  
-                  // Child Info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -560,75 +529,33 @@ class _ChildCard extends StatelessWidget {
                                 fullName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                  color: AppColors.textPrimary,
-                                ),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: AppColors.textPrimary),
                               ),
                             ),
                             if (isGuardianChild) ...[
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.success.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: AppColors.success.withValues(alpha: 0.3),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Guardian',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.success,
-                                  ),
-                                ),
+                                decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.success.withValues(alpha: 0.3))),
+                                child: const Text('Guardian', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.success)),
                               ),
                             ],
                           ],
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          age,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
+                        Text(age, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(
-                              isGuardianChild ? Icons.person_outline : Icons.pregnant_woman,
-                              size: 12,
-                              color: AppColors.textSecondary,
-                            ),
+                            Icon(isGuardianChild ? Icons.person_outline : Icons.pregnant_woman, size: 12, color: AppColors.textSecondary),
                             const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                parentName,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                            Expanded(child: Text(parentName, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
                           ],
                         ),
                       ],
                     ),
                   ),
-                  
-                  // Arrow
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 24,
-                    color: AppColors.textSecondary,
-                  ),
+                  const Icon(Icons.chevron_right, size: 24, color: AppColors.textSecondary),
                 ],
               ),
             ),

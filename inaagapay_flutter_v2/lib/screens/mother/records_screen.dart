@@ -2,10 +2,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
+import '../../services/mother_profile_service.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/headline.dart';
+import '../../widgets/main_button.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 
 class RecordsScreen extends StatefulWidget {
@@ -15,22 +17,47 @@ class RecordsScreen extends StatefulWidget {
   State<RecordsScreen> createState() => _RecordsScreenState();
 }
 
-class _RecordsScreenState extends State<RecordsScreen> {
+class _RecordsScreenState extends State<RecordsScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   String? _errorMessage;
   int? _motherId;
-  
+
+  List<Map<String, dynamic>> _checkups = [];
   List<Map<String, dynamic>> _ultrasounds = [];
   List<Map<String, dynamic>> _labTests = [];
-  List<Map<String, dynamic>> _prenatalCheckups = [];
-  
+  Map<int, int> _pregnancyFetalCounts = {};
+  Map<int, String> _checkupSymptomSummaries = {};
+
   String _selectedFilter = 'all';
+  String _sortOrder = 'desc';
   String _searchQuery = '';
+  final Set<String> _expandedLabInsightAspects = <String>{};
+  StateSetter? _recordDetailsModalSetState;
+
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadMotherData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _refreshRecordDetailsUi() {
+    final modalSetState = _recordDetailsModalSetState;
+    if (modalSetState != null) {
+      modalSetState(() {});
+      return;
+    }
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _loadMotherData() async {
@@ -41,7 +68,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
 
     try {
       _motherId = await AuthStorage.getMotherId();
-      
+
       if (_motherId == null) {
         throw Exception('Mother ID not found');
       }
@@ -55,14 +82,32 @@ class _RecordsScreenState extends State<RecordsScreen> {
         setState(() {
           _ultrasounds = [];
           _labTests = [];
-          _prenatalCheckups = [];
-          _isLoading = false;
         });
-        return;
+      } else {
+        final pregnancyIds = pregnanciesResponse
+            .map<int>((p) => p['pregnancy_id'] as int)
+            .toList();
+        await _loadRecordsForPregnancies(pregnancyIds);
       }
-      
-      final pregnancyIds = pregnanciesResponse.map<int>((p) => p['pregnancy_id'] as int).toList();
-      
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadRecordsForPregnancies(List<int> pregnancyIds) async {
+    if (pregnancyIds.isNotEmpty) {
+      final checkupsResponse = await SupabaseService.client
+          .from('prenatal_checkups')
+          .select('*')
+          .inFilter('pregnancy_id', pregnancyIds)
+          .order('checkup_datetime', ascending: false);
+
       final ultrasoundsResponse = await SupabaseService.client
           .from('ultrasounds')
           .select('*')
@@ -75,28 +120,64 @@ class _RecordsScreenState extends State<RecordsScreen> {
           .inFilter('pregnancy_id', pregnancyIds)
           .order('lab_test_date', ascending: false);
 
-      final prenatalResponse = await SupabaseService.client
-          .from('prenatal_checkups')
-          .select('''
-            *,
-            pregnancy:pregnancy_id (
-              mother_id
-            )
-          ''')
-          .inFilter('pregnancy_id', pregnancyIds)
-          .order('checkup_datetime', ascending: false);
+      final pregnancyResponse = await SupabaseService.client
+          .from('pregnancies')
+          .select('pregnancy_id, fetal_count')
+          .inFilter('pregnancy_id', pregnancyIds);
+
+      final checkupIds = (checkupsResponse as List)
+          .map<int?>((c) => c['prenatal_checkup_id'] as int?)
+          .whereType<int>()
+          .toList();
+
+      Map<int, String> symptomSummaries = {};
+      if (checkupIds.isNotEmpty) {
+        final symptomRows = await SupabaseService.client
+            .from('pregnancy_symptoms')
+            .select(
+                'prenatal_checkup_id, symptom_type_id, notes, symptom_type:symptom_types(symptom_name, risk_category)')
+            .inFilter('prenatal_checkup_id', checkupIds);
+
+        for (final symbol
+            in (symptomRows as List).cast<Map<String, dynamic>>()) {
+          final checkupId = symbol['prenatal_checkup_id'] as int?;
+          if (checkupId == null) continue;
+          final symptomType = symbol['symptom_type'] as Map<String, dynamic>?;
+          final name =
+              symptomType?['symptom_name']?.toString() ?? 'Unknown symptom';
+          final risk = symptomType?['risk_category']?.toString() ?? 'unknown';
+          final note = (symbol['notes'] as String?)?.trim();
+          final label = note != null && note.isNotEmpty
+              ? '$name ($risk): $note'
+              : '$name ($risk)';
+          symptomSummaries.update(
+            checkupId,
+            (existing) {
+              final items = existing.split('; ');
+              items.add(label);
+              return items.join('; ');
+            },
+            ifAbsent: () => label,
+          );
+        }
+      }
+
+      final fetalCounts = <int, int>{};
+      for (final pregnancy
+          in (pregnancyResponse as List).cast<Map<String, dynamic>>()) {
+        final id = pregnancy['pregnancy_id'] as int?;
+        final count = pregnancy['fetal_count'] as int?;
+        if (id != null && count != null) {
+          fetalCounts[id] = count;
+        }
+      }
 
       setState(() {
+        _checkups = List<Map<String, dynamic>>.from(checkupsResponse);
         _ultrasounds = List<Map<String, dynamic>>.from(ultrasoundsResponse);
         _labTests = List<Map<String, dynamic>>.from(labTestsResponse);
-        _prenatalCheckups = List<Map<String, dynamic>>.from(prenatalResponse);
-        _isLoading = false;
-      });
-
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
+        _pregnancyFetalCounts = fetalCounts;
+        _checkupSymptomSummaries = symptomSummaries;
       });
     }
   }
@@ -129,6 +210,11 @@ class _RecordsScreenState extends State<RecordsScreen> {
     return str.isEmpty ? '—' : str;
   }
 
+  String _formatInputValue(dynamic value) {
+    final formatted = _formatValue(value);
+    return formatted == '—' ? 'Not inputted' : formatted;
+  }
+
   List<String> _parseImageUrls(dynamic imageField) {
     List<String> urls = [];
     if (imageField != null) {
@@ -140,6 +226,32 @@ class _RecordsScreenState extends State<RecordsScreen> {
       }
     }
     return urls;
+  }
+
+  ({String cleanRemarks, String? extractedAi}) _splitRemarksAndAi(
+      String? rawRemarks) {
+    final source = rawRemarks?.trim() ?? '';
+    if (source.isEmpty) {
+      return (cleanRemarks: '', extractedAi: null);
+    }
+
+    final marker = RegExp(r'\bAI\s*Analysis\s*:', caseSensitive: false);
+    final match = marker.firstMatch(source);
+    if (match == null) {
+      return (cleanRemarks: source, extractedAi: null);
+    }
+
+    final notesPart = source.substring(0, match.start).trim();
+    final aiPart = source.substring(match.end).trim();
+    return (
+      cleanRemarks: notesPart,
+      extractedAi: aiPart.isEmpty ? null : aiPart,
+    );
+  }
+
+  ({String cleanRemarks, String? extractedAi}) _splitLabRemarksAndAi(
+      String? rawRemarks) {
+    return _splitRemarksAndAi(rawRemarks);
   }
 
   void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
@@ -161,901 +273,1669 @@ class _RecordsScreenState extends State<RecordsScreen> {
     String? subtitle,
     List<String>? imageUrls,
     String? aiAnalysis,
+    bool useStructuredAiInsights = false,
   }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+      builder: (_) {
+        bool showFullAi = false;
+        bool isEditing = false;
+        final editController = TextEditingController(text: aiAnalysis ?? '');
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            _recordDetailsModalSetState = setModalState;
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: AppColors.bgSecondary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(icon, color: AppColors.brandPrimary),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Text(
-                                title,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: AppColors.bgSecondary,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(icon, color: AppColors.brandPrimary),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (subtitle != null && subtitle.isNotEmpty)
+                                      Text(
+                                        subtitle,
+                                        style: const TextStyle(
+                                            color: AppColors.textSecondary),
+                                      ),
+                                  ],
                                 ),
                               ),
-                              if (subtitle != null && subtitle.isNotEmpty)
-                                Text(
-                                  subtitle,
-                                  style: const TextStyle(color: AppColors.textSecondary),
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () => Navigator.pop(context),
+                              ),
                             ],
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                          const SizedBox(height: 16),
 
-                    if (imageUrls != null && imageUrls.isNotEmpty) ...[
-                      SizedBox(
-                        height: 200,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: imageUrls.length,
-                          itemBuilder: (context, index) {
-                            return GestureDetector(
-                              onTap: () => _showFullScreenImage(imageUrls, index),
-                              child: Container(
-                                width: 200,
-                                margin: const EdgeInsets.only(right: 12),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      Image.network(
-                                        imageUrls[index],
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => Container(
-                                          color: AppColors.bgSecondary,
-                                          child: const Center(
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                Icon(Icons.broken_image, size: 32, color: Colors.grey),
-                                                SizedBox(height: 4),
-                                                Text(
-                                                  'Image not available',
-                                                  style: TextStyle(fontSize: 10),
-                                                  textAlign: TextAlign.center,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        loadingBuilder: (context, child, loadingProgress) {
-                                          if (loadingProgress == null) return child;
-                                          return Container(
-                                            color: AppColors.bgSecondary,
-                                            child: const Center(
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
-                                              ),
-                                            ),
-                                          );
-                                        },
+                          if (imageUrls != null && imageUrls.isNotEmpty) ...[
+                            SizedBox(
+                              height: 200,
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: imageUrls.length,
+                                itemBuilder: (context, index) {
+                                  return GestureDetector(
+                                    onTap: () => _showFullScreenImage(imageUrls, index),
+                                    child: Container(
+                                      width: 200,
+                                      margin: const EdgeInsets.only(right: 12),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: Colors.grey.shade300),
                                       ),
-                                      if (imageUrls.length > 1 && index == 0)
-                                        Positioned(
-                                          top: 8,
-                                          right: 8,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withValues(alpha: 0.6),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              '+${imageUrls.length - 1} more',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w500,
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            Image.network(
+                                              imageUrls[index],
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) =>
+                                                  Container(
+                                                color: AppColors.bgSecondary,
+                                                child: const Center(
+                                                  child: Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment.center,
+                                                    children: [
+                                                      Icon(Icons.broken_image,
+                                                          size: 32,
+                                                          color: Colors.grey),
+                                                      SizedBox(height: 4),
+                                                      Text(
+                                                        'Image not available',
+                                                        style: TextStyle(
+                                                            fontSize: 10),
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
                                               ),
+                                              loadingBuilder: (context, child,
+                                                  loadingProgress) {
+                                                if (loadingProgress == null)
+                                                  return child;
+                                                return Container(
+                                                  color: AppColors.bgSecondary,
+                                                  child: const Center(
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      valueColor:
+                                                          AlwaysStoppedAnimation<
+                                                              Color>(
+                                                          AppColors
+                                                              .brandPrimary),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
                                             ),
-                                          ),
+                                            if (imageUrls.length > 1 &&
+                                                index == 0)
+                                              Positioned(
+                                                top: 8,
+                                                right: 8,
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black
+                                                        .withValues(alpha: 0.6),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                  ),
+                                                  child: Text(
+                                                    '+${imageUrls.length - 1} more',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
                                         ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.bgSecondary,
+                              borderRadius: BorderRadius.circular(14),
+                              border:
+                                  Border.all(color: AppColors.borderPrimary),
+                            ),
+                            child: Column(
+                              children: rows.map((entry) => Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 6),
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      width: 120,
+                                      child: Text(
+                                        entry.key,
+                                        style: const TextStyle(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        entry.value,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )).toList(),
+                            ),
+                          ),
+
+                          if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3E5F5),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                    color: const Color(0xFF7E57C2)
+                                        .withValues(alpha: 0.2)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.psychology_rounded,
+                                          color: const Color(0xFF7E57C2),
+                                          size: 20),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'AI-Powered Insights',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF5E35B1),
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      TextButton.icon(
+                                        onPressed: () {
+                                          setModalState(() {
+                                            isEditing = !isEditing;
+                                            if (!isEditing) {
+                                              editController.text =
+                                                  aiAnalysis;
+                                            }
+                                          });
+                                        },
+                                        icon: Icon(Icons.edit_outlined,
+                                            size: 16,
+                                            color: isEditing
+                                                ? Colors.green
+                                                : AppColors.brandPrimary),
+                                        label: Text(
+                                          isEditing ? 'Cancel' : 'Edit',
+                                          style: TextStyle(
+                                              color: isEditing
+                                                  ? Colors.green
+                                                  : AppColors.brandPrimary),
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.borderPrimary),
-                      ),
-                      child: Column(
-                        children: rows.map((entry) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 120,
-                                child: Text(
-                                  entry.key,
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 13,
+                                  const SizedBox(height: 12),
+                                  if (!isEditing)
+                                    Text(
+                                      aiAnalysis,
+                                      style: const TextStyle(
+                                          fontSize: 13, height: 1.5),
+                                    )
+                                  else
+                                    Column(
+                                      children: [
+                                        TextField(
+                                          controller: editController,
+                                          maxLines: 10,
+                                          decoration: const InputDecoration(
+                                            border: OutlineInputBorder(),
+                                            hintText: 'Edit AI insights...',
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: [
+                                            TextButton(
+                                              onPressed: () {
+                                                setModalState(() {
+                                                  isEditing = false;
+                                                  editController.text =
+                                                      aiAnalysis;
+                                                });
+                                              },
+                                              child: const Text('Discard'),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            ElevatedButton(
+                                              onPressed: () {
+                                                setModalState(() {
+                                                  isEditing = false;
+                                                });
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                        'AI insights updated locally'),
+                                                    backgroundColor:
+                                                        AppColors.success,
+                                                  ),
+                                                );
+                                              },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor:
+                                                    AppColors.brandPrimary,
+                                              ),
+                                              child: const Text('Save'),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.7),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'Note: This is AI-generated analysis for informational purposes only.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  entry.value,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )).toList(),
-                      ),
-                    ),
-
-                    if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3E5F5),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFF7E57C2).withValues(alpha: 0.2)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.psychology_rounded, color: const Color(0xFF7E57C2), size: 20),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'AI-Powered Insights',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF5E35B1),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              aiAnalysis,
-                              style: const TextStyle(fontSize: 13, height: 1.5),
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'Note: This is AI-generated analysis for informational purposes only.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
-                                  fontStyle: FontStyle.italic,
-                                ),
+                                ],
                               ),
                             ),
                           ],
-                        ),
+                        ],
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
   String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
+    final bpSys = _toDouble(checkup['blood_pressure_systolic']);
+    final bpDia = _toDouble(checkup['blood_pressure_diastolic']);
+    final weight = _toDouble(checkup['checkup_weight']);
+    final edemaRaw = _formatValue(checkup['edema']);
+    final edema = edemaRaw.toLowerCase();
+    final tdDose = _formatValue(checkup['td_vaccine_dose']);
+
+    final fhrRaw = _formatValue(checkup['fetal_heart_beat']);
+    final fhr = int.tryParse(fhrRaw);
+
+    String overallAssessment =
+        'Current prenatal checkup findings appear stable overall.';
+    if (bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) {
+      overallAssessment =
+          'Blood pressure is elevated and needs closer monitoring for hypertensive disorders of pregnancy.';
+    } else if (bpSys != null && bpDia != null && (bpSys < 90 || bpDia < 60)) {
+      overallAssessment =
+          'Blood pressure is lower than typical range; monitor hydration, symptoms, and follow-up trends.';
+    } else if (fhr != null && (fhr < 120 || fhr > 160)) {
+      overallAssessment =
+          'Fetal heart rate is outside the usual expected range and should be reviewed clinically.';
+    } else if (edema != '—' && edema != 'none') {
+      overallAssessment =
+          'Mild edema is noted; monitor progression and correlate with blood pressure and symptoms.';
+    }
+
     final buffer = StringBuffer();
-    buffer.write('Prenatal Checkup AI Insights:\n\n');
-    
-    final bpSys = checkup['blood_pressure_systolic'];
-    final bpDia = checkup['blood_pressure_diastolic'];
-    final weight = checkup['checkup_weight'];
-    final fhr = checkup['fetal_heart_beat'];
-    final remarks = checkup['remarks']?.toString().toLowerCase() ?? '';
-    
+    buffer.write('OVERALL ASSESSMENT: $overallAssessment\n\n');
+
+    buffer.write('KEY OBSERVATIONS:\n');
     if (bpSys != null && bpDia != null) {
       if (bpSys >= 140 || bpDia >= 90) {
-        buffer.write('⚠️ Blood Pressure: $bpSys/$bpDia mmHg is elevated. Monitor for preeclampsia symptoms.\n\n');
+        buffer.write(
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [REVIEW].\n');
       } else if (bpSys < 90 || bpDia < 60) {
-        buffer.write('📉 Blood Pressure: $bpSys/$bpDia mmHg is lower than expected. Ensure adequate hydration.\n\n');
+        buffer.write(
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [MONITOR].\n');
       } else {
-        buffer.write('✓ Blood Pressure: $bpSys/$bpDia mmHg is within normal range.\n\n');
+        buffer.write(
+            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [WITHIN NORMAL LIMITS].\n');
       }
+    } else {
+      buffer.write(
+          '- Maternal Vitals - Blood Pressure: Not documented in this record.\n');
     }
-    
+
     if (weight != null) {
-      buffer.write('⚖️ Weight: ${weight.toStringAsFixed(1)} kg\n\n');
+      buffer.write(
+          '- Maternal Vitals - Weight: ${weight.toStringAsFixed(1)} kg.\n');
     }
-    
+
     if (fhr != null) {
       if (fhr >= 120 && fhr <= 160) {
-        buffer.write('💓 Fetal Heart Rate: $fhr bpm (Normal range)\n\n');
+        buffer.write(
+            '- Fetal Status - Heart Rate: $fhr bpm [WITHIN NORMAL LIMITS].\n');
       } else {
-        buffer.write('⚠️ Fetal Heart Rate: $fhr bpm (Outside normal range - needs review)\n\n');
+        buffer.write('- Fetal Status - Heart Rate: $fhr bpm [REVIEW].\n');
+      }
+    } else if (fhrRaw != '—') {
+      buffer.write('- Fetal Status - Heart Rate: $fhrRaw [REVIEW MANUALLY].\n');
+    }
+
+    final fetalPosition = _formatValue(checkup['fetal_position']);
+    if (fetalPosition != '—') {
+      buffer.write('- Fetal Status - Position: $fetalPosition.\n');
+    }
+
+    if (edemaRaw != '—') {
+      if (edema == 'none') {
+        buffer.write('- Maternal Observation - Edema: None reported.\n');
+      } else {
+        buffer.write('- Maternal Observation - Edema: $edemaRaw [MONITOR].\n');
       }
     }
-    
-    if (remarks.isNotEmpty && !remarks.contains('normal')) {
-      buffer.write('📝 Remarks: $remarks\n\n');
+
+    if (tdDose != '—') {
+      buffer.write('- Preventive Care - TD Vaccine: $tdDose documented.\n');
     }
-    
-    buffer.write('Recommendations:\n');
-    buffer.write('• Continue regular prenatal checkups\n');
-    buffer.write('• Monitor fetal movements daily\n');
-    buffer.write('• Report any unusual symptoms to your healthcare provider\n');
-    
-    return buffer.toString();
+
+    final nextSchedule = _formatDate(checkup['next_schedule']);
+    if (nextSchedule != '—') {
+      buffer.write('- Follow-up - Next Schedule: $nextSchedule.\n');
+    }
+
+    buffer.write('\nRECOMMENDATIONS:\n');
+    buffer.write('- Continue scheduled prenatal follow-up visits.\n');
+    buffer
+        .write('- Monitor maternal warning signs and fetal movement daily.\n');
+    if ((bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) ||
+        (fhr != null && (fhr < 120 || fhr > 160))) {
+      buffer.write(
+          '- Prioritize clinician review for blood pressure and/or fetal heart findings.\n');
+    }
+    if (edema != '—' && edema != 'none') {
+      buffer.write('- Reassess edema severity in next checkup.\n');
+    }
+
+    return buffer.toString().trim();
   }
 
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
     final remarks = ultrasound['remarks']?.toString().toLowerCase() ?? '';
     final buffer = StringBuffer();
-    
-    buffer.write('Ultrasound AI Insights:\n\n');
-    
+
+    buffer.write('🤖 Ultrasound AI Insights:\n\n');
+
     if (remarks.contains('normal') || remarks.contains('healthy')) {
-      buffer.write('✓ Normal Findings: Ultrasound appears normal with healthy fetal development.\n\n');
+      buffer.write(
+          '✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
-      buffer.write('📊 Follow-up Recommended: Some findings require additional observation.\n\n');
+      buffer.write(
+          '📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
     } else if (remarks.contains('concern') || remarks.contains('abnormal')) {
-      buffer.write('🔍 Further Evaluation Needed: Discuss findings with healthcare provider.\n\n');
+      buffer.write(
+          '🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
     } else {
-      buffer.write('📋 Diagnostic Information: The ultrasound provides important diagnostic information.\n\n');
+      buffer.write(
+          '📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
     }
 
-    buffer.write('Key Recommendations:\n');
+    buffer.write('💡 **Key Recommendations**:\n');
     buffer.write('• Discuss findings with your healthcare provider\n');
     buffer.write('• Continue all scheduled prenatal appointments\n');
 
     return buffer.toString();
   }
 
-  String _generateLabTestAIInsights(Map<String, dynamic> labTest) {
-    final remarks = labTest['remarks']?.toString().toLowerCase() ?? '';
-    final buffer = StringBuffer();
-    
-    buffer.write('Lab Test AI Analysis:\n\n');
-    
-    if (remarks.contains('normal')) {
-      buffer.write('✓ All results are within normal range.\n\n');
-    } else if (remarks.contains('abnormal') || remarks.contains('borderline')) {
-      buffer.write('⚠️ Some values require attention.\n\n');
+  Future<Map<String, dynamic>?> _fetchCheckupDetails(
+      int prenatalCheckupId, dynamic checkupDateTime) async {
+    try {
+      final aiRow = await SupabaseService.client
+          .from('ai_responses')
+          .select('ai_response_id, response')
+          .eq('reference_table', 'prenatal_checkups')
+          .eq('reference_id', prenatalCheckupId)
+          .eq('response_type', 'risk_assessment')
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      String? aiResponse = aiRow?['response'] as String?;
+      String? riskLevel;
+      String riskFactors = '';
+      String medicationPlans = 'None';
+      String givenMedications = 'None';
+      String ferrousQuantity = 'Not given';
+      String calciumQuantity = 'Not given';
+
+      if (aiRow != null) {
+        final aiResponseId = aiRow['ai_response_id'] as int?;
+        if (aiResponseId != null) {
+          final riskRow = await SupabaseService.client
+              .from('pregnancy_risk_assessments')
+              .select('pregnancy_risk_id, risk_level')
+              .eq('ai_response_id', aiResponseId)
+              .maybeSingle();
+
+          if (riskRow != null) {
+            riskLevel = riskRow['risk_level']?.toString();
+            final factorRows = await SupabaseService.client
+                .from('pregnancy_risk_factors')
+                .select('factor, risk_influence')
+                .eq('pregnancy_risk_id', riskRow['pregnancy_risk_id'])
+                .order('risk_factor_id', ascending: true);
+
+            final factorList = <String>[];
+            for (final factor
+                in (factorRows as List).cast<Map<String, dynamic>>()) {
+              final factorText = factor['factor']?.toString() ?? '';
+              final influence = factor['risk_influence']?.toString() ?? '';
+              if (factorText.isNotEmpty) {
+                factorList.add(
+                    '$factorText${influence.isNotEmpty ? ' ($influence)' : ''}');
+              }
+            }
+            riskFactors = factorList.join('; ');
+          }
+        }
+      }
+
+      if (checkupDateTime != null) {
+        final date = DateTime.tryParse(checkupDateTime.toString());
+        final checkupDateString =
+            date != null ? date.toIso8601String().split('T')[0] : null;
+        if (checkupDateString != null && _motherId != null) {
+          final givenRows = await SupabaseService.client
+              .from('given_medications')
+              .select('given_medication_name, quantity')
+              .eq('mother_id', _motherId!)
+              .eq('date_given', checkupDateString);
+
+          final medicationRows = await SupabaseService.client
+              .from('mother_medications')
+              .select(
+                  'mother_medication_name, quantity, frequency, start_date, end_date')
+              .eq('mother_id', _motherId!)
+              .eq('start_date', checkupDateString);
+
+          final givenItems = <String>[];
+          for (final row in (givenRows as List).cast<Map<String, dynamic>>()) {
+            final name = row['given_medication_name']?.toString() ?? 'Unknown';
+            final quantity = row['quantity']?.toString() ?? '1';
+            givenItems.add('$name x$quantity');
+            if (name.toLowerCase().contains('ferrous')) {
+              ferrousQuantity = quantity;
+            }
+            if (name.toLowerCase().contains('calcium')) {
+              calciumQuantity = quantity;
+            }
+          }
+          if (givenItems.isNotEmpty) {
+            givenMedications = givenItems.join('; ');
+          }
+
+          final planItems = <String>[];
+          for (final row
+              in (medicationRows as List).cast<Map<String, dynamic>>()) {
+            final name = row['mother_medication_name']?.toString() ?? 'Unknown';
+            final qty = row['quantity']?.toString() ?? '1';
+            final freq = row['frequency']?.toString();
+            final start = row['start_date']?.toString();
+            final end = row['end_date']?.toString();
+            final details = [
+              qty != 'null' ? 'Qty $qty' : null,
+              freq,
+              start != null ? 'Start $start' : null,
+              end != null ? 'End $end' : null
+            ].where((element) => element != null).join(' · ');
+            planItems.add('$name${details.isNotEmpty ? ' ($details)' : ''}');
+          }
+          if (planItems.isNotEmpty) {
+            medicationPlans = planItems.join('; ');
+          }
+        }
+      }
+
+      return {
+        'aiResponse': aiResponse,
+        'riskLevel': riskLevel,
+        'riskFactors': riskFactors,
+        'medicationPlans': medicationPlans,
+        'givenMedications': givenMedications,
+        'ferrousQuantity': ferrousQuantity,
+        'calciumQuantity': calciumQuantity,
+      };
+    } catch (_) {
+      return null;
     }
-
-    buffer.write('Recommendations:\n');
-    buffer.write('• Review results with your healthcare provider\n');
-    buffer.write('• Follow any prescribed treatment plans\n');
-
-    return buffer.toString();
   }
 
-  List<Map<String, dynamic>> _getFilteredRecords() {
+  List<Map<String, dynamic>> _getFilteredAndSortedRecords() {
     List<Map<String, dynamic>> allRecords = [];
-    
-    // Add ultrasounds
+
+    for (var checkup in _checkups) {
+      allRecords.add({
+        ...checkup,
+        'record_type': 'checkup',
+        'record_date': checkup['checkup_datetime'],
+      });
+    }
+
     for (var ultrasound in _ultrasounds) {
       allRecords.add({
         ...ultrasound,
-        'type': 'ultrasound',
-        'type_display': 'Ultrasound',
-        'date': ultrasound['ultrasound_date'],
-        'title': 'Ultrasound',
-        'icon': Icons.photo,
-        'iconColor': Colors.purple,
-        'subtitle': _formatDate(ultrasound['ultrasound_date']),
-        'health_worker': ultrasound['health_worker_name'],
+        'record_type': 'ultrasound',
+        'record_date': ultrasound['ultrasound_date'],
       });
     }
-    
-    // Add lab tests
+
     for (var labTest in _labTests) {
       allRecords.add({
         ...labTest,
-        'type': 'labtest',
-        'type_display': 'Lab Test',
-        'date': labTest['lab_test_date'],
-        'title': labTest['lab_test_type'] ?? 'Lab Test',
-        'icon': Icons.science,
-        'iconColor': Colors.orange,
-        'subtitle': _formatDate(labTest['lab_test_date']),
-        'health_worker': labTest['health_worker_name'],
+        'record_type': 'labtest',
+        'record_date': labTest['lab_test_date'],
       });
     }
-    
-    // Add prenatal checkups
-    for (var checkup in _prenatalCheckups) {
-      allRecords.add({
-        ...checkup,
-        'type': 'prenatal',
-        'type_display': 'Prenatal Checkup',
-        'date': checkup['checkup_datetime'],
-        'title': 'Prenatal Checkup',
-        'icon': Icons.medical_services,
-        'iconColor': AppColors.brandPrimary,
-        'subtitle': _formatDateTime(checkup['checkup_datetime']),
-        'health_worker': null,
-      });
-    }
-    
-    // Apply filter
+
     if (_selectedFilter != 'all') {
-      allRecords = allRecords.where((record) => record['type'] == _selectedFilter).toList();
+      allRecords = allRecords
+          .where((record) => record['record_type'] == _selectedFilter)
+          .toList();
     }
-    
-    // Apply search
+
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       allRecords = allRecords.where((record) {
-        return record['title'].toString().toLowerCase().contains(query) ||
-               record['subtitle'].toString().toLowerCase().contains(query) ||
-               (record['remarks']?.toString().toLowerCase().contains(query) ?? false) ||
-               (record['lab_test_type']?.toString().toLowerCase().contains(query) ?? false);
+        if (record['record_type'] == 'checkup') {
+          return _formatDateTime(record['checkup_datetime'])
+                  .toLowerCase()
+                  .contains(query) ||
+              (record['remarks']?.toString().toLowerCase().contains(query) ??
+                  false) ||
+              (record['blood_pressure_systolic']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains(query) ??
+                  false) ||
+              (record['blood_pressure_diastolic']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains(query) ??
+                  false);
+        }
+
+        if (record['record_type'] == 'ultrasound') {
+          return _formatDate(record['ultrasound_date'])
+                  .toLowerCase()
+                  .contains(query) ||
+              (record['remarks']?.toString().toLowerCase().contains(query) ??
+                  false);
+        }
+
+        return _formatDate(record['lab_test_date'])
+                .toLowerCase()
+                .contains(query) ||
+            (record['lab_test_type']
+                    ?.toString()
+                    .toLowerCase()
+                    .contains(query) ??
+                false) ||
+            (record['remarks']?.toString().toLowerCase().contains(query) ??
+                false);
       }).toList();
     }
-    
-    // Sort by date (newest first)
+
     allRecords.sort((a, b) {
-      final dateA = DateTime.tryParse(a['date'] ?? '');
-      final dateB = DateTime.tryParse(b['date'] ?? '');
+      final dateA = DateTime.tryParse(a['record_date'] ?? '');
+      final dateB = DateTime.tryParse(b['record_date'] ?? '');
       if (dateA == null || dateB == null) return 0;
-      return dateB.compareTo(dateA);
+      return _sortOrder == 'desc'
+          ? dateB.compareTo(dateA)
+          : dateA.compareTo(dateB);
     });
-    
+
     return allRecords;
   }
 
   @override
   Widget build(BuildContext context) {
-    final records = _getFilteredRecords();
-    final totalCount = _ultrasounds.length + _labTests.length + _prenatalCheckups.length;
-    final filteredCount = records.length;
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+        ),
+      );
+    }
 
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      body: SafeArea(
-        top: false,
-        bottom: false,
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-
-            // Stats Card with Pink Background Image
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              height: 110,
-              decoration: BoxDecoration(
-                image: const DecorationImage(
-                  image: AssetImage('assets/images/pinkbg.png'),
-                  fit: BoxFit.cover,
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
                 ),
-                borderRadius: BorderRadius.circular(20),
+                child: const Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Colors.red,
+                ),
               ),
-              child: Stack(
+              const SizedBox(height: 16),
+              const Headline(text: 'Failed to Load Records'),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 24),
+              MainButton(
+                label: 'Retry',
+                onPressed: _loadMotherData,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final allRecords = _getFilteredAndSortedRecords();
+
+    return Column(
+      children: [
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            indicatorColor: AppColors.brandPrimary,
+            labelColor: AppColors.brandPrimary,
+            unselectedLabelColor: AppColors.textSecondary,
+            tabs: const [
+              Tab(text: 'All Records'),
+              Tab(text: 'Statistics'),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildRecordsTab(allRecords),
+              _buildStatisticsTab(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecordsTab(List<Map<String, dynamic>> allRecords) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Column(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.bgSecondary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TextField(
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search records...',
+                    prefixIcon: const Icon(Icons.search,
+                        color: AppColors.textSecondary),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    top: 0,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 16.0, top: 4.0, bottom: 4.0),
-                      child: Image.asset(
-                        'assets/images/records.png',
-                        height: 100,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.folder,
-                          size: 80,
-                          color: AppColors.brandPrimary,
-                        ),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSecondary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _selectedFilter,
+                        isExpanded: true,
+                        underline: const SizedBox(),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'all', child: Text('All Records')),
+                          DropdownMenuItem(
+                              value: 'checkup', child: Text('Checkups Only')),
+                          DropdownMenuItem(
+                              value: 'ultrasound',
+                              child: Text('Ultrasounds Only')),
+                          DropdownMenuItem(
+                              value: 'labtest', child: Text('Lab Tests Only')),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedFilter = value!;
+                          });
+                        },
                       ),
                     ),
                   ),
-                  Positioned(
-                    left: 24,
-                    top: 0,
-                    bottom: 0,
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSecondary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _sortOrder,
+                      underline: const SizedBox(),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'desc', child: Text('Newest First')),
+                        DropdownMenuItem(
+                            value: 'asc', child: Text('Oldest First')),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _sortOrder = value!;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: allRecords.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _searchQuery.isNotEmpty
+                            ? Icons.search_off
+                            : Icons.folder_open,
+                        size: 64,
+                        color: AppColors.textSecondary.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? 'No matching records found'
+                            : 'No records available',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? 'Try adjusting your search or filters'
+                            : 'Your medical records will appear here',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadMotherData,
+                  color: AppColors.brandPrimary,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: allRecords.length,
+                    itemBuilder: (context, index) {
+                      final record = allRecords[index];
+                      final isCheckup = record['record_type'] == 'checkup';
+                      final isUltrasound =
+                          record['record_type'] == 'ultrasound';
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(16),
+                          leading: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isCheckup
+                                  ? AppColors.brandPrimary.withOpacity(0.1)
+                                  : isUltrasound
+                                      ? Colors.purple.withOpacity(0.1)
+                                      : Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              isCheckup
+                                  ? Icons.medical_services
+                                  : isUltrasound
+                                      ? Icons.photo
+                                      : Icons.science,
+                              color: isCheckup
+                                  ? AppColors.brandPrimary
+                                  : isUltrasound
+                                      ? Colors.purple
+                                      : Colors.orange,
+                            ),
+                          ),
+                          title: Text(
+                            isCheckup
+                                ? 'Prenatal Checkup'
+                                : isUltrasound
+                                    ? 'Ultrasound'
+                                    : (record['lab_test_type'] ?? 'Lab Test'),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Text(
+                                isCheckup
+                                    ? _formatDateTime(
+                                        record['checkup_datetime'])
+                                    : _formatDate(isUltrasound
+                                        ? record['ultrasound_date']
+                                        : record['lab_test_date']),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              if (isCheckup) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'BP: ${_formatValue(record['blood_pressure_systolic'])}/${_formatValue(record['blood_pressure_diastolic'])}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                              if (record['health_worker_name'] != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'By: ${record['health_worker_name']}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right,
+                            color: AppColors.textSecondary,
+                          ),
+                          onTap: () async {
+                            if (isCheckup) {
+                              final bpSys = _formatInputValue(
+                                  record['blood_pressure_systolic']);
+                              final bpDia = _formatInputValue(
+                                  record['blood_pressure_diastolic']);
+                              final checkupId = record['prenatal_checkup_id'];
+                              String? aiAnalysis;
+                              String? riskLevel;
+                              String riskFactors = '';
+                              String medicationPlansSummary = 'None';
+                              String givenMedicationsSummary = 'None';
+                              String ferrousSummary = 'Not given';
+                              String calciumSummary = 'Not given';
+
+                              if (checkupId is int) {
+                                final checkupDetails =
+                                    await _fetchCheckupDetails(
+                                        checkupId, record['checkup_datetime']);
+                                if (checkupDetails != null) {
+                                  riskLevel =
+                                      checkupDetails['riskLevel'] as String?;
+                                  riskFactors =
+                                      checkupDetails['riskFactors'] as String;
+                                  aiAnalysis =
+                                      checkupDetails['aiResponse'] as String?;
+                                  medicationPlansSummary =
+                                      checkupDetails['medicationPlans']
+                                          as String;
+                                  givenMedicationsSummary =
+                                      checkupDetails['givenMedications']
+                                          as String;
+                                  ferrousSummary =
+                                      checkupDetails['ferrousQuantity']
+                                          as String;
+                                  calciumSummary =
+                                      checkupDetails['calciumQuantity']
+                                          as String;
+                                }
+
+                                if (aiAnalysis == null ||
+                                    aiAnalysis.trim().isEmpty) {
+                                  aiAnalysis = await MotherProfileService
+                                      .getCheckupAIAnalysis(
+                                    checkupId,
+                                  );
+                                }
+                              }
+
+                              aiAnalysis = (aiAnalysis != null &&
+                                      aiAnalysis.trim().isNotEmpty)
+                                  ? aiAnalysis.trim()
+                                  : _generatePrenatalAIInsights(record);
+                              final symptomSummary = _checkupSymptomSummaries[
+                                      record['prenatal_checkup_id'] as int? ??
+                                          -1] ??
+                                  'None recorded';
+                              final fetalCount = (_pregnancyFetalCounts[
+                                          record['pregnancy_id'] as int? ?? -1]
+                                      ?.toString()) ??
+                                  'Not inputted';
+                              final riskLevelValue = (riskLevel != null &&
+                                      riskLevel.trim().isNotEmpty)
+                                  ? _formatInputValue(riskLevel)
+                                  : 'Not inputted';
+                              final riskFactorsValue =
+                                  riskFactors.trim().isNotEmpty
+                                      ? riskFactors
+                                      : 'Not inputted';
+                              _showRecordDetails(
+                                title: 'Prenatal Checkup',
+                                subtitle:
+                                    _formatDateTime(record['checkup_datetime']),
+                                icon: Icons.medical_services,
+                                rows: [
+                                  MapEntry(
+                                      'Date',
+                                      record['checkup_datetime'] == null
+                                          ? 'Not inputted'
+                                          : _formatDateTime(
+                                              record['checkup_datetime'])),
+                                  MapEntry('Fetal Count', fetalCount),
+                                  MapEntry(
+                                      'Age of Gestation',
+                                      _formatInputValue(
+                                          record['age_of_gestation'])),
+                                  MapEntry(
+                                      'Weight (kg)',
+                                      _formatInputValue(
+                                          record['checkup_weight'])),
+                                  MapEntry('Blood Pressure', '$bpSys/$bpDia'),
+                                  MapEntry(
+                                      'Fetal Position',
+                                      _formatInputValue(
+                                          record['fetal_position'])),
+                                  MapEntry(
+                                      'Fetal Heart Tone',
+                                      _formatInputValue(
+                                          record['fetal_heart_tone'])),
+                                  MapEntry(
+                                      'Fetal Heart Beat',
+                                      _formatInputValue(
+                                          record['fetal_heart_beat'])),
+                                  MapEntry('Symptoms', symptomSummary),
+                                  MapEntry('Medication Plans',
+                                      medicationPlansSummary),
+                                  MapEntry('Given Medications',
+                                      givenMedicationsSummary),
+                                  MapEntry('Ferrous + FA', ferrousSummary),
+                                  MapEntry('Calcium', calciumSummary),
+                                  MapEntry('Risk Level', riskLevelValue),
+                                  MapEntry('Risk Factors', riskFactorsValue),
+                                  MapEntry(
+                                      'TD Vaccine',
+                                      _formatInputValue(
+                                          record['td_vaccine_dose'])),
+                                  MapEntry('Edema',
+                                      _formatInputValue(record['edema'])),
+                                  MapEntry('Remarks',
+                                      _formatInputValue(record['remarks'])),
+                                  MapEntry(
+                                      'Next Schedule',
+                                      record['next_schedule'] == null
+                                          ? 'Not inputted'
+                                          : _formatDate(
+                                              record['next_schedule'])),
+                                ],
+                                aiAnalysis: aiAnalysis,
+                                useStructuredAiInsights: true,
+                              );
+                            } else if (isUltrasound) {
+                              final imageUrls =
+                                  _parseImageUrls(record['ultrasound_image']);
+                              final split = _splitRemarksAndAi(
+                                  record['remarks']?.toString());
+                              String? aiAnalysis;
+                              final ultrasoundId = record['ultrasound_id'];
+                              if (ultrasoundId is int) {
+                                aiAnalysis = await MotherProfileService
+                                    .getUltrasoundAIAnalysis(
+                                  ultrasoundId,
+                                );
+                              }
+
+                              String finalRemarks = split.cleanRemarks;
+                              if (aiAnalysis != null &&
+                                  aiAnalysis.trim() == finalRemarks.trim()) {
+                                finalRemarks = '';
+                              }
+
+                              aiAnalysis = (aiAnalysis != null &&
+                                      aiAnalysis.trim().isNotEmpty)
+                                  ? aiAnalysis.trim()
+                                  : split.extractedAi ??
+                                      _generateUltrasoundAIInsights(record);
+                              _showRecordDetails(
+                                title: 'Ultrasound',
+                                subtitle:
+                                    _formatDate(record['ultrasound_date']),
+                                icon: Icons.monitor_heart,
+                                imageUrls:
+                                    imageUrls.isNotEmpty ? imageUrls : null,
+                                rows: [
+                                  MapEntry('Ultrasound Date',
+                                      _formatDate(record['ultrasound_date'])),
+                                  MapEntry(
+                                      'Location',
+                                      _formatValue(
+                                          record['ultrasound_location'])),
+                                  MapEntry(
+                                      'Full Name',
+                                      _formatValue(
+                                          record['health_worker_name'])),
+                                  MapEntry(
+                                      'Institution',
+                                      _formatValue(
+                                          record['health_worker_institution'])),
+                                  MapEntry(
+                                      'Profession',
+                                      _formatValue(
+                                          record['health_worker_profession'])),
+                                  MapEntry(
+                                      'Remarks', _formatValue(finalRemarks)),
+                                ],
+                                aiAnalysis: aiAnalysis,
+                                useStructuredAiInsights:
+                                    aiAnalysis != null && aiAnalysis.isNotEmpty,
+                              );
+                            } else {
+                              final imageUrls =
+                                  _parseImageUrls(record['lab_test_image']);
+                              final split = _splitRemarksAndAi(
+                                  record['remarks']?.toString());
+
+                              String? aiAnalysis;
+                              final labTestId = record['lab_test_id'];
+                              if (labTestId is int) {
+                                aiAnalysis = await MotherProfileService
+                                    .getLabTestAIAnalysis(
+                                  labTestId,
+                                );
+                              }
+
+                              aiAnalysis = (aiAnalysis != null &&
+                                      aiAnalysis.trim().isNotEmpty)
+                                  ? aiAnalysis.trim()
+                                  : split.extractedAi;
+
+                              _showRecordDetails(
+                                title: record['lab_test_type'] ?? 'Lab Test',
+                                subtitle: _formatDate(record['lab_test_date']),
+                                icon: Icons.science,
+                                imageUrls:
+                                    imageUrls.isNotEmpty ? imageUrls : null,
+                                rows: [
+                                  MapEntry('Lab Test Type',
+                                      _formatValue(record['lab_test_type'])),
+                                  MapEntry('Lab Test Date',
+                                      _formatDate(record['lab_test_date'])),
+                                  MapEntry(
+                                      'Full Name',
+                                      _formatValue(
+                                          record['health_worker_name'])),
+                                  MapEntry(
+                                      'Institution',
+                                      _formatValue(
+                                          record['health_worker_institution'])),
+                                  MapEntry(
+                                      'Profession',
+                                      _formatValue(
+                                          record['health_worker_profession'])),
+                                  MapEntry('Notes',
+                                      _formatValue(split.cleanRemarks)),
+                                ],
+                                aiAnalysis: aiAnalysis,
+                                useStructuredAiInsights:
+                                    aiAnalysis != null && aiAnalysis.isNotEmpty,
+                              );
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatisticsTab() {
+    final totalCheckups = _checkups.length;
+    final totalUltrasounds = _ultrasounds.length;
+    final totalLabTests = _labTests.length;
+    final totalRecords = totalCheckups + totalUltrasounds + totalLabTests;
+
+    final allRecords = _getFilteredAndSortedRecords();
+    final latestRecord = allRecords.isNotEmpty ? allRecords.first : null;
+
+    final now = DateTime.now();
+    final last6Months =
+        List.generate(6, (i) => DateTime(now.year, now.month - i, 1))
+            .reversed
+            .toList();
+
+    final Map<String, int> recordsByMonth = {};
+    for (final month in last6Months) {
+      recordsByMonth[DateFormat('MMM yyyy').format(month)] = 0;
+    }
+
+    for (final record in allRecords) {
+      final dateStr = record['record_date'];
+      if (dateStr == null) continue;
+      final date = DateTime.tryParse(dateStr);
+      if (date == null) continue;
+      final monthKey = DateFormat('MMM yyyy').format(date);
+      if (recordsByMonth.containsKey(monthKey)) {
+        recordsByMonth[monthKey] = (recordsByMonth[monthKey] ?? 0) + 1;
+      }
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  'Total Records',
+                  totalRecords.toString(),
+                  Icons.folder,
+                  AppColors.brandPrimary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  'Checkups',
+                  totalCheckups.toString(),
+                  Icons.medical_services,
+                  AppColors.brandPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  'Ultrasounds',
+                  totalUltrasounds.toString(),
+                  Icons.photo,
+                  Colors.purple,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  'Lab Tests',
+                  totalLabTests.toString(),
+                  Icons.science,
+                  Colors.orange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (latestRecord != null) ...[
+            const Text(
+              'LATEST RECORD',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: (latestRecord['record_type'] == 'ultrasound'
+                              ? Colors.purple
+                              : latestRecord['record_type'] == 'checkup'
+                                  ? AppColors.brandPrimary
+                                  : Colors.orange)
+                          .withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      latestRecord['record_type'] == 'ultrasound'
+                          ? Icons.photo
+                          : latestRecord['record_type'] == 'checkup'
+                              ? Icons.medical_services
+                              : Icons.science,
+                      color: latestRecord['record_type'] == 'ultrasound'
+                          ? Colors.purple
+                          : latestRecord['record_type'] == 'checkup'
+                              ? AppColors.brandPrimary
+                              : Colors.orange,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'You have',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                        Text(
+                          latestRecord['record_type'] == 'checkup'
+                              ? 'Prenatal Checkup'
+                              : latestRecord['record_type'] == 'ultrasound'
+                                  ? 'Ultrasound'
+                                  : (latestRecord['lab_test_type'] ??
+                                      'Lab Test'),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          latestRecord['record_type'] == 'checkup'
+                              ? _formatDateTime(latestRecord['record_date'])
+                              : _formatDate(latestRecord['record_date']),
+                          style: const TextStyle(
+                            fontSize: 13,
                             color: AppColors.textSecondary,
                           ),
                         ),
-                        Text(
-                          '$totalCount Medical ${totalCount == 1 ? 'Record' : 'Records'}',
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.brandPrimary,
-                          ),
-                        ),
                       ],
                     ),
                   ),
                 ],
               ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Search and Filter Bar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              color: Colors.white,
-              child: Column(
-                children: [
-                  // Search Field
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: AppColors.borderPrimary),
-                    ),
-                    child: TextField(
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Search records...',
-                        prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, color: AppColors.textSecondary),
-                                onPressed: () {
-                                  setState(() {
-                                    _searchQuery = '';
-                                  });
-                                },
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Filter Chips
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        FilterChip(
-                          label: const Text('All'),
-                          selected: _selectedFilter == 'all',
-                          onSelected: (_) {
-                            setState(() {
-                              _selectedFilter = 'all';
-                            });
-                          },
-                          backgroundColor: Colors.white,
-                          selectedColor: AppColors.brandPrimary.withValues(alpha: 0.1),
-                          checkmarkColor: AppColors.brandPrimary,
-                          labelStyle: TextStyle(
-                            color: _selectedFilter == 'all' ? AppColors.brandPrimary : AppColors.textSecondary,
-                            fontWeight: _selectedFilter == 'all' ? FontWeight.w600 : FontWeight.normal,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilterChip(
-                          label: const Text('Ultrasound'),
-                          selected: _selectedFilter == 'ultrasound',
-                          onSelected: (_) {
-                            setState(() {
-                              _selectedFilter = 'ultrasound';
-                            });
-                          },
-                          backgroundColor: Colors.white,
-                          selectedColor: Colors.purple.withValues(alpha: 0.1),
-                          checkmarkColor: Colors.purple,
-                          avatar: Icon(Icons.photo, size: 16, color: _selectedFilter == 'ultrasound' ? Colors.purple : Colors.grey),
-                          labelStyle: TextStyle(
-                            color: _selectedFilter == 'ultrasound' ? Colors.purple : AppColors.textSecondary,
-                            fontWeight: _selectedFilter == 'ultrasound' ? FontWeight.w600 : FontWeight.normal,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilterChip(
-                          label: const Text('Lab Test'),
-                          selected: _selectedFilter == 'labtest',
-                          onSelected: (_) {
-                            setState(() {
-                              _selectedFilter = 'labtest';
-                            });
-                          },
-                          backgroundColor: Colors.white,
-                          selectedColor: Colors.orange.withValues(alpha: 0.1),
-                          checkmarkColor: Colors.orange,
-                          avatar: Icon(Icons.science, size: 16, color: _selectedFilter == 'labtest' ? Colors.orange : Colors.grey),
-                          labelStyle: TextStyle(
-                            color: _selectedFilter == 'labtest' ? Colors.orange : AppColors.textSecondary,
-                            fontWeight: _selectedFilter == 'labtest' ? FontWeight.w600 : FontWeight.normal,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilterChip(
-                          label: const Text('Prenatal'),
-                          selected: _selectedFilter == 'prenatal',
-                          onSelected: (_) {
-                            setState(() {
-                              _selectedFilter = 'prenatal';
-                            });
-                          },
-                          backgroundColor: Colors.white,
-                          selectedColor: AppColors.brandPrimary.withValues(alpha: 0.1),
-                          checkmarkColor: AppColors.brandPrimary,
-                          avatar: Icon(Icons.medical_services, size: 16, color: _selectedFilter == 'prenatal' ? AppColors.brandPrimary : Colors.grey),
-                          labelStyle: TextStyle(
-                            color: _selectedFilter == 'prenatal' ? AppColors.brandPrimary : AppColors.textSecondary,
-                            fontWeight: _selectedFilter == 'prenatal' ? FontWeight.w600 : FontWeight.normal,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_selectedFilter != 'all' || _searchQuery.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Showing $filteredCount of $totalCount records',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _selectedFilter = 'all';
-                                _searchQuery = '';
-                              });
-                            },
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: const Size(0, 30),
-                            ),
-                            child: const Text(
-                              'Clear filters',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.brandPrimary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-            // Records List
-            Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
-                      ),
-                    )
-                  : _errorMessage != null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade50,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.error_outline,
-                                  size: 48,
-                                  color: Colors.red,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Failed to Load Records',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _errorMessage!,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: AppColors.textSecondary),
-                              ),
-                              const SizedBox(height: 24),
-                              ElevatedButton(
-                                onPressed: _loadMotherData,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.brandPrimary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                ),
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadMotherData,
-                          color: AppColors.brandPrimary,
-                          child: records.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        _searchQuery.isNotEmpty || _selectedFilter != 'all'
-                                            ? Icons.search_off
-                                            : Icons.folder_open,
-                                        size: 64,
-                                        color: AppColors.textSecondary.withValues(alpha: 0.5),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        _searchQuery.isNotEmpty || _selectedFilter != 'all'
-                                            ? 'No matching records found'
-                                            : 'No records available',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        _searchQuery.isNotEmpty || _selectedFilter != 'all'
-                                            ? 'Try adjusting your search or filters'
-                                            : 'Your medical records will appear here',
-                                        style: const TextStyle(
-                                          color: AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.all(16),
-                                  itemCount: records.length,
-                                  itemBuilder: (context, index) {
-                                    final record = records[index];
-                                    final color = record['iconColor'];
-                                    final icon = record['icon'];
-                                    
-                                    return GestureDetector(
-                                      onTap: () {
-                                        if (record['type'] == 'ultrasound') {
-                                          final imageUrls = _parseImageUrls(record['ultrasound_image']);
-                                          _showRecordDetails(
-                                            title: 'Ultrasound',
-                                            subtitle: _formatDate(record['ultrasound_date']),
-                                            icon: Icons.monitor_heart,
-                                            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-                                            rows: [
-                                              MapEntry('Date', _formatDate(record['ultrasound_date'])),
-                                              MapEntry('Location', _formatValue(record['ultrasound_location'])),
-                                              MapEntry('Health Worker', _formatValue(record['health_worker_name'])),
-                                              MapEntry('Institution', _formatValue(record['health_worker_institution'])),
-                                              MapEntry('Profession', _formatValue(record['health_worker_profession'])),
-                                              MapEntry('Remarks', _formatValue(record['remarks'])),
-                                            ],
-                                            aiAnalysis: _generateUltrasoundAIInsights(record),
-                                          );
-                                        } else if (record['type'] == 'labtest') {
-                                          final imageUrls = _parseImageUrls(record['lab_test_image']);
-                                          _showRecordDetails(
-                                            title: record['lab_test_type'] ?? 'Lab Test',
-                                            subtitle: _formatDate(record['lab_test_date']),
-                                            icon: Icons.science,
-                                            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-                                            rows: [
-                                              MapEntry('Type', _formatValue(record['lab_test_type'])),
-                                              MapEntry('Date', _formatDate(record['lab_test_date'])),
-                                              MapEntry('Location', _formatValue(record['lab_test_location'])),
-                                              MapEntry('Health Worker', _formatValue(record['health_worker_name'])),
-                                              MapEntry('Institution', _formatValue(record['health_worker_institution'])),
-                                              MapEntry('Profession', _formatValue(record['health_worker_profession'])),
-                                              MapEntry('Remarks', _formatValue(record['remarks'])),
-                                            ],
-                                            aiAnalysis: _generateLabTestAIInsights(record),
-                                          );
-                                        } else {
-                                          _showRecordDetails(
-                                            title: 'Prenatal Checkup',
-                                            subtitle: _formatDateTime(record['checkup_datetime']),
-                                            icon: Icons.medical_services,
-                                            imageUrls: null,
-                                            rows: [
-                                              MapEntry('Date', _formatDateTime(record['checkup_datetime'])),
-                                              MapEntry('Age of Gestation', _formatValue(record['age_of_gestation'])),
-                                              MapEntry('Weight (kg)', _formatValue(record['checkup_weight'])),
-                                              MapEntry('Blood Pressure', '${_formatValue(record['blood_pressure_systolic'])}/${_formatValue(record['blood_pressure_diastolic'])}'),
-                                              MapEntry('Fetal Heart Rate', _formatValue(record['fetal_heart_beat'])),
-                                              MapEntry('Edema', _formatValue(record['edema'])),
-                                              MapEntry('TD Vaccine', _formatValue(record['td_vaccine_dose'])),
-                                              MapEntry('Remarks', _formatValue(record['remarks'])),
-                                              MapEntry('Next Schedule', _formatDate(record['next_schedule'])),
-                                            ],
-                                            aiAnalysis: _generatePrenatalAIInsights(record),
-                                          );
-                                        }
-                                      },
-                                      child: Container(
-                                        margin: const EdgeInsets.only(bottom: 12),
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(30),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(alpha: 0.05),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            // Icon
-                                            Container(
-                                              width: 50,
-                                              height: 50,
-                                              decoration: BoxDecoration(
-                                                color: color.withValues(alpha: 0.1),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Center(
-                                                child: Icon(
-                                                  icon,
-                                                  color: color,
-                                                  size: 24,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 16),
-                                            
-                                            // Details
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    record['title'],
-                                                    style: const TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: AppColors.textPrimary,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    record['subtitle'],
-                                                    style: const TextStyle(
-                                                      fontSize: 13,
-                                                      color: AppColors.textSecondary,
-                                                    ),
-                                                  ),
-                                                  if (record['health_worker'] != null &&
-                                                      record['health_worker'].toString().isNotEmpty)
-                                                    Text(
-                                                      'By: ${record['health_worker']}',
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        color: AppColors.textSecondary,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                            
-                                            // Arrow
-                                            const Icon(
-                                              Icons.chevron_right,
-                                              size: 24,
-                                              color: AppColors.textSecondary,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                        ),
             ),
           ],
+          const SizedBox(height: 24),
+          const Text(
+            'RECORDS BY MONTH',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...recordsByMonth.entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    child: Text(
+                      entry.key,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSecondary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        Container(
+                          height: 30,
+                          width: (entry.value / 10) *
+                              MediaQuery.of(context).size.width *
+                              0.5,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppColors.brandPrimary,
+                                AppColors.brandSecondary,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                entry.value.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'QUICK ACTIONS',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildActionButton(
+                        'View Checkups',
+                        Icons.medical_services,
+                        AppColors.brandPrimary,
+                        () {
+                          setState(() {
+                            _selectedFilter = 'checkup';
+                            _tabController.animateTo(0);
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildActionButton(
+                        'View Lab Tests',
+                        Icons.science,
+                        Colors.orange,
+                        () {
+                          setState(() {
+                            _selectedFilter = 'labtest';
+                            _tabController.animateTo(0);
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildActionButton(
+                        'View Ultrasounds',
+                        Icons.photo,
+                        Colors.purple,
+                        () {
+                          setState(() {
+                            _selectedFilter = 'ultrasound';
+                            _tabController.animateTo(0);
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(child: SizedBox.shrink()),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const Spacer(),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
+      String label, IconData icon, Color color, VoidCallback onTap) {
+    return ElevatedButton(
+      onPressed: onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color.withOpacity(0.1),
+        foregroundColor: color,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
       ),
     );
   }
