@@ -24,6 +24,7 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
   bool loading = true;
   List<Map<String, dynamic>> records = [];
   Map<String, dynamic>? childData;
+  DateTime? birthdate;
 
   @override
   void initState() {
@@ -42,14 +43,21 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
             child_id,
             first_name,
             last_name,
-            mother:mother_id (
-              birth_details (
-                birthdate
-              )
-            )
+            sex
           ''')
           .eq('child_id', widget.childId)
           .single();
+
+      // Fetch birth details separately (directly from birth_details table)
+      final birthDetailsResponse = await Supabase.instance.client
+          .from('birth_details')
+          .select('birthdate')
+          .eq('child_id', widget.childId)
+          .maybeSingle();
+
+      if (birthDetailsResponse != null && birthDetailsResponse['birthdate'] != null) {
+        birthdate = DateTime.parse(birthDetailsResponse['birthdate']);
+      }
 
       childData = childResponse;
 
@@ -94,21 +102,13 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
   }
 
   String calculateAge() {
-    final mother = childData?['mother'] as Map<String, dynamic>?;
-    if (mother == null) return 'Unknown age';
-    final birthDetailsList = mother['birth_details'] as List?;
-    if (birthDetailsList == null || birthDetailsList.isEmpty) return 'Unknown age';
-    final birthDetails = birthDetailsList.first as Map<String, dynamic>?;
-    final birthdate = birthDetails?['birthdate']?.toString();
-    
-    if (birthdate == null || birthdate.isEmpty) return 'Unknown age';
+    if (birthdate == null) return 'Unknown age';
 
     try {
-      final birth = DateTime.parse(birthdate);
       final now = DateTime.now();
 
-      int years = now.year - birth.year;
-      int months = now.month - birth.month;
+      int years = now.year - birthdate!.year;
+      int months = now.month - birthdate!.month;
 
       if (months < 0) {
         years--;

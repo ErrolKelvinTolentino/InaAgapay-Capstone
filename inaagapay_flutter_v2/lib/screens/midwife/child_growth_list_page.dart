@@ -24,6 +24,13 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
   bool loading = true;
   List<Map<String, dynamic>> records = [];
   Map<String, dynamic>? childData;
+  DateTime? birthdate;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchGrowthRecords();
+  }
 
   Future<void> fetchGrowthRecords() async {
     setState(() => loading = true);
@@ -36,14 +43,21 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
             child_id,
             first_name,
             last_name,
-            mother:mother_id (
-              birth_details (
-                birthdate
-              )
-            )
+            sex
           ''')
           .eq('child_id', widget.childId)
           .single();
+
+      // Fetch birth details separately (directly from birth_details table)
+      final birthDetailsResponse = await Supabase.instance.client
+          .from('birth_details')
+          .select('birthdate')
+          .eq('child_id', widget.childId)
+          .maybeSingle();
+
+      if (birthDetailsResponse != null && birthDetailsResponse['birthdate'] != null) {
+        birthdate = DateTime.parse(birthDetailsResponse['birthdate']);
+      }
 
       childData = childResponse;
 
@@ -58,6 +72,7 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
 
       setState(() => loading = false);
     } catch (e) {
+      debugPrint('Error loading growth records: $e');
       setState(() => loading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -76,21 +91,13 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
   }
 
   String calculateAge() {
-    final mother = childData?['mother'] as Map<String, dynamic>?;
-    if (mother == null) return 'Unknown age';
-    final birthDetailsList = mother['birth_details'] as List?;
-    if (birthDetailsList == null || birthDetailsList.isEmpty) return 'Unknown age';
-    final birthDetails = birthDetailsList.first as Map<String, dynamic>?;
-    final birthdate = birthDetails?['birthdate']?.toString();
-    
-    if (birthdate == null || birthdate.isEmpty) return 'Unknown age';
+    if (birthdate == null) return 'Unknown age';
 
     try {
-      final birth = DateTime.parse(birthdate);
       final now = DateTime.now();
 
-      int years = now.year - birth.year;
-      int months = now.month - birth.month;
+      int years = now.year - birthdate!.year;
+      int months = now.month - birthdate!.month;
 
       if (months < 0) {
         years--;
@@ -115,12 +122,6 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
     } catch (e) {
       return date;
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    fetchGrowthRecords();
   }
 
   @override
@@ -192,16 +193,12 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
                                 final record = records[index];
                                 final height = (record['child_height'] as num?)?.toDouble() ?? 0;
                                 final weight = (record['child_weight'] as num?)?.toDouble() ?? 0;
-                                final bmi = (record['bmi'] as num?)?.toDouble();
                                 final date = record['created_at']?.toString() ?? '';
-                                final remarks = record['remarks']?.toString() ?? '';
 
                                 return GrowthRecordCard(
                                   height: height,
                                   weight: weight,
-                                  bmi: bmi,
                                   date: formatDate(date),
-                                  remarks: remarks,
                                 );
                               },
                             ),
@@ -217,41 +214,17 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
 class GrowthRecordCard extends StatelessWidget {
   final double height;
   final double weight;
-  final double? bmi;
   final String date;
-  final String remarks;
 
   const GrowthRecordCard({
     super.key,
     required this.height,
     required this.weight,
-    this.bmi,
     required this.date,
-    required this.remarks,
   });
-
-  String getBMICategory(double? bmi) {
-    if (bmi == null) return 'Normal';
-    if (bmi < 14) return 'Underweight';
-    if (bmi < 18) return 'Normal';
-    if (bmi < 22) return 'Overweight';
-    return 'Obese';
-  }
-
-  Color getBMIColor(double? bmi) {
-    if (bmi == null) return AppColors.success;
-    if (bmi < 14) return AppColors.warning;
-    if (bmi < 18) return AppColors.success;
-    if (bmi < 22) return AppColors.warning;
-    return AppColors.error;
-  }
 
   @override
   Widget build(BuildContext context) {
-    final bmiColor = getBMIColor(bmi);
-    final bmiCategory = getBMICategory(bmi);
-    final bmiValue = bmi?.toStringAsFixed(1) ?? 'N/A';
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -279,21 +252,6 @@ class GrowthRecordCard extends StatelessWidget {
                   color: AppColors.textPrimary,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: bmiColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'BMI: $bmiValue',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: bmiColor,
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -318,70 +276,6 @@ class GrowthRecordCard extends StatelessWidget {
               ),
             ],
           ),
-
-          if (bmi != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.bgSecondary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: bmiColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'BMI Status: $bmiCategory',
-                      style: TextStyle(
-                        color: bmiColor,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          if (remarks.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.bgSecondary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.notes_outlined,
-                    size: 16,
-                    color: AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      remarks,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
