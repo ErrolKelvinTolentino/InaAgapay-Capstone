@@ -55,6 +55,62 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSecondary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(widget.icon, color: AppColors.brandPrimary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (widget.subtitle != null &&
+                              widget.subtitle!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              widget.subtitle!.trim(),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
               if (widget.imageUrls != null && widget.imageUrls!.isNotEmpty) ...[
                 _buildImageGallery(widget.imageUrls!),
                 const SizedBox(height: 14),
@@ -634,7 +690,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     sections[currentSection] = [];
 
     final headingPattern = RegExp(
-      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|LABORATORY RESULTS|ABNORMAL FINDINGS|NORMAL RANGES|REFERENCE RANGES|OVERALL ASSESSMENT|OVERALL HEALTH STATUS|RECOMMENDATIONS|RECOMMENDED NEXT ACTIONS|KEY OBSERVATIONS|DETAILED MEASUREMENTS ASSESSMENT|ANATOMICAL ASSESSMENT|GESTATIONAL AGE ASSESSMENT)\s*:\s*(.*)$',
+      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|LABORATORY RESULTS|ABNORMAL FINDINGS|NORMAL RANGES|REFERENCE RANGES|OVERALL ASSESSMENT|OVERALL HEALTH STATUS|RECOMMENDATIONS|RECOMMENDED NEXT ACTIONS|KEY OBSERVATIONS|DETAILED MEASUREMENTS ASSESSMENT|ANATOMICAL ASSESSMENT|GESTATIONAL AGE ASSESSMENT|CLINICAL IMPRESSION|FOLLOW-UP SUGGESTIONS)\s*:?\s*(.*)$',
       caseSensitive: false,
     );
 
@@ -938,6 +994,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     }
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -975,6 +1032,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
             final hasDetails = details.isNotEmpty;
 
             return Container(
+              width: double.infinity,
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -1070,12 +1128,13 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                       height: 1.35,
                     ),
                   ),
-                  if (isExpanded && hasDetails)
+                  if (isExpanded && hasDetails) ...[
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.only(top: 10),
                       child: _buildFormattedAiText(details),
                     ),
+                  ],
                 ],
               ),
             );
@@ -1133,8 +1192,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
             rest.toLowerCase() == 'absent') {
           value = 'Absent / Abnormal';
           status = 'ABNORMAL';
-          if (rest.startsWith('X') || rest.startsWith('✗'))
+          if (rest.startsWith('X') || rest.startsWith('✗')) {
             rest = rest.substring(1).trim();
+          }
         } else {
           final dashIndex = rest.lastIndexOf('-');
           if (dashIndex != -1) {
@@ -1190,29 +1250,31 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       return _buildAiSectionCard(title, lines);
     }
 
-    IconData headerIcon = Icons.straighten_outlined;
+    IconData headerIcon = Icons.article_outlined;
     Color headerColor = AppColors.brandPrimary;
 
-    if (title.toUpperCase().contains('ANATOMICAL')) {
-      headerIcon = Icons.accessibility_new_outlined;
-    } else if (title.toUpperCase().contains('ABNORMAL')) {
-      headerIcon = Icons.warning_amber_outlined;
-      headerColor = Colors.orange;
-    } else if (title.toUpperCase().contains('NORMAL RANGES')) {
+    final normalized = title.trim().toUpperCase();
+    if (normalized == 'DETAILED MEASUREMENTS ASSESSMENT') {
+      headerColor = Colors.teal;
+      headerIcon = Icons.straighten;
+    } else if (normalized == 'ANATOMICAL ASSESSMENT') {
+      headerColor = Colors.green;
+      headerIcon = Icons.child_care_outlined;
+    } else if (normalized == 'ABNORMAL FINDINGS') {
+      headerColor = Colors.red;
+      headerIcon = Icons.warning_amber_rounded;
+    } else if (normalized.contains('NORMAL RANGES')) {
       headerIcon = Icons.analytics_outlined;
     }
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color:
-            headerColor == Colors.orange ? Colors.orange.shade50 : Colors.white,
+        color: headerColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: headerColor == Colors.orange
-                ? Colors.orange.shade200
-                : AppColors.borderPrimary),
+        border: Border.all(color: headerColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1234,6 +1296,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           const SizedBox(height: 10),
           ...rows.map((row) {
             return Container(
+              width: double.infinity,
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -1320,39 +1383,47 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   Widget _buildAiSectionCard(String title, List<String> lines) {
     final friendlyTitle = _friendlyAiSectionTitle(title);
     Color color = AppColors.brandPrimary;
-    IconData icon = Icons.info_outline;
+    IconData icon = Icons.article_outlined;
 
     final normalized = title.trim().toUpperCase();
-    if (normalized == 'OVERALL ASSESSMENT') {
-      icon = Icons.summarize_outlined;
-    } else if (normalized == 'OVERALL HEALTH STATUS') {
+    if (normalized.contains('HEALTH STATUS')) {
+      final hasHealthy = lines.any((v) => v.toLowerCase().contains('healthy'));
+      color = hasHealthy ? Colors.green : Colors.orange;
       icon = Icons.monitor_heart_outlined;
-    } else if (normalized == 'GESTATIONAL AGE ASSESSMENT') {
-      icon = Icons.calendar_month_outlined;
     } else if (normalized == 'DETAILED MEASUREMENTS ASSESSMENT') {
-      icon = Icons.straighten_outlined;
+      color = Colors.teal;
+      icon = Icons.straighten;
     } else if (normalized == 'ANATOMICAL ASSESSMENT') {
-      icon = Icons.accessibility_new_outlined;
+      color = Colors.green;
+      icon = Icons.child_care_outlined;
     } else if (normalized == 'ABNORMAL FINDINGS') {
-      icon = Icons.warning_amber_outlined;
-      color = Colors.orange;
-    } else if (normalized == 'RECOMMENDATIONS' ||
-        normalized == 'RECOMMENDED NEXT ACTIONS') {
-      icon = Icons.medical_information_outlined;
+      color = Colors.red;
+      icon = Icons.warning_amber_rounded;
+    } else if (normalized.contains('RECOMMENDED')) {
+      color = Colors.blue;
+      icon = Icons.lightbulb_outline;
+    } else if (normalized == 'OVERALL ASSESSMENT') {
+      icon = Icons.summarize_outlined;
     } else if (normalized == 'KEY OBSERVATIONS') {
       icon = Icons.visibility_outlined;
+    } else if (normalized == 'CLINICAL IMPRESSION') {
+      icon = Icons.medical_information_outlined;
+      color = Colors.indigo;
+    } else if (normalized == 'FOLLOW-UP SUGGESTIONS') {
+      icon = Icons.follow_the_signs;
+      color = Colors.blue;
     } else if (normalized == 'SUMMARY') {
       icon = Icons.analytics_outlined;
     }
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1421,12 +1492,14 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       'GESTATIONAL AGE ASSESSMENT',
       'DETAILED MEASUREMENTS ASSESSMENT',
       'ANATOMICAL ASSESSMENT',
+      'CLINICAL IMPRESSION',
       'LABORATORY RESULTS',
       'ABNORMAL FINDINGS',
       'NORMAL RANGES',
       'KEY OBSERVATIONS',
       'RECOMMENDATIONS',
       'RECOMMENDED NEXT ACTIONS',
+      'FOLLOW-UP SUGGESTIONS',
       'SUMMARY',
     ];
 
@@ -1496,6 +1569,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
         return 'Recommendations';
       case 'RECOMMENDED NEXT ACTIONS':
         return 'Recommended Next Actions';
+      case 'CLINICAL IMPRESSION':
+        return 'Clinical Impression';
+      case 'FOLLOW-UP SUGGESTIONS':
+        return 'Follow-up Suggestions';
       case 'DETAILED MEASUREMENTS ASSESSMENT':
         return 'Measurements';
       case 'ANATOMICAL ASSESSMENT':
