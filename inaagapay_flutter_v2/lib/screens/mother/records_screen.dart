@@ -27,6 +27,8 @@ class _RecordsScreenState extends State<RecordsScreen>
   List<Map<String, dynamic>> _checkups = [];
   List<Map<String, dynamic>> _ultrasounds = [];
   List<Map<String, dynamic>> _labTests = [];
+  Map<int, int> _pregnancyFetalCounts = {};
+  Map<int, String> _checkupSymptomSummaries = {};
 
   String _selectedFilter = 'all';
   String _sortOrder = 'desc';
@@ -119,10 +121,64 @@ class _RecordsScreenState extends State<RecordsScreen>
           .inFilter('pregnancy_id', pregnancyIds)
           .order('lab_test_date', ascending: false);
 
+      final pregnancyResponse = await SupabaseService.client
+          .from('pregnancies')
+          .select('pregnancy_id, fetal_count')
+          .inFilter('pregnancy_id', pregnancyIds);
+
+      final checkupIds = (checkupsResponse as List)
+          .map<int?>((c) => c['prenatal_checkup_id'] as int?)
+          .whereType<int>()
+          .toList();
+
+      Map<int, String> symptomSummaries = {};
+      if (checkupIds.isNotEmpty) {
+        final symptomRows = await SupabaseService.client
+            .from('pregnancy_symptoms')
+            .select(
+                'prenatal_checkup_id, symptom_type_id, notes, symptom_type:symptom_types(symptom_name, risk_category)')
+            .inFilter('prenatal_checkup_id', checkupIds);
+
+        for (final symbol
+            in (symptomRows as List).cast<Map<String, dynamic>>()) {
+          final checkupId = symbol['prenatal_checkup_id'] as int?;
+          if (checkupId == null) continue;
+          final symptomType = symbol['symptom_type'] as Map<String, dynamic>?;
+          final name =
+              symptomType?['symptom_name']?.toString() ?? 'Unknown symptom';
+          final risk = symptomType?['risk_category']?.toString() ?? 'unknown';
+          final note = (symbol['notes'] as String?)?.trim();
+          final label = note != null && note.isNotEmpty
+              ? '$name ($risk): $note'
+              : '$name ($risk)';
+          symptomSummaries.update(
+            checkupId,
+            (existing) {
+              final items = existing.split('; ');
+              items.add(label);
+              return items.join('; ');
+            },
+            ifAbsent: () => label,
+          );
+        }
+      }
+
+      final fetalCounts = <int, int>{};
+      for (final pregnancy
+          in (pregnancyResponse as List).cast<Map<String, dynamic>>()) {
+        final id = pregnancy['pregnancy_id'] as int?;
+        final count = pregnancy['fetal_count'] as int?;
+        if (id != null && count != null) {
+          fetalCounts[id] = count;
+        }
+      }
+
       setState(() {
         _checkups = List<Map<String, dynamic>>.from(checkupsResponse);
         _ultrasounds = List<Map<String, dynamic>>.from(ultrasoundsResponse);
         _labTests = List<Map<String, dynamic>>.from(labTestsResponse);
+        _pregnancyFetalCounts = fetalCounts;
+        _checkupSymptomSummaries = symptomSummaries;
       });
     }
   }
@@ -153,6 +209,11 @@ class _RecordsScreenState extends State<RecordsScreen>
     if (value == null) return '—';
     final str = value.toString().trim();
     return str.isEmpty ? '—' : str;
+  }
+
+  String _formatInputValue(dynamic value) {
+    final formatted = _formatValue(value);
+    return formatted == '—' ? 'Not inputted' : formatted;
   }
 
   List<String> _parseImageUrls(dynamic imageField) {
@@ -418,12 +479,17 @@ class _RecordsScreenState extends State<RecordsScreen>
 
   bool _isConcerningStatus(String status) {
     final s = status.toUpperCase();
-    return s.contains('REVIEW') || s.contains('ABNORMAL') || s.contains('CONCERNING');
+    return s.contains('REVIEW') ||
+        s.contains('ABNORMAL') ||
+        s.contains('CONCERNING');
   }
 
   bool _isCautionStatus(String status) {
     final s = status.toUpperCase();
-    return s == 'OBSERVE' || s == 'BORDERLINE' || s == 'POSITIVE' || s == 'MONITOR';
+    return s == 'OBSERVE' ||
+        s == 'BORDERLINE' ||
+        s == 'POSITIVE' ||
+        s == 'MONITOR';
   }
 
   Color _statusChipBackground(String status) {
@@ -713,8 +779,10 @@ class _RecordsScreenState extends State<RecordsScreen>
     );
   }
 
-  ({String testName, String value, String status, String remark}) _parseUltrasoundMetricLine(String line) {
-    final cleaned = _safeText(line).replaceFirst(RegExp(r'^[-\*•]\s*'), '').trim();
+  ({String testName, String value, String status, String remark})
+      _parseUltrasoundMetricLine(String line) {
+    final cleaned =
+        _safeText(line).replaceFirst(RegExp(r'^[-\*•]\s*'), '').trim();
 
     String testName = '';
     String value = '';
@@ -722,15 +790,15 @@ class _RecordsScreenState extends State<RecordsScreen>
     String remark = '';
 
     final bracketMatch = RegExp(r'\[(.*?)\]').firstMatch(cleaned);
-    
+
     if (bracketMatch != null) {
       status = bracketMatch.group(1)!.trim().toUpperCase();
       testName = cleaned.substring(0, bracketMatch.start).trim();
-      
+
       final colonIdx = testName.indexOf(':');
       if (colonIdx != -1) {
-         value = testName.substring(colonIdx + 1).trim();
-         testName = testName.substring(0, colonIdx).trim();
+        value = testName.substring(colonIdx + 1).trim();
+        testName = testName.substring(0, colonIdx).trim();
       }
 
       remark = cleaned.substring(bracketMatch.end).trim();
@@ -747,43 +815,58 @@ class _RecordsScreenState extends State<RecordsScreen>
           rest = rest.substring(0, parenMatch.start).trim();
         }
 
-        if (rest.startsWith('✓') || rest.toLowerCase() == 'normal' || rest.toLowerCase() == 'present') {
+        if (rest.startsWith('✓') ||
+            rest.toLowerCase() == 'normal' ||
+            rest.toLowerCase() == 'present') {
           value = 'Present / Normal';
           status = 'NORMAL';
           if (rest.startsWith('✓')) rest = rest.substring(1).trim();
-        } else if (rest.startsWith('X') || rest.startsWith('✗') || rest.toLowerCase() == 'abnormal' || rest.toLowerCase() == 'absent') {
+        } else if (rest.startsWith('X') ||
+            rest.startsWith('✗') ||
+            rest.toLowerCase() == 'abnormal' ||
+            rest.toLowerCase() == 'absent') {
           value = 'Absent / Abnormal';
           status = 'ABNORMAL';
-          if (rest.startsWith('X') || rest.startsWith('✗')) rest = rest.substring(1).trim();
+          if (rest.startsWith('X') || rest.startsWith('✗'))
+            rest = rest.substring(1).trim();
         } else {
           final dashIndex = rest.lastIndexOf('-');
           if (dashIndex != -1) {
-            final possibleStatus = rest.substring(dashIndex + 1).trim().toUpperCase();
-            if (possibleStatus == 'NORMAL' || possibleStatus == 'ABNORMAL' || possibleStatus == 'REVIEW' || possibleStatus == 'MONITOR' || possibleStatus == 'BORDERLINE' || possibleStatus == 'CONCERNING') {
+            final possibleStatus =
+                rest.substring(dashIndex + 1).trim().toUpperCase();
+            if (possibleStatus == 'NORMAL' ||
+                possibleStatus == 'ABNORMAL' ||
+                possibleStatus == 'REVIEW' ||
+                possibleStatus == 'MONITOR' ||
+                possibleStatus == 'BORDERLINE' ||
+                possibleStatus == 'CONCERNING') {
               status = possibleStatus;
               value = rest.substring(0, dashIndex).trim();
             } else {
-               value = rest;
+              value = rest;
             }
           } else {
-             value = rest;
+            value = rest;
           }
         }
       } else {
-         return (testName: cleaned, value: '', status: 'UNKNOWN', remark: '');
+        return (testName: cleaned, value: '', status: 'UNKNOWN', remark: '');
       }
     }
-    
+
     if (status == 'CONCERNING') status = 'ABNORMAL';
-    
+
     if (status == 'UNKNOWN' || status.isEmpty) {
-        if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
-            status = 'NORMAL';
-        } else if (RegExp(r'\babnormal\b|\bcritical\b|outside normal range|concerning', caseSensitive: false).hasMatch(value)) {
-            status = 'ABNORMAL';
-        } else {
-            status = 'INFO';
-        }
+      if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
+        status = 'NORMAL';
+      } else if (RegExp(
+              r'\babnormal\b|\bcritical\b|outside normal range|concerning',
+              caseSensitive: false)
+          .hasMatch(value)) {
+        status = 'ABNORMAL';
+      } else {
+        status = 'INFO';
+      }
     }
 
     return (testName: testName, value: value, status: status, remark: remark);
@@ -792,7 +875,10 @@ class _RecordsScreenState extends State<RecordsScreen>
   Widget _buildUltrasoundMetricsSummaryCard(String title, List<String> lines) {
     if (lines.isEmpty) return _buildAiSectionCard(title, lines);
 
-    final rows = lines.map(_parseUltrasoundMetricLine).where((r) => r.testName.isNotEmpty).toList();
+    final rows = lines
+        .map(_parseUltrasoundMetricLine)
+        .where((r) => r.testName.isNotEmpty)
+        .toList();
 
     if (rows.isEmpty) {
       return _buildAiSectionCard(title, lines);
@@ -800,7 +886,7 @@ class _RecordsScreenState extends State<RecordsScreen>
 
     IconData headerIcon = Icons.straighten_outlined;
     Color headerColor = AppColors.brandPrimary;
-    
+
     if (title.toUpperCase().contains('ANATOMICAL')) {
       headerIcon = Icons.accessibility_new_outlined;
     } else if (title.toUpperCase().contains('ABNORMAL')) {
@@ -814,9 +900,13 @@ class _RecordsScreenState extends State<RecordsScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: headerColor == Colors.orange ? Colors.orange.shade50 : Colors.white,
+        color:
+            headerColor == Colors.orange ? Colors.orange.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: headerColor == Colors.orange ? Colors.orange.shade200 : AppColors.borderPrimary),
+        border: Border.all(
+            color: headerColor == Colors.orange
+                ? Colors.orange.shade200
+                : AppColors.borderPrimary),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -862,7 +952,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                     children: [
                       if (row.status != 'UNKNOWN' && row.status != 'INFO')
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: _statusChipBackground(row.status),
                             borderRadius: BorderRadius.circular(999),
@@ -879,9 +970,12 @@ class _RecordsScreenState extends State<RecordsScreen>
                             ),
                           ),
                         ),
-                      if (row.value.isNotEmpty && row.value != 'Present / Normal' && row.value != 'Absent / Abnormal')
+                      if (row.value.isNotEmpty &&
+                          row.value != 'Present / Normal' &&
+                          row.value != 'Absent / Abnormal')
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: AppColors.bgSecondary,
                             borderRadius: BorderRadius.circular(999),
@@ -947,8 +1041,10 @@ class _RecordsScreenState extends State<RecordsScreen>
   Widget _buildAiSectionCard(String title, List<String> lines) {
     final safeTitle = title.toUpperCase();
     final isAbnormal = safeTitle.contains('ABNORMAL');
-    final isRecommendation = safeTitle.contains('RECOMMENDATION') || safeTitle.contains('RECOMMENDED');
-    final isAssessment = safeTitle.contains('ASSESSMENT') || safeTitle.contains('HEALTH STATUS');
+    final isRecommendation = safeTitle.contains('RECOMMENDATION') ||
+        safeTitle.contains('RECOMMENDED');
+    final isAssessment =
+        safeTitle.contains('ASSESSMENT') || safeTitle.contains('HEALTH STATUS');
 
     final Color accent = isAbnormal
         ? Colors.red
@@ -981,9 +1077,13 @@ class _RecordsScreenState extends State<RecordsScreen>
           ...lines.map((line) {
             String cleaned = line.replaceFirst(RegExp(r'^[-*]\s*'), '').trim();
             if (RegExp(r'^[A-Z_]+$').hasMatch(cleaned)) {
-              cleaned = cleaned.replaceAll('_', ' ').split(' ').map((word) => 
-                word.isEmpty ? '' : '${word[0]}${word.substring(1).toLowerCase()}'
-              ).join(' ');
+              cleaned = cleaned
+                  .replaceAll('_', ' ')
+                  .split(' ')
+                  .map((word) => word.isEmpty
+                      ? ''
+                      : '${word[0]}${word.substring(1).toLowerCase()}')
+                  .join(' ');
             }
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -1037,8 +1137,13 @@ class _RecordsScreenState extends State<RecordsScreen>
         continue;
       }
 
-      if (entry.key == 'DETAILED MEASUREMENTS ASSESSMENT' || entry.key == 'ANATOMICAL ASSESSMENT' || entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
-        if ((entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') && sections.containsKey('LABORATORY RESULTS')) {
+      if (entry.key == 'DETAILED MEASUREMENTS ASSESSMENT' ||
+          entry.key == 'ANATOMICAL ASSESSMENT' ||
+          entry.key == 'ABNORMAL FINDINGS' ||
+          entry.key == 'NORMAL RANGES') {
+        if ((entry.key == 'ABNORMAL FINDINGS' ||
+                entry.key == 'NORMAL RANGES') &&
+            sections.containsKey('LABORATORY RESULTS')) {
           continue;
         }
         widgets.add(_buildUltrasoundMetricsSummaryCard(entry.key, entry.value));
@@ -1179,6 +1284,129 @@ class _RecordsScreenState extends State<RecordsScreen>
     }
 
     return buffer.toString().trim();
+  }
+
+  Future<Map<String, dynamic>?> _fetchCheckupDetails(
+      int prenatalCheckupId, dynamic checkupDateTime) async {
+    try {
+      final aiRow = await SupabaseService.client
+          .from('ai_responses')
+          .select('ai_response_id, response')
+          .eq('reference_table', 'prenatal_checkups')
+          .eq('reference_id', prenatalCheckupId)
+          .eq('response_type', 'risk_assessment')
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      String? aiResponse = aiRow?['response'] as String?;
+      String? riskLevel;
+      String riskFactors = '';
+      String medicationPlans = 'None';
+      String givenMedications = 'None';
+      String ferrousQuantity = 'Not given';
+      String calciumQuantity = 'Not given';
+
+      if (aiRow != null) {
+        final aiResponseId = aiRow['ai_response_id'] as int?;
+        if (aiResponseId != null) {
+          final riskRow = await SupabaseService.client
+              .from('pregnancy_risk_assessments')
+              .select('pregnancy_risk_id, risk_level')
+              .eq('ai_response_id', aiResponseId)
+              .maybeSingle();
+
+          if (riskRow != null) {
+            riskLevel = riskRow['risk_level']?.toString();
+            final factorRows = await SupabaseService.client
+                .from('pregnancy_risk_factors')
+                .select('factor, risk_influence')
+                .eq('pregnancy_risk_id', riskRow['pregnancy_risk_id'])
+                .order('risk_factor_id', ascending: true);
+
+            final factorList = <String>[];
+            for (final factor
+                in (factorRows as List).cast<Map<String, dynamic>>()) {
+              final factorText = factor['factor']?.toString() ?? '';
+              final influence = factor['risk_influence']?.toString() ?? '';
+              if (factorText.isNotEmpty) {
+                factorList.add(
+                    '$factorText${influence.isNotEmpty ? ' ($influence)' : ''}');
+              }
+            }
+            riskFactors = factorList.join('; ');
+          }
+        }
+      }
+
+      if (checkupDateTime != null) {
+        final date = DateTime.tryParse(checkupDateTime.toString());
+        final checkupDateString =
+            date != null ? date.toIso8601String().split('T')[0] : null;
+        if (checkupDateString != null && _motherId != null) {
+          final givenRows = await SupabaseService.client
+              .from('given_medications')
+              .select('given_medication_name, quantity')
+              .eq('mother_id', _motherId!)
+              .eq('date_given', checkupDateString);
+
+          final medicationRows = await SupabaseService.client
+              .from('mother_medications')
+              .select(
+                  'mother_medication_name, quantity, frequency, start_date, end_date')
+              .eq('mother_id', _motherId!)
+              .eq('start_date', checkupDateString);
+
+          final givenItems = <String>[];
+          for (final row in (givenRows as List).cast<Map<String, dynamic>>()) {
+            final name = row['given_medication_name']?.toString() ?? 'Unknown';
+            final quantity = row['quantity']?.toString() ?? '1';
+            givenItems.add('$name x$quantity');
+            if (name.toLowerCase().contains('ferrous')) {
+              ferrousQuantity = quantity;
+            }
+            if (name.toLowerCase().contains('calcium')) {
+              calciumQuantity = quantity;
+            }
+          }
+          if (givenItems.isNotEmpty) {
+            givenMedications = givenItems.join('; ');
+          }
+
+          final planItems = <String>[];
+          for (final row
+              in (medicationRows as List).cast<Map<String, dynamic>>()) {
+            final name = row['mother_medication_name']?.toString() ?? 'Unknown';
+            final qty = row['quantity']?.toString() ?? '1';
+            final freq = row['frequency']?.toString();
+            final start = row['start_date']?.toString();
+            final end = row['end_date']?.toString();
+            final details = [
+              qty != 'null' ? 'Qty $qty' : null,
+              freq,
+              start != null ? 'Start $start' : null,
+              end != null ? 'End $end' : null
+            ].where((element) => element != null).join(' · ');
+            planItems.add('$name${details.isNotEmpty ? ' ($details)' : ''}');
+          }
+          if (planItems.isNotEmpty) {
+            medicationPlans = planItems.join('; ');
+          }
+        }
+      }
+
+      return {
+        'aiResponse': aiResponse,
+        'riskLevel': riskLevel,
+        'riskFactors': riskFactors,
+        'medicationPlans': medicationPlans,
+        'givenMedications': givenMedications,
+        'ferrousQuantity': ferrousQuantity,
+        'calciumQuantity': calciumQuantity,
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   double? _toDouble(dynamic value) {
@@ -1571,22 +1799,73 @@ class _RecordsScreenState extends State<RecordsScreen>
                           ),
                           onTap: () async {
                             if (isCheckup) {
-                              final bpSys = _formatValue(
+                              final bpSys = _formatInputValue(
                                   record['blood_pressure_systolic']);
-                              final bpDia = _formatValue(
+                              final bpDia = _formatInputValue(
                                   record['blood_pressure_diastolic']);
-                              String? aiAnalysis;
                               final checkupId = record['prenatal_checkup_id'];
+                              String? aiAnalysis;
+                              String? riskLevel;
+                              String riskFactors = '';
+                              String medicationPlansSummary = 'None';
+                              String givenMedicationsSummary = 'None';
+                              String ferrousSummary = 'Not given';
+                              String calciumSummary = 'Not given';
+
                               if (checkupId is int) {
-                                aiAnalysis = await MotherProfileService
-                                    .getCheckupAIAnalysis(
-                                  checkupId,
-                                );
+                                final checkupDetails =
+                                    await _fetchCheckupDetails(
+                                        checkupId, record['checkup_datetime']);
+                                if (checkupDetails != null) {
+                                  riskLevel =
+                                      checkupDetails['riskLevel'] as String?;
+                                  riskFactors =
+                                      checkupDetails['riskFactors'] as String;
+                                  aiAnalysis =
+                                      checkupDetails['aiResponse'] as String?;
+                                  medicationPlansSummary =
+                                      checkupDetails['medicationPlans']
+                                          as String;
+                                  givenMedicationsSummary =
+                                      checkupDetails['givenMedications']
+                                          as String;
+                                  ferrousSummary =
+                                      checkupDetails['ferrousQuantity']
+                                          as String;
+                                  calciumSummary =
+                                      checkupDetails['calciumQuantity']
+                                          as String;
+                                }
+
+                                if (aiAnalysis == null ||
+                                    aiAnalysis.trim().isEmpty) {
+                                  aiAnalysis = await MotherProfileService
+                                      .getCheckupAIAnalysis(
+                                    checkupId,
+                                  );
+                                }
                               }
+
                               aiAnalysis = (aiAnalysis != null &&
                                       aiAnalysis.trim().isNotEmpty)
                                   ? aiAnalysis.trim()
                                   : _generatePrenatalAIInsights(record);
+                              final symptomSummary = _checkupSymptomSummaries[
+                                      record['prenatal_checkup_id'] as int? ??
+                                          -1] ??
+                                  'None recorded';
+                              final fetalCount = (_pregnancyFetalCounts[
+                                          record['pregnancy_id'] as int? ?? -1]
+                                      ?.toString()) ??
+                                  'Not inputted';
+                              final riskLevelValue = (riskLevel != null &&
+                                      riskLevel.trim().isNotEmpty)
+                                  ? _formatInputValue(riskLevel)
+                                  : 'Not inputted';
+                              final riskFactorsValue =
+                                  riskFactors.trim().isNotEmpty
+                                      ? riskFactors
+                                      : 'Not inputted';
                               _showRecordDetails(
                                 title: 'Prenatal Checkup',
                                 subtitle:
@@ -1595,25 +1874,55 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 rows: [
                                   MapEntry(
                                       'Date',
-                                      _formatDateTime(
-                                          record['checkup_datetime'])),
-                                  MapEntry('Age of Gestation',
-                                      _formatValue(record['age_of_gestation'])),
-                                  MapEntry('Weight (kg)',
-                                      _formatValue(record['checkup_weight'])),
-                                  MapEntry('Blood Pressure', '$bpSys/$bpDia'),
-                                  MapEntry('Fetal Position',
-                                      _formatValue(record['fetal_position'])),
-                                  MapEntry('Fetal Heart Beat',
-                                      _formatValue(record['fetal_heart_beat'])),
-                                  MapEntry('TD Vaccine',
-                                      _formatValue(record['td_vaccine_dose'])),
+                                      record['checkup_datetime'] == null
+                                          ? 'Not inputted'
+                                          : _formatDateTime(
+                                              record['checkup_datetime'])),
+                                  MapEntry('Fetal Count', fetalCount),
                                   MapEntry(
-                                      'Edema', _formatValue(record['edema'])),
+                                      'Age of Gestation',
+                                      _formatInputValue(
+                                          record['age_of_gestation'])),
+                                  MapEntry(
+                                      'Weight (kg)',
+                                      _formatInputValue(
+                                          record['checkup_weight'])),
+                                  MapEntry('Blood Pressure', '$bpSys/$bpDia'),
+                                  MapEntry(
+                                      'Fetal Position',
+                                      _formatInputValue(
+                                          record['fetal_position'])),
+                                  MapEntry(
+                                      'Fetal Heart Tone',
+                                      _formatInputValue(
+                                          record['fetal_heart_tone'])),
+                                  MapEntry(
+                                      'Fetal Heart Beat',
+                                      _formatInputValue(
+                                          record['fetal_heart_beat'])),
+                                  MapEntry('Symptoms', symptomSummary),
+                                  MapEntry('Medication Plans',
+                                      medicationPlansSummary),
+                                  MapEntry('Given Medications',
+                                      givenMedicationsSummary),
+                                  MapEntry('Ferrous + FA', ferrousSummary),
+                                  MapEntry('Calcium', calciumSummary),
+                                  MapEntry('Risk Level', riskLevelValue),
+                                  MapEntry('Risk Factors', riskFactorsValue),
+                                  MapEntry(
+                                      'TD Vaccine',
+                                      _formatInputValue(
+                                          record['td_vaccine_dose'])),
+                                  MapEntry('Edema',
+                                      _formatInputValue(record['edema'])),
                                   MapEntry('Remarks',
-                                      _formatValue(record['remarks'])),
-                                  MapEntry('Next Schedule',
-                                      _formatDate(record['next_schedule'])),
+                                      _formatInputValue(record['remarks'])),
+                                  MapEntry(
+                                      'Next Schedule',
+                                      record['next_schedule'] == null
+                                          ? 'Not inputted'
+                                          : _formatDate(
+                                              record['next_schedule'])),
                                 ],
                                 aiAnalysis: aiAnalysis,
                                 useStructuredAiInsights: true,
@@ -1631,9 +1940,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   ultrasoundId,
                                 );
                               }
-                              
+
                               String finalRemarks = split.cleanRemarks;
-                              if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
+                              if (aiAnalysis != null &&
+                                  aiAnalysis.trim() == finalRemarks.trim()) {
                                 finalRemarks = '';
                               }
 
@@ -1668,8 +1978,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       'Profession',
                                       _formatValue(
                                           record['health_worker_profession'])),
-                                  MapEntry('Remarks',
-                                      _formatValue(finalRemarks)),
+                                  MapEntry(
+                                      'Remarks', _formatValue(finalRemarks)),
                                 ],
                                 aiAnalysis: aiAnalysis,
                                 useStructuredAiInsights:

@@ -3817,6 +3817,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
           title: 'Fetal Assessment',
           child: Column(
             children: [
+              _summaryRow('Fetal Count', '${_fetalCount ?? "-"}'),
               _summaryRow('Position', _fetalPosition ?? '-'),
               _summaryRow(
                 'Heart Rate',
@@ -4006,21 +4007,21 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
-            color: AppColors.info.withAlpha(20),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.info.withAlpha(80)),
+            color: AppColors.info.withAlpha(25),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.info.withAlpha(90)),
           ),
           child: const Row(
             children: [
               Icon(Icons.psychology_alt_outlined,
-                  size: 16, color: AppColors.brandText),
-              SizedBox(width: 8),
+                  size: 18, color: AppColors.brandText),
+              SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Review and refine the AI risk note before final save.',
+                  'Review and refine the risk assessment before saving this prenatal checkup.',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.brandText,
@@ -4037,9 +4038,8 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
                   if (_riskSnapshot != null)
                     statPill(
@@ -4066,24 +4066,36 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _loadingRiskPreview
-                      ? null
-                      : () => _refreshRiskPreview(force: true),
-                  icon: const Icon(Icons.refresh, size: 15),
-                  label: const Text('Refresh AI Assessment'),
-                ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Confirm the AI assessment, triage override, and care priorities for this prenatal visit.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: _loadingRiskPreview
+                        ? null
+                        : () => _refreshRiskPreview(force: true),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Refresh AI Assessment'),
+                  ),
+                ],
               ),
-              if (_loadingRiskPreview)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: LinearProgressIndicator(minHeight: 3),
-                ),
+              if (_loadingRiskPreview) ...[
+                const SizedBox(height: 14),
+                const LinearProgressIndicator(minHeight: 3),
+              ],
               if (_riskPreviewError != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 14),
                 Text(
                   _riskPreviewError!,
                   style: const TextStyle(
@@ -4093,123 +4105,137 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
-              if (_riskSnapshot != null) ...[
-                _buildAssessmentPhaseChip(),
-                const SizedBox(height: 6),
-                const Text(
-                  'Triage Override',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
-                  ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.faintWhite,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.borderPrimary),
                 ),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ChoiceChip(
-                      label: const Text('Low'),
-                      selected: _editableRiskLevel == 'low',
-                      labelStyle: const TextStyle(color: AppColors.textPrimary),
-                      onSelected: _isEditingAiAssessment
-                          ? (_) => setState(() {
-                                _editableRiskLevel = 'low';
-                                _aiResponseApproved = false;
-                              })
-                          : null,
+                    const Text(
+                      'Triage Override',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
-                    ChoiceChip(
-                      label: const Text('High'),
-                      selected: _editableRiskLevel == 'high',
-                      selectedColor: AppColors.error.withValues(alpha: 0.15),
-                      labelStyle: const TextStyle(color: AppColors.textPrimary),
-                      onSelected: _isEditingAiAssessment
-                          ? (_) => setState(() {
-                                _editableRiskLevel = 'high';
-                                _aiResponseApproved = false;
-                              })
-                          : null,
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Low'),
+                          selected: _editableRiskLevel == 'low',
+                          selectedColor: AppColors.success.withOpacity(0.14),
+                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          onSelected: _isEditingAiAssessment
+                              ? (_) => setState(() {
+                                    _editableRiskLevel = 'low';
+                                    _aiResponseApproved = false;
+                                  })
+                              : null,
+                        ),
+                        ChoiceChip(
+                          label: const Text('High'),
+                          selected: _editableRiskLevel == 'high',
+                          selectedColor: AppColors.error.withOpacity(0.14),
+                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          onSelected: _isEditingAiAssessment
+                              ? (_) => setState(() {
+                                    _editableRiskLevel = 'high';
+                                    _aiResponseApproved = false;
+                                  })
+                              : null,
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Clinical Signals',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_riskSnapshot!.notableRecords.isEmpty)
+                      const Text(
+                        'No notable records detected.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: _riskSnapshot!.notableRecords.map((r) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border:
+                                  Border.all(color: AppColors.borderPrimary),
+                            ),
+                            child: Text(
+                              r,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderPrimary),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              ),
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.faintWhite,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.borderPrimary),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Risk Factors & Actions',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_editableRiskFactors.isEmpty)
                       const Text(
-                        'Clinical Signals',
+                        'No major risk factors identified from current records.',
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w700,
                           color: AppColors.textSecondary,
+                          height: 1.5,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      if (_riskSnapshot!.notableRecords.isEmpty)
-                        const Text(
-                          'No notable records detected.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        )
-                      else
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: _riskSnapshot!.notableRecords.map((r) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(10),
-                                border:
-                                    Border.all(color: AppColors.borderPrimary),
-                              ),
-                              child: Text(
-                                r,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Risk Factors',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      if (_editableRiskFactors.isEmpty)
-                        const Text(
-                          'No major risk factors identified from current records.',
-                          style: TextStyle(
-                              fontSize: 12, color: AppColors.textSecondary),
-                        )
-                      else
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children:
-                              _editableRiskFactors.asMap().entries.map((e) {
+                      )
+                    else
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: _editableRiskFactors.asMap().entries.map(
+                          (e) {
                             final f = e.value;
                             final idx = e.key;
                             final isHigh = f.influence == 'high';
@@ -4217,23 +4243,21 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                               label: Text('${f.factor} (${f.influence})'),
                               labelStyle: TextStyle(
                                 fontSize: 12,
+                                fontWeight: isHigh
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                                 color: isHigh
                                     ? AppColors.error
                                     : AppColors.textPrimary,
-                                fontWeight:
-                                    isHigh ? FontWeight.w700 : FontWeight.w500,
                               ),
                               backgroundColor: isHigh
                                   ? AppColors.error.withOpacity(0.12)
-                                  : AppColors.borderPrimary,
+                                  : AppColors.success.withOpacity(0.12),
                               side: BorderSide(
                                 color: isHigh
-                                    ? AppColors.error.withOpacity(0.42)
-                                    : AppColors.borderPrimary,
+                                    ? AppColors.error.withOpacity(0.35)
+                                    : AppColors.success.withOpacity(0.35),
                               ),
-                              deleteIconColor: isHigh
-                                  ? AppColors.error
-                                  : AppColors.textSecondary,
                               onPressed: _isEditingAiAssessment
                                   ? () => setState(() {
                                         _editableRiskFactors[idx] =
@@ -4253,234 +4277,242 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                                       })
                                   : null,
                             );
-                          }).toList(),
-                        ),
-                      if (_isEditingAiAssessment) ...[
-                        const SizedBox(height: 4),
-                        TextButton.icon(
-                          onPressed: () => _openAddRiskFactorDialog(),
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('Add Risk Factor'),
-                        ),
-                      ],
-                      const SizedBox(height: 8),
+                          },
+                        ).toList(),
+                      ),
+                    if (_isEditingAiAssessment) ...[
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: () => _openAddRiskFactorDialog(),
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add Risk Factor'),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Suggested Actions',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_riskSnapshot!.suggestedActions.isEmpty)
                       const Text(
-                        'Suggested Actions',
+                        'No suggested actions are available. Confirm follow-up priorities with the mother and document the care plan.',
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textSecondary,
+                          color: AppColors.textPrimary,
+                          height: 1.6,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      if (_riskSnapshot!.suggestedActions.isEmpty)
-                        const Text(
-                          'No suggested actions are available. Confirm follow-up priorities with the mother and document the care plan.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textPrimary,
-                            height: 1.35,
-                          ),
-                        )
-                      else
-                        ..._riskSnapshot!.suggestedActions.asMap().entries.map(
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _riskSnapshot!.suggestedActions
+                            .asMap()
+                            .entries
+                            .map(
                               (entry) => Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Text(
-                                  '${entry.key + 1}. ${entry.value}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textPrimary,
-                                    height: 1.35,
-                                  ),
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${entry.key + 1}.',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.brandPrimary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        entry.value,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textPrimary,
+                                          height: 1.6,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                    ],
-                  ),
+                            )
+                            .toList(),
+                      ),
+                  ],
                 ),
-                if (_isEditingAiAssessment) ...[
-                  const SizedBox(height: 8),
-                ] else
-                  const SizedBox(height: 12),
-                const Text(
-                  'AI Insights (Editable)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
-                  ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'AI Insights (Editable)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
                 ),
-                const SizedBox(height: 4),
-                if (!_isEditingAiAssessment)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.faintWhite,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.borderPrimary),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
+              ),
+              const SizedBox(height: 10),
+              if (!_isEditingAiAssessment)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.faintWhite,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderPrimary),
+                  ),
+                  child: Text(
+                    content.isEmpty
+                        ? 'AI insights will appear here once the assessment is generated.'
+                        : content,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textPrimary,
+                      height: 1.7,
                     ),
+                  ),
+                )
+              else
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderPrimary),
+                  ),
+                  child: TextField(
+                    controller: _aiAssessmentEditCtrl,
+                    minLines: editorLines,
+                    maxLines: editorLines,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'Edit AI insights only (no duplicate system lists).',
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.all(16),
+                    ),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textPrimary,
+                      height: 1.7,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: !_isEditingAiAssessment
+                        ? OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _aiAssessmentEditCtrl.text =
+                                    _aiAssessmentCtrl.text;
+                                _isEditingAiAssessment = true;
+                                _aiResponseApproved = false;
+                              });
+                            },
+                            icon: const Icon(Icons.edit_outlined, size: 16),
+                            label: const Text('Edit Insights'),
+                          )
+                        : OutlinedButton(
+                            onPressed: () {
+                              setState(() {
+                                _aiAssessmentEditCtrl.text =
+                                    _aiAssessmentCtrl.text;
+                                _editableRiskLevel = _riskSnapshot!.level;
+                                _editableRiskFactors =
+                                    List<_RiskFactorItem>.from(
+                                        _riskSnapshot!.factors);
+                                _isEditingAiAssessment = false;
+                              });
+                            },
+                            child: const Text('Discard Changes'),
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _isEditingAiAssessment
+                        ? FilledButton(
+                            onPressed: () {
+                              final nextText =
+                                  _aiAssessmentEditCtrl.text.trim();
+                              if (nextText.isEmpty) {
+                                _showMessage('AI insights cannot be empty.');
+                                return;
+                              }
+                              setState(() {
+                                _aiAssessmentCtrl.text = nextText;
+                                _aiAssessmentEdited =
+                                    _aiAssessmentCtrl.text.trim() !=
+                                        (_aiOriginalAssessment ?? '').trim();
+                                _aiResponseApproved = false;
+                                _isEditingAiAssessment = false;
+                              });
+                            },
+                            child: const Text('Save Insights'),
+                          )
+                        : FilledButton.icon(
+                            onPressed: (_riskSnapshot == null ||
+                                    _aiAssessmentCtrl.text.trim().isEmpty ||
+                                    _isEditingAiAssessment)
+                                ? null
+                                : () {
+                                    setState(() => _aiResponseApproved = true);
+                                    _showMessage(
+                                        'AI response approved. You can now save the checkup.');
+                                  },
+                            icon: Icon(_aiResponseApproved
+                                ? Icons.verified_rounded
+                                : Icons.check_circle_outline_rounded),
+                            label: Text(_aiResponseApproved
+                                ? 'Approved'
+                                : 'Approve'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _aiResponseApproved
+                                  ? AppColors.success
+                                  : AppColors.brandPrimary,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(
+                    _aiResponseApproved
+                        ? Icons.verified_rounded
+                        : (_aiAssessmentEdited
+                            ? Icons.edit_note_rounded
+                            : Icons.smart_toy_outlined),
+                    size: 14,
+                    color: _aiResponseApproved
+                        ? AppColors.success
+                        : (_aiAssessmentEdited
+                            ? AppColors.brandAccent
+                            : AppColors.textSecondary),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
                     child: Text(
-                      _aiAssessmentCtrl.text.trim().isEmpty
-                          ? _riskSnapshot!.aiAssessment
-                          : _aiAssessmentCtrl.text.trim(),
+                      _aiResponseApproved
+                          ? 'AI response approved for final save.'
+                          : (_aiAssessmentEdited
+                              ? 'Edited by midwife. Press Approve to enable saving. Changes are logged in AI edit history.'
+                              : 'Review then press Approve AI Response before saving.'),
                       style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textPrimary,
-                        height: 1.35,
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.borderPrimary),
-                    ),
-                    child: TextField(
-                      controller: _aiAssessmentEditCtrl,
-                      minLines: editorLines,
-                      maxLines: editorLines,
-                      decoration: const InputDecoration(
-                        hintText:
-                            'Edit AI insights only (no duplicate system lists).',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(12),
-                      ),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textPrimary,
-                        height: 1.35,
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: !_isEditingAiAssessment
-                          ? OutlinedButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _aiAssessmentEditCtrl.text =
-                                      _aiAssessmentCtrl.text;
-                                  _isEditingAiAssessment = true;
-                                  _aiResponseApproved = false;
-                                });
-                              },
-                              icon: const Icon(Icons.edit_outlined, size: 16),
-                              label: const Text('Edit Insights'),
-                            )
-                          : OutlinedButton(
-                              onPressed: () {
-                                setState(() {
-                                  _aiAssessmentEditCtrl.text =
-                                      _aiAssessmentCtrl.text;
-                                  _editableRiskLevel = _riskSnapshot!.level;
-                                  _editableRiskFactors =
-                                      List<_RiskFactorItem>.from(
-                                          _riskSnapshot!.factors);
-                                  _isEditingAiAssessment = false;
-                                });
-                              },
-                              child: const Text('Discard Changes'),
-                            ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _isEditingAiAssessment
-                          ? FilledButton(
-                              onPressed: () {
-                                final nextText =
-                                    _aiAssessmentEditCtrl.text.trim();
-                                if (nextText.isEmpty) {
-                                  _showMessage('AI insights cannot be empty.');
-                                  return;
-                                }
-                                setState(() {
-                                  _aiAssessmentCtrl.text = nextText;
-                                  _aiAssessmentEdited =
-                                      _aiAssessmentCtrl.text.trim() !=
-                                          (_aiOriginalAssessment ?? '').trim();
-                                  _aiResponseApproved = false;
-                                  _isEditingAiAssessment = false;
-                                });
-                              },
-                              child: const Text('Save Insights'),
-                            )
-                          : FilledButton.icon(
-                              onPressed: (_riskSnapshot == null ||
-                                      _aiAssessmentCtrl.text.trim().isEmpty ||
-                                      _isEditingAiAssessment)
-                                  ? null
-                                  : () {
-                                      setState(
-                                          () => _aiResponseApproved = true);
-                                      _showMessage(
-                                          'AI response approved. You can now save the checkup.');
-                                    },
-                              icon: Icon(_aiResponseApproved
-                                  ? Icons.verified_rounded
-                                  : Icons.check_circle_outline_rounded),
-                              label: Text(
-                                  _aiResponseApproved ? 'Approved' : 'Approve'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _aiResponseApproved
-                                    ? AppColors.success
-                                    : AppColors.brandPrimary,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(
-                      _aiResponseApproved
-                          ? Icons.verified_rounded
-                          : (_aiAssessmentEdited
-                              ? Icons.edit_note_rounded
-                              : Icons.smart_toy_outlined),
-                      size: 14,
-                      color: _aiResponseApproved
-                          ? AppColors.success
-                          : (_aiAssessmentEdited
-                              ? AppColors.brandAccent
-                              : AppColors.textSecondary),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        _aiResponseApproved
-                            ? 'AI response approved for final save.'
-                            : (_aiAssessmentEdited
-                                ? 'Edited by midwife. Press Approve to enable saving. Changes are logged in AI edit history.'
-                                : 'Review then press Approve AI Response before saving.'),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ] else
-                const Text(
-                  'Risk analysis will be prepared based on demographics, pregnancy history, prior checkups, and current values.',
-                  style:
-                      TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
+                ],
+              ),
             ],
           ),
         ),

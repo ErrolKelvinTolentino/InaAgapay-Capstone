@@ -62,6 +62,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               _buildDetailsCard(),
               if (hasAi) ...[
                 const SizedBox(height: 14),
+                if (_shouldShowPrenatalRiskSummary())
+                  _buildPrenatalRiskSummaryCard(),
+                if (_shouldShowPrenatalRiskSummary())
+                  const SizedBox(height: 14),
                 _buildAiCard(widget.aiAnalysis!.trim()),
               ],
             ],
@@ -190,6 +194,15 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Color _sectionAccent(String title) {
+    if (widget.title.toLowerCase().contains('prenatal checkup')) {
+      final t = title.toLowerCase();
+      if (t == 'vitals') return const Color(0xFFE6398D);
+      if (t == 'fetal assessment') return const Color(0xFFD44B8A);
+      if (t == 'pregnancy symptoms') return const Color(0xFFF06292);
+      if (t == 'medications & supplements') return const Color(0xFFBA68C8);
+      if (t == 'schedule & remarks') return const Color(0xFF9575CD);
+    }
+
     final t = title.toLowerCase();
     if (t.contains('health worker')) return _accentWorker;
     if (t.contains('notes')) return _accentNotes;
@@ -197,6 +210,15 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   IconData _sectionIcon(String title) {
+    if (widget.title.toLowerCase().contains('prenatal checkup')) {
+      final t = title.toLowerCase();
+      if (t == 'vitals') return Icons.favorite_border;
+      if (t == 'fetal assessment') return Icons.child_care;
+      if (t == 'pregnancy symptoms') return Icons.healing;
+      if (t == 'medications & supplements') return Icons.medication_outlined;
+      if (t == 'schedule & remarks') return Icons.event_note;
+    }
+
     final t = title.toLowerCase();
     if (t.contains('health worker')) return Icons.person_outline;
     if (t.contains('notes')) return Icons.sticky_note_2_outlined;
@@ -256,6 +278,54 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
   Map<String, List<MapEntry<String, String>>> _groupRows(
       List<MapEntry<String, String>> rows) {
+    if (widget.title.toLowerCase().contains('prenatal checkup')) {
+      final vitals = <MapEntry<String, String>>[];
+      final fetal = <MapEntry<String, String>>[];
+      final symptoms = <MapEntry<String, String>>[];
+      final meds = <MapEntry<String, String>>[];
+      final schedule = <MapEntry<String, String>>[];
+
+      for (final row in rows) {
+        final key = _labelKey(row.key);
+        if (['date', 'ageofgestation', 'weight(kg)', 'bloodpressure']
+            .contains(key)) {
+          vitals.add(row);
+        } else if ([
+          'fetalcount',
+          'fetalposition',
+          'fetalhearttone',
+          'fetalheartbeat',
+          'edema'
+        ].contains(key)) {
+          fetal.add(row);
+        } else if (['symptoms'].contains(key)) {
+          symptoms.add(row);
+        } else if ([
+          'medicationplans',
+          'givenmedications',
+          'ferrous+fa',
+          'calcium',
+          'tdvaccine'
+        ].contains(key)) {
+          meds.add(row);
+        } else if (['nextschedule', 'remarks'].contains(key)) {
+          schedule.add(row);
+        } else if (['risklevel', 'riskfactors'].contains(key)) {
+          // Skip risk level and factors (they go to the AI card area or can be ignored here since they're in card now)
+        } else {
+          vitals.add(row); // fallback
+        }
+      }
+
+      return {
+        'Vitals': vitals,
+        if (fetal.isNotEmpty) 'Fetal Assessment': fetal,
+        if (symptoms.isNotEmpty) 'Pregnancy Symptoms': symptoms,
+        if (meds.isNotEmpty) 'Medications & Supplements': meds,
+        if (schedule.isNotEmpty) 'Schedule & Remarks': schedule,
+      };
+    }
+
     final record = <MapEntry<String, String>>[];
     final worker = <MapEntry<String, String>>[];
     final notes = <MapEntry<String, String>>[];
@@ -679,12 +749,17 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
   bool _isConcerningStatus(String status) {
     final s = status.toUpperCase();
-    return s.contains('REVIEW') || s.contains('ABNORMAL') || s.contains('CONCERNING');
+    return s.contains('REVIEW') ||
+        s.contains('ABNORMAL') ||
+        s.contains('CONCERNING');
   }
 
   bool _isCautionStatus(String status) {
     final s = status.toUpperCase();
-    return s == 'OBSERVE' || s == 'BORDERLINE' || s == 'POSITIVE' || s == 'MONITOR';
+    return s == 'OBSERVE' ||
+        s == 'BORDERLINE' ||
+        s == 'POSITIVE' ||
+        s == 'MONITOR';
   }
 
   Color _statusChipBackground(String status) {
@@ -1010,8 +1085,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     );
   }
 
-  ({String testName, String value, String status, String remark}) _parseUltrasoundMetricLine(String line) {
-    final cleaned = _safeText(line).replaceFirst(RegExp(r'^[-\*•]\s*'), '').trim();
+  ({String testName, String value, String status, String remark})
+      _parseUltrasoundMetricLine(String line) {
+    final cleaned =
+        _safeText(line).replaceFirst(RegExp(r'^[-\*•]\s*'), '').trim();
 
     String testName = '';
     String value = '';
@@ -1019,15 +1096,15 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     String remark = '';
 
     final bracketMatch = RegExp(r'\[(.*?)\]').firstMatch(cleaned);
-    
+
     if (bracketMatch != null) {
       status = bracketMatch.group(1)!.trim().toUpperCase();
       testName = cleaned.substring(0, bracketMatch.start).trim();
-      
+
       final colonIdx = testName.indexOf(':');
       if (colonIdx != -1) {
-         value = testName.substring(colonIdx + 1).trim();
-         testName = testName.substring(0, colonIdx).trim();
+        value = testName.substring(colonIdx + 1).trim();
+        testName = testName.substring(0, colonIdx).trim();
       }
 
       remark = cleaned.substring(bracketMatch.end).trim();
@@ -1044,43 +1121,58 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           rest = rest.substring(0, parenMatch.start).trim();
         }
 
-        if (rest.startsWith('✓') || rest.toLowerCase() == 'normal' || rest.toLowerCase() == 'present') {
+        if (rest.startsWith('✓') ||
+            rest.toLowerCase() == 'normal' ||
+            rest.toLowerCase() == 'present') {
           value = 'Present / Normal';
           status = 'NORMAL';
           if (rest.startsWith('✓')) rest = rest.substring(1).trim();
-        } else if (rest.startsWith('X') || rest.startsWith('✗') || rest.toLowerCase() == 'abnormal' || rest.toLowerCase() == 'absent') {
+        } else if (rest.startsWith('X') ||
+            rest.startsWith('✗') ||
+            rest.toLowerCase() == 'abnormal' ||
+            rest.toLowerCase() == 'absent') {
           value = 'Absent / Abnormal';
           status = 'ABNORMAL';
-          if (rest.startsWith('X') || rest.startsWith('✗')) rest = rest.substring(1).trim();
+          if (rest.startsWith('X') || rest.startsWith('✗'))
+            rest = rest.substring(1).trim();
         } else {
           final dashIndex = rest.lastIndexOf('-');
           if (dashIndex != -1) {
-            final possibleStatus = rest.substring(dashIndex + 1).trim().toUpperCase();
-            if (possibleStatus == 'NORMAL' || possibleStatus == 'ABNORMAL' || possibleStatus == 'REVIEW' || possibleStatus == 'MONITOR' || possibleStatus == 'BORDERLINE' || possibleStatus == 'CONCERNING') {
+            final possibleStatus =
+                rest.substring(dashIndex + 1).trim().toUpperCase();
+            if (possibleStatus == 'NORMAL' ||
+                possibleStatus == 'ABNORMAL' ||
+                possibleStatus == 'REVIEW' ||
+                possibleStatus == 'MONITOR' ||
+                possibleStatus == 'BORDERLINE' ||
+                possibleStatus == 'CONCERNING') {
               status = possibleStatus;
               value = rest.substring(0, dashIndex).trim();
             } else {
-               value = rest;
+              value = rest;
             }
           } else {
-             value = rest;
+            value = rest;
           }
         }
       } else {
-         return (testName: cleaned, value: '', status: 'UNKNOWN', remark: '');
+        return (testName: cleaned, value: '', status: 'UNKNOWN', remark: '');
       }
     }
-    
+
     if (status == 'CONCERNING') status = 'ABNORMAL';
-    
+
     if (status == 'UNKNOWN' || status.isEmpty) {
-        if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
-            status = 'NORMAL';
-        } else if (RegExp(r'\babnormal\b|\bcritical\b|outside normal range|concerning', caseSensitive: false).hasMatch(value)) {
-            status = 'ABNORMAL';
-        } else {
-            status = 'INFO';
-        }
+      if (RegExp(r'\bnormal\b', caseSensitive: false).hasMatch(value)) {
+        status = 'NORMAL';
+      } else if (RegExp(
+              r'\babnormal\b|\bcritical\b|outside normal range|concerning',
+              caseSensitive: false)
+          .hasMatch(value)) {
+        status = 'ABNORMAL';
+      } else {
+        status = 'INFO';
+      }
     }
 
     return (testName: testName, value: value, status: status, remark: remark);
@@ -1089,7 +1181,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   Widget _buildUltrasoundMetricsSummaryCard(String title, List<String> lines) {
     if (lines.isEmpty) return _buildAiSectionCard(title, lines);
 
-    final rows = lines.map(_parseUltrasoundMetricLine).where((r) => r.testName.isNotEmpty).toList();
+    final rows = lines
+        .map(_parseUltrasoundMetricLine)
+        .where((r) => r.testName.isNotEmpty)
+        .toList();
 
     if (rows.isEmpty) {
       return _buildAiSectionCard(title, lines);
@@ -1097,7 +1192,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
     IconData headerIcon = Icons.straighten_outlined;
     Color headerColor = AppColors.brandPrimary;
-    
+
     if (title.toUpperCase().contains('ANATOMICAL')) {
       headerIcon = Icons.accessibility_new_outlined;
     } else if (title.toUpperCase().contains('ABNORMAL')) {
@@ -1111,9 +1206,13 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: headerColor == Colors.orange ? Colors.orange.shade50 : Colors.white,
+        color:
+            headerColor == Colors.orange ? Colors.orange.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: headerColor == Colors.orange ? Colors.orange.shade200 : AppColors.borderPrimary),
+        border: Border.all(
+            color: headerColor == Colors.orange
+                ? Colors.orange.shade200
+                : AppColors.borderPrimary),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1159,7 +1258,8 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                     children: [
                       if (row.status != 'UNKNOWN' && row.status != 'INFO')
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: _statusChipBackground(row.status),
                             borderRadius: BorderRadius.circular(999),
@@ -1176,9 +1276,12 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                             ),
                           ),
                         ),
-                      if (row.value.isNotEmpty && row.value != 'Present / Normal' && row.value != 'Absent / Abnormal')
+                      if (row.value.isNotEmpty &&
+                          row.value != 'Present / Normal' &&
+                          row.value != 'Absent / Abnormal')
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: AppColors.bgSecondary,
                             borderRadius: BorderRadius.circular(999),
@@ -1233,7 +1336,8 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     } else if (normalized == 'ABNORMAL FINDINGS') {
       icon = Icons.warning_amber_outlined;
       color = Colors.orange;
-    } else if (normalized == 'RECOMMENDATIONS' || normalized == 'RECOMMENDED NEXT ACTIONS') {
+    } else if (normalized == 'RECOMMENDATIONS' ||
+        normalized == 'RECOMMENDED NEXT ACTIONS') {
       icon = Icons.medical_information_outlined;
     } else if (normalized == 'KEY OBSERVATIONS') {
       icon = Icons.visibility_outlined;
@@ -1272,9 +1376,13 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           _buildFormattedAiText(lines.map((line) {
             String cleaned = line.trim();
             if (RegExp(r'^[A-Z_]+$').hasMatch(cleaned)) {
-              cleaned = cleaned.replaceAll('_', ' ').split(' ').map((word) => 
-                word.isEmpty ? '' : '${word[0]}${word.substring(1).toLowerCase()}'
-              ).join(' ');
+              cleaned = cleaned
+                  .replaceAll('_', ' ')
+                  .split(' ')
+                  .map((word) => word.isEmpty
+                      ? ''
+                      : '${word[0]}${word.substring(1).toLowerCase()}')
+                  .join(' ');
             }
             return cleaned;
           }).join('\n')),
@@ -1345,8 +1453,13 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
         continue;
       }
 
-      if (entry.key == 'DETAILED MEASUREMENTS ASSESSMENT' || entry.key == 'ANATOMICAL ASSESSMENT' || entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
-        if ((entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') && sections.containsKey('LABORATORY RESULTS')) {
+      if (entry.key == 'DETAILED MEASUREMENTS ASSESSMENT' ||
+          entry.key == 'ANATOMICAL ASSESSMENT' ||
+          entry.key == 'ABNORMAL FINDINGS' ||
+          entry.key == 'NORMAL RANGES') {
+        if ((entry.key == 'ABNORMAL FINDINGS' ||
+                entry.key == 'NORMAL RANGES') &&
+            sections.containsKey('LABORATORY RESULTS')) {
           continue;
         }
         widgets.add(_buildUltrasoundMetricsSummaryCard(entry.key, entry.value));
@@ -1397,5 +1510,153 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                 (w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
             .join(' ');
     }
+  }
+
+  bool _shouldShowPrenatalRiskSummary() {
+    if (!widget.useStructuredAiInsights) return false;
+    final title = widget.title.toLowerCase();
+    if (!title.contains('prenatal') && !title.contains('checkup')) {
+      return false;
+    }
+    return _rowValue('Risk Level') != null || _rowValue('Risk Factors') != null;
+  }
+
+  String? _rowValue(String label) {
+    try {
+      return widget.rows
+          .firstWhere(
+            (row) =>
+                _normalizeForCompare(row.key) == _normalizeForCompare(label),
+          )
+          .value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Color _riskLevelBadgeColor(String riskLevel) {
+    final normalized = riskLevel.toLowerCase();
+    if (normalized.contains('high')) return AppColors.error;
+    if (normalized.contains('low')) return AppColors.success;
+    return AppColors.brandPrimary;
+  }
+
+  Widget _buildPrenatalRiskSummaryCard() {
+    final riskLevel = _rowValue('Risk Level') ?? 'Not inputted';
+    final riskFactors = _rowValue('Risk Factors') ?? 'Not inputted';
+    final factorCount = riskFactors.toLowerCase() == 'not inputted'
+        ? 0
+        : riskFactors.split(RegExp(r';\s*')).length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFF0F5), Color(0xFFFFE4EE)],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.psychology_alt_outlined,
+                    size: 16, color: AppColors.brandText),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Prenatal Risk Summary',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildSummaryPill(
+                icon: Icons.flag_outlined,
+                label: riskLevel,
+                color: _riskLevelBadgeColor(riskLevel),
+              ),
+              const SizedBox(width: 10),
+              _buildSummaryPill(
+                icon: Icons.fact_check_outlined,
+                label: 'Factors $factorCount',
+                color: AppColors.brandAccent,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Clinical Signals',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            riskFactors,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textPrimary,
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withAlpha(100)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

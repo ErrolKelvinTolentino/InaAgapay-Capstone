@@ -1,10 +1,11 @@
-// lib/screens/mother/mother_profile_page.dart
+﻿// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/auth_storage.dart';
+import '../../services/supabase_service.dart';
 import '../midwife/add_ultrasound_page.dart';
 import '../midwife/lab_test_analyzer_screen.dart';
 import '../midwife/add_prenatal_checkup_screen.dart';
@@ -3240,7 +3241,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     ),
                   )
                 else
-                  ...sortedCheckups.map((c) => _buildCheckupCard(c)),
+                  ...sortedCheckups.map((c) => _buildCheckupCard(
+                      c,
+                      pregnancy['pregnancy_id'] ?? -1,
+                      pregnancy['fetal_count'] ?? 1)),
               ],
             ),
 
@@ -3615,7 +3619,157 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  Widget _buildCheckupCard(Map<String, dynamic> checkup) {
+  Future<Map<String, dynamic>?> _fetchCheckupDetails(
+      int prenatalCheckupId, dynamic checkupDateTime) async {
+    try {
+      final aiRow = await SupabaseService.client
+          .from('ai_responses')
+          .select('ai_response_id, response')
+          .eq('reference_table', 'prenatal_checkups')
+          .eq('reference_id', prenatalCheckupId)
+          .eq('response_type', 'risk_assessment')
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      String? aiResponse = aiRow?['response'] as String?;
+      String? riskLevel;
+      String riskFactors = '';
+      String medicationPlans = 'None';
+      String givenMedications = 'None';
+      String ferrousQuantity = 'Not given';
+      String calciumQuantity = 'Not given';
+
+      if (aiRow != null) {
+        final aiResponseId = aiRow['ai_response_id'] as int?;
+        if (aiResponseId != null) {
+          final riskRow = await SupabaseService.client
+              .from('pregnancy_risk_assessments')
+              .select('pregnancy_risk_id, risk_level')
+              .eq('ai_response_id', aiResponseId)
+              .maybeSingle();
+
+          if (riskRow != null) {
+            riskLevel = riskRow['risk_level']?.toString();
+            final factorRows = await SupabaseService.client
+                .from('pregnancy_risk_factors')
+                .select('factor, risk_influence')
+                .eq('pregnancy_risk_id', riskRow['pregnancy_risk_id'])
+                .order('risk_factor_id', ascending: true);
+
+            final factorList = <String>[];
+            for (final factor
+                in (factorRows as List).cast<Map<String, dynamic>>()) {
+              final factorText = factor['factor']?.toString() ?? '';
+              final influence = factor['risk_influence']?.toString() ?? '';
+              if (factorText.isNotEmpty) {
+                factorList.add(
+                    '$factorText${influence.isNotEmpty ? ' ($influence)' : ''}');
+              }
+            }
+            riskFactors = factorList.join('; ');
+          }
+        }
+      }
+
+      if (checkupDateTime != null) {
+        final date = DateTime.tryParse(checkupDateTime.toString());
+        final checkupDateString =
+            date != null ? date.toIso8601String().split('T')[0] : null;
+        if (checkupDateString != null) {
+          final givenRows = await SupabaseService.client
+              .from('given_medications')
+              .select('given_medication_name, quantity')
+              .eq('mother_id', widget.motherId)
+              .eq('date_given', checkupDateString);
+
+          final medicationRows = await SupabaseService.client
+              .from('mother_medications')
+              .select(
+                  'mother_medication_name, quantity, frequency, start_date, end_date')
+              .eq('mother_id', widget.motherId)
+              .eq('start_date', checkupDateString);
+
+          final givenItems = <String>[];
+          for (final row in (givenRows as List).cast<Map<String, dynamic>>()) {
+            final name = row['given_medication_name']?.toString() ?? 'Unknown';
+            final quantity = row['quantity']?.toString() ?? '1';
+            givenItems.add('$name x$quantity');
+            if (name.toLowerCase().contains('ferrous')) {
+              ferrousQuantity = quantity;
+            }
+            if (name.toLowerCase().contains('calcium')) {
+              calciumQuantity = quantity;
+            }
+          }
+          if (givenItems.isNotEmpty) {
+            givenMedications = givenItems.join('; ');
+          }
+
+          final planItems = <String>[];
+          for (final row
+              in (medicationRows as List).cast<Map<String, dynamic>>()) {
+            final name = row['mother_medication_name']?.toString() ?? 'Unknown';
+            final qty = row['quantity']?.toString() ?? '1';
+            final freq = row['frequency']?.toString();
+            final start = row['start_date']?.toString();
+            final end = row['end_date']?.toString();
+            final details = [
+              qty != 'null' ? 'Qty $qty' : null,
+              freq,
+              start != null ? 'Start $start' : null,
+              end != null ? 'End $end' : null
+            ].where((element) => element != null).join(' · ');
+            planItems.add('$name${details.isNotEmpty ? ' ($details)' : ''}');
+          }
+          if (planItems.isNotEmpty) {
+            medicationPlans = planItems.join('; ');
+          }
+        }
+      }
+
+      // Fetch symptom summary for this specific checkup
+      final symRows = await SupabaseService.client
+          .from('mother_symptoms')
+          .select('symptom_name, pregnancy_symptom:symptom_id (severity_level)')
+          .eq('prenatal_checkup_id', prenatalCheckupId);
+
+      String symptomSummaryStr = 'None recorded';
+      if ((symRows as List).isNotEmpty) {
+        final items = <String>[];
+        for (final row in symRows.cast<Map<String, dynamic>>()) {
+          final symName = row['symptom_name']?.toString() ?? 'Unknown';
+          final pSymRow = row['pregnancy_symptom'];
+          String risk = 'Minor';
+          if (pSymRow != null && pSymRow is Map) {
+            final sl = pSymRow['severity_level']?.toString();
+            if (sl == '3' || sl == 'Severe') risk = 'Danger';
+            if (sl == '2' || sl == 'Moderate') risk = 'Moderate';
+          } else {
+            // Let it be Minor by default if no matching id
+          }
+          items.add('$symName ($risk)');
+        }
+        symptomSummaryStr = items.join('; ');
+      }
+
+      return {
+        'aiResponse': aiResponse,
+        'riskLevel': riskLevel,
+        'riskFactors': riskFactors,
+        'medicationPlans': medicationPlans,
+        'givenMedications': givenMedications,
+        'ferrousQuantity': ferrousQuantity,
+        'calciumQuantity': calciumQuantity,
+        'symptomSummary': symptomSummaryStr,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildCheckupCard(
+      Map<String, dynamic> checkup, int pregnancyId, int fetalCount) {
     final date = _formatDateTime(checkup['checkup_datetime']);
     final bpSys = _formatValue(checkup['blood_pressure_systolic']);
     final bpDia = _formatValue(checkup['blood_pressure_diastolic']);
@@ -3648,11 +3802,36 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           final aog = _formatValue(checkup['age_of_gestation']);
           final weight = _formatValue(checkup['checkup_weight']);
           String? aiAnalysis;
+          String? riskLevel;
+          String riskFactors = '';
+          String medicationPlansSummary = 'None';
+          String givenMedicationsSummary = 'None';
+          String ferrousSummary = 'Not given';
+          String calciumSummary = 'Not given';
+          String symptomSummary = 'None recorded';
+
           final checkupId = checkup['prenatal_checkup_id'];
           if (checkupId is int) {
-            aiAnalysis = await MotherProfileService.getCheckupAIAnalysis(
-              checkupId,
-            );
+            final checkupDetails = await _fetchCheckupDetails(
+                checkupId, checkup['checkup_datetime']);
+            if (checkupDetails != null) {
+              riskLevel = checkupDetails['riskLevel'] as String?;
+              riskFactors = checkupDetails['riskFactors'] ?? '';
+              aiAnalysis = checkupDetails['aiResponse'] as String?;
+              medicationPlansSummary =
+                  checkupDetails['medicationPlans'] ?? 'None';
+              givenMedicationsSummary =
+                  checkupDetails['givenMedications'] ?? 'None';
+              ferrousSummary = checkupDetails['ferrousQuantity'] ?? 'Not given';
+              calciumSummary = checkupDetails['calciumQuantity'] ?? 'Not given';
+              symptomSummary =
+                  checkupDetails['symptomSummary'] ?? 'None recorded';
+            }
+            if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
+              aiAnalysis = await MotherProfileService.getCheckupAIAnalysis(
+                checkupId,
+              );
+            }
           }
           aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
               ? aiAnalysis.trim()
@@ -3664,13 +3843,28 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             icon: Icons.medical_services,
             rows: [
               MapEntry('Date', _formatDateTime(checkup['checkup_datetime'])),
+              MapEntry('Fetal Count', fetalCount.toString()),
               MapEntry('Age of Gestation', aog),
               MapEntry('Weight (kg)', weight),
               MapEntry('Blood Pressure', '$bpSys/$bpDia'),
               MapEntry(
                   'Fetal Position', _formatValue(checkup['fetal_position'])),
+              MapEntry('Fetal Heart Tone',
+                  _formatValue(checkup['fetal_heart_tone'])),
               MapEntry('Fetal Heart Beat',
                   _formatValue(checkup['fetal_heart_beat'])),
+              MapEntry('Symptoms', symptomSummary),
+              MapEntry('Medication Plans', medicationPlansSummary),
+              MapEntry('Given Medications', givenMedicationsSummary),
+              MapEntry('Ferrous + FA', ferrousSummary),
+              MapEntry('Calcium', calciumSummary),
+              MapEntry(
+                  'Risk Level',
+                  (riskLevel != null && riskLevel.trim().isNotEmpty)
+                      ? riskLevel
+                      : 'Not inputted'),
+              MapEntry('Risk Factors',
+                  riskFactors.trim().isNotEmpty ? riskFactors : 'Not inputted'),
               MapEntry('TD Vaccine', _formatValue(checkup['td_vaccine_dose'])),
               MapEntry('Edema', _formatValue(checkup['edema'])),
               MapEntry('Remarks', _formatValue(checkup['remarks'])),
@@ -3728,7 +3922,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               ultrasoundId,
             );
           }
-          
+
           String finalRemarks = split.cleanRemarks;
           if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
             finalRemarks = '';
