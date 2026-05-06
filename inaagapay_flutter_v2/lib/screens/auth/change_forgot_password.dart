@@ -1,5 +1,3 @@
-// lib/screens/auth/change_forgot_password.dart
-
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
@@ -7,8 +5,9 @@ import '../../widgets/main_button.dart';
 import '../../widgets/page_title.dart';
 import '../../widgets/password_constraints.dart';
 import '../../widgets/password_strength_indicator.dart';
-import '../../models/password_strength.dart';
+import '../../widgets/dialog_box.dart';
 import '../../services/supabase_service.dart';
+import '../../models/password_strength.dart';
 
 class ChangeForgotPasswordScreen extends StatefulWidget {
   const ChangeForgotPasswordScreen({super.key});
@@ -26,16 +25,22 @@ class _ChangeForgotPasswordScreenState extends State<ChangeForgotPasswordScreen>
   bool _isLoading = false;
   String? _errorMessage;
   
-  late String _email;
+  late String _contact;
+  late String _channel;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)!.settings.arguments;
-    if (args is String) {
-      _email = args;
+    if (args is Map<String, dynamic>) {
+      _contact = args['contact'] as String;
+      _channel = args['channel'] as String;
+    } else if (args is String) {
+      _contact = args;
+      _channel = 'email';
     } else {
-      _email = '';
+      _contact = '';
+      _channel = 'email';
     }
   }
 
@@ -77,7 +82,7 @@ class _ChangeForgotPasswordScreenState extends State<ChangeForgotPasswordScreen>
     });
 
     final result = await SupabaseService.resetPasswordWithNew(
-      _email,
+      _contact,
       _newPasswordController.text,
     );
 
@@ -86,23 +91,38 @@ class _ChangeForgotPasswordScreenState extends State<ChangeForgotPasswordScreen>
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password reset successfully!'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          type: DialogType.success,
+          title: 'Password Reset',
+          content: 'Your password has been reset successfully!',
+          buttonText: 'Login',
+          onPressed: () {
+            Navigator.pop(context);
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              '/login',
+              (route) => false,
+            );
+          },
         ),
       );
-      
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/login',
-        (route) => false,
-      );
     } else {
-      setState(() {
-        _errorMessage = result['message'] ?? 'Failed to reset password';
-      });
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          type: DialogType.error,
+          title: 'Reset Failed',
+          content: result['message'] ?? 'Failed to reset password',
+          buttonText: 'OK',
+          onPressed: () => Navigator.pop(context),
+        ),
+      );
     }
   }
 

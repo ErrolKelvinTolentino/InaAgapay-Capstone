@@ -1,4 +1,3 @@
-// lib/screens/auth/mother_registration.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -23,16 +22,17 @@ class MotherRegistrationScreen extends StatefulWidget {
 
 class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
-  bool _emailExists = false;
-  bool _checkingEmail = false;
-  Timer? _emailTimer;
+  bool _contactExists = false;
+  bool _checkingContact = false;
+  Timer? _contactTimer;
+  String? _contactError;
 
   late final AnimationController _shakeController;
   late final Animation<double> _shakeAnimation;
@@ -46,7 +46,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
     _passwordController.addListener(() => setState(() {}));
     _confirmPasswordController.addListener(() => setState(() {}));
-    _emailController.addListener(_onEmailChanged);
+    _contactController.addListener(_onContactChanged);
 
     _shakeController = AnimationController(
       vsync: this,
@@ -65,45 +65,64 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
   @override
   void dispose() {
-    _emailTimer?.cancel();
-    _emailController.dispose();
+    _contactTimer?.cancel();
+    _contactController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _shakeController.dispose();
     super.dispose();
   }
 
-  void _onEmailChanged() {
-    _emailTimer?.cancel();
-    final email = _emailController.text.trim();
+  void _onContactChanged() {
+    _contactTimer?.cancel();
+    final contact = _contactController.text.trim();
     
-    if (email.isEmpty) {
+    if (contact.isEmpty) {
       setState(() {
-        _emailExists = false;
-        _checkingEmail = false;
+        _contactExists = false;
+        _checkingContact = false;
+        _contactError = null;
       });
       return;
     }
     
-    final isValid = RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
-    if (!isValid) {
+    final isEmail = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact);
+    final isPhone = SupabaseService.isValidPhilippineNumber(contact);
+    
+    if (!isEmail && !isPhone) {
       setState(() {
-        _emailExists = false;
-        _checkingEmail = false;
+        _contactExists = false;
+        _checkingContact = false;
+        _contactError = 'Please enter a valid email address or Philippine mobile number (e.g., 09123456789)';
       });
       return;
     }
     
-    setState(() => _checkingEmail = true);
-    _emailTimer = Timer(const Duration(milliseconds: 500), () async {
-      final exists = await SupabaseService.isEmailAvailable(email);
+    setState(() {
+      _contactError = null;
+      _checkingContact = true;
+    });
+    
+    _contactTimer = Timer(const Duration(milliseconds: 500), () async {
+      final exists = isEmail
+          ? !(await SupabaseService.isEmailAvailable(contact))
+          : !(await SupabaseService.isPhoneNumberAvailable(contact));
+          
       if (mounted) {
         setState(() {
-          _emailExists = !exists;
-          _checkingEmail = false;
+          _contactExists = exists;
+          _checkingContact = false;
         });
       }
     });
+  }
+
+  String? _getContactType() {
+    final contact = _contactController.text.trim();
+    if (contact.isEmpty) return null;
+    if (RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact)) return 'email';
+    if (SupabaseService.isValidPhilippineNumber(contact)) return 'phone';
+    return null;
   }
 
   PasswordStrength _calculateStrength(String password) {
@@ -118,12 +137,12 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     return PasswordStrength.strong;
   }
 
-  bool get _isEmailValid {
-    final email = _emailController.text.trim();
-    return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
+  bool get _isContactValid {
+    final type = _getContactType();
+    return type != null;
   }
 
-  bool get _isEmailAvailable => !_emailExists && _isEmailValid;
+  bool get _isContactAvailable => !_contactExists && _isContactValid && _contactController.text.isNotEmpty && _contactError == null;
 
   bool get _passwordsMatch =>
       _confirmPasswordController.text.isNotEmpty &&
@@ -133,11 +152,11 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       _confirmPasswordController.text.isNotEmpty && !_passwordsMatch;
 
   bool get _canSubmit =>
-      _isEmailAvailable &&
+      _isContactAvailable &&
       _calculateStrength(_passwordController.text) == PasswordStrength.strong &&
       _passwordsMatch &&
       !_isLoading &&
-      !_checkingEmail;
+      !_checkingContact;
 
   Future<void> _handleSubmit() async {
     if (!_canSubmit) {
@@ -148,9 +167,13 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     setState(() => _isLoading = true);
 
     try {
+      final contactType = _getContactType();
+      final channel = contactType == 'email' ? 'email' : 'sms';
+
       final result = await SupabaseService.registerWithOTP(
-        _emailController.text.trim(),
-        _passwordController.text,
+        contact: _contactController.text.trim(),
+        password: _passwordController.text,
+        channel: channel,
       );
 
       setState(() => _isLoading = false);
@@ -163,7 +186,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
           barrierDismissible: false,
           builder: (_) => DialogBox(
             title: 'Verification Code Sent',
-            content: 'A 6-digit verification code has been sent to ${_emailController.text.trim()}',
+            content: 'A 6-digit verification code has been sent to your ${channel == 'email' ? 'email' : 'phone'}.',
             buttonText: 'Continue',
             type: DialogType.success,
             onPressed: () => Navigator.pop(context),
@@ -174,14 +197,22 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
           Navigator.pushNamed(
             context,
             '/verify-registration',
-            arguments: _emailController.text.trim(),
+            arguments: {
+              'contact': _contactController.text.trim(),
+              'channel': channel,
+            },
           );
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Registration failed'),
-            backgroundColor: AppColors.error,
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => DialogBox(
+            type: DialogType.error,
+            title: 'Registration Failed',
+            content: result['message'] ?? 'Registration failed. Please try again.',
+            buttonText: 'OK',
+            onPressed: () => Navigator.pop(context),
           ),
         );
       }
@@ -190,10 +221,15 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       
       if (!mounted) return;
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: AppColors.error,
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          type: DialogType.error,
+          title: 'Error',
+          content: 'Error: ${e.toString()}',
+          buttonText: 'OK',
+          onPressed: () => Navigator.pop(context),
         ),
       );
     }
@@ -203,6 +239,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
   Widget build(BuildContext context) {
     final password = _passwordController.text;
     final strength = _calculateStrength(password);
+    final contactType = _getContactType();
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
@@ -236,37 +273,72 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                     ),
                     const SizedBox(height: 24),
 
-                    // Email
+                    // Contact Field (Email or Phone - single field)
                     AppInputField(
-                      hintText: 'Enter Email Address',
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      leadingIcon: Icons.email,
+                      hintText: 'Email or Phone Number',
+                      controller: _contactController,
+                      keyboardType: TextInputType.text,
+                      leadingIcon: Icons.person_outline,
                       isRequired: true,
+                      errorText: _contactError,
                       onChanged: (_) => setState(() {}),
                     ),
-                    const SizedBox(height: 8),
-
-                    Padding(
-                      padding: const EdgeInsets.only(left: 20),
-                      child: Builder(
-                        builder: (context) {
-                          if (_emailController.text.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-                          if (_checkingEmail) {
-                            return _infoRow('Checking email availability...', isInfo: true);
-                          }
-                          if (_emailExists) {
-                            return _errorRow('Email already exists');
-                          }
-                          if (!_isEmailValid) {
-                            return _errorRow('Enter a valid email address');
-                          }
-                          return _successRow('Email is available');
-                        },
+                    
+                    // Availability status
+                    if (_contactController.text.isNotEmpty && !_checkingContact && !_contactExists && _isContactValid && _contactError == null) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle, size: 16, color: AppColors.success),
+                            const SizedBox(width: 6),
+                            Text(
+                              contactType == 'email' ? 'Email is available' : 'Phone number is available',
+                              style: const TextStyle(fontSize: 12, color: AppColors.success),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ] else if (_contactController.text.isNotEmpty && _contactExists) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.cancel, size: 16, color: AppColors.error),
+                            const SizedBox(width: 6),
+                            Text(
+                              contactType == 'email' ? 'Email already exists' : 'Phone number already exists',
+                              style: const TextStyle(fontSize: 12, color: AppColors.error),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (_contactController.text.isNotEmpty && _checkingContact) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 13,
+                              height: 13,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.8,
+                                color: AppColors.brandAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Checking availability...',
+                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -338,10 +410,28 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                             child: Builder(
                               builder: (context) {
                                 if (_passwordsDoNotMatch) {
-                                  return _errorRow('Passwords do not match');
+                                  return Row(
+                                    children: const [
+                                      Icon(Icons.cancel, size: 16, color: AppColors.error),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Passwords do not match',
+                                        style: TextStyle(fontSize: 13, color: AppColors.error),
+                                      ),
+                                    ],
+                                  );
                                 }
                                 if (_passwordsMatch && _confirmPasswordController.text.isNotEmpty) {
-                                  return _successRow('Passwords match');
+                                  return Row(
+                                    children: const [
+                                      Icon(Icons.check_circle, size: 16, color: AppColors.success),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Passwords match',
+                                        style: TextStyle(fontSize: 13, color: AppColors.success),
+                                      ),
+                                    ],
+                                  );
                                 }
                                 return const SizedBox.shrink();
                               },
@@ -428,58 +518,6 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _errorRow(String text) {
-    return Row(
-      children: [
-        const Icon(Icons.cancel, size: 16, color: AppColors.error),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text, 
-            style: const TextStyle(fontSize: 13, color: AppColors.error),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _successRow(String text) {
-    return Row(
-      children: [
-        const Icon(Icons.check_circle, size: 16, color: AppColors.success),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text, 
-            style: const TextStyle(fontSize: 13, color: AppColors.success),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _infoRow(String text, {bool isInfo = true}) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 13,
-          height: 13,
-          child: CircularProgressIndicator(
-            strokeWidth: 1.5,
-            color: AppColors.brandAccent,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text, 
-            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-          ),
-        ),
-      ],
     );
   }
 }

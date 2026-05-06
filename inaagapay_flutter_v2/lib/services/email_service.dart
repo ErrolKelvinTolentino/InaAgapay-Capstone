@@ -1,13 +1,25 @@
-// lib/services/email_service.dart
-
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'sms_service.dart';
 
 class EmailService {
+  // Send verification code via preferred channel (email or SMS)
+  static Future<bool> sendVerificationCode({
+    required String contact,
+    required String code,
+    required String channel, // 'email' or 'sms'
+  }) async {
+    if (channel == 'email') {
+      return sendVerificationEmail(contact, code);
+    } else {
+      return SmsService.sendOtp(contact, code);
+    }
+  }
+
   // Send verification code email
-  static Future<bool> sendVerificationCode(String email, String code) async {
+  static Future<bool> sendVerificationEmail(String email, String code) async {
     final supabaseUrl = dotenv.env['SUPABASE_URL'];
     final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
     
@@ -22,14 +34,21 @@ class EmailService {
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #DE3A53;">Inaagapay</h2>
-          <p>Your verification code is:</p>
-          <div style="font-size: 32px; color: #DE3A53; letter-spacing: 5px; padding: 20px; background: #f5f5f5; text-align: center;">
-            <strong>$code</strong>
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #FF68A5; margin: 0;">INAAGAPAY</h1>
+            <p style="color: #666; margin: 5px 0 0;">Maternal and Child Health Information System</p>
           </div>
-          <p>This code expires in 10 minutes.</p>
-          <hr>
-          <p style="font-size: 12px; color: #666;">© 2026 Inaagapay</p>
+          <div style="background: #f9f9f9; padding: 20px; border-radius: 10px; text-align: center;">
+            <p style="font-size: 16px; color: #333;">Your verification code is:</p>
+            <div style="font-size: 36px; color: #FF68A5; letter-spacing: 8px; padding: 15px; background: white; border-radius: 10px; font-weight: bold; margin: 10px 0;">
+              <strong>$code</strong>
+            </div>
+            <p style="font-size: 14px; color: #666;">This code expires in <strong>10 minutes</strong>.</p>
+          </div>
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; font-size: 12px; color: #999;">
+            <p>© 2026 INAAGAPAY. All rights reserved.</p>
+            <p>This is an automated message, please do not reply.</p>
+          </div>
         </div>
       </body>
       </html>
@@ -45,7 +64,7 @@ class EmailService {
         body: jsonEncode({
           'email': email,
           'code': code,
-          'subject': 'Verify Your Email - Inaagapay',
+          'subject': '🔐 Verify Your Email - INAAGAPAY',
           'htmlContent': html,
         }),
       ).timeout(const Duration(seconds: 30));
@@ -55,7 +74,7 @@ class EmailService {
         if (kDebugMode) print('Email sent: ${data['success']}');
         return data['success'] == true;
       }
-      if (kDebugMode) print('Email failed: ${response.statusCode}');
+      if (kDebugMode) print('Email failed: ${response.statusCode} - ${response.body}');
       return false;
     } catch (e) {
       if (kDebugMode) print('Email error: $e');
@@ -63,8 +82,20 @@ class EmailService {
     }
   }
 
-  // Send password reset code email
-  static Future<bool> sendPasswordResetCode(String email, String code) async {
+  // Send password reset code
+  static Future<bool> sendPasswordResetCode({
+    required String contact,
+    required String code,
+    required String channel,
+  }) async {
+    if (channel == 'email') {
+      return sendPasswordResetEmail(contact, code);
+    } else {
+      return SmsService.sendOtp(contact, code);
+    }
+  }
+
+  static Future<bool> sendPasswordResetEmail(String email, String code) async {
     final supabaseUrl = dotenv.env['SUPABASE_URL'];
     final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
     
@@ -76,14 +107,23 @@ class EmailService {
       <head><meta charset="UTF-8"></head>
       <body style="font-family: Arial, sans-serif;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #DE3A53;">Inaagapay</h2>
-          <p>Your password reset code is:</p>
-          <div style="font-size: 32px; color: #DE3A53; letter-spacing: 5px; padding: 20px; background: #f5f5f5; text-align: center;">
-            <strong>$code</strong>
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #FF68A5; margin: 0;">INAAGAPAY</h1>
+            <p style="color: #666; margin: 5px 0 0;">Password Reset Request</p>
           </div>
-          <p>This code expires in 10 minutes.</p>
-          <hr>
-          <p style="font-size: 12px; color: #666;">© 2026 Inaagapay</p>
+          <div style="background: #f9f9f9; padding: 20px; border-radius: 10px; text-align: center;">
+            <p style="font-size: 16px; color: #333;">Your password reset code is:</p>
+            <div style="font-size: 36px; color: #FF68A5; letter-spacing: 8px; padding: 15px; background: white; border-radius: 10px; font-weight: bold; margin: 10px 0;">
+              <strong>$code</strong>
+            </div>
+            <p style="font-size: 14px; color: #666;">This code expires in <strong>10 minutes</strong>.</p>
+            <p style="margin-top: 15px; font-size: 13px; color: #999;">
+              If you did not request this, please ignore this email.
+            </p>
+          </div>
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; font-size: 12px; color: #999;">
+            <p>© 2026 INAAGAPAY. All rights reserved.</p>
+          </div>
         </div>
       </body>
       </html>
@@ -99,7 +139,7 @@ class EmailService {
         body: jsonEncode({
           'email': email,
           'code': code,
-          'subject': 'Reset Your Password - Inaagapay',
+          'subject': '🔑 Password Reset Code - INAAGAPAY',
           'htmlContent': html,
         }),
       ).timeout(const Duration(seconds: 30));
@@ -114,7 +154,7 @@ class EmailService {
     }
   }
 
-  // Send account credentials email (for new mother accounts)
+  // Send account credentials email (for midwife-created accounts)
   static Future<bool> sendAccountCredentials({
     required String email,
     required String password,
@@ -150,11 +190,11 @@ class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🌸 Welcome to Inaagapay!</h1>
+            <h1>🌸 Welcome to INAAGAPAY!</h1>
           </div>
           <div class="content">
             <h2>Hello $firstName $lastName!</h2>
-            <p>A midwife has created an account for you on the Inaagapay Maternal and Child Health Information System.</p>
+            <p>A midwife has created an account for you on the <strong>INAAGAPAY Maternal and Child Health Information System</strong>.</p>
             
             <div class="password-box">
               <p style="margin-bottom: 10px;">Your temporary password is:</p>
@@ -166,16 +206,16 @@ class EmailService {
               For security reasons, you will be required to change it upon your first login.
             </div>
             
-            <p>To access your account:</p>
+            <p><strong>To access your account:</strong></p>
             <ol>
-              <li>Open the Inaagapay mobile app</li>
+              <li>Open the INAAGAPAY mobile app</li>
               <li>Log in using your email and the temporary password above</li>
               <li>You will be prompted to create a new password</li>
               <li>Set a password that you will remember</li>
             </ol>
             
             <center>
-              <a href="inaagapay://login" class="button">Open Inaagapay App</a>
+              <a href="inaagapay://login" class="button">Open INAAGAPAY App</a>
             </center>
             
             <p>If you didn't expect this email or have any questions, please contact your barangay health center.</p>
@@ -184,7 +224,7 @@ class EmailService {
             <p style="font-size: 14px; color: #666;">This is an automated message, please do not reply to this email.</p>
           </div>
           <div class="footer">
-            <p>© 2026 Inaagapay - Supporting mothers every step of the way</p>
+            <p>© 2026 INAAGAPAY - Supporting mothers every step of the way</p>
           </div>
         </div>
       </body>
@@ -200,7 +240,7 @@ class EmailService {
         },
         body: jsonEncode({
           'email': email,
-          'subject': 'Welcome to Inaagapay - Your Account Credentials',
+          'subject': '🎉 Welcome to INAAGAPAY - Your Account Credentials',
           'htmlContent': html,
         }),
       ).timeout(const Duration(seconds: 30));
@@ -210,7 +250,7 @@ class EmailService {
         if (kDebugMode) print('Email sent: ${data['success']}');
         return data['success'] == true;
       }
-      if (kDebugMode) print('Email failed: ${response.statusCode}');
+      if (kDebugMode) print('Email failed: ${response.statusCode} - ${response.body}');
       return false;
     } catch (e) {
       if (kDebugMode) print('Email error: $e');

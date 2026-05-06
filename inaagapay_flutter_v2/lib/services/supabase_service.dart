@@ -1,10 +1,9 @@
-// lib/services/supabase_service.dart - COMPLETE FIXED VERSION
-
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'email_service.dart';
+import 'sms_service.dart';
 
 class SupabaseService {
   static SupabaseClient get client => Supabase.instance.client;
@@ -84,42 +83,102 @@ class SupabaseService {
     }
   }
 
-  // Send OTP email
-  static Future<bool> sendOTPEmail(
-      String email, String code, String type) async {
-    try {
-      if (kDebugMode)
-        debugPrint('Sending OTP email to: $email with code: $code');
+  // Validate Philippine phone number
+  static bool isValidPhilippineNumber(String phoneNumber) {
+    return SmsService.isValidPhilippineNumber(phoneNumber);
+  }
 
-      if (type == 'verification') {
-        return await EmailService.sendVerificationCode(email, code);
-      } else if (type == 'reset') {
-        return await EmailService.sendPasswordResetCode(email, code);
-      }
-      return false;
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error sending OTP email: $e');
-      return false;
+  // Check if phone number is available
+  static Future<bool> isPhoneNumberAvailable(String phoneNumber) async {
+    try {
+      final formatted = SmsService.formatPhilippineNumber(phoneNumber);
+      final result = await client
+          .from('accounts')
+          .select('account_id')
+          .eq('phone_number', formatted)
+          .maybeSingle();
+      return result == null;
+    } catch (_) {
+      return true;
     }
   }
 
-  // Register with OTP (self-registration)
-  static Future<Map<String, dynamic>> registerWithOTP(
-    String email,
-    String password,
-  ) async {
+  // Check if email is available
+  static Future<bool> isEmailAvailable(String email) async {
     try {
-      if (kDebugMode) debugPrint('Registering with OTP for: $email');
+      final result = await client
+          .from('accounts')
+          .select('account_id')
+          .eq('email_address', email)
+          .maybeSingle();
+      return result == null;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // Check if contact (email or phone) exists
+  static Future<Map<String, dynamic>> findAccountByContact(String contact) async {
+    try {
+      final isPhone = isValidPhilippineNumber(contact);
+      
+      if (isPhone) {
+        final formatted = SmsService.formatPhilippineNumber(contact);
+        final result = await client
+            .from('accounts')
+            .select('account_id, email_address, phone_number, account_type, is_verified, status')
+            .eq('phone_number', formatted)
+            .maybeSingle();
+        return {'exists': result != null, 'data': result, 'type': 'phone'};
+      } else {
+        final result = await client
+            .from('accounts')
+            .select('account_id, email_address, phone_number, account_type, is_verified, status')
+            .eq('email_address', contact)
+            .maybeSingle();
+        return {'exists': result != null, 'data': result, 'type': 'email'};
+      }
+    } catch (e) {
+      return {'exists': false, 'error': e.toString()};
+    }
+  }
+
+  // Register with OTP (supports email or phone)
+  static Future<Map<String, dynamic>> registerWithOTP({
+    required String contact,
+    required String password,
+    required String channel, // 'email' or 'sms'
+  }) async {
+    try {
+      if (kDebugMode) debugPrint('Registering with $channel for: $contact');
+
+      // Validate contact format
+      if (channel == 'sms' && !isValidPhilippineNumber(contact)) {
+        return {
+          'success': false,
+          'message': 'Please enter a valid Philippine mobile number (e.g., 09123456789)',
+        };
+      }
+      if (channel == 'email' && !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact)) {
+        return {
+          'success': false,
+          'message': 'Please enter a valid email address',
+        };
+      }
+
+      final field = channel == 'sms' ? 'phone_number' : 'email_address';
+      final formattedContact = channel == 'sms' 
+          ? SmsService.formatPhilippineNumber(contact) 
+          : contact;
 
       final existing = await client
           .from('accounts')
           .select('account_id, is_verified')
-          .eq('email_address', email)
+          .eq(field, formattedContact)
           .maybeSingle();
 
       final code = _generateOTP();
-      final expires =
-          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       if (existing != null) {
         if (existing['is_verified']) {
@@ -134,10 +193,9 @@ class SupabaseService {
           'verification_code': code,
           'verification_expires': expires,
           'created_by': 'self',
-        }).eq('email_address', email);
+        }).eq(field, formattedContact);
       } else {
-        await client.from('accounts').insert({
-          'email_address': email,
+        final data = {
           'password_hash': _hashPassword(password),
           'account_type': 'mother',
           'verification_code': code,
@@ -146,24 +204,37 @@ class SupabaseService {
           'status': 'active',
           'created_by': 'self',
           'created_at': DateTime.now().toIso8601String(),
-        });
+        };
+        
+        if (channel == 'sms') {
+          data['phone_number'] = formattedContact;
+        } else {
+          data['email_address'] = formattedContact;
+        }
+        
+        await client.from('accounts').insert(data);
       }
 
-      final emailSent = await sendOTPEmail(email, code, 'verification');
+      final sent = await EmailService.sendVerificationCode(
+        contact: formattedContact,
+        code: code,
+        channel: channel,
+      );
 
-      if (!emailSent) {
+      if (!sent) {
         return {
           'success': true,
-          'message':
-              'Account created but email failed to send. Please use "Resend Code" on the next screen.',
-          'email_failed': true,
+          'message': 'Account created but failed to send $channel code. Please use "Resend Code".',
+          'code_sent': false,
         };
       }
 
       return {
         'success': true,
-        'message': 'Verification code sent to your email.',
-        'email_sent': true,
+        'message': 'Verification code sent to your $channel.',
+        'code_sent': true,
+        'channel': channel,
+        'contact': formattedContact,
       };
     } catch (e) {
       if (kDebugMode) debugPrint('Registration error: $e');
@@ -174,57 +245,101 @@ class SupabaseService {
     }
   }
 
-  // Forgot Password
-  static Future<Map<String, dynamic>> forgotPassword(String email) async {
+  // Forgot Password (supports email or phone)
+  static Future<Map<String, dynamic>> forgotPassword(String contact) async {
     try {
-      if (kDebugMode) debugPrint('Sending password reset email to: $email');
+      if (kDebugMode) debugPrint('Sending password reset to: $contact');
+
+      final isPhone = isValidPhilippineNumber(contact);
+      final field = isPhone ? 'phone_number' : 'email_address';
+      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
 
       final account = await client
           .from('accounts')
           .select('account_id')
-          .eq('email_address', email)
+          .eq(field, formattedContact)
           .maybeSingle();
 
       if (account == null) {
         return {
           'success': false,
-          'message': 'No account found with this email address.',
+          'message': 'No account found with this ${isPhone ? 'phone number' : 'email address'}.',
         };
       }
 
       final code = _generateOTP();
-      final expires =
-          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       await client.from('accounts').update({
         'reset_code': code,
         'reset_expires': expires,
-      }).eq('email_address', email);
+      }).eq(field, formattedContact);
 
-      final emailSent = await sendOTPEmail(email, code, 'reset');
+      final sent = await EmailService.sendPasswordResetCode(
+        contact: formattedContact,
+        code: code,
+        channel: isPhone ? 'sms' : 'email',
+      );
 
       return {
-        'success': emailSent,
-        'message': emailSent
-            ? 'Password reset code sent to your email.'
-            : 'Failed to send email. Please try again.',
+        'success': sent,
+        'message': sent
+            ? 'Password reset code sent to your ${isPhone ? 'phone' : 'email'}.'
+            : 'Failed to send code. Please try again.',
+        'channel': isPhone ? 'sms' : 'email',
       };
     } catch (e) {
-      if (kDebugMode) debugPrint('Error sending reset email: $e');
+      if (kDebugMode) debugPrint('Error sending reset code: $e');
       return {
         'success': false,
-        'message': 'Failed to send reset email. Please try again.',
+        'message': 'Failed to send reset code. Please try again.',
       };
     }
   }
 
-  // Verify reset code
-  static Future<bool> verifyResetCode(String email, String code) async {
+  // Verify code (supports email or phone)
+  static Future<bool> verifyCode(String contact, String code) async {
     try {
+      final isPhone = isValidPhilippineNumber(contact);
+      final field = isPhone ? 'phone_number' : 'email_address';
+      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+
+      final account = await client
+          .from('accounts')
+          .select('verification_code, verification_expires')
+          .eq(field, formattedContact)
+          .maybeSingle();
+
+      if (account == null) return false;
+      if (account['verification_code'] != code) return false;
+
+      final expires = DateTime.parse(account['verification_expires']);
+      if (expires.isBefore(DateTime.now())) return false;
+
+      await client.from('accounts').update({
+        'is_verified': true,
+        'verification_code': null,
+        'verification_expires': null,
+      }).eq(field, formattedContact);
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Verification error: $e');
+      return false;
+    }
+  }
+
+  // Verify reset code
+  static Future<bool> verifyResetCode(String contact, String code) async {
+    try {
+      final isPhone = isValidPhilippineNumber(contact);
+      final field = isPhone ? 'phone_number' : 'email_address';
+      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+
       final account = await client
           .from('accounts')
           .select('reset_code, reset_expires')
-          .eq('email_address', email)
+          .eq(field, formattedContact)
           .maybeSingle();
 
       if (account == null) return false;
@@ -242,15 +357,19 @@ class SupabaseService {
 
   // Reset password with new password
   static Future<Map<String, dynamic>> resetPasswordWithNew(
-      String email, String newPassword) async {
+      String contact, String newPassword) async {
     try {
+      final isPhone = isValidPhilippineNumber(contact);
+      final field = isPhone ? 'phone_number' : 'email_address';
+      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+      
       final newHash = _hashPassword(newPassword);
 
       await client.from('accounts').update({
         'password_hash': newHash,
         'reset_code': null,
         'reset_expires': null,
-      }).eq('email_address', email);
+      }).eq(field, formattedContact);
 
       return {'success': true, 'message': 'Password reset successfully'};
     } catch (e) {
@@ -261,24 +380,27 @@ class SupabaseService {
     }
   }
 
-  // LOGIN - THE FIXED VERSION
-  static Future<Map<String, dynamic>> login(
-      String email, String password) async {
+  // LOGIN (supports email or phone)
+  static Future<Map<String, dynamic>> login(String identifier, String password) async {
     try {
-      if (kDebugMode) debugPrint('Attempting login for: $email');
+      if (kDebugMode) debugPrint('Attempting login for: $identifier');
 
       final isConnected = await testConnection();
       if (!isConnected) {
         return {
           'success': false,
-          'message':
-              'Cannot connect to server. Please check your internet connection.'
+          'message': 'Cannot connect to server. Please check your internet connection.'
         };
       }
+
+      final isPhone = isValidPhilippineNumber(identifier);
+      final field = isPhone ? 'phone_number' : 'email_address';
+      final formattedIdentifier = isPhone ? SmsService.formatPhilippineNumber(identifier) : identifier;
 
       final accountResponse = await client.from('accounts').select('''
             account_id,
             email_address,
+            phone_number,
             password_hash,
             account_type,
             is_verified,
@@ -287,11 +409,10 @@ class SupabaseService {
             middle_name,
             last_name,
             extension_name,
-            phone_number,
             created_at,
             is_temporary_password,
             created_by
-          ''').eq('email_address', email).maybeSingle();
+          ''').eq(field, formattedIdentifier).maybeSingle();
 
       if (kDebugMode) {
         debugPrint('Account query response: $accountResponse');
@@ -321,7 +442,6 @@ class SupabaseService {
         return {'success': false, 'message': 'Account inactive'};
       }
 
-      // CRITICAL FIX: Get created_by FIRST and don't let errors overwrite it
       final createdBy = accountResponse['created_by'] as String? ?? 'self';
 
       if (kDebugMode) {
@@ -335,13 +455,9 @@ class SupabaseService {
 
       if (accountResponse['account_type'] == 'mother') {
         try {
-          // Try to get mother data - but don't let errors affect created_by
           motherData = await client
               .from('mothers')
-              .select('''
-                mother_id,
-                birthdate
-              ''') // Only select what we need
+              .select('mother_id, birthdate')
               .eq('account_id', accountResponse['account_id'])
               .maybeSingle();
 
@@ -351,33 +467,26 @@ class SupabaseService {
             motherId = motherData['mother_id'] as int?;
           }
         } catch (e) {
-          // Log error but continue - don't let this break login
-          if (kDebugMode)
-            debugPrint('Error fetching mother data (non-critical): $e');
+          if (kDebugMode) debugPrint('Error fetching mother data (non-critical): $e');
         }
 
-        // CRITICAL: For midwife-created accounts, profile is ALWAYS complete
         if (createdBy == 'midwife') {
           profileComplete = true;
           if (kDebugMode) {
             debugPrint('✅ Midwife account detected - profileComplete = true');
           }
         } else {
-          // For self-registered accounts, check essential fields
           final hasFirstName = accountResponse['first_name'] != null &&
               accountResponse['first_name'].toString().isNotEmpty;
           final hasLastName = accountResponse['last_name'] != null &&
               accountResponse['last_name'].toString().isNotEmpty;
-          final hasBirthdate =
-              motherData != null && motherData['birthdate'] != null;
+          final hasBirthdate = motherData != null && motherData['birthdate'] != null;
           final hasPhone = accountResponse['phone_number'] != null &&
               accountResponse['phone_number'].toString().isNotEmpty;
 
-          profileComplete =
-              hasFirstName && hasLastName && hasBirthdate && hasPhone;
+          profileComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
           if (kDebugMode) {
-            debugPrint(
-                'Self-registered account - profileComplete = $profileComplete');
+            debugPrint('Self-registered account - profileComplete = $profileComplete');
           }
         }
 
@@ -392,8 +501,7 @@ class SupabaseService {
         }
       }
 
-      final token =
-          _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
+      final token = _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
 
       try {
         await client.from('accounts').update({
@@ -407,7 +515,7 @@ class SupabaseService {
       final userData = {
         'id': accountResponse['account_id'],
         'role': accountResponse['account_type'],
-        'created_by': createdBy, // CRITICAL: Use the value we captured
+        'created_by': createdBy,
       };
 
       if (accountResponse['account_type'] == 'mother') {
@@ -458,12 +566,14 @@ class SupabaseService {
   }
 
   // Resend verification code
-  static Future<Map<String, dynamic>> resendVerificationCode(
-      String email) async {
+  static Future<Map<String, dynamic>> resendVerificationCode(String contact) async {
     try {
+      final isPhone = isValidPhilippineNumber(contact);
+      final field = isPhone ? 'phone_number' : 'email_address';
+      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+
       final code = _generateOTP();
-      final expires =
-          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       await client
           .from('accounts')
@@ -471,51 +581,26 @@ class SupabaseService {
             'verification_code': code,
             'verification_expires': expires,
           })
-          .eq('email_address', email)
+          .eq(field, formattedContact)
           .eq('is_verified', false);
 
-      final emailSent = await sendOTPEmail(email, code, 'verification');
+      final sent = await EmailService.sendVerificationCode(
+        contact: formattedContact,
+        code: code,
+        channel: isPhone ? 'sms' : 'email',
+      );
 
       return {
-        'success': emailSent,
-        'message': emailSent
-            ? 'New verification code sent to your email.'
-            : 'Failed to send email. Please try again.',
+        'success': sent,
+        'message': sent
+            ? 'New verification code sent to your ${isPhone ? 'phone' : 'email'}.'
+            : 'Failed to send code. Please try again.',
       };
     } catch (e) {
       return {
         'success': false,
         'message': 'Failed to resend code: ${e.toString()}',
       };
-    }
-  }
-
-  // Verify code
-  static Future<bool> verifyCode(String email, String code) async {
-    try {
-      final account = await client
-          .from('accounts')
-          .select('verification_code, verification_expires')
-          .eq('email_address', email)
-          .maybeSingle();
-
-      if (account == null) return false;
-
-      if (account['verification_code'] != code) return false;
-
-      final expires = DateTime.parse(account['verification_expires']);
-      if (expires.isBefore(DateTime.now())) return false;
-
-      await client.from('accounts').update({
-        'is_verified': true,
-        'verification_code': null,
-        'verification_expires': null,
-      }).eq('email_address', email);
-
-      return true;
-    } catch (e) {
-      if (kDebugMode) debugPrint('Verification error: $e');
-      return false;
     }
   }
 
@@ -730,20 +815,6 @@ class SupabaseService {
       };
     } catch (e) {
       return {'success': false, 'message': e.toString()};
-    }
-  }
-
-  // Check if email is available
-  static Future<bool> isEmailAvailable(String email) async {
-    try {
-      final result = await client
-          .from('accounts')
-          .select('account_id')
-          .eq('email_address', email)
-          .maybeSingle();
-      return result == null;
-    } catch (_) {
-      return true;
     }
   }
 
@@ -1006,7 +1077,6 @@ class SupabaseService {
       final generatedPassword = _generateSecurePassword();
       final hashedPassword = _hashPassword(generatedPassword);
 
-      // CRITICAL: Set created_by = 'midwife' when creating account
       final accountRow = await client
           .from('accounts')
           .insert({
@@ -1021,7 +1091,7 @@ class SupabaseService {
             'is_verified': true,
             'status': 'active',
             'is_temporary_password': true,
-            'created_by': 'midwife', // ← CRITICAL: This must be here
+            'created_by': 'midwife',
             'created_at': DateTime.now().toIso8601String(),
           })
           .select('account_id')
@@ -1058,7 +1128,6 @@ class SupabaseService {
 
       final motherId = motherRow['mother_id'] as int;
 
-      // Insert emergency contacts
       if (emergencyContacts.isNotEmpty) {
         await client.from('emergency_contacts').insert(
               emergencyContacts
@@ -1067,7 +1136,6 @@ class SupabaseService {
             );
       }
 
-      // Insert medical conditions
       if (medicalConditions.isNotEmpty) {
         await client.from('medical_conditions').insert(
               medicalConditions
@@ -1076,14 +1144,12 @@ class SupabaseService {
             );
       }
 
-      // Insert allergies
       if (allergies.isNotEmpty) {
         await client.from('allergies').insert(
               allergies.map((al) => {'mother_id': motherId, ...al}).toList(),
             );
       }
 
-      // Insert current pregnancy
       int? pregnancyId;
       if (lmp != null && edd != null) {
         final pregRow = await client
@@ -1103,7 +1169,6 @@ class SupabaseService {
         }
       }
 
-      // Insert past pregnancies
       for (final pp in pastPregnancies) {
         final pastPregRow = await client
             .from('pregnancies')
@@ -1149,7 +1214,6 @@ class SupabaseService {
         }
       }
 
-      // Send email with credentials
       final emailSent = await EmailService.sendAccountCredentials(
         email: email,
         password: generatedPassword,
@@ -1169,8 +1233,7 @@ class SupabaseService {
             : 'Mother account created but email failed to send. Please provide the password manually.',
       };
     } catch (e) {
-      if (kDebugMode)
-        debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');
+      if (kDebugMode) debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');
       return {
         'success': false,
         'message': 'Failed to add mother: ${e.toString()}',
@@ -1179,7 +1242,7 @@ class SupabaseService {
   }
 
   // ============================================================
-  // PROFILE PICTURE METHODS - Using uploaded_by (account_id)
+  // PROFILE PICTURE METHODS
   // ============================================================
 
   // Upload profile picture

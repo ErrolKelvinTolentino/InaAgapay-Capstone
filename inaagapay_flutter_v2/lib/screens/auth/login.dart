@@ -1,5 +1,3 @@
-// lib/screens/auth/login.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
@@ -9,6 +7,7 @@ import '../../widgets/clickable_text.dart';
 import '../../services/supabase_service.dart';
 import '../../services/auth_storage.dart';
 import '../../widgets/validation_message.dart';
+import '../../widgets/dialog_box.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,7 +17,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _identifierController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
@@ -26,10 +25,26 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _hasError = false;
   String _errorMessage = '';
 
-  bool get _isEmailValid {
-    final email = _emailController.text.trim();
-    if (email.isEmpty) return true;
-    return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
+  String? _getIdentifierType() {
+    final identifier = _identifierController.text.trim();
+    if (identifier.isEmpty) return null;
+    
+    // Check if it's an email
+    if (RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(identifier)) {
+      return 'email';
+    }
+    
+    // Check if it's a valid Philippine phone number
+    if (SupabaseService.isValidPhilippineNumber(identifier)) {
+      return 'phone';
+    }
+    
+    return 'invalid';
+  }
+
+  bool get _isIdentifierValid {
+    final type = _getIdentifierType();
+    return type == 'email' || type == 'phone';
   }
 
   @override
@@ -42,13 +57,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+    final identifier = _identifierController.text.trim();
+    final password = _passwordController.text.trim();
+    
+    if (identifier.isEmpty || password.isEmpty) {
       setState(() {
         _hasError = true;
         _errorMessage = 'Please fill in all fields';
@@ -56,10 +74,11 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    if (!_isEmailValid) {
+    final identifierType = _getIdentifierType();
+    if (identifierType != 'email' && identifierType != 'phone') {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Please enter a valid email address';
+        _errorMessage = 'Please enter a valid email address or Philippine mobile number (e.g., 09123456789)';
       });
       return;
     }
@@ -72,8 +91,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await SupabaseService.login(
-        _emailController.text.trim(),
-        _passwordController.text,
+        identifier,
+        password,
       );
 
       if (!mounted) {
@@ -82,12 +101,6 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       
       setState(() => _isLoading = false);
-
-      if (kDebugMode) {
-        debugPrint('=== LOGIN RESPONSE ===');
-        debugPrint('Success: ${response['success']}');
-        debugPrint('User data: ${response['user']}');
-      }
 
       if (response['success'] == true && response['token'] != null) {
         await AuthStorage.saveToken(response['token']);
@@ -98,40 +111,15 @@ class _LoginScreenState extends State<LoginScreen> {
           final motherId = response['user']['mother_id'];
           if (motherId != null) {
             await AuthStorage.saveMotherId(motherId);
-            if (kDebugMode) {
-              debugPrint('Mother ID saved during login: $motherId');
-            }
-          } else {
-            if (kDebugMode) {
-              debugPrint('WARNING: mother_id is null in login response');
-            }
           }
           
           final needsPasswordChange = response['user']['needs_password_change'] == true;
           final createdBy = response['user']['created_by'] as String? ?? 'self';
-          final profileCompleteFromResponse = response['user']['profile_complete'] == true;
           
-          if (kDebugMode) {
-            debugPrint('=== ACCOUNT TYPE DETECTION ===');
-            debugPrint('createdBy: $createdBy');
-            debugPrint('needsPasswordChange: $needsPasswordChange');
-            debugPrint('profileCompleteFromResponse: $profileCompleteFromResponse');
-          }
-          
-          // For midwife-created or midwife-updated accounts: skip Complete Profile
           if (createdBy == 'midwife') {
-            if (kDebugMode) {
-              debugPrint('✅ Midwife-managed account detected - Skipping Complete Profile');
-            }
-            
-            // Mark profile as complete since midwife filled all data
             await AuthStorage.saveProfileComplete(true);
             
             if (needsPasswordChange) {
-              if (kDebugMode) {
-                debugPrint('➡️ Redirecting to Change Temporary Password screen');
-              }
-              await AuthStorage.saveTemporaryPasswordChanged(false);
               if (!mounted) return;
               Navigator.pushNamedAndRemoveUntil(
                 context,
@@ -139,9 +127,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 (route) => false,
               );
             } else {
-              if (kDebugMode) {
-                debugPrint('➡️ Redirecting to Mother Dashboard');
-              }
               if (!mounted) return;
               Navigator.pushNamedAndRemoveUntil(
                 context,
@@ -149,24 +134,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 (route) => false,
               );
             }
-          } 
-          // For self-registered accounts: check if profile needs completion
-          else {
-            if (kDebugMode) {
-              debugPrint('⚠️ Self-registered account detected - Checking profile completeness');
-            }
-            
-            // Verify if profile is actually complete by checking database
+          } else {
             final isActuallyComplete = await _checkProfileCompleteness(motherId);
             
-            if (kDebugMode) {
-              debugPrint('Profile completeness result: $isActuallyComplete');
-            }
-            
             if (!isActuallyComplete) {
-              if (kDebugMode) {
-                debugPrint('❌ Profile incomplete - Redirecting to Complete Profile');
-              }
               await AuthStorage.saveProfileComplete(false);
               if (!mounted) return;
               Navigator.pushNamedAndRemoveUntil(
@@ -175,9 +146,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 (route) => false,
               );
             } else {
-              if (kDebugMode) {
-                debugPrint('✅ Profile complete - Redirecting to Mother Dashboard');
-              }
               await AuthStorage.saveProfileComplete(true);
               if (!mounted) return;
               Navigator.pushNamedAndRemoveUntil(
@@ -196,10 +164,16 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         } else if (response['user']['role'] == 'admin') {
           if (!mounted) return;
-          setState(() {
-            _hasError = true;
-            _errorMessage = 'Admin accounts must use the administrative web portal.';
-          });
+          await showDialog(
+            context: context,
+            builder: (_) => DialogBox(
+              type: DialogType.error,
+              title: 'Access Denied',
+              content: 'Admin accounts must use the administrative web portal.',
+              buttonText: 'OK',
+              onPressed: () => Navigator.pop(context),
+            ),
+          );
         } else {
           if (!mounted) return;
           setState(() {
@@ -228,40 +202,21 @@ class _LoginScreenState extends State<LoginScreen> {
     if (motherId == null) return false;
     
     try {
-      if (kDebugMode) {
-        debugPrint('=== CHECKING PROFILE COMPLETENESS ===');
-        debugPrint('Mother ID: $motherId');
-      }
-      
-      // Check birthdate in mothers table
       final response = await SupabaseService.client
           .from('mothers')
           .select('birthdate')
           .eq('mother_id', motherId)
           .maybeSingle();
       
-      if (kDebugMode) {
-        debugPrint('Mother record: $response');
-      }
-      
       final accountId = await AuthStorage.getUserId();
-      if (accountId == null) {
-        if (kDebugMode) debugPrint('Account ID is null');
-        return false;
-      }
+      if (accountId == null) return false;
       
-      // Check personal info in accounts table
       final accountResponse = await SupabaseService.client
           .from('accounts')
           .select('first_name, last_name, phone_number, created_by')
           .eq('account_id', accountId)
           .maybeSingle();
       
-      if (kDebugMode) {
-        debugPrint('Account record: $accountResponse');
-      }
-      
-      // Check ONLY essential fields (not address fields)
       final hasFirstName = accountResponse != null && 
                            accountResponse['first_name'] != null && 
                            accountResponse['first_name'].toString().isNotEmpty;
@@ -273,28 +228,19 @@ class _LoginScreenState extends State<LoginScreen> {
                        accountResponse['phone_number'] != null && 
                        accountResponse['phone_number'].toString().isNotEmpty;
       
-      final isComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
-      
-      if (kDebugMode) {
-        debugPrint('Profile completeness check results:');
-        debugPrint('  hasFirstName: $hasFirstName');
-        debugPrint('  hasLastName: $hasLastName');
-        debugPrint('  hasBirthdate: $hasBirthdate');
-        debugPrint('  hasPhone: $hasPhone');
-        debugPrint('  isComplete: $isComplete');
-      }
-      
-      return isComplete;
+      return hasFirstName && hasLastName && hasBirthdate && hasPhone;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Error checking profile completeness: $e');
-      }
       return false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final identifierType = _getIdentifierType();
+    final helperText = identifierType == 'invalid' && _identifierController.text.isNotEmpty
+        ? 'Please enter a valid email address or Philippine mobile number'
+        : null;
+
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
@@ -332,23 +278,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 56),
 
-              // Email
+              // Identifier Field (Email or Phone)
               AppInputField(
-                hintText: 'Email Address',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                leadingIcon: Icons.email_outlined,
+                hintText: 'Email or Phone Number',
+                controller: _identifierController,
+                keyboardType: TextInputType.text,
+                leadingIcon: Icons.person_outline,
                 onChanged: (_) {
                   setState(() {});
                   if (_hasError) setState(() => _hasError = false);
                 },
               ),
 
-              if (_emailController.text.isNotEmpty && !_isEmailValid) ...[
+              if (helperText != null) ...[
                 const SizedBox(height: 8),
-                const ValidationMessage(
-                  message: 'Please enter a valid email address',
-                  type: ValidationType.error,
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Text(
+                    helperText,
+                    style: const TextStyle(fontSize: 12, color: AppColors.warning),
+                  ),
                 ),
               ],
 
@@ -369,7 +318,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 },
               ),
 
-              // Error message
               if (_hasError) ...[
                 const SizedBox(height: 12),
                 ValidationMessage(

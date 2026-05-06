@@ -1,5 +1,4 @@
-﻿// lib/screens/auth/mother_registration.dart
-
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
@@ -23,13 +22,17 @@ class MotherRegistrationScreen extends StatefulWidget {
 
 class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
+  bool _contactExists = false;
+  bool _checkingContact = false;
+  Timer? _contactTimer;
+  String _registrationType = 'email'; // 'email' or 'phone'
 
   late final AnimationController _shakeController;
   late final Animation<double> _shakeAnimation;
@@ -43,6 +46,7 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
     _passwordController.addListener(() => setState(() {}));
     _confirmPasswordController.addListener(() => setState(() {}));
+    _contactController.addListener(_onContactChanged);
 
     _shakeController = AnimationController(
       vsync: this,
@@ -61,11 +65,51 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _contactTimer?.cancel();
+    _contactController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _shakeController.dispose();
     super.dispose();
+  }
+
+  void _onContactChanged() {
+    _contactTimer?.cancel();
+    final contact = _contactController.text.trim();
+    
+    if (contact.isEmpty) {
+      setState(() {
+        _contactExists = false;
+        _checkingContact = false;
+      });
+      return;
+    }
+    
+    final isValid = _registrationType == 'email'
+        ? RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact)
+        : SupabaseService.isValidPhilippineNumber(contact);
+        
+    if (!isValid) {
+      setState(() {
+        _contactExists = false;
+        _checkingContact = false;
+      });
+      return;
+    }
+    
+    setState(() => _checkingContact = true);
+    _contactTimer = Timer(const Duration(milliseconds: 500), () async {
+      final exists = _registrationType == 'email'
+          ? !(await SupabaseService.isEmailAvailable(contact))
+          : !(await SupabaseService.isPhoneNumberAvailable(contact));
+          
+      if (mounted) {
+        setState(() {
+          _contactExists = exists;
+          _checkingContact = false;
+        });
+      }
+    });
   }
 
   PasswordStrength _calculateStrength(String password) {
@@ -80,10 +124,15 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     return PasswordStrength.strong;
   }
 
-  bool get _isEmailValid {
-    final email = _emailController.text.trim();
-    return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
+  bool get _isContactValid {
+    final contact = _contactController.text.trim();
+    if (contact.isEmpty) return false;
+    return _registrationType == 'email'
+        ? RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact)
+        : SupabaseService.isValidPhilippineNumber(contact);
   }
+
+  bool get _isContactAvailable => !_contactExists && _isContactValid;
 
   bool get _passwordsMatch =>
       _confirmPasswordController.text.isNotEmpty &&
@@ -93,10 +142,11 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       _confirmPasswordController.text.isNotEmpty && !_passwordsMatch;
 
   bool get _canSubmit =>
-      _isEmailValid &&
+      _isContactAvailable &&
       _calculateStrength(_passwordController.text) == PasswordStrength.strong &&
       _passwordsMatch &&
-      !_isLoading;
+      !_isLoading &&
+      !_checkingContact;
 
   Future<void> _handleSubmit() async {
     if (!_canSubmit) {
@@ -107,10 +157,10 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
     setState(() => _isLoading = true);
 
     try {
-      // ✅ CHANGED: Use registerWithOTP instead of register
       final result = await SupabaseService.registerWithOTP(
-        _emailController.text.trim(),
-        _passwordController.text,
+        contact: _contactController.text.trim(),
+        password: _passwordController.text,
+        channel: _registrationType,
       );
 
       setState(() => _isLoading = false);
@@ -118,13 +168,12 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       if (!mounted) return;
 
       if (result['success'] == true) {
-        // Show success dialog
         await showDialog(
           context: context,
           barrierDismissible: false,
           builder: (_) => DialogBox(
             title: 'Verification Code Sent',
-            content: 'A 6-digit verification code has been sent to ${_emailController.text.trim()}',
+            content: 'A 6-digit verification code has been sent to your ${_registrationType == 'email' ? 'email' : 'phone'}.',
             buttonText: 'Continue',
             type: DialogType.success,
             onPressed: () => Navigator.pop(context),
@@ -132,19 +181,25 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
         );
 
         if (mounted) {
-          // Navigate to verification screen
           Navigator.pushNamed(
             context,
             '/verify-registration',
-            arguments: _emailController.text.trim(),
+            arguments: {
+              'contact': _contactController.text.trim(),
+              'channel': _registrationType,
+            },
           );
         }
       } else {
-        // Show error
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Registration failed'),
-            backgroundColor: AppColors.error,
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => DialogBox(
+            type: DialogType.error,
+            title: 'Registration Failed',
+            content: result['message'] ?? 'Registration failed. Please try again.',
+            buttonText: 'OK',
+            onPressed: () => Navigator.pop(context),
           ),
         );
       }
@@ -153,10 +208,15 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
       
       if (!mounted) return;
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: AppColors.error,
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          type: DialogType.error,
+          title: 'Error',
+          content: 'Error: ${e.toString()}',
+          buttonText: 'OK',
+          onPressed: () => Navigator.pop(context),
         ),
       );
     }
@@ -199,12 +259,97 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                     ),
                     const SizedBox(height: 24),
 
-                    // Email
+                    // Registration Type Toggle
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSecondary,
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _registrationType = 'email';
+                                  _contactController.clear();
+                                  _contactExists = false;
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: _registrationType == 'email'
+                                      ? AppColors.brandPrimary
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(26),
+                                ),
+                                child: Text(
+                                  'Email',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: _registrationType == 'email'
+                                        ? Colors.white
+                                        : AppColors.textSecondary,
+                                    fontWeight: _registrationType == 'email'
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _registrationType = 'phone';
+                                  _contactController.clear();
+                                  _contactExists = false;
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: _registrationType == 'phone'
+                                      ? AppColors.brandPrimary
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(26),
+                                ),
+                                child: Text(
+                                  'Phone Number',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: _registrationType == 'phone'
+                                        ? Colors.white
+                                        : AppColors.textSecondary,
+                                    fontWeight: _registrationType == 'phone'
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Contact Field (Email or Phone)
                     AppInputField(
-                      hintText: 'Enter Email Address',
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      leadingIcon: Icons.email,
+                      hintText: _registrationType == 'email' 
+                          ? 'Enter Email Address' 
+                          : 'Enter Mobile Number',
+                      controller: _contactController,
+                      keyboardType: _registrationType == 'email' 
+                          ? TextInputType.emailAddress 
+                          : TextInputType.phone,
+                      leadingIcon: _registrationType == 'email' 
+                          ? Icons.email 
+                          : Icons.phone,
                       isRequired: true,
                       onChanged: (_) => setState(() {}),
                     ),
@@ -214,13 +359,21 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
                       padding: const EdgeInsets.only(left: 20),
                       child: Builder(
                         builder: (context) {
-                          if (_emailController.text.isEmpty) {
+                          if (_contactController.text.isEmpty) {
                             return const SizedBox.shrink();
                           }
-                          if (!_isEmailValid) {
-                            return _errorRow('Enter a valid email address');
+                          if (_checkingContact) {
+                            return _infoRow('Checking availability...', isInfo: true);
                           }
-                          return _successRow('Email looks good');
+                          if (_contactExists) {
+                            return _errorRow('${_registrationType == 'email' ? 'Email' : 'Phone number'} already exists');
+                          }
+                          if (!_isContactValid) {
+                            return _errorRow(_registrationType == 'email' 
+                                ? 'Enter a valid email address'
+                                : 'Enter a valid PH number (e.g., 09123456789)');
+                          }
+                          return _successRow('${_registrationType == 'email' ? 'Email' : 'Phone number'} is available');
                         },
                       ),
                     ),
@@ -412,6 +565,28 @@ class _MotherRegistrationScreenState extends State<MotherRegistrationScreen>
           child: Text(
             text, 
             style: const TextStyle(fontSize: 13, color: AppColors.success),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow(String text, {bool isInfo = true}) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 13,
+          height: 13,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: AppColors.brandAccent,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text, 
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
         ),
       ],

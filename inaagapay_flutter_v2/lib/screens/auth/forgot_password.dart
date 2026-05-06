@@ -1,4 +1,4 @@
-// lib/screens/auth/forgot_password.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
@@ -15,20 +15,29 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
 
+  String? _getContactType() {
+    final contact = _contactController.text.trim();
+    if (contact.isEmpty) return null;
+    if (RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact)) return 'email';
+    if (SupabaseService.isValidPhilippineNumber(contact)) return 'phone';
+    return 'invalid';
+  }
+
   Future<void> _handleSubmit() async {
-    final email = _emailController.text.trim();
+    final contact = _contactController.text.trim();
+    final contactType = _getContactType();
     
-    if (email.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your email address');
+    if (contact.isEmpty) {
+      setState(() => _errorMessage = 'Please enter your email address or phone number');
       return;
     }
     
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
-      setState(() => _errorMessage = 'Please enter a valid email address');
+    if (contactType != 'email' && contactType != 'phone') {
+      setState(() => _errorMessage = 'Please enter a valid email address or Philippine mobile number (e.g., 09123456789)');
       return;
     }
 
@@ -37,42 +46,41 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _errorMessage = null;
     });
 
-    final result = await SupabaseService.forgotPassword(email);
+    final result = await SupabaseService.forgotPassword(contact);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      // ✅ FIX: Show Dialog Box instead of snackbar
       await showDialog(
         context: context,
         barrierDismissible: false,
         builder: (_) => DialogBox(
-          title: 'Verification Code Sent',
-          content: 'A 6-digit verification code has been sent to $email.\nPlease check your email inbox.',
-          buttonText: 'Continue',
           type: DialogType.success,
-          onPressed: () {
-            Navigator.pop(context);
-            // ✅ Navigate to verification page
-            Navigator.pushNamed(
-              context,
-              '/forgot-password-verify',
-              arguments: email,
-            );
-          },
+          title: 'Code Sent',
+          content: result['message'],
+          buttonText: 'Continue',
+          onPressed: () => Navigator.pop(context),
         ),
       );
+      
+      Navigator.pushNamed(
+        context,
+        '/forgot-password-verify',
+        arguments: {
+          'contact': contact,
+          'channel': result['channel'],
+        },
+      );
     } else {
-      // ✅ FIX: Show validation message for non-existent email
       await showDialog(
         context: context,
         barrierDismissible: false,
         builder: (_) => DialogBox(
-          title: 'Email Not Found',
-          content: result['message'] ?? 'No account found with this email address.',
+          type: DialogType.error,
+          title: 'Failed',
+          content: result['message'],
           buttonText: 'OK',
-          type: DialogType.warning,
           onPressed: () => Navigator.pop(context),
         ),
       );
@@ -81,6 +89,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final contactType = _getContactType();
+    final helperText = _contactController.text.isNotEmpty && contactType == 'invalid'
+        ? 'Please enter a valid email address or Philippine mobile number'
+        : null;
+
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
@@ -89,6 +102,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           child: Column(
             children: [
               const SizedBox(height: 40),
+              
               const Text(
                 'Inaagapay',
                 style: TextStyle(
@@ -97,36 +111,59 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   color: Color(0xFFFF68A5),
                 ),
               ),
+              
               const SizedBox(height: 40),
+              
               const PageTitle(
                 title: 'Reset Password',
                 leadingIcon: Icons.lock_reset,
               ),
+              
               const SizedBox(height: 16),
+              
               const Text(
-                'Enter your email address and we\'ll send you a verification code',
+                'Enter your email address or phone number to receive a verification code',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary),
               ),
+              
               const SizedBox(height: 32),
+              
+              // Single field for email or phone
               AppInputField(
-                hintText: 'Email Address',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                leadingIcon: Icons.email_outlined,
+                hintText: 'Email or Phone Number',
+                controller: _contactController,
+                keyboardType: TextInputType.text,
+                leadingIcon: Icons.person_outline,
                 errorText: _errorMessage,
                 onChanged: (_) {
                   if (_errorMessage != null) {
                     setState(() => _errorMessage = null);
                   }
+                  setState(() {});
                 },
               ),
+              
+              if (helperText != null) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Text(
+                    helperText,
+                    style: const TextStyle(fontSize: 12, color: AppColors.warning),
+                  ),
+                ),
+              ],
+              
               const SizedBox(height: 32),
+              
               MainButton(
                 label: _isLoading ? 'Sending...' : 'Send Reset Code',
                 onPressed: _isLoading ? null : _handleSubmit,
               ),
+              
               const SizedBox(height: 16),
+              
               TextButton(
                 onPressed: () {
                   Navigator.pushNamedAndRemoveUntil(

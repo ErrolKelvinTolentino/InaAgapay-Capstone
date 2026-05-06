@@ -15,13 +15,38 @@ import '../../widgets/dialog_box.dart';
 import '../../widgets/secondary_header.dart';
 import 'add_prenatal_checkup_screen.dart';
 
-// ──────────────── Enums & Data Models ────────────────
+// Extension name options
+const List<String> _extensionOptions = ['', 'Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
+// Blood type options
+const List<String> _bloodTypeOptions = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
+// Relationship options for emergency contacts
+const List<String> _relationshipOptions = [
+  'Spouse/Partner',
+  'Parent',
+  'Child',
+  'Sibling',
+  'Relative',
+  'Friend',
+  'Neighbor',
+  'Coworker',
+  'Other',
+];
+// Common medical conditions
+const List<String> _commonConditions = [
+  'Anemia',
+  'Diabetes',
+  'Hypertension',
+  'Asthma',
+  'Thyroid Disorder',
+  'Heart Disease',
+  'Kidney Disease',
+  'Epilepsy',
+  'Hepatitis',
+  'Other',
+];
 
 enum _GestationMethod { lmp, edd, aog }
 enum _OcrDialogState { loading, results, error }
-
-// Extension name options
-const List<String> _extensionOptions = ['', 'Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
 
 class _EmergencyContact {
   String firstName = '';
@@ -29,9 +54,10 @@ class _EmergencyContact {
   String lastName = '';
   String? extensionName;
   String phoneNumber = '';
-  String? affiliation;
+  String? relationship;
 
-  bool get isValid => firstName.isNotEmpty && lastName.isNotEmpty && phoneNumber.isNotEmpty;
+  bool get isValid =>
+      firstName.isNotEmpty && lastName.isNotEmpty && phoneNumber.isNotEmpty && relationship != null && relationship!.isNotEmpty;
 
   Map<String, dynamic> toMap() => {
         'first_name': firstName,
@@ -39,7 +65,7 @@ class _EmergencyContact {
         'last_name': lastName,
         'extension_name': extensionName?.isEmpty == true ? null : extensionName,
         'phone_number': phoneNumber,
-        'affiliation': affiliation,
+        'affiliation': relationship,
       };
 }
 
@@ -167,8 +193,6 @@ class _PastPregnancy {
       };
 }
 
-// ──────────────── Screen ────────────────
-
 class MidwifeAddMotherScreen extends StatefulWidget {
   const MidwifeAddMotherScreen({super.key});
 
@@ -204,6 +228,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   final TextEditingController _birthdateCtrl = TextEditingController();
   String? _birthdateError;
   String? _riskWarning;
+  int? _calculatedAge;
   
   String? _phoneError;
   String? _emailError;
@@ -253,25 +278,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   String? _bloodType;
   String? _heightError;
   String? _weightError;
-  String? _calculatedBMI;
+  double? _calculatedBMI;
   String? _bmiClassification;
   String? _bmiWarning;
 
   // ── Step 4 : Medical Conditions ─────────────────────
   final List<_MedicalCondition> _medicalConditions = [];
-
-  final List<String> _commonConditions = const [
-    'Anemia',
-    'Diabetes',
-    'Hypertension',
-    'Asthma',
-    'Thyroid Disorder',
-    'Heart Disease',
-    'Kidney Disease',
-    'Epilepsy',
-    'Hepatitis',
-    'Other',
-  ];
 
   // ── Step 5 : Allergies ──────────────────────────────
   final List<_Allergy> _allergies = [];
@@ -378,36 +390,27 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     if (height != null && weight != null && height > 0) {
       final heightM = height / 100;
       final bmi = weight / (heightM * heightM);
-      setState(() => _calculatedBMI = bmi.toStringAsFixed(1));
+      _calculatedBMI = bmi;
 
       if (bmi < 18.5) {
-        setState(() {
-          _bmiClassification = 'Underweight';
-          _bmiWarning = 'Underweight: May increase risk of complications.';
-        });
+        _bmiClassification = 'Underweight';
+        _bmiWarning = 'Underweight: May increase risk of complications.';
       } else if (bmi < 25) {
-        setState(() {
-          _bmiClassification = 'Normal';
-          _bmiWarning = null;
-        });
+        _bmiClassification = 'Normal';
+        _bmiWarning = null;
       } else if (bmi < 30) {
-        setState(() {
-          _bmiClassification = 'Overweight';
-          _bmiWarning = 'Overweight: Monitor weight gain during pregnancy.';
-        });
+        _bmiClassification = 'Overweight';
+        _bmiWarning = 'Overweight: Monitor weight gain during pregnancy.';
       } else {
-        setState(() {
-          _bmiClassification = 'Obese';
-          _bmiWarning = 'Obese: Higher risk of pregnancy complications. Close monitoring advised.';
-        });
+        _bmiClassification = 'Obese';
+        _bmiWarning = 'Obese: Higher risk of pregnancy complications. Close monitoring advised.';
       }
     } else {
-      setState(() {
-        _calculatedBMI = null;
-        _bmiClassification = null;
-        _bmiWarning = null;
-      });
+      _calculatedBMI = null;
+      _bmiClassification = null;
+      _bmiWarning = null;
     }
+    setState(() {});
   }
 
   void _validateBirthdate() {
@@ -422,6 +425,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     }
     
     final age = (DateTime.now().difference(_birthdate!).inDays / 365.25).floor();
+    _calculatedAge = age;
+    
     if (age < 10 || age > 50) {
       setState(() => _birthdateError = 'Maternal age ($age years) must be between 10 and 50');
     } else {
@@ -444,25 +449,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       if (gap > 0 && gap < minGapDays) {
         return 'Pregnancy interval too short ($gap days). Minimum interval is $minGapDays days after previous pregnancy outcome.';
       }
-    }
-    return null;
-  }
-
-  String? _validateGestationalAgeForOutcome(String outcome, int weeks) {
-    switch (outcome) {
-      case 'live_birth':
-        if (weeks < 22) return 'Live birth not possible before 22 weeks';
-        if (weeks > 45) return 'Live birth beyond 45 weeks is not possible';
-        break;
-      case 'stillbirth':
-        if (weeks < 20) return 'Stillbirth is defined at 20+ weeks';
-        break;
-      case 'miscarriage':
-        if (weeks > 19) return 'At $weeks weeks this is classified as Stillbirth';
-        break;
-      case 'ectopic':
-        if (weeks > 15) return 'Ectopic pregnancy cannot survive beyond 15 weeks';
-        break;
     }
     return null;
   }
@@ -1008,72 +994,80 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final firstNameCtrl = TextEditingController();
     final lastNameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
-    String? affiliation;
+    String? relationship;
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Add Emergency Contact'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: firstNameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'First Name *',
-                  border: OutlineInputBorder(),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Add Emergency Contact'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: firstNameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'First Name *',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: lastNameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Last Name *',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: lastNameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Last Name *',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number *',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number *',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.phone,
                 ),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                onChanged: (v) => affiliation = v,
-                decoration: const InputDecoration(
-                  labelText: 'Relationship/Affiliation',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  hint: const Text('Relationship *'),
+                  items: _relationshipOptions.map((rel) {
+                    return DropdownMenuItem(value: rel, child: Text(rel));
+                  }).toList(),
+                  onChanged: (value) {
+                    setS(() => relationship = value);
+                  },
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(_, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (firstNameCtrl.text.trim().isNotEmpty &&
-                  lastNameCtrl.text.trim().isNotEmpty &&
-                  phoneCtrl.text.trim().isNotEmpty) {
-                Navigator.pop(_, true);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandPrimary,
-              foregroundColor: Colors.white,
+              ],
             ),
-            child: const Text('Add'),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (firstNameCtrl.text.trim().isNotEmpty &&
+                    lastNameCtrl.text.trim().isNotEmpty &&
+                    phoneCtrl.text.trim().isNotEmpty &&
+                    relationship != null) {
+                  Navigator.pop(ctx, true);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -1083,15 +1077,40 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ..firstName = firstNameCtrl.text.trim()
           ..lastName = lastNameCtrl.text.trim()
           ..phoneNumber = phoneCtrl.text.trim()
-          ..affiliation = affiliation);
+          ..relationship = relationship);
       });
     }
   }
 
-  void _deleteEmergencyContact(int index) {
-    setState(() {
-      _emergencyContacts.removeAt(index);
-    });
+  Future<void> _confirmDeleteEmergencyContact(int index) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Contact'),
+        content: const Text('Are you sure you want to remove this emergency contact?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _emergencyContacts.removeAt(index);
+      });
+    }
   }
 
   Future<void> _showAddMedicalCondition({String? prefill}) async {
@@ -1201,10 +1220,35 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     }
   }
 
-  void _deleteMedicalCondition(int index) {
-    setState(() {
-      _medicalConditions.removeAt(index);
-    });
+  Future<void> _confirmDeleteMedicalCondition(int index) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Condition'),
+        content: const Text('Are you sure you want to remove this medical condition?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _medicalConditions.removeAt(index);
+      });
+    }
   }
 
   Future<void> _showAddAllergy() async {
@@ -1313,10 +1357,35 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     }
   }
 
-  void _deleteAllergy(int index) {
-    setState(() {
-      _allergies.removeAt(index);
-    });
+  Future<void> _confirmDeleteAllergy(int index) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Allergy'),
+        content: const Text('Are you sure you want to remove this allergy?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _allergies.removeAt(index);
+      });
+    }
   }
 
   Future<void> _showAddPastPregnancy() async {
@@ -1465,7 +1534,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: isEstimated[i],
+                          onChanged: (v) => setS(() => isEstimated[i] = v ?? false),
+                        ),
+                        const Text('Date is estimated'),
+                      ],
+                    ),
                     if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') ...[
+                      const SizedBox(height: 8),
                       TextField(
                         controller: placeCtrls[i],
                         decoration: const InputDecoration(
@@ -1533,13 +1612,38 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     }
   }
 
-  void _deletePastPregnancy(int index) {
-    setState(() {
-      _pastPregnancies.removeAt(index);
-      if (_pastPregnancies.isEmpty) {
-        _hasPastPregnancy = false;
-      }
-    });
+  Future<void> _confirmDeletePastPregnancy(int index) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Pregnancy Record'),
+        content: const Text('Are you sure you want to remove this past pregnancy record?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _pastPregnancies.removeAt(index);
+        if (_pastPregnancies.isEmpty) {
+          _hasPastPregnancy = false;
+        }
+      });
+    }
   }
 
   // ── Step Content Builders ────────────────────────────
@@ -1570,10 +1674,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   // ──────────────── Step 0 : Personal ────────────────
 
   Widget _stepPersonal() {
-    final age = _birthdate != null
-        ? (DateTime.now().difference(_birthdate!).inDays / 365.25).floor()
-        : null;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1583,7 +1683,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             Expanded(
               flex: 3,
               child: AppInputField(
-                hintText: 'First Name',
+                hintText: 'First Name *',
                 controller: _firstNameCtrl,
                 isRequired: true,
                 errorText: _firstNameError,
@@ -1614,7 +1714,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             Expanded(
               flex: 3,
               child: AppInputField(
-                hintText: 'Last Name',
+                hintText: 'Last Name *',
                 controller: _lastNameCtrl,
                 isRequired: true,
                 errorText: _lastNameError,
@@ -1635,7 +1735,13 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         const SizedBox(height: 24),
         
         _sectionLabel('Birthdate'),
-        GestureDetector(
+        AppInputField(
+          hintText: 'Birthdate',
+          controller: _birthdateCtrl,
+          isRequired: true,
+          leadingIcon: Icons.cake_outlined,
+          readOnly: true,
+          errorText: _birthdateError,
           onTap: () async {
             final picked = await showDatePicker(
               context: context,
@@ -1651,26 +1757,16 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               _validateBirthdate();
             }
           },
-          child: IgnorePointer(
-            child: AppInputField(
-              hintText: 'Birthdate',
-              controller: _birthdateCtrl,
-              isRequired: true,
-              leadingIcon: Icons.cake_outlined,
-              readOnly: true,
-              errorText: _birthdateError,
-            ),
-          ),
         ),
-        if (age != null) ...[
+        if (_calculatedAge != null) ...[
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.only(left: 16),
             child: Text(
-              'Age: $age years old',
+              'Age: $_calculatedAge years old',
               style: TextStyle(
                 fontSize: 12,
-                color: age < 10 || age > 50 ? AppColors.error : AppColors.textSecondary,
+                color: (_calculatedAge! < 10 || _calculatedAge! > 50) ? AppColors.error : AppColors.textSecondary,
               ),
             ),
           ),
@@ -1679,9 +1775,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.only(left: 16),
-            child: Text(
-              _riskWarning!,
-              style: const TextStyle(fontSize: 12, color: AppColors.warning),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
+                const SizedBox(width: 6),
+                Expanded(child: Text(_riskWarning!, style: const TextStyle(fontSize: 12, color: AppColors.warning))),
+              ],
             ),
           ),
         ],
@@ -1689,7 +1788,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         
         _sectionLabel('Contact'),
         AppInputField(
-          hintText: 'Phone Number',
+          hintText: 'Phone Number *',
           controller: _phoneCtrl,
           isRequired: true,
           leadingIcon: Icons.phone_outlined,
@@ -1703,7 +1802,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         AppInputField(
           hintText: 'Email Address',
           controller: _emailCtrl,
-          isRequired: true,
           leadingIcon: Icons.email_outlined,
           keyboardType: TextInputType.emailAddress,
           onChanged: _onEmailChanged,
@@ -1809,7 +1907,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: _selectedExtension.isEmpty ? null : _selectedExtension,
-          hint: const Text('Ext. (Jr., III)', style: TextStyle(color: AppColors.textSecondary)),
+          hint: const Text('Extension Name (Jr., III)', style: TextStyle(color: AppColors.textSecondary)),
           isExpanded: true,
           icon: const Icon(Icons.arrow_drop_down),
           items: _extensionOptions.map((ext) {
@@ -1971,8 +2069,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 (e) => _itemCard(
                   leading: _iconAvatar(Icons.person_outline),
                   title: '${e.value.firstName} ${e.value.lastName}',
-                  subtitle: '${e.value.phoneNumber}${e.value.affiliation != null ? ' - ${e.value.affiliation}' : ''}',
-                  onDelete: () => _deleteEmergencyContact(e.key),
+                  subtitle: '${e.value.phoneNumber} - ${e.value.relationship ?? "No relationship"}',
+                  onDelete: () => _confirmDeleteEmergencyContact(e.key),
                 ),
               ),
       ],
@@ -2027,9 +2125,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             padding: const EdgeInsets.only(left: 16),
             child: Row(
               children: [
-                Text('BMI: $_calculatedBMI', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                Text('BMI: ${_calculatedBMI!.toStringAsFixed(1)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                 const SizedBox(width: 8),
-                _bmiTag(double.parse(_calculatedBMI!)),
+                _bmiTag(_calculatedBMI!),
               ],
             ),
           ),
@@ -2037,16 +2135,22 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             const SizedBox(height: 4),
             Padding(
               padding: const EdgeInsets.only(left: 16),
-              child: Text(_bmiWarning!, style: const TextStyle(fontSize: 12, color: AppColors.warning)),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 12, color: AppColors.warning),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(_bmiWarning!, style: const TextStyle(fontSize: 12, color: AppColors.warning))),
+                ],
+              ),
             ),
           ],
         ],
         const SizedBox(height: 20),
-        _sectionLabel('Blood Type (optional)'),
+        _sectionLabel('Blood Type'),
         _styledDropdown(
           hint: 'Select Blood Type',
           value: _bloodType,
-          items: const ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'],
+          items: _bloodTypeOptions,
           icon: Icons.bloodtype_outlined,
           onChanged: (v) => setState(() => _bloodType = v),
         ),
@@ -2104,7 +2208,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     if (e.value.diagnosisDate != null) _dateFmt.format(e.value.diagnosisDate!),
                     if (e.value.remarks != null) e.value.remarks!,
                   ].join(' - '),
-                                  onDelete: () => _deleteMedicalCondition(e.key),
+                  onDelete: () => _confirmDeleteMedicalCondition(e.key),
                 ),
               ),
       ],
@@ -2148,7 +2252,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     e.value.status == 'active' ? 'Active' : 'Resolved',
                     if (e.value.treatment != null) e.value.treatment!,
                   ].join(' - '),
-                  onDelete: () => _deleteAllergy(e.key),
+                  onDelete: () => _confirmDeleteAllergy(e.key),
                 ),
               ),
       ],
@@ -2220,7 +2324,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 leading: _iconAvatar(Icons.pregnant_woman_outlined),
                 title: _pastPregnancyTitle(p),
                 subtitle: _pastPregnancySubtitle(p),
-                onDelete: () => _deletePastPregnancy(e.key),
+                onDelete: () => _confirmDeletePastPregnancy(e.key),
               );
             }),
         ],
@@ -2249,7 +2353,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             : _outcomeLabel(e.value.outcome))
         .join(' | ');
 
-    return '$dateText\n$outcomeText';
+    final gaText = p.gestationalAgeAtEnd != null 
+        ? ' - ${p.gestationalAgeAtEnd!.toStringAsFixed(1)} weeks'
+        : '';
+
+    return '$dateText\n$outcomeText$gaText';
   }
 
   String _outcomeLabel(String outcome) {
@@ -2303,15 +2411,13 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               );
               if (picked != null) setState(() => _updateFromLmp(picked));
             },
-            child: IgnorePointer(
-              child: AppInputField(
-                hintText: 'Last Menstrual Period',
-                controller: _lmpCtrl,
-                isRequired: true,
-                leadingIcon: Icons.calendar_today_outlined,
-                readOnly: true,
-                errorText: _gestationError,
-              ),
+            child: AppInputField(
+              hintText: 'Last Menstrual Period',
+              controller: _lmpCtrl,
+              isRequired: true,
+              leadingIcon: Icons.calendar_today_outlined,
+              readOnly: true,
+              errorText: _gestationError,
             ),
           )
         else if (_gestationMethod == _GestationMethod.edd)
@@ -2325,15 +2431,13 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               );
               if (picked != null) setState(() => _updateFromEdd(picked));
             },
-            child: IgnorePointer(
-              child: AppInputField(
-                hintText: 'Estimated Delivery Date',
-                controller: _eddCtrl,
-                isRequired: true,
-                leadingIcon: Icons.event_available_outlined,
-                readOnly: true,
-                errorText: _gestationError,
-              ),
+            child: AppInputField(
+              hintText: 'Estimated Delivery Date',
+              controller: _eddCtrl,
+              isRequired: true,
+              leadingIcon: Icons.event_available_outlined,
+              readOnly: true,
+              errorText: _gestationError,
             ),
           )
         else
@@ -2433,6 +2537,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           [
             _summaryRow('Full Name', fullName.isEmpty ? '-' : fullName),
             _summaryRow('Birthdate', _birthdate != null ? _dateFmt.format(_birthdate!) : '-'),
+            _summaryRow('Age', _calculatedAge != null ? '$_calculatedAge years' : '-'),
             _summaryRow('Phone', _phoneCtrl.text.trim().isEmpty ? '-' : _phoneCtrl.text.trim()),
             _summaryRow('Email', _emailCtrl.text.trim().isEmpty ? '-' : _emailCtrl.text.trim()),
           ],
@@ -2455,7 +2560,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           'Vital Statistics',
           [
             _summaryRow('Height / Weight', '${_heightCtrl.text.trim().isEmpty ? '-' : _heightCtrl.text.trim()} cm / ${_weightCtrl.text.trim().isEmpty ? '-' : _weightCtrl.text.trim()} kg'),
-            _summaryRow('BMI', _calculatedBMI != null ? '$_calculatedBMI ($_bmiClassification)' : '-'),
+            _summaryRow('BMI', _calculatedBMI != null ? '${_calculatedBMI!.toStringAsFixed(1)} ($_bmiClassification)' : '-'),
             _summaryRow('Blood Type', _bloodType ?? '-'),
           ],
           onTap: () => _jumpToStep(3),
@@ -2478,7 +2583,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         // Records Section
         _buildExpandableRecordsSection(
           'Emergency Contacts',
-          _emergencyContacts.map((c) => '${c.firstName} ${c.lastName} - ${c.phoneNumber}').toList(),
+          _emergencyContacts.map((c) => '${c.firstName} ${c.lastName} - ${c.phoneNumber} (${c.relationship ?? "No relationship"})').toList(),
           onTap: () => _jumpToStep(2),
         ),
         const SizedBox(height: 12),
@@ -2515,7 +2620,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.warning_amber, color: AppColors.warning),
+                Icon(Icons.warning_amber, color: AppColors.warning),
                 const SizedBox(width: 8),
                 Expanded(child: Text(_riskWarning!, style: const TextStyle(color: AppColors.warning))),
               ],
@@ -2824,12 +2929,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     );
   }
 
-  void _riskHint(String text, {bool isError = false}) {}
-
   // ──────────────── OCR (placeholder) ────────────────
 
   Future<void> _startOcrFlow() async {
-    // OCR implementation from original file
+    // OCR implementation - will be added in future iteration
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('OCR feature coming soon'), backgroundColor: AppColors.info),
     );

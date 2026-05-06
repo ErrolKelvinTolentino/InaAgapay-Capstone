@@ -1,5 +1,4 @@
-// lib/screens/auth/register_screen.dart
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
@@ -8,6 +7,7 @@ import '../../widgets/clickable_text.dart';
 import '../../widgets/page_title.dart';
 import '../../widgets/password_constraints.dart';
 import '../../widgets/password_strength_indicator.dart';
+import '../../widgets/dialog_box.dart';
 import '../../services/supabase_service.dart';
 import '../../models/password_strength.dart';
 
@@ -19,7 +19,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
@@ -28,6 +28,66 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
   bool _hasError = false;
   String _errorMessage = '';
+  bool _contactExists = false;
+  bool _checkingContact = false;
+  Timer? _contactTimer;
+
+  @override
+  void dispose() {
+    _contactTimer?.cancel();
+    _contactController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  void _onContactChanged() {
+    _contactTimer?.cancel();
+    final contact = _contactController.text.trim();
+    
+    if (contact.isEmpty) {
+      setState(() {
+        _contactExists = false;
+        _checkingContact = false;
+        _hasError = false;
+        _errorMessage = '';
+      });
+      return;
+    }
+    
+    final isEmail = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact);
+    final isPhone = SupabaseService.isValidPhilippineNumber(contact);
+    
+    if (!isEmail && !isPhone) {
+      setState(() {
+        _contactExists = false;
+        _checkingContact = false;
+      });
+      return;
+    }
+    
+    setState(() => _checkingContact = true);
+    _contactTimer = Timer(const Duration(milliseconds: 500), () async {
+      final exists = isEmail
+          ? !(await SupabaseService.isEmailAvailable(contact))
+          : !(await SupabaseService.isPhoneNumberAvailable(contact));
+          
+      if (mounted) {
+        setState(() {
+          _contactExists = exists;
+          _checkingContact = false;
+        });
+      }
+    });
+  }
+
+  String? _getContactType() {
+    final contact = _contactController.text.trim();
+    if (contact.isEmpty) return null;
+    if (RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact)) return 'email';
+    if (SupabaseService.isValidPhilippineNumber(contact)) return 'phone';
+    return 'invalid';
+  }
 
   PasswordStrength _calculateStrength(String password) {
     int met = 0;
@@ -42,20 +102,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return PasswordStrength.strong;
   }
 
-  bool get _isEmailValid {
-    final email = _emailController.text.trim();
-    return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
+  bool get _isContactValid {
+    final type = _getContactType();
+    return type == 'email' || type == 'phone';
   }
+
+  bool get _isContactAvailable => !_contactExists && _isContactValid && _contactController.text.isNotEmpty;
 
   bool get _passwordsMatch =>
       _confirmPasswordController.text.isNotEmpty &&
       _passwordController.text == _confirmPasswordController.text;
 
   bool get _canSubmit =>
-      _isEmailValid &&
+      _isContactAvailable &&
       _calculateStrength(_passwordController.text) == PasswordStrength.strong &&
       _passwordsMatch &&
-      !_isLoading;
+      !_isLoading &&
+      !_checkingContact;
 
   Future<void> _handleRegister() async {
     if (!_canSubmit) return;
@@ -65,20 +128,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _hasError = false;
     });
 
+    final contactType = _getContactType();
+    final channel = contactType == 'email' ? 'email' : 'sms';
+
     final response = await SupabaseService.registerWithOTP(
-      _emailController.text.trim(),
-      _passwordController.text,
+      contact: _contactController.text.trim(),
+      password: _passwordController.text,
+      channel: channel,
     );
 
     setState(() => _isLoading = false);
     if (!mounted) return;
 
     if (response['success']) {
-      // Navigate to OTP verification
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DialogBox(
+          type: DialogType.success,
+          title: 'Verification Code Sent',
+          content: 'A verification code has been sent to your ${channel == 'email' ? 'email' : 'phone'}.',
+          buttonText: 'Continue',
+          onPressed: () => Navigator.pop(context),
+        ),
+      );
+      
       Navigator.pushNamed(
         context,
         '/verify-otp',
-        arguments: _emailController.text.trim(),
+        arguments: {
+          'contact': _contactController.text.trim(),
+          'channel': channel,
+        },
       );
     } else {
       setState(() {
@@ -91,6 +172,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final strength = _calculateStrength(_passwordController.text);
+    final contactType = _getContactType();
+    
+    String? helperText;
+    if (_contactController.text.isNotEmpty && contactType == 'invalid') {
+      helperText = 'Please enter a valid email address or Philippine mobile number (e.g., 09123456789)';
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
@@ -100,42 +187,105 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Column(
             children: [
               const SizedBox(height: 32),
-              const Text(
-                'Inaagapay',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFDE3A53),
-                ),
+              
+              // Logo
+              Image.asset('assets/images/logo.png', height: 100),
+              const SizedBox(height: 12),
+
+              // App Name
+              Image.asset(
+                'assets/images/inaagapay_name.png',
+                width: 210,
+                fit: BoxFit.contain,
               ),
               const SizedBox(height: 24),
+
               const PageTitle(
                 title: 'Create Account',
-                leadingIcon: Icons.person,
-                trailingIcon: Icons.check,
+                leadingIcon: Icons.account_circle,
+                trailingIcon: Icons.keyboard_arrow_down,
+                color: AppColors.brandText,
               ),
+              
               const SizedBox(height: 24),
               
-              // Email
+              // Contact Field (Email or Phone - single field)
               AppInputField(
-                hintText: 'Email Address',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                leadingIcon: Icons.email_outlined,
+                hintText: 'Email or Phone Number',
+                controller: _contactController,
+                keyboardType: TextInputType.text,
+                leadingIcon: Icons.person_outline,
                 isRequired: true,
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) {
+                  _onContactChanged();
+                  setState(() {});
+                },
               ),
-              if (_emailController.text.isNotEmpty && !_isEmailValid) ...[
+              
+              if (helperText != null) ...[
                 const SizedBox(height: 8),
-                const Padding(
-                  padding: EdgeInsets.only(left: 16),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
                   child: Text(
-                    'Enter a valid email address',
-                    style: TextStyle(fontSize: 12, color: AppColors.error),
+                    helperText,
+                    style: const TextStyle(fontSize: 12, color: AppColors.warning),
+                  ),
+                ),
+              ] else if (_contactController.text.isNotEmpty && !_checkingContact && !_contactExists && _isContactValid) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, size: 16, color: AppColors.success),
+                      const SizedBox(width: 6),
+                      Text(
+                        contactType == 'email' ? 'Email is available' : 'Phone number is available',
+                        style: const TextStyle(fontSize: 12, color: AppColors.success),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (_contactController.text.isNotEmpty && _contactExists) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cancel, size: 16, color: AppColors.error),
+                      const SizedBox(width: 6),
+                      Text(
+                        contactType == 'email' ? 'Email already exists' : 'Phone number already exists',
+                        style: const TextStyle(fontSize: 12, color: AppColors.error),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (_contactController.text.isNotEmpty && _checkingContact) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          color: AppColors.brandAccent,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Checking availability...',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    ],
                   ),
                 ),
               ],
-              const SizedBox(height: 16),
+              
+              const SizedBox(height: 24),
               
               // Password
               AppInputField(
@@ -184,7 +334,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.error.withOpacity(0.1),
+                    color: AppColors.error.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(

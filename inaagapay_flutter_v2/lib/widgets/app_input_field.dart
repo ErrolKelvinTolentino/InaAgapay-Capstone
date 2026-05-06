@@ -97,7 +97,7 @@ class _AppInputFieldState extends State<AppInputField> {
                       keyboardType: widget.keyboardType,
                       readOnly: widget.readOnly,
                       inputFormatters: widget.inputFormatters,
-                      onTap: widget.readOnly ? null : widget.onTap,
+                      onTap: widget.onTap,
                       onChanged: widget.onChanged,
                       style: TextStyle(
                         color: widget.readOnly
