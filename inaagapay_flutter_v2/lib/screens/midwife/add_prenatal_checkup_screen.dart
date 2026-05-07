@@ -110,7 +110,6 @@ class _RiskFactorItem {
 class _RiskSnapshot {
   _RiskSnapshot({
     required this.level,
-    required this.score,
     required this.factors,
     required this.notableRecords,
     required this.suggestedActions,
@@ -120,7 +119,6 @@ class _RiskSnapshot {
   });
 
   final String level;
-  final double score;
   final List<_RiskFactorItem> factors;
   final List<String> notableRecords;
   final List<String> suggestedActions;
@@ -655,14 +653,14 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
         : 'Continue routine prenatal follow-up and monitor for new warning signs.';
 
     final riskIntro =
-        'Risk classification: ${_riskLevelLabel(snapshot.level)} based on current prenatal checkup values, obstetric history, and rule-based screening.';
+        'Risk classification: ${_riskLevelLabel(snapshot.level)} based on current prenatal checkup findings.';
     final signals =
-        'Clinical signals: gestational age $gaText, blood pressure $currentBp, and a trigger score of ${snapshot.score.toStringAsFixed(0)}.';
+        'Clinical signals: gestational age $gaText, blood pressure $currentBp.';
     final concernText = highFactors.isEmpty
-        ? 'No high-risk trigger is currently detected from available records.'
-        : 'Key concern(s): ${highFactors.join(', ')}.';
+        ? 'No abnormal findings are currently detected from available records.'
+        : 'Finding(s): ${highFactors.join(', ')}.';
     final summaryText =
-        factorSummary.isNotEmpty ? 'Notable factors: $factorSummary.' : '';
+        factorSummary.isNotEmpty ? 'Notable items: $factorSummary.' : '';
 
     return '$riskIntro $signals $concernText $summaryText Priority next step: $keyAction';
   }
@@ -689,7 +687,6 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   }
 
   _RiskSnapshot _buildRuleBasedRiskSnapshot() {
-    double score = 0;
     final factors = <_RiskFactorItem>[];
     final notable = <String>[];
     final actions = <String>[];
@@ -699,39 +696,16 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     final conditions =
         (_motherRiskContext?['medical_conditions'] as List? ?? const [])
             .cast<dynamic>();
-    final allergies =
-        (_motherRiskContext?['allergies'] as List? ?? const []).cast<dynamic>();
     final pastPregnancies =
         (_motherRiskContext?['past_pregnancies'] as List? ?? const [])
             .cast<dynamic>();
     final pastPregnancyOutcomes =
         (_motherRiskContext?['past_pregnancy_outcomes'] as List? ?? const [])
             .cast<dynamic>();
-    final previousCheckups =
-        (_motherRiskContext?['previous_checkups'] as List? ?? const [])
-            .cast<dynamic>();
 
     final currentLmp =
         _tryDate(pregnancy?['last_menstrual_period']) ?? widget.lmp;
     final today = DateTime.now();
-
-    final Map<int, List<Map<String, dynamic>>> outcomesByPregnancy = {};
-    for (final row in pastPregnancyOutcomes) {
-      if (row is! Map<String, dynamic>) continue;
-      final pid = row['pregnancy_id'] as int?;
-      if (pid == null) continue;
-      outcomesByPregnancy
-          .putIfAbsent(pid, () => <Map<String, dynamic>>[])
-          .add(row);
-    }
-
-    int recurrentLossCount = 0;
-    int stillbirthCount = 0;
-    int ectopicCount = 0;
-    int pretermCount = 0;
-    int priorMultifetalCount = 0;
-    DateTime? latestHistoricalOutcome;
-    final historicalOutcomes = <String>[];
 
     final systolic = int.tryParse(_sysCtrl.text.trim());
     final diastolic = int.tryParse(_diaCtrl.text.trim());
@@ -739,558 +713,100 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     final gaCurrent =
         currentLmp != null ? today.difference(currentLmp).inDays ~/ 7 : null;
 
-    final age = _ageFromBirthdate(_tryDate(mother?['birthdate']));
-    if (age != null) {
-      notable.add('Maternal age: $age years');
-      if (age < 18) {
-        score += 30;
+    if (gaCurrent != null) {
+      notable.add('Current gestational age estimate: $gaCurrent weeks');
+    }
+
+    // High Risk Triggers (Binary)
+    bool isHigh = false;
+
+    // 1. Blood Pressure Thresholds
+    if (systolic != null && diastolic != null) {
+      notable.add('Current BP: $systolic/$diastolic mmHg');
+      if (systolic >= 140 || diastolic >= 90) {
+        isHigh = true;
         factors.add(_RiskFactorItem(
-          factor: 'Teenage pregnancy (<18 years)',
+          factor: 'High blood pressure (>=140/90)',
           influence: 'high',
-          sourceTable: 'mothers',
-          sourceId: widget.motherId,
         ));
-        actions.add(
-            'Provide adolescent-focused high-risk counseling and close follow-up.');
-      } else if (age >= 35) {
-        score += 18;
-        factors.add(_RiskFactorItem(
-          factor: 'Advanced maternal age (>=35 years)',
-          influence: 'high',
-          sourceTable: 'mothers',
-          sourceId: widget.motherId,
-        ));
-        actions.add(
-            'Monitor blood pressure and fetal growth more closely due to age-related risk.');
-      } else if (age >= 30) {
-        score += 6;
-        factors.add(_RiskFactorItem(
-          factor: 'Age 30-34 years (moderate baseline obstetric risk)',
-          influence: 'low',
-          sourceTable: 'mothers',
-          sourceId: widget.motherId,
-        ));
+        actions.add('Monitor blood pressure closely and screen for preeclampsia.');
       }
     }
 
-    final height = (mother?['height'] as num?)?.toDouble();
-    final weightNow = double.tryParse(_weightCtrl.text.trim()) ??
-        (mother?['weight'] as num?)?.toDouble();
-    if (height != null && weightNow != null && height > 0) {
-      final bmi = weightNow / ((height / 100) * (height / 100));
-      notable
-          .add('Estimated BMI from height/weight: ${bmi.toStringAsFixed(1)}');
-      if (bmi < 18.5) {
-        score += 10;
+    // 2. Fetal Heart Rate Thresholds
+    if (fetalBeat != null) {
+      notable.add('Fetal heart rate: $fetalBeat bpm');
+      if (fetalBeat < 110 || fetalBeat > 160) {
+        isHigh = true;
         factors.add(_RiskFactorItem(
-          factor: 'Underweight BMI (<18.5)',
-          influence: 'low',
-          sourceTable: 'mothers',
-          sourceId: widget.motherId,
-        ));
-      } else if (bmi >= 30) {
-        score += 20;
-        factors.add(_RiskFactorItem(
-          factor: 'Obese BMI (>=30)',
+          factor: 'Abnormal fetal heart rate ($fetalBeat bpm)',
           influence: 'high',
-          sourceTable: 'mothers',
-          sourceId: widget.motherId,
         ));
-      } else if (bmi >= 25) {
-        score += 8;
+        actions.add('Repeat fetal heart monitoring; correlate with fetal movement.');
+      }
+    }
+
+    // 3. Edema
+    if (_edema == 'moderate' || _edema == 'severe') {
+      isHigh = true;
+      factors.add(_RiskFactorItem(
+        factor: 'Significant edema ($_edema)',
+        influence: 'high',
+      ));
+    }
+
+    // 4. Danger Symptoms
+    final dangerSymptomsFiltered =
+        _symptoms.where((s) => s.riskCategory == 'danger').toList();
+    if (dangerSymptomsFiltered.isNotEmpty) {
+      isHigh = true;
+      for (final s in dangerSymptomsFiltered) {
         factors.add(_RiskFactorItem(
-          factor: 'Overweight BMI (25-29.9)',
+          factor: 'Danger symptom: ${s.name}',
+          influence: 'high',
+        ));
+      }
+      actions.add('Prioritize immediate danger sign protocol and referral if needed.');
+    }
+
+    // 5. Medical History & Pregnancy Context (Watch Items)
+    final age = _ageFromBirthdate(_tryDate(mother?['birthdate']));
+    if (age != null) {
+      if (age < 18 || age >= 35) {
+        factors.add(_RiskFactorItem(
+          factor: 'Maternal age factor ($age years)',
           influence: 'low',
-          sourceTable: 'mothers',
-          sourceId: widget.motherId,
         ));
       }
     }
 
     if (_fetalCount > 1) {
-      // Multifetal gestation is treated as an automatic high-risk baseline.
-      score = score < 40 ? 40 : score + 24;
       factors.add(_RiskFactorItem(
-        factor: 'Current multifetal gestation (fetal count: $_fetalCount)',
-        influence: 'high',
-        sourceTable: 'pregnancies',
-        sourceId: widget.pregnancyId,
+        factor: 'Multifetal gestation ($_fetalCount)',
+        influence: 'low',
       ));
-      notable.add('Current pregnancy fetal count: $_fetalCount');
-      actions.add(
-          'Use closer surveillance for preterm labor, hypertensive disorders, and fetal growth in multifetal pregnancy.');
-    }
-
-    if (gaCurrent != null) {
-      notable.add('Current gestational age estimate: $gaCurrent weeks');
-      if (gaCurrent < 8) {
-        score += 5;
-        factors.add(_RiskFactorItem(
-          factor:
-              'Very early gestation (<8 weeks) with limited clinical trend data',
-          influence: 'low',
-          sourceTable: 'pregnancies',
-          sourceId: widget.pregnancyId,
-        ));
-      }
+      actions.add('Monitor closely for preterm labor and growth in multifetal pregnancy.');
     }
 
     for (final row in conditions) {
       final map = row as Map<String, dynamic>;
-      final status = (map['status'] ?? '').toString().toLowerCase();
-      if (status != 'active') continue;
-      final name = (map['condition_name'] ?? '').toString();
-      final lower = name.toLowerCase();
-      int conditionScore = 10;
-      String influence = 'low';
-      if (lower.contains('hypertension') ||
-          lower.contains('diabetes') ||
-          lower.contains('heart') ||
-          lower.contains('kidney') ||
-          lower.contains('lupus') ||
-          lower.contains('epilepsy') ||
-          lower.contains('thyroid')) {
-        conditionScore = 24;
-        influence = 'high';
-      } else if (lower.contains('anemia') || lower.contains('asthma')) {
-        conditionScore = 14;
-        influence = 'low';
-      }
-      score += conditionScore;
-      factors.add(_RiskFactorItem(
-        factor: 'Active medical condition: $name',
-        influence: influence,
-        sourceTable: 'medical_conditions',
-        sourceId: widget.motherId,
-      ));
-    }
-
-    final activeConditionCount = conditions.where((row) {
-      final map = row as Map<String, dynamic>;
-      return (map['status'] ?? '').toString().toLowerCase() == 'active';
-    }).length;
-    if (activeConditionCount >= 2) {
-      score += 10;
-      factors.add(_RiskFactorItem(
-        factor: 'Multiple active chronic conditions ($activeConditionCount)',
-        influence: 'high',
-        sourceTable: 'medical_conditions',
-        sourceId: widget.motherId,
-      ));
-      actions.add(
-          'Coordinate integrated management plan for multiple comorbidities with physician review.');
-    }
-
-    final activeAllergies = allergies.where((row) {
-      final map = row as Map<String, dynamic>;
-      return (map['status'] ?? '').toString().toLowerCase() == 'active';
-    }).toList();
-    if (activeAllergies.isNotEmpty) {
-      final severeAllergy = activeAllergies.any((row) {
-        final map = row as Map<String, dynamic>;
-        final allergen = (map['allergen'] ?? '').toString().toLowerCase();
-        return allergen.contains('anaphyl') ||
-            allergen.contains('penicillin') ||
-            allergen.contains('drug') ||
-            allergen.contains('antibiotic');
-      });
-      score += severeAllergy ? 10 : 4;
-      factors.add(_RiskFactorItem(
-        factor:
-            'Active allergy history (${activeAllergies.length})${severeAllergy ? ' with potential severe trigger' : ''}',
-        influence: severeAllergy ? 'high' : 'low',
-        sourceTable: 'allergies',
-        sourceId: widget.motherId,
-      ));
-      notable.add('Has active allergies (${activeAllergies.length})');
-      actions.add(
-          'Verify medication allergies before prescribing supplements or antibiotics.');
-    }
-
-    for (final row in pastPregnancies) {
-      final map = row as Map<String, dynamic>;
-      final pid = map['pregnancy_id'] as int?;
-      final fetalCount = (map['fetal_count'] as num?)?.toInt() ?? 1;
-      if (fetalCount > 1) {
-        priorMultifetalCount++;
-      }
-
-      final outcomeRows = <Map<String, dynamic>>[];
-      if (pid != null && outcomesByPregnancy.containsKey(pid)) {
-        outcomeRows.addAll(outcomesByPregnancy[pid]!);
-      }
-      if (outcomeRows.isEmpty && map['outcome'] != null) {
-        outcomeRows.add({
-          'pregnancy_id': pid,
-          'outcome': map['outcome'],
-          'outcome_date': map['outcome_date'],
-          'gestational_age_at_end': map['gestational_age_at_end'],
-        });
-      }
-
-      for (final o in outcomeRows) {
-        final outcome = (o['outcome'] ?? '').toString();
-        final lower = outcome.toLowerCase();
-        final outcomeDate = _tryDate(o['outcome_date']);
-        final gaEnd = (o['gestational_age_at_end'] as num?)?.toDouble() ??
-            (map['gestational_age_at_end'] as num?)?.toDouble();
-
-        if (outcomeDate != null) {
-          if (latestHistoricalOutcome == null ||
-              outcomeDate.isAfter(latestHistoricalOutcome)) {
-            latestHistoricalOutcome = outcomeDate;
-          }
-        }
-
-        historicalOutcomes.add(
-            '$outcome${outcomeDate != null ? ' (${DateFormat('yyyy-MM-dd').format(outcomeDate)})' : ''}');
-
-        if (lower == 'miscarriage' || lower == 'abortion') recurrentLossCount++;
-        if (lower == 'stillbirth') stillbirthCount++;
-        if (lower == 'ectopic') ectopicCount++;
-        if ((lower == 'live_birth' || lower == 'stillbirth') &&
-            gaEnd != null &&
-            gaEnd < 37) {
-          pretermCount++;
-        }
-
-        if (lower == 'stillbirth' ||
-            lower == 'miscarriage' ||
-            lower == 'ectopic') {
-          score += 18;
-          factors.add(_RiskFactorItem(
-            factor: 'History of $lower pregnancy outcome',
-            influence: 'high',
-            sourceTable: 'pregnancies',
-            sourceId: pid,
-          ));
-        }
-
-        if (currentLmp != null && outcomeDate != null) {
-          final daysGap = currentLmp.difference(outcomeDate).inDays;
-          if (daysGap > 0 && daysGap < 180) {
-            score += 20;
-            factors.add(_RiskFactorItem(
-              factor: 'Short interpregnancy interval ($daysGap days)',
-              influence: 'high',
-              sourceTable: 'pregnancies',
-              sourceId: pid,
-            ));
-          } else if (daysGap >= 180 && daysGap < 365) {
-            score += 10;
-            factors.add(_RiskFactorItem(
-              factor: 'Interpregnancy interval under 12 months ($daysGap days)',
-              influence: 'low',
-              sourceTable: 'pregnancies',
-              sourceId: pid,
-            ));
-          }
-        }
-      }
-    }
-
-    if (historicalOutcomes.isNotEmpty) {
-      notable
-          .add('Historical outcomes: ${historicalOutcomes.take(8).join(', ')}');
-    }
-    if (recurrentLossCount >= 2) {
-      score += 22;
-      factors.add(_RiskFactorItem(
-        factor: 'Recurrent pregnancy loss history ($recurrentLossCount)',
-        influence: 'high',
-        sourceTable: 'pregnancies',
-        sourceId: widget.motherId,
-      ));
-      actions.add(
-          'Assess recurrent loss workup history and monitor early-pregnancy viability closely.');
-    }
-    if (stillbirthCount >= 1) {
-      actions.add(
-          'Plan closer fetal surveillance due to prior stillbirth history.');
-    }
-    if (ectopicCount >= 1) {
-      actions.add(
-          'Confirm pregnancy location and dating details if early-gestation uncertainty exists.');
-    }
-    if (pretermCount >= 1) {
-      score += 14;
-      factors.add(_RiskFactorItem(
-        factor: 'History of preterm delivery/preterm fetal loss',
-        influence: 'high',
-        sourceTable: 'pregnancies',
-        sourceId: widget.motherId,
-      ));
-      actions.add(
-          'Strengthen preterm labor counseling and symptom monitoring plan.');
-    }
-    if (priorMultifetalCount >= 1) {
-      score += 8;
-      factors.add(_RiskFactorItem(
-        factor: 'Prior multifetal pregnancy history',
-        influence: 'low',
-        sourceTable: 'pregnancies',
-        sourceId: widget.motherId,
-      ));
-    }
-
-    if (systolic != null && diastolic != null) {
-      notable.add('Current BP: $systolic/$diastolic mmHg');
-      if (systolic >= 160 || diastolic >= 110) {
-        score += 35;
+      if ((map['status'] ?? '').toString().toLowerCase() == 'active') {
         factors.add(_RiskFactorItem(
-          factor: 'Severely elevated blood pressure at checkup',
-          influence: 'high',
-          sourceTable: 'prenatal_checkups',
-        ));
-        actions.add(
-            'Recheck blood pressure and evaluate urgently for hypertensive disorders.');
-      } else if (systolic >= 140 || diastolic >= 90) {
-        score += 24;
-        factors.add(_RiskFactorItem(
-          factor: 'High blood pressure at checkup (>=140/90)',
-          influence: 'high',
-          sourceTable: 'prenatal_checkups',
-        ));
-        actions.add(
-            'Check urine protein and preeclampsia warning signs due to hypertensive range BP.');
-      } else if (systolic >= 130 || diastolic >= 80) {
-        score += 12;
-        factors.add(_RiskFactorItem(
-          factor: 'Borderline elevated blood pressure',
+          factor: 'Condition: ${map['condition_name']}',
           influence: 'low',
-          sourceTable: 'prenatal_checkups',
         ));
       }
     }
 
-    if (fetalBeat != null) {
-      notable.add('Fetal heart rate: $fetalBeat bpm');
-      if (fetalBeat < 110 || fetalBeat > 160) {
-        score += 26;
-        factors.add(_RiskFactorItem(
-          factor: 'Abnormal fetal heart rate ($fetalBeat bpm)',
-          influence: 'high',
-          sourceTable: 'prenatal_checkups',
-        ));
-        actions.add(
-            'Repeat fetal heart monitoring and correlate with fetal movement.');
-      }
-    } else if (gaCurrent != null && gaCurrent >= 20) {
-      score += 8;
-      factors.add(_RiskFactorItem(
-        factor: 'Missing fetal heart rate at >=20 weeks gestation',
-        influence: 'low',
-        sourceTable: 'prenatal_checkups',
-      ));
-      actions.add(
-          'Document fetal heart rate in this checkup to complete fetal surveillance.');
-    }
+    final level = isHigh ? 'high' : 'low';
 
-    if (_edema == 'moderate' || _edema == 'severe') {
-      score += _edema == 'severe' ? 20 : 12;
-      factors.add(_RiskFactorItem(
-        factor: '$_edema edema documented',
-        influence: _edema == 'severe' ? 'high' : 'low',
-        sourceTable: 'prenatal_checkups',
-      ));
-    }
-
-    if ((systolic != null && diastolic != null) &&
-        (systolic >= 140 || diastolic >= 90) &&
-        (_edema == 'moderate' || _edema == 'severe')) {
-      score += 16;
-      factors.add(_RiskFactorItem(
-        factor:
-            'Hypertension with edema pattern (possible preeclampsia warning)',
-        influence: 'high',
-        sourceTable: 'prenatal_checkups',
-      ));
-      actions.add(
-          'Escalate preeclampsia screening today (repeat BP, urine protein, severe symptom check).');
-    }
-
-    final warningSymptomsFiltered =
-        _symptoms.where((s) => s.riskCategory == 'warning').toList();
-    final dangerSymptomsFiltered =
-        _symptoms.where((s) => s.riskCategory == 'danger').toList();
-
-    double warningScoreAdded = 0;
-    for (final s in warningSymptomsFiltered) {
-      if (warningScoreAdded < 24) {
-        score += 6;
-        warningScoreAdded += 6;
-      }
-      factors.add(_RiskFactorItem(
-        factor: 'Warning symptom: ${s.name}',
-        influence: 'low',
-        sourceTable: 'pregnancy_symptoms',
-      ));
-      notable.add(
-          'Warning symptom: ${s.name}${(s.notes ?? '').trim().isEmpty ? '' : ' — ${s.notes!.trim()}'}');
-    }
-
-    double dangerScoreAdded = 0;
-    for (final s in dangerSymptomsFiltered) {
-      if (dangerScoreAdded < 36) {
-        score += 12;
-        dangerScoreAdded += 12;
-      }
-      factors.add(_RiskFactorItem(
-        factor: 'Danger symptom: ${s.name}',
-        influence: 'high',
-        sourceTable: 'pregnancy_symptoms',
-      ));
-      notable.add(
-          '⚠ Danger symptom: ${s.name}${(s.notes ?? '').trim().isEmpty ? '' : ' — ${s.notes!.trim()}'}');
-    }
-
-    if (dangerSymptomsFiltered.isNotEmpty) {
-      actions.add(
-          'Prioritize immediate danger sign protocol and referral if persistent.');
-    }
-
-    final dangerSymptomCount = dangerSymptomsFiltered.length;
-    if (dangerSymptomCount >= 2) {
-      score += 12;
-      factors.add(_RiskFactorItem(
-        factor:
-            'Multiple danger symptoms in current visit ($dangerSymptomCount)',
-        influence: 'high',
-        sourceTable: 'pregnancy_symptoms',
-      ));
-      actions.add(
-          'Consider urgent physician review due to multiple concurrent danger symptoms.');
-    }
-
-    if (previousCheckups.isNotEmpty) {
-      final latest = previousCheckups.first as Map<String, dynamic>;
-      final prevSys = latest['blood_pressure_systolic'] as int?;
-      final prevDia = latest['blood_pressure_diastolic'] as int?;
-      if (systolic != null &&
-          diastolic != null &&
-          prevSys != null &&
-          prevDia != null) {
-        final jumped =
-            (systolic - prevSys >= 20) || (diastolic - prevDia >= 15);
-        if (jumped) {
-          score += 10;
-          factors.add(_RiskFactorItem(
-            factor: 'Blood pressure increased significantly from prior checkup',
-            influence: 'low',
-            sourceTable: 'prenatal_checkups',
-            sourceId: latest['prenatal_checkup_id'] as int?,
-          ));
-          actions.add(
-              'Compare with previous checkup trends and reinforce BP warning signs.');
-        }
-      }
-
-      final highBpHistoryCount = previousCheckups.where((row) {
-        final map = row as Map<String, dynamic>;
-        final s = map['blood_pressure_systolic'] as int?;
-        final d = map['blood_pressure_diastolic'] as int?;
-        if (s == null || d == null) return false;
-        return s >= 140 || d >= 90;
-      }).length;
-      final highBpTotal = highBpHistoryCount +
-          (((systolic != null && diastolic != null) &&
-                  (systolic >= 140 || diastolic >= 90))
-              ? 1
-              : 0);
-      if (highBpTotal >= 2) {
-        score += 16;
-        factors.add(_RiskFactorItem(
-          factor:
-              'Repeated hypertensive readings across visits ($highBpTotal episodes)',
-          influence: 'high',
-          sourceTable: 'prenatal_checkups',
-          sourceId: latest['prenatal_checkup_id'] as int?,
-        ));
-        actions.add(
-            'Treat as persistent BP risk pattern and increase follow-up frequency.');
-      }
-
-      final priorFhrAbnormal = previousCheckups.where((row) {
-        final map = row as Map<String, dynamic>;
-        final fhr = map['fetal_heart_beat'] as int?;
-        return fhr != null && (fhr < 110 || fhr > 160);
-      }).length;
-      if (priorFhrAbnormal >= 1 &&
-          fetalBeat != null &&
-          (fetalBeat < 110 || fetalBeat > 160)) {
-        score += 14;
-        factors.add(_RiskFactorItem(
-          factor: 'Recurrent abnormal fetal heart rate trend',
-          influence: 'high',
-          sourceTable: 'prenatal_checkups',
-          sourceId: latest['prenatal_checkup_id'] as int?,
-        ));
-      }
-
-      final previousWeight = (latest['checkup_weight'] as num?)?.toDouble();
-      final currentWeight = double.tryParse(_weightCtrl.text.trim());
-      if (previousWeight != null && currentWeight != null) {
-        final delta = currentWeight - previousWeight;
-        if (delta >= 3.0) {
-          score += 10;
-          factors.add(_RiskFactorItem(
-            factor:
-                'Rapid weight gain since last checkup (+${delta.toStringAsFixed(1)} kg)',
-            influence: 'low',
-            sourceTable: 'prenatal_checkups',
-            sourceId: latest['prenatal_checkup_id'] as int?,
-          ));
-        }
-      }
-    }
-
-    if (latestHistoricalOutcome != null) {
-      notable.add(
-          'Most recent prior pregnancy outcome: ${DateFormat('yyyy-MM-dd').format(latestHistoricalOutcome)}');
-    }
-
-    if (_weightCtrl.text.trim().isEmpty ||
-        _sysCtrl.text.trim().isEmpty ||
-        _diaCtrl.text.trim().isEmpty) {
-      score += 8;
-      factors.add(_RiskFactorItem(
-        factor: 'Missing key vitals in current draft (weight/BP)',
-        influence: 'low',
-        sourceTable: 'prenatal_checkups',
-      ));
-      actions.add(
-          'Complete missing vitals before finalizing risk interpretation.');
-    }
-
-    final highRiskTriggerCount =
-        factors.where((f) => f.influence == 'high').length;
-    final lowRiskMonitorCount =
-        factors.where((f) => f.influence == 'low').length;
-    final level = highRiskTriggerCount > 0 ? 'high' : 'low';
-    score = highRiskTriggerCount.toDouble();
-
-    notable.add('High-risk triggers: $highRiskTriggerCount');
-    notable.add('Monitoring factors: $lowRiskMonitorCount');
-    final dedupedActions = <String>[];
-    for (final action in actions) {
-      final normalized = action.trim().toLowerCase();
-      if (normalized.isEmpty) continue;
-      if (dedupedActions
-          .any((existing) => existing.trim().toLowerCase() == normalized)) {
-        continue;
-      }
-      dedupedActions.add(action.trim());
-    }
-
+    final dedupedActions = actions.toSet().toList();
     if (dedupedActions.isEmpty) {
-      dedupedActions.add(
-        'Continue routine prenatal follow-up and monitor for new warning signs.',
-      );
+      dedupedActions.add('Continue routine prenatal follow-up and monitoring.');
     }
 
     final fallbackSnapshot = _RiskSnapshot(
       level: level,
-      score: score,
       factors: factors,
       notableRecords: notable,
       suggestedActions: dedupedActions,
@@ -1303,7 +819,6 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
 
     return _RiskSnapshot(
       level: level,
-      score: score,
       factors: factors,
       notableRecords: notable,
       suggestedActions: dedupedActions,
@@ -1476,8 +991,6 @@ ${givenMedicationLines.isEmpty ? '- none recorded' : givenMedicationLines.join('
 
 RULE BASED PRE-ASSESSMENT
 - Level: ${draft.level}
-- High-risk trigger count: ${draft.score.toStringAsFixed(0)}
-- Trigger rule: any high-risk trait => High Risk
 - Factors: ${draft.factors.map((f) => '${f.factor} [${f.influence}]').join('; ')}
 - Notable records: ${draft.notableRecords.join('; ')}
 - Suggested actions: ${draft.suggestedActions.join('; ')}
@@ -1516,7 +1029,6 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
         final mergedText = _buildMergedAssessmentText(draft, aiText);
         _riskSnapshot = _RiskSnapshot(
           level: draft.level,
-          score: draft.score,
           factors: draft.factors,
           notableRecords: draft.notableRecords,
           suggestedActions: draft.suggestedActions,
@@ -1542,7 +1054,6 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
         final mergedText = _buildMergedAssessmentText(draft, null);
         _riskSnapshot = _RiskSnapshot(
           level: draft.level,
-          score: draft.score,
           factors: draft.factors,
           notableRecords: draft.notableRecords,
           suggestedActions: draft.suggestedActions,
@@ -4054,10 +3565,10 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                     ),
                   if (_riskSnapshot != null)
                     statPill(
-                      icon: Icons.speed_rounded,
+                      icon: Icons.checklist_rtl_rounded,
                       label:
-                          'High-risk triggers ${_riskSnapshot!.score.toStringAsFixed(0)}',
-                      color: AppColors.brandPrimary,
+                          '${_riskSnapshot!.factors.where((f) => f.influence == "high").length} High Triggers',
+                      color: _riskSnapshot!.level == 'high' ? AppColors.error : AppColors.brandPrimary,
                     ),
                   statPill(
                     icon: Icons.fact_check_outlined,

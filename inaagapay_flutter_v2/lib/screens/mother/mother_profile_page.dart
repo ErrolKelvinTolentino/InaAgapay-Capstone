@@ -1,4 +1,4 @@
-﻿// lib/screens/mother/mother_profile_page.dart
+// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -16,6 +16,8 @@ import '../../widgets/main_button.dart';
 import '../../widgets/secondary_button.dart';
 import '../../widgets/overview_info.dart';
 import '../../services/risk_engine.dart';
+import '../../services/smart_risk_engine.dart';
+import '../../models/smart_risk_models.dart';
 import '../../models/add_mother_form_data.dart';
 import '../shared/record_detail_screen.dart';
 import '../../widgets/full_screen_image_viewer.dart';
@@ -343,110 +345,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       default:
         return outcome;
     }
-  }
-
-  // Build risk assessment from DB-stored values (preferred) with local engine fallback.
-  RiskAssessment _buildRiskAssessmentFromDb(
-      Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
-    if (pregnancy == null) {
-      return RiskAssessment(
-        level: 'low',
-        score: 0,
-        factors: ['No ongoing pregnancy'],
-        note: 'No ongoing pregnancy to assess.',
-      );
-    }
-
-    final dbLevel =
-        (pregnancy['pregnancy_risk_level'] as String?)?.toLowerCase();
-    final checkups = (pregnancy['checkups'] as List?) ?? [];
-    final List<String> dbFactors = [];
-    String? dbAiNote;
-
-    for (final checkup in checkups) {
-      final factors = checkup['risk_factors'] as List?;
-      if (factors != null && factors.isNotEmpty) {
-        for (final f in factors) {
-          final factor = f['factor']?.toString() ?? '';
-          if (factor.isNotEmpty) dbFactors.add(factor);
-        }
-        final aiResp = checkup['risk_ai_response'] as Map<String, dynamic>?;
-        if (aiResp != null) {
-          final resp = aiResp['response']?.toString();
-          if (resp != null && resp.isNotEmpty) dbAiNote = resp;
-        }
-        break;
-      }
-    }
-
-    String baselineLevel = 'low';
-    double baselineScore = 5;
-    String baselineNote = 'No significant risk factors identified.';
-    final baselineFactors = <String>[];
-
-    if (dbLevel != null && dbLevel.isNotEmpty) {
-      baselineLevel =
-          ['high', 'medium', 'low'].contains(dbLevel) ? dbLevel : 'low';
-      baselineScore = baselineLevel == 'high'
-          ? 60
-          : baselineLevel == 'medium'
-              ? 30
-              : 5;
-      baselineFactors.addAll(
-          dbFactors.isNotEmpty ? dbFactors : ['No risk factors recorded yet']);
-      baselineNote = dbAiNote ??
-          (baselineLevel == 'high'
-              ? 'High-risk pregnancy. Close monitoring required. Consult with specialist.'
-              : baselineLevel == 'medium'
-                  ? 'Moderate risk factors present. Regular monitoring recommended.'
-                  : 'No significant risk factors identified.');
-    } else {
-      final formData = AddMotherFormData();
-      if (profile['birthdate'] != null) {
-        try {
-          formData.birthdate = DateTime.parse(profile['birthdate']);
-        } catch (_) {}
-      }
-      if (profile['height'] != null && profile['weight'] != null) {
-        formData.heightCm = (profile['height'] as num?)?.toDouble();
-        formData.weightKg = (profile['weight'] as num?)?.toDouble();
-      }
-      final conditions = profile['medical_conditions'] as List? ?? [];
-      for (final condition in conditions) {
-        formData.medicalConditions.add(
-          MedicalConditionEntry(
-            conditionName: condition['condition_name'] ?? '',
-            status: condition['status'] ?? 'active',
-          )..diagnosisDate =
-              DateTime.tryParse(condition['diagnosis_date'] ?? ''),
-        );
-      }
-      final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
-      for (final pg in pastPregnancies) {
-        final date = DateTime.tryParse(pg['outcome_date'] ?? '');
-        if (date != null) {
-          formData.pregnancyHistory.add(
-            PregnancyHistoryEntry(
-              outcome: pg['outcome'] ?? 'live_birth',
-              outcomeDate: date,
-            ),
-          );
-        }
-      }
-
-      final fallback = RiskEngine.evaluate(formData);
-      baselineLevel = fallback.level;
-      baselineScore = fallback.score;
-      baselineNote = fallback.note;
-      baselineFactors.addAll(fallback.factors);
-    }
-
-    return RiskAssessment(
-      level: baselineLevel,
-      score: baselineScore,
-      factors: baselineFactors,
-      note: baselineNote,
-    );
   }
 
   // AI Analysis Generators (from Version 1)
@@ -780,16 +678,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
 
     final level = hasSevereSignal || riskScore >= 6
-        ? 'HIGH ALERT'
-        : riskScore >= 3
-            ? 'MODERATE ALERT'
-            : 'STABLE';
+        ? 'HIGH RISK'
+        : 'LOW RISK';
 
-    final overall = level == 'HIGH ALERT'
-        ? 'High-priority review is advised based on the latest combined records (checkup, ultrasound, and lab test).'
-        : level == 'MODERATE ALERT'
-            ? 'Some risk signals are present across recent records and should be monitored closely.'
-            : 'Latest combined records suggest a relatively stable maternal state at this time.';
+    final overall = level == 'HIGH RISK'
+        ? 'Risk signals are present across recent records and should be monitored closely.'
+        : 'Latest combined records suggest a relatively stable maternal state at this time.';
 
     final buffer = StringBuffer();
     buffer.write('OVERALL ASSESSMENT: $overall\n\n');
@@ -805,43 +699,40 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return (level: level, structuredText: buffer.toString().trim());
   }
 
-  Widget _buildCombinedRiskAndInsightCard(
+  Widget _buildSimpleRiskCard(
       Map<String, dynamic> profile, Map<String, dynamic> pregnancy) {
-    RiskAssessment assessment = _buildRiskAssessmentFromDb(profile, pregnancy);
-    final unified = _buildUnifiedMaternalInsight(pregnancy);
-    final pregnancyId = pregnancy['pregnancy_id'] as int;
-    final currentLevel =
-        (pregnancy['pregnancy_risk_level'] as String?)?.toLowerCase() ??
-            assessment.level.toLowerCase();
+    final checkups =
+        (pregnancy['checkups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final pastPregnancies =
+        (profile['past_pregnancies'] as List?)?.cast<Map<String, dynamic>>() ??
+            [];
+    final latestCheckup = checkups.isNotEmpty ? checkups.last : null;
 
-    Color levelColor;
-    IconData levelIcon;
-    String displayLevel;
-
-    switch (currentLevel) {
-      case 'high':
-        levelColor = AppColors.error;
-        levelIcon = Icons.warning_rounded;
-        displayLevel = 'HIGH RISK';
-        break;
-      case 'medium':
-      case 'moderate':
-        levelColor = Colors.orange.shade700;
-        levelIcon = Icons.error_outline_rounded;
-        displayLevel = 'MODERATE RISK';
-        break;
-      default:
-        levelColor = Colors.green;
-        levelIcon = Icons.check_circle_outline_rounded;
-        displayLevel = 'LOW RISK';
+    if (latestCheckup == null) {
+      return _buildNoDataCard();
     }
 
+    // Get risk assessment
+    final risk = RiskEngine.evaluate(latestCheckup: latestCheckup);
+    final history = SmartRiskEngine.buildHistory(
+        allCheckups: checkups, pastPregnancies: pastPregnancies);
+    final watchList = SmartRiskEngine.buildWatchList(
+      allCheckups: checkups,
+      pastPregnancies: pastPregnancies,
+      latestCheckup: latestCheckup,
+    );
+
+    final isHigh = risk.level == 'high';
+
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isHigh ? Colors.red.shade300 : Colors.green.shade300,
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -853,135 +744,156 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // BIG clear status
           Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: levelColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(levelIcon, color: levelColor, size: 24),
+              Icon(
+                isHigh ? Icons.warning_rounded : Icons.check_circle_rounded,
+                color: isHigh ? Colors.red : Colors.green,
+                size: 32,
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Pregnancy Risk Level',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      displayLevel,
-                      style: TextStyle(
-                        color: levelColor,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+              Text(
+                isHigh ? 'HIGH RISK' : 'LOW RISK',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: isHigh ? Colors.red : Colors.green,
                 ),
               ),
             ],
           ),
-          if (assessment.factors.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            const Text(
-              'Identified Risk Factors',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
-              ),
+          const SizedBox(height: 8),
+
+          // What's off (or all clear)
+          if (isHigh) ...[
+            Text(
+              risk.note,
+              style: TextStyle(fontSize: 15, color: Colors.red.shade700),
             ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: assessment.factors.map((factor) {
-                return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.3),
-                    ),
+            const SizedBox(height: 12),
+            ...risk.findings.map((f) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('• ',
+                          style: TextStyle(fontSize: 16, color: Colors.red)),
+                      Expanded(
+                        child: Text(f,
+                            style: TextStyle(
+                                fontSize: 14, color: Colors.grey.shade800)),
+                      ),
+                    ],
                   ),
-                  child: Text(
-                    factor,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.error,
-                      fontWeight: FontWeight.w500,
-                    ),
+                )),
+          ] else ...[
+            Text(
+              'All readings within normal range',
+              style: TextStyle(fontSize: 15, color: Colors.green.shade700),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+          const Divider(),
+
+          // What happened before (collapsible)
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('What happened before',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              children: history.map((event) {
+                final isElevated = event.type == 'elevated';
+                return Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        isElevated ? Icons.arrow_upward : Icons.circle,
+                        size: 14,
+                        color: isElevated ? Colors.orange : Colors.grey,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              event.what,
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.grey.shade800),
+                            ),
+                            if (event.week != null)
+                              Text(
+                                'Week ${event.week!.toInt()}',
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),
             ),
-          ],
-          const SizedBox(height: 16),
-          const Divider(height: 24),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(
-                Icons.insights_rounded,
-                color: AppColors.brandPrimary,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'AI Maternal Insights',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: unified.level == 'HIGH ALERT'
-                      ? Colors.red.withValues(alpha: 0.12)
-                      : unified.level == 'MODERATE ALERT'
-                          ? Colors.orange.withValues(alpha: 0.12)
-                          : Colors.green.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: unified.level == 'HIGH ALERT'
-                        ? Colors.red.withValues(alpha: 0.3)
-                        : unified.level == 'MODERATE ALERT'
-                            ? Colors.orange.withValues(alpha: 0.3)
-                            : Colors.green.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Text(
-                  unified.level,
-                  style: TextStyle(
-                    color: unified.level == 'HIGH ALERT'
-                        ? Colors.red
-                        : unified.level == 'MODERATE ALERT'
-                            ? Colors.orange.shade700
-                            : Colors.green,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
-                  ),
-                ),
-              ),
-            ],
           ),
-          const SizedBox(height: 12),
-          _buildStructuredAiInsights(unified.structuredText),
+
+          const SizedBox(height: 8),
+          const Divider(),
+
+          // What to watch
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('What to watch',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              children: watchList
+                  .map((item) => Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.remove_red_eye,
+                                size: 14, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(item,
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade800)),
+                            ),
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoDataCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.info_outline, color: AppColors.textSecondary),
+          SizedBox(width: 12),
+          Text('No checkup data available yet'),
         ],
       ),
     );
@@ -3389,9 +3301,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
-            // Unified Risk Assessment and AI Insight
+            // Simplified Risk Assessment
             if (currentPregnancy != null)
-              _buildCombinedRiskAndInsightCard(profile, currentPregnancy),
+              _buildSimpleRiskCard(profile, currentPregnancy),
 
             const SizedBox(height: 16),
 
@@ -3731,8 +3643,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Unified Risk Assessment and AI Insight
-            _buildCombinedRiskAndInsightCard(profile, pregnancy),
+            // Simplified Risk Assessment
+            _buildSimpleRiskCard(profile, pregnancy),
             const SizedBox(height: 16),
 
             // Quick Stats Card (from Version 1)
@@ -3771,12 +3683,19 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       Expanded(
                         child: Column(
                           children: [
-                            Text(daysToEdd != null ? daysToEdd.toString() : '-',
-                                style: const TextStyle(
-                                    fontSize: 32,
+                            Text(
+                                daysToEdd != null
+                                    ? (daysToEdd < 0
+                                        ? 'Past Due'
+                                        : (daysToEdd ~/ 30 > 0
+                                            ? '${daysToEdd ~/ 30}m ${(daysToEdd % 30) ~/ 7}w'
+                                            : '${daysToEdd ~/ 7}w ${daysToEdd % 7}d'))
+                                    : '-',
+                                style: TextStyle(
+                                    fontSize: daysToEdd != null && daysToEdd < 0 ? 20 : 28,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.brandPrimary)),
-                            const Text('Days to EDD',
+                            const Text('Time to EDD',
                                 style:
                                     TextStyle(color: AppColors.textSecondary)),
                           ],
@@ -3802,9 +3721,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               '-',
                           Icons.warning,
                           color: pregnancy['pregnancy_risk_level'] == 'high'
-                              ? Colors.red
-                              : pregnancy['pregnancy_risk_level'] == 'medium'
-                                  ? Colors.orange
+                                  ? Colors.red
                                   : Colors.green,
                         ),
                       ),

@@ -1,104 +1,78 @@
 // lib/services/risk_engine.dart
-
-import '../models/add_mother_form_data.dart';
+// Simplified legacy risk engine – used only to provide a low/high risk flag
+// based on the latest check‑up data.
 
 class RiskAssessment {
-  final String level; // 'low', 'medium', 'high'
-  final double score;
-  final List<String> factors;
-  final String note;
+  final String level; // 'low' or 'high'
+  final List<String> findings; // list of abnormal observations
+  final String note; // one‑line summary
 
   const RiskAssessment({
     required this.level,
-    required this.score,
-    required this.factors,
+    required this.findings,
     required this.note,
   });
 }
 
 class RiskEngine {
-  static RiskAssessment evaluate(AddMotherFormData form) {
-    double score = 0;
-    final List<String> factors = [];
+  /// Evaluate the latest check‑up and return a simple assessment.
+  /// Returns 'high' if any abnormal finding is detected, otherwise 'low'.
+  static RiskAssessment evaluate({
+    required Map<String, dynamic> latestCheckup,
+  }) {
+    final findings = <String>[];
 
-    // Age risk
-    if (form.ageYears != null) {
-      if (form.ageYears! < 18) {
-        score += 30;
-        factors.add('Teenage pregnancy (under 18)');
-      } else if (form.ageYears! > 35) {
-        score += 20;
-        factors.add('Advanced maternal age (over 35)');
+    // Blood pressure thresholds
+    final bpSys = _num(latestCheckup['blood_pressure_systolic']);
+    final bpDia = _num(latestCheckup['blood_pressure_diastolic']);
+    if (bpSys != null && bpDia != null) {
+      if (bpSys >= 140 || bpDia >= 90) {
+        findings.add('BP ${bpSys.toInt()}/${bpDia.toInt()} (above 140/90)');
+      } else if (bpSys < 90 || bpDia < 60) {
+        findings.add('BP ${bpSys.toInt()}/${bpDia.toInt()} (below 90/60)');
       }
     }
 
-    // BMI risk
-    if (form.bmi != null) {
-      if (form.bmi! < 18.5) {
-        score += 15;
-        factors.add('Underweight (BMI < 18.5)');
-      } else if (form.bmi! > 30) {
-        score += 25;
-        factors.add('Obese (BMI > 30)');
-      }
+    // Fetal heart rate thresholds (120‑160 bpm is normal)
+    final fhr = _intVal(latestCheckup['fetal_heart_beat']);
+    if (fhr != null && (fhr < 120 || fhr > 160)) {
+      findings.add('FHR $fhr bpm (outside 120‑160 range)');
     }
 
-    // Medical conditions
-    for (final condition in form.medicalConditions) {
-      if (condition.status == 'active') {
-        final conditionScore = _getConditionScore(condition.conditionName);
-        score += conditionScore;
-        factors.add('Active: ${condition.conditionName}');
-      }
+    // Edema – flag moderate or severe
+    final edema = latestCheckup['edema']?.toString().toLowerCase() ?? '';
+    if (edema.contains('moderate') || edema.contains('severe')) {
+      findings.add('Edema: ${latestCheckup['edema']}');
     }
 
-    // Pregnancy history
-    for (final history in form.pregnancyHistory) {
-      if (history.outcome == 'stillbirth' || history.outcome == 'miscarriage') {
-        score += 25;
-        factors.add('Previous ${history.outcome}');
-      }
+    // Bleeding flag – either explicit boolean or mentioned in remarks
+    final bleeding = latestCheckup['bleeding'] == true ||
+        (latestCheckup['remarks']?.toString().toLowerCase().contains('bleeding') ?? false);
+    if (bleeding) {
+      findings.add('Bleeding reported');
     }
 
-    // Determine level
-    String level;
-    if (score >= 50) {
-      level = 'high';
-    } else if (score >= 20) {
-      level = 'medium';
-    } else {
-      level = 'low';
-    }
+    // Additional simple thresholds can be added here (e.g., Hb, proteinuria, fever)
 
-    String note = _generateNote(level, factors);
-
+    final isHigh = findings.isNotEmpty;
     return RiskAssessment(
-      level: level,
-      score: score,
-      factors: factors.isEmpty ? ['No significant risk factors identified'] : factors,
-      note: note,
+      level: isHigh ? 'high' : 'low',
+      findings: findings,
+      note: isHigh ? '${findings.length} finding(s) outside normal range' : 'All readings within normal range',
     );
   }
 
-  static double _getConditionScore(String condition) {
-    final highRisk = ['diabetes', 'hypertension', 'heart disease', 'kidney disease'];
-    final mediumRisk = ['anemia', 'asthma', 'thyroid'];
-    
-    final lower = condition.toLowerCase();
-    
-    if (highRisk.any((h) => lower.contains(h))) return 25;
-    if (mediumRisk.any((m) => lower.contains(m))) return 15;
-    return 10;
+  // Helpers – same as previous implementation
+  static double? _num(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    return double.tryParse(v.toString());
   }
 
-  static String _generateNote(String level, List<String> factors) {
-    switch (level) {
-      case 'high':
-        return 'High-risk pregnancy detected. Close monitoring required. Consult with specialist.';
-      case 'medium':
-        return 'Moderate risk factors present. Regular monitoring recommended.';
-      default:
-        return 'No significant risk factors identified so far.';
-    }
+  static int? _intVal(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    return int.tryParse(v.toString());
   }
 }

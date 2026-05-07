@@ -13,7 +13,7 @@ class _MidwifeMotherListState extends State<MidwifeMotherList> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedFilter = 'All';
 
-  final List<String> _filters = ['All', 'High Risk', 'Medium Risk', 'Low Risk', 'Due Soon'];
+  final List<String> _filters = ['All', 'High Risk', 'Low Risk', 'Due Soon'];
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +117,7 @@ class _MidwifeMotherListState extends State<MidwifeMotherList> {
         'name': 'Ana Lopez',
         'age': 25,
         'weeks': 16,
-        'risk': 'medium',
+        'risk': 'low',
         'nextCheckup': 'May 22, 2026',
         'bhc': 'Barangay San Jose',
       },
@@ -127,15 +127,12 @@ class _MidwifeMotherListState extends State<MidwifeMotherList> {
 
     Color riskColor;
     IconData riskIcon;
-    if (mother['risk'] == 'low') {
-      riskColor = Colors.green;
-      riskIcon = Icons.check_circle;
-    } else if (mother['risk'] == 'medium') {
-      riskColor = Colors.orange;
-      riskIcon = Icons.warning;
-    } else {
+    if (mother['risk'] == 'high') {
       riskColor = Colors.red;
       riskIcon = Icons.error;
+    } else {
+      riskColor = Colors.green;
+      riskIcon = Icons.check_circle;
     }
 
     return Container(

@@ -39,7 +39,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   final List<String> _riskFilters = [
     'All',
     'High Risk',
-    'Medium Risk',
     'Low Risk',
     'Due Soon'
   ];
@@ -126,7 +125,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           final riskLevel =
               mother['risk_level']?.toString().toLowerCase() ?? 'low';
           if (filterLower == 'high risk') return riskLevel == 'high';
-          if (filterLower == 'medium risk') return riskLevel == 'medium';
           if (filterLower == 'low risk') return riskLevel == 'low';
           return true;
         }).toList();
@@ -384,8 +382,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
     switch (riskLevel.toLowerCase()) {
       case 'high':
         return Colors.red;
-      case 'medium':
-        return Colors.orange;
       default:
         return Colors.green;
     }
@@ -395,8 +391,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
     switch (riskLevel.toLowerCase()) {
       case 'high':
         return 'HIGH RISK';
-      case 'medium':
-        return 'MEDIUM RISK';
       default:
         return 'LOW RISK';
     }
@@ -818,11 +812,23 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                     if (edd != null) {
                                       final daysUntil =
                                           edd.difference(DateTime.now()).inDays;
-                                      if (daysUntil >= 0 && daysUntil <= 14) {
-                                        dueDateText = 'Due in $daysUntil days';
-                                      } else if (daysUntil > 14) {
-                                        dueDateText = 'Due in $daysUntil days';
-                                      } else if (daysUntil < 0) {
+                                      if (daysUntil >= 0) {
+                                        final int months = daysUntil ~/ 30;
+                                        final int remainingDays = daysUntil % 30;
+                                        final int weeks = remainingDays ~/ 7;
+                                        
+                                        if (months > 0 && weeks > 0) {
+                                          dueDateText = 'Due in $months month${months == 1 ? '' : 's'} and $weeks week${weeks == 1 ? '' : 's'}';
+                                        } else if (months > 0) {
+                                          dueDateText = 'Due in $months month${months == 1 ? '' : 's'}';
+                                        } else if (weeks > 0) {
+                                          dueDateText = 'Due in $weeks week${weeks == 1 ? '' : 's'}';
+                                        } else if (daysUntil > 0) {
+                                          dueDateText = 'Due in $daysUntil day${daysUntil == 1 ? '' : 's'}';
+                                        } else {
+                                          dueDateText = 'Due today';
+                                        }
+                                      } else {
                                         dueDateText = 'Past due date';
                                       }
                                     }
@@ -886,44 +892,16 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   Widget _getRiskFilterIcon(String filter) {
     switch (filter) {
       case 'High Risk':
-        return Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: Colors.red,
-            shape: BoxShape.circle,
-          ),
-        );
-      case 'Medium Risk':
-        return Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: Colors.orange,
-            shape: BoxShape.circle,
-          ),
-        );
+        return const Icon(Icons.error_outline, size: 16, color: Colors.red);
       case 'Low Risk':
-        return Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: Colors.green,
-            shape: BoxShape.circle,
-          ),
-        );
+        return const Icon(Icons.check_circle_outline,
+            size: 16, color: Colors.green);
       case 'Due Soon':
-        return const Icon(Icons.event_available,
-            size: 14, color: Colors.purple);
+        return Icon(Icons.event_available,
+            size: 16, color: Colors.pink[300]);
       default:
-        return Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: AppColors.textSecondary,
-            shape: BoxShape.circle,
-          ),
-        );
+        return Icon(Icons.circle,
+            size: 10, color: AppColors.textSecondary.withValues(alpha: 0.5));
     }
   }
 }
@@ -1129,17 +1107,17 @@ class _MotherCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.event_available,
                               size: 12,
-                              color: Colors.purple,
+                              color: Colors.pink[300],
                             ),
                             const SizedBox(width: 4),
                             Text(
                               dueDateText!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.purple,
+                                color: Colors.pink[300],
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
