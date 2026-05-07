@@ -1,4 +1,4 @@
-// lib/screens/mother/mother_profile_page.dart
+﻿// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -677,9 +677,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           'Continue routine prenatal surveillance and document new symptoms promptly.');
     }
 
-    final level = hasSevereSignal || riskScore >= 6
-        ? 'HIGH RISK'
-        : 'LOW RISK';
+    final level = hasSevereSignal || riskScore >= 6 ? 'HIGH RISK' : 'LOW RISK';
 
     final overall = level == 'HIGH RISK'
         ? 'Risk signals are present across recent records and should be monitored closely.'
@@ -3692,7 +3690,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                             : '${daysToEdd ~/ 7}w ${daysToEdd % 7}d'))
                                     : '-',
                                 style: TextStyle(
-                                    fontSize: daysToEdd != null && daysToEdd < 0 ? 20 : 28,
+                                    fontSize: daysToEdd != null && daysToEdd < 0
+                                        ? 20
+                                        : 28,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.brandPrimary)),
                             const Text('Time to EDD',
@@ -3721,8 +3721,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               '-',
                           Icons.warning,
                           color: pregnancy['pregnancy_risk_level'] == 'high'
-                                  ? Colors.red
-                                  : Colors.green,
+                              ? Colors.red
+                              : Colors.green,
                         ),
                       ),
                     ],

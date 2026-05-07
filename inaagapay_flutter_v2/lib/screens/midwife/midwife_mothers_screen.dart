@@ -35,14 +35,18 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   String _selectedBarangayFilter = 'All';
   Timer? _searchDebounceTimer;
 
+  String _selectedSort = 'Name (A-Z)';
+
   // Filter options
-  final List<String> _riskFilters = [
+  final List<String> _riskFilters = ['All', 'Low Risk', 'High Risk'];
+  final List<String> _barangayFilters = [
     'All',
-    'High Risk',
-    'Low Risk',
-    'Due Soon'
+    'Tarcan',
+    'San Jose',
+    'Sta. Barbara',
+    'Pinagbarilan',
+    'Tiaong'
   ];
-  List<String> _barangayFilters = ['All'];
 
   // Scroll controller
   final ScrollController _scrollController = ScrollController();
@@ -100,35 +104,21 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
     if (_searchQuery.isNotEmpty) {
       results = results.where((mother) {
         final fullName = mother['full_name']?.toString().toLowerCase() ?? '';
-        final phone = mother['phone_number']?.toString().toLowerCase() ?? '';
         final email = mother['email_address']?.toString().toLowerCase() ?? '';
-        return fullName.contains(_searchQuery) ||
-            phone.contains(_searchQuery) ||
-            email.contains(_searchQuery);
+        return fullName.contains(_searchQuery) || email.contains(_searchQuery);
       }).toList();
     }
 
     // Apply risk filter
     if (_selectedRiskFilter != 'All') {
-      if (_selectedRiskFilter == 'Due Soon') {
-        results = results.where((mother) {
-          final eddStr = mother['expected_due_date'] as String?;
-          if (eddStr == null || eddStr.isEmpty) return false;
-          final edd = DateTime.tryParse(eddStr);
-          if (edd == null) return false;
-          final daysUntilDue = edd.difference(DateTime.now()).inDays;
-          return daysUntilDue >= 0 && daysUntilDue <= 14;
-        }).toList();
-      } else {
-        final filterLower = _selectedRiskFilter.toLowerCase();
-        results = results.where((mother) {
-          final riskLevel =
-              mother['risk_level']?.toString().toLowerCase() ?? 'low';
-          if (filterLower == 'high risk') return riskLevel == 'high';
-          if (filterLower == 'low risk') return riskLevel == 'low';
-          return true;
-        }).toList();
-      }
+      final filterLower = _selectedRiskFilter.toLowerCase();
+      results = results.where((mother) {
+        final riskLevel =
+            mother['risk_level']?.toString().toLowerCase() ?? 'low';
+        if (filterLower == 'high risk') return riskLevel == 'high';
+        if (filterLower == 'low risk') return riskLevel == 'low';
+        return true;
+      }).toList();
     }
 
     // Apply barangay filter
@@ -139,21 +129,43 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
       }).toList();
     }
 
+    // Apply sorting
+    if (_selectedSort == 'Age (Ascending)') {
+      results.sort(
+          (a, b) => (a['age'] as int? ?? 0).compareTo(b['age'] as int? ?? 0));
+    } else if (_selectedSort == 'Age (Descending)') {
+      results.sort(
+          (a, b) => (b['age'] as int? ?? 0).compareTo(a['age'] as int? ?? 0));
+    } else if (_selectedSort == 'Due Date (Ascending)') {
+      results.sort((a, b) {
+        final dateA =
+            DateTime.tryParse(a['expected_due_date']?.toString() ?? '');
+        final dateB =
+            DateTime.tryParse(b['expected_due_date']?.toString() ?? '');
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return dateA.compareTo(dateB);
+      });
+    } else if (_selectedSort == 'Due Date (Descending)') {
+      results.sort((a, b) {
+        final dateA =
+            DateTime.tryParse(a['expected_due_date']?.toString() ?? '');
+        final dateB =
+            DateTime.tryParse(b['expected_due_date']?.toString() ?? '');
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return dateB.compareTo(dateA);
+      });
+    } else {
+      results.sort((a, b) => (a['full_name']?.toString() ?? '')
+          .compareTo(b['full_name']?.toString() ?? ''));
+    }
+
     setState(() {
       _filteredMothers = results;
     });
-  }
-
-  void _extractBarangayFilters() {
-    final Set<String> barangays = {'All'};
-    for (var mother in _allMothers) {
-      final barangay = mother['barangay']?.toString();
-      if (barangay != null && barangay.isNotEmpty) {
-        barangays.add(barangay);
-      }
-    }
-    _barangayFilters = barangays.toList()..sort();
-    setState(() {});
   }
 
   void _onScroll() {
@@ -214,7 +226,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
       if (_searchQuery.isNotEmpty && reset) {
         query = query.or('first_name.ilike.%$_searchQuery%,'
             'last_name.ilike.%$_searchQuery%,'
-            'phone_number.ilike.%$_searchQuery%,'
             'email_address.ilike.%$_searchQuery%');
       }
 
@@ -350,7 +361,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           } else {
             _allMothers.addAll(newMothers);
           }
-          _extractBarangayFilters();
           _applyFilters();
           _isLoading = false;
         });
@@ -403,8 +413,8 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
     if (_searchQuery.isNotEmpty && _filteredMothers.isEmpty) {
       return 'No matching mothers found';
     }
-    if (_selectedRiskFilter == 'Due Soon' && _filteredMothers.isEmpty) {
-      return 'No mothers due soon';
+    if (_selectedRiskFilter != 'All' && _filteredMothers.isEmpty) {
+      return 'No mothers matching the risk filter';
     }
     if (_selectedBarangayFilter != 'All' && _filteredMothers.isEmpty) {
       return 'No mothers in this barangay';
@@ -416,10 +426,213 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
     setState(() {
       _searchController.clear();
       _searchQuery = '';
+      _selectedSort = 'Name (A-Z)';
       _selectedRiskFilter = 'All';
       _selectedBarangayFilter = 'All';
       _applyFilters();
     });
+  }
+
+  void _showFilterSortDialog() {
+    String tempSort = _selectedSort;
+    String tempRisk = _selectedRiskFilter;
+    String tempBarangay = _selectedBarangayFilter;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Sort & Filter',
+                            style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.brandPrimary)),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        )
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Sort By',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        'Name (A-Z)',
+                        'Age (Ascending)',
+                        'Age (Descending)',
+                        'Due Date (Ascending)',
+                        'Due Date (Descending)'
+                      ].map((sortOption) {
+                        final isSelected = tempSort == sortOption;
+                        return ChoiceChip(
+                          label: Text(sortOption),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setModalState(() => tempSort = sortOption);
+                            }
+                          },
+                          selectedColor:
+                              AppColors.brandPrimary.withValues(alpha: 0.2),
+                          backgroundColor: AppColors.bgSecondary,
+                          labelStyle: TextStyle(
+                            color: isSelected
+                                ? AppColors.brandPrimary
+                                : AppColors.textPrimary,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? AppColors.brandPrimary
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          showCheckmark: false,
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text('Filter by Risk',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children:
+                          ['All', 'Low Risk', 'High Risk'].map((riskOption) {
+                        final isSelected = tempRisk == riskOption;
+                        return ChoiceChip(
+                          label: Text(
+                              riskOption == 'All' ? 'All Risks' : riskOption),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setModalState(() => tempRisk = riskOption);
+                            }
+                          },
+                          selectedColor:
+                              AppColors.brandPrimary.withValues(alpha: 0.2),
+                          backgroundColor: AppColors.bgSecondary,
+                          labelStyle: TextStyle(
+                            color: isSelected
+                                ? AppColors.brandPrimary
+                                : AppColors.textPrimary,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? AppColors.brandPrimary
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          showCheckmark: false,
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text('Filter by Barangay',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    DropdownMenu<String>(
+                      initialSelection: tempBarangay,
+                      width: MediaQuery.of(context).size.width - 48,
+                      textStyle: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      menuStyle: MenuStyle(
+                        backgroundColor: WidgetStateProperty.all(Colors.white),
+                        shape: WidgetStateProperty.all(
+                          RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        elevation: WidgetStateProperty.all(4),
+                      ),
+                      inputDecorationTheme: InputDecorationTheme(
+                        fillColor: AppColors.bgSecondary,
+                        filled: true,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onSelected: (val) {
+                        if (val != null)
+                          setModalState(() => tempBarangay = val);
+                      },
+                      dropdownMenuEntries: _barangayFilters
+                          .map((b) => DropdownMenuEntry<String>(
+                                value: b,
+                                label: b == 'All' ? 'All Barangays' : b,
+                              ))
+                          .toList(),
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _selectedSort = tempSort;
+                            _selectedRiskFilter = tempRisk;
+                            _selectedBarangayFilter = tempBarangay;
+                            _applyFilters();
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Apply',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -503,7 +716,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: AppInputField(
-                hintText: 'Search Mother by name, phone, or email',
+                hintText: 'Search Mother by name or email',
                 controller: _searchController,
                 leadingIcon: Icons.search,
                 trailingIcon:
@@ -518,124 +731,54 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
               ),
             ),
 
-            // Filter Row - Risk Dropdown and Barangay Dropdown
+            // Filter & Sort Button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  // Risk Filter Dropdown
                   Expanded(
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.borderPrimary),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedRiskFilter,
-                          isExpanded: true,
-                          icon: const Icon(Icons.arrow_drop_down,
-                              color: AppColors.brandPrimary),
-                          items: _riskFilters.map((filter) {
-                            return DropdownMenuItem(
-                              value: filter,
-                              child: Row(
-                                children: [
-                                  _getRiskFilterIcon(filter),
-                                  const SizedBox(width: 8),
-                                  Text(filter),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedRiskFilter = value!;
-                              _applyFilters();
-                            });
-                          },
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            AppColors.brandPrimary.withValues(alpha: 0.1),
+                        foregroundColor: AppColors.brandPrimary,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
+                      onPressed: _showFilterSortDialog,
+                      icon: const Icon(Icons.filter_list),
+                      label: const Text('Sort & Filter',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  // Barangay Filter Dropdown
-                  Expanded(
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.borderPrimary),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedBarangayFilter,
-                          isExpanded: true,
-                          icon: const Icon(Icons.arrow_drop_down,
-                              color: AppColors.brandPrimary),
-                          items: _barangayFilters.map((barangay) {
-                            return DropdownMenuItem(
-                              value: barangay,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.location_on_outlined,
-                                    size: 16,
-                                    color: barangay == 'All'
-                                        ? AppColors.textSecondary
-                                        : AppColors.brandPrimary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      barangay == 'All'
-                                          ? 'All Barangays'
-                                          : barangay,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedBarangayFilter = value!;
-                              _applyFilters();
-                            });
-                          },
+                  if (_selectedSort != 'Name (A-Z)' ||
+                      _selectedRiskFilter != 'All' ||
+                      _selectedBarangayFilter != 'All' ||
+                      _searchQuery.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            AppColors.brandPrimary.withValues(alpha: 0.1),
+                        foregroundColor: AppColors.brandPrimary,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14, horizontal: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
+                      onPressed: _resetFilters,
+                      child: const Text('Clear',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
-
-            // Clear Filters Button (only show when filters are active)
-            if (_selectedRiskFilter != 'All' ||
-                _selectedBarangayFilter != 'All' ||
-                _searchQuery.isNotEmpty)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _resetFilters,
-                    icon: const Icon(Icons.clear_all, size: 16),
-                    label: const Text('Clear All Filters'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                    ),
-                  ),
-                ),
-              ),
 
             // Results Count
             if (_searchQuery.isNotEmpty ||
@@ -814,17 +957,22 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                           edd.difference(DateTime.now()).inDays;
                                       if (daysUntil >= 0) {
                                         final int months = daysUntil ~/ 30;
-                                        final int remainingDays = daysUntil % 30;
+                                        final int remainingDays =
+                                            daysUntil % 30;
                                         final int weeks = remainingDays ~/ 7;
-                                        
+
                                         if (months > 0 && weeks > 0) {
-                                          dueDateText = 'Due in $months month${months == 1 ? '' : 's'} and $weeks week${weeks == 1 ? '' : 's'}';
+                                          dueDateText =
+                                              'Due in $months month${months == 1 ? '' : 's'} and $weeks week${weeks == 1 ? '' : 's'}';
                                         } else if (months > 0) {
-                                          dueDateText = 'Due in $months month${months == 1 ? '' : 's'}';
+                                          dueDateText =
+                                              'Due in $months month${months == 1 ? '' : 's'}';
                                         } else if (weeks > 0) {
-                                          dueDateText = 'Due in $weeks week${weeks == 1 ? '' : 's'}';
+                                          dueDateText =
+                                              'Due in $weeks week${weeks == 1 ? '' : 's'}';
                                         } else if (daysUntil > 0) {
-                                          dueDateText = 'Due in $daysUntil day${daysUntil == 1 ? '' : 's'}';
+                                          dueDateText =
+                                              'Due in $daysUntil day${daysUntil == 1 ? '' : 's'}';
                                         } else {
                                           dueDateText = 'Due today';
                                         }
@@ -897,8 +1045,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         return const Icon(Icons.check_circle_outline,
             size: 16, color: Colors.green);
       case 'Due Soon':
-        return Icon(Icons.event_available,
-            size: 16, color: Colors.pink[300]);
+        return Icon(Icons.event_available, size: 16, color: Colors.pink[300]);
       default:
         return Icon(Icons.circle,
             size: 10, color: AppColors.textSecondary.withValues(alpha: 0.5));

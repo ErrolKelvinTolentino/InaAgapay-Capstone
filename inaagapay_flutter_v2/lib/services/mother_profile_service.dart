@@ -352,6 +352,7 @@ class MotherProfileService {
           'fetus_number': f['fetus_number'],
           'outcome': f['outcome'],
           'outcome_date': f['outcome_date'],
+          'is_outcome_date_estimated': false,
         });
 
         if (f['outcome'] == 'live_birth' || f['outcome'] == 'stillbirth') {
@@ -361,6 +362,7 @@ class MotherProfileService {
             'delivery_date': f['delivery_date'],
             'place_of_delivery': f['place_of_delivery'],
             'delivery_method': f['delivery_method'],
+            'is_delivery_date_estimated': false,
           });
         }
       }
