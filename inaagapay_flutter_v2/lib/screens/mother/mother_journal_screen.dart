@@ -54,7 +54,6 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 16),
-
               const Text(
                 'Your personal space 🌷',
                 style: TextStyle(
@@ -63,9 +62,7 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 6),
-
               const Text(
                 'Write your thoughts, feelings, and pregnancy moments.',
                 style: TextStyle(
@@ -73,9 +70,7 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                   color: AppColors.textSecondary,
                 ),
               ),
-
               const SizedBox(height: 20),
-
               Expanded(
                 child: FutureBuilder<List<JournalEntry>>(
                   future: _journalsFuture,
@@ -152,15 +147,16 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final entry = journals[index];
-                          final date = DateFormat('MMMM d, y')
-                              .format(entry.createdAt);
+                          final date =
+                              DateFormat('MMMM d, y').format(entry.createdAt);
 
                           return GestureDetector(
                             onTap: () async {
                               await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => JournalDetailsPage(entry: entry),
+                                  builder: (_) =>
+                                      JournalDetailsPage(entry: entry),
                                 ),
                               );
                               if (mounted) {
@@ -240,8 +236,8 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.brandPrimary,
         onPressed: _openAddJournal,
-        child: const Icon(Icons.add, color: Colors.white),
         elevation: 2,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -292,7 +288,8 @@ class _EmptyJournalState extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandPrimary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
                 ),

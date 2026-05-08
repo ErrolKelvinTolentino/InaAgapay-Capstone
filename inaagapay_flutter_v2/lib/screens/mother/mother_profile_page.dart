@@ -1988,8 +1988,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               MapEntry('Remarks', _formatValue(finalRemarks)),
             ],
             aiAnalysis: aiAnalysis,
-            useStructuredAiInsights:
-                aiAnalysis != null && aiAnalysis.isNotEmpty,
+            useStructuredAiInsights: aiAnalysis.isNotEmpty,
           );
         },
       ),
@@ -3057,7 +3056,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: _editingBloodType.isEmpty ? null : _editingBloodType,
+          initialValue: _editingBloodType.isEmpty ? null : _editingBloodType,
           decoration: const InputDecoration(
               labelText: 'Blood Type', border: OutlineInputBorder()),
           items: _bloodTypeOptions.map((type) {
@@ -3071,7 +3070,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: _editingExtension.isEmpty ? null : _editingExtension,
+          initialValue: _editingExtension.isEmpty ? null : _editingExtension,
           decoration: const InputDecoration(
               labelText: 'Extension Name', border: OutlineInputBorder()),
           items: _extensionOptions.map((ext) {
@@ -3528,7 +3527,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: DropdownButtonFormField<String>(
-                    value: _childSort,
+                    initialValue: _childSort,
                     decoration: const InputDecoration(
                       labelText: 'Sort by',
                       border: InputBorder.none,

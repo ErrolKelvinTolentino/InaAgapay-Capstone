@@ -319,7 +319,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   color: AppColors.bgSecondary,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Icon(icon, color: AppColors.brandPrimary),
+                                child:
+                                    Icon(icon, color: AppColors.brandPrimary),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -349,7 +350,6 @@ class _RecordsScreenState extends State<RecordsScreen>
                             ],
                           ),
                           const SizedBox(height: 16),
-
                           if (imageUrls != null && imageUrls.isNotEmpty) ...[
                             SizedBox(
                               height: 200,
@@ -358,7 +358,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 itemCount: imageUrls.length,
                                 itemBuilder: (context, index) {
                                   return GestureDetector(
-                                    onTap: () => _showFullScreenImage(imageUrls, index),
+                                    onTap: () =>
+                                        _showFullScreenImage(imageUrls, index),
                                     child: Container(
                                       width: 200,
                                       margin: const EdgeInsets.only(right: 12),
@@ -381,7 +382,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                 child: const Center(
                                                   child: Column(
                                                     mainAxisAlignment:
-                                                        MainAxisAlignment.center,
+                                                        MainAxisAlignment
+                                                            .center,
                                                     children: [
                                                       Icon(Icons.broken_image,
                                                           size: 32,
@@ -400,8 +402,9 @@ class _RecordsScreenState extends State<RecordsScreen>
                                               ),
                                               loadingBuilder: (context, child,
                                                   loadingProgress) {
-                                                if (loadingProgress == null)
+                                                if (loadingProgress == null) {
                                                   return child;
+                                                }
                                                 return Container(
                                                   color: AppColors.bgSecondary,
                                                   child: const Center(
@@ -410,9 +413,9 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                       strokeWidth: 2,
                                                       valueColor:
                                                           AlwaysStoppedAnimation<
-                                                              Color>(
-                                                          AppColors
-                                                              .brandPrimary),
+                                                                  Color>(
+                                                              AppColors
+                                                                  .brandPrimary),
                                                     ),
                                                   ),
                                                 );
@@ -424,8 +427,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                 top: 8,
                                                 right: 8,
                                                 child: Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
                                                     horizontal: 8,
                                                     vertical: 4,
                                                   ),
@@ -457,7 +460,6 @@ class _RecordsScreenState extends State<RecordsScreen>
                             ),
                             const SizedBox(height: 16),
                           ],
-
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(16),
@@ -468,38 +470,40 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   Border.all(color: AppColors.borderPrimary),
                             ),
                             child: Column(
-                              children: rows.map((entry) => Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 6),
-                                child: Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(
-                                      width: 120,
-                                      child: Text(
-                                        entry.key,
-                                        style: const TextStyle(
-                                          color: AppColors.textSecondary,
-                                          fontSize: 13,
+                              children: rows
+                                  .map((entry) => Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 6),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            SizedBox(
+                                              width: 120,
+                                              child: Text(
+                                                entry.key,
+                                                style: const TextStyle(
+                                                  color:
+                                                      AppColors.textSecondary,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: Text(
+                                                entry.value,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        entry.value,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )).toList(),
+                                      ))
+                                  .toList(),
                             ),
                           ),
-
                           if (aiAnalysis != null && aiAnalysis.isNotEmpty) ...[
                             const SizedBox(height: 16),
                             Container(
@@ -535,8 +539,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                           setModalState(() {
                                             isEditing = !isEditing;
                                             if (!isEditing) {
-                                              editController.text =
-                                                  aiAnalysis;
+                                              editController.text = aiAnalysis;
                                             }
                                           });
                                         },
@@ -618,7 +621,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.7),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.7),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Text(
@@ -1471,8 +1475,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       'Remarks', _formatValue(finalRemarks)),
                                 ],
                                 aiAnalysis: aiAnalysis,
-                                useStructuredAiInsights:
-                                    aiAnalysis != null && aiAnalysis.isNotEmpty,
+                                useStructuredAiInsights: aiAnalysis.isNotEmpty,
                               );
                             } else {
                               final imageUrls =
@@ -1859,7 +1862,8 @@ class _RecordsScreenState extends State<RecordsScreen>
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

@@ -1176,8 +1176,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
     final widgets = <Widget>[];
     for (final entry in orderedEntries) {
-      if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON')
+      if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON') {
         continue;
+      }
 
       final isMeasurements = entry.key == 'DETAILED MEASUREMENTS ASSESSMENT';
       final isAnatomical = entry.key == 'ANATOMICAL ASSESSMENT';

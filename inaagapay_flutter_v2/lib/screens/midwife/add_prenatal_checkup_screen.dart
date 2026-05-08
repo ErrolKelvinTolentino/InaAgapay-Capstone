@@ -125,6 +125,26 @@ class _RiskSnapshot {
   final String aiAssessment;
   final bool aiGenerated;
   final String? aiModel;
+
+  _RiskSnapshot copyWith({
+    String? level,
+    List<_RiskFactorItem>? factors,
+    List<String>? notableRecords,
+    List<String>? suggestedActions,
+    String? aiAssessment,
+    bool? aiGenerated,
+    String? aiModel,
+  }) {
+    return _RiskSnapshot(
+      level: level ?? this.level,
+      factors: factors ?? this.factors,
+      notableRecords: notableRecords ?? this.notableRecords,
+      suggestedActions: suggestedActions ?? this.suggestedActions,
+      aiAssessment: aiAssessment ?? this.aiAssessment,
+      aiGenerated: aiGenerated ?? this.aiGenerated,
+      aiModel: aiModel ?? this.aiModel,
+    );
+  }
 }
 
 // ── BP classification ────────────────────────────────────────────────────────
@@ -251,6 +271,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   bool _isEditingAiAssessment = false;
   String _editableRiskLevel = 'low';
   List<_RiskFactorItem> _editableRiskFactors = [];
+  List<String> _editableSuggestedActions = [];
 
   static const List<String> _fetalPositions = [
     'unknown',
@@ -654,20 +675,21 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
 
     final riskIntro =
         'Risk classification: ${_riskLevelLabel(snapshot.level)} based on current prenatal checkup findings.';
-    final signals =
-        'Clinical signals: gestational age $gaText, blood pressure $currentBp.';
+    final findings =
+        'Current prenatal findings: gestational age $gaText, blood pressure $currentBp.';
     final concernText = highFactors.isEmpty
         ? 'No abnormal findings are currently detected from available records.'
         : 'Finding(s): ${highFactors.join(', ')}.';
     final summaryText =
         factorSummary.isNotEmpty ? 'Notable items: $factorSummary.' : '';
 
-    return '$riskIntro $signals $concernText $summaryText Priority next step: $keyAction';
+    return '$riskIntro $findings $concernText $summaryText Priority next step: $keyAction';
   }
 
   void _syncEditableRiskState(_RiskSnapshot snapshot, String mergedText) {
     _editableRiskLevel = snapshot.level;
     _editableRiskFactors = List<_RiskFactorItem>.from(snapshot.factors);
+    _editableSuggestedActions = List<String>.from(snapshot.suggestedActions);
     _aiOriginalAssessment = mergedText;
     _aiAssessmentCtrl.text = mergedText;
     _aiAssessmentEditCtrl.text = mergedText;
@@ -729,7 +751,8 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           factor: 'High blood pressure (>=140/90)',
           influence: 'high',
         ));
-        actions.add('Monitor blood pressure closely and screen for preeclampsia.');
+        actions
+            .add('Monitor blood pressure closely and screen for preeclampsia.');
       }
     }
 
@@ -742,7 +765,8 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           factor: 'Abnormal fetal heart rate ($fetalBeat bpm)',
           influence: 'high',
         ));
-        actions.add('Repeat fetal heart monitoring; correlate with fetal movement.');
+        actions.add(
+            'Repeat fetal heart monitoring; correlate with fetal movement.');
       }
     }
 
@@ -766,7 +790,8 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           influence: 'high',
         ));
       }
-      actions.add('Prioritize immediate danger sign protocol and referral if needed.');
+      actions.add(
+          'Prioritize immediate danger sign protocol and referral if needed.');
     }
 
     // 5. Medical History & Pregnancy Context (Watch Items)
@@ -785,7 +810,8 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
         factor: 'Multifetal gestation ($_fetalCount)',
         influence: 'low',
       ));
-      actions.add('Monitor closely for preterm labor and growth in multifetal pregnancy.');
+      actions.add(
+          'Monitor closely for preterm labor and growth in multifetal pregnancy.');
     }
 
     for (final row in conditions) {
@@ -3482,6 +3508,9 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
         : _aiAssessmentCtrl.text.trim();
     final lineCount = '\n'.allMatches(content).length + 1;
     final editorLines = (lineCount + 2).clamp(4, 22);
+    final displayedActions = _isEditingAiAssessment
+        ? _editableSuggestedActions
+        : _riskSnapshot?.suggestedActions ?? [];
 
     Widget statPill({
       required IconData icon,
@@ -3521,18 +3550,17 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
-            color: AppColors.info.withAlpha(25),
+            color: AppColors.faintWhite,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.info.withAlpha(90)),
+            border: Border.all(color: AppColors.borderPrimary),
           ),
           child: const Row(
             children: [
-              Icon(Icons.psychology_alt_outlined,
-                  size: 18, color: AppColors.brandText),
+              Icon(Icons.shield_outlined, size: 18, color: AppColors.brandText),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Review and refine the risk assessment before saving this prenatal checkup.',
+                  'Review the risk summary and care plan before saving this prenatal checkup.',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.brandText,
@@ -3544,7 +3572,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
           ),
         ),
         _sectionCard(
-          title: 'Risk Decision Workspace',
+          title: 'Assessment Summary',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -3567,12 +3595,14 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                     statPill(
                       icon: Icons.checklist_rtl_rounded,
                       label:
-                          '${_riskSnapshot!.factors.where((f) => f.influence == "high").length} High Triggers',
-                      color: _riskSnapshot!.level == 'high' ? AppColors.error : AppColors.brandPrimary,
+                          '${_riskSnapshot!.factors.where((f) => f.influence == "high").length} Major Concerns',
+                      color: _riskSnapshot!.level == 'high'
+                          ? AppColors.error
+                          : AppColors.brandPrimary,
                     ),
                   statPill(
                     icon: Icons.fact_check_outlined,
-                    label: 'Factors ${_editableRiskFactors.length}',
+                    label: 'Risk Factors ${_editableRiskFactors.length}',
                     color: AppColors.brandAccent,
                   ),
                 ],
@@ -3583,7 +3613,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                 children: [
                   Expanded(
                     child: Text(
-                      'Confirm the AI assessment, triage override, and care priorities for this prenatal visit.',
+                      'Review the AI assessment, care priority, and recommended action plan for this visit.',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -3628,7 +3658,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Triage Override',
+                      'Edit Risk Level',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -3644,7 +3674,8 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                           label: const Text('Low'),
                           selected: _editableRiskLevel == 'low',
                           selectedColor: AppColors.success.withOpacity(0.14),
-                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          labelStyle:
+                              const TextStyle(color: AppColors.textPrimary),
                           onSelected: _isEditingAiAssessment
                               ? (_) => setState(() {
                                     _editableRiskLevel = 'low';
@@ -3656,7 +3687,8 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                           label: const Text('High'),
                           selected: _editableRiskLevel == 'high',
                           selectedColor: AppColors.error.withOpacity(0.14),
-                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          labelStyle:
+                              const TextStyle(color: AppColors.textPrimary),
                           onSelected: _isEditingAiAssessment
                               ? (_) => setState(() {
                                     _editableRiskLevel = 'high';
@@ -3666,48 +3698,6 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Clinical Signals',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (_riskSnapshot!.notableRecords.isEmpty)
-                      const Text(
-                        'No notable records detected.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      )
-                    else
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: _riskSnapshot!.notableRecords.map((r) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 9),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border:
-                                  Border.all(color: AppColors.borderPrimary),
-                            ),
-                            child: Text(
-                              r,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
                   ],
                 ),
               ),
@@ -3754,9 +3744,8 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                               label: Text('${f.factor} (${f.influence})'),
                               labelStyle: TextStyle(
                                 fontSize: 12,
-                                fontWeight: isHigh
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
+                                fontWeight:
+                                    isHigh ? FontWeight.w700 : FontWeight.w500,
                                 color: isHigh
                                     ? AppColors.error
                                     : AppColors.textPrimary,
@@ -3800,19 +3789,33 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                       ),
                     ],
                     const SizedBox(height: 18),
-                    const Text(
-                      'Suggested Actions',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Suggested Actions',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        if (_isEditingAiAssessment)
+                          TextButton.icon(
+                            onPressed: () => _openAddSuggestedActionDialog(),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Action'),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 10),
-                    if (_riskSnapshot!.suggestedActions.isEmpty)
-                      const Text(
-                        'No suggested actions are available. Confirm follow-up priorities with the mother and document the care plan.',
-                        style: TextStyle(
+                    if (displayedActions.isEmpty)
+                      Text(
+                        _isEditingAiAssessment
+                            ? 'No suggested actions have been added yet. Add action items to guide follow-up care.'
+                            : 'No suggested actions are available. Confirm follow-up priorities with the mother and document the care plan.',
+                        style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.textPrimary,
                           height: 1.6,
@@ -3821,7 +3824,7 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                     else
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: _riskSnapshot!.suggestedActions
+                        children: displayedActions
                             .asMap()
                             .entries
                             .map(
@@ -3849,6 +3852,26 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                                         ),
                                       ),
                                     ),
+                                    if (_isEditingAiAssessment)
+                                      IconButton(
+                                        onPressed: () => setState(() {
+                                          _editableSuggestedActions
+                                              .removeAt(entry.key);
+                                          _riskSnapshot =
+                                              _riskSnapshot?.copyWith(
+                                            suggestedActions: List<String>.from(
+                                                _editableSuggestedActions),
+                                          );
+                                          _aiResponseApproved = false;
+                                        }),
+                                        icon: const Icon(
+                                          Icons.close,
+                                          size: 18,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -3979,9 +4002,8 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
                             icon: Icon(_aiResponseApproved
                                 ? Icons.verified_rounded
                                 : Icons.check_circle_outline_rounded),
-                            label: Text(_aiResponseApproved
-                                ? 'Approved'
-                                : 'Approve'),
+                            label: Text(
+                                _aiResponseApproved ? 'Approved' : 'Approve'),
                             style: FilledButton.styleFrom(
                               backgroundColor: _aiResponseApproved
                                   ? AppColors.success
@@ -4093,6 +4115,49 @@ Make the response practical, accurate, and suitable for a midwife handoff note.
       });
     }
     factorCtrl.dispose();
+  }
+
+  Future<void> _openAddSuggestedActionDialog() async {
+    final actionCtrl = TextEditingController();
+    final added = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Add Suggested Action'),
+          content: TextField(
+            controller: actionCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Action',
+              hintText: 'e.g. Schedule follow-up in 2 weeks',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (actionCtrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (added == true && mounted) {
+      setState(() {
+        _editableSuggestedActions.add(actionCtrl.text.trim());
+        _riskSnapshot = _riskSnapshot?.copyWith(
+          suggestedActions: List<String>.from(_editableSuggestedActions),
+        );
+        _aiResponseApproved = false;
+      });
+    }
+    actionCtrl.dispose();
   }
 
   @override

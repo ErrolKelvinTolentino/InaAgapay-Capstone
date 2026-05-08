@@ -1,7 +1,6 @@
 // lib/screens/mother/mother_dashboard_shell.dart
 
 import 'package:flutter/material.dart';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
@@ -24,7 +23,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
   String? _profilePictureUrl;
   int? _motherId;
   final ImagePicker _picker = ImagePicker();
-  
+
   bool _showBHCRequiredDialog = false;
 
   final List<Widget> _screens = const [
@@ -63,17 +62,17 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
 
   Future<void> _checkAndShowBHCRequiredDialog() async {
     if (_showBHCRequiredDialog) return;
-    
+
     final accountId = await AuthStorage.getUserId();
     if (accountId == null) return;
-    
+
     try {
       final motherResponse = await SupabaseService.client
           .from('mothers')
           .select('mother_id, assigned_bhc_id')
           .eq('account_id', accountId)
           .maybeSingle();
-      
+
       if (motherResponse == null || motherResponse['assigned_bhc_id'] == null) {
         _showBHCRequiredDialog = true;
         if (mounted) {
@@ -234,13 +233,14 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     if (_motherId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please complete your account setup with a midwife first.'),
+          content:
+              Text('Please complete your account setup with a midwife first.'),
           backgroundColor: AppColors.warning,
         ),
       );
       return;
     }
-    
+
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
@@ -259,11 +259,12 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
         );
 
         final bytes = await image.readAsBytes();
-        final url = await SupabaseService.uploadProfilePicture(_motherId!, bytes);
+        final url =
+            await SupabaseService.uploadProfilePicture(_motherId!, bytes);
 
         if (mounted) {
           Navigator.pop(context);
-          
+
           if (url != null) {
             setState(() {
               _profilePictureUrl = url;
@@ -308,7 +309,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
             child: Material(
               color: Colors.transparent,
               child: Container(
-                width: 220,  // ← FIXED: Increased width slightly
+                width: 220, // ← FIXED: Increased width slightly
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -322,7 +323,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                   ],
                 ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,  // ← FIXED: Use min size
+                  mainAxisSize: MainAxisSize.min, // ← FIXED: Use min size
                   children: [
                     _MenuItem(
                       icon: Icons.photo_camera_outlined,
@@ -341,13 +342,15 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => MotherProfilePage(motherId: _motherId!),
+                              builder: (context) =>
+                                  MotherProfilePage(motherId: _motherId!),
                             ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Please complete your account setup with a midwife first.'),
+                              content: Text(
+                                  'Please complete your account setup with a midwife first.'),
                               backgroundColor: AppColors.warning,
                             ),
                           );
@@ -370,7 +373,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                         Navigator.pushNamed(context, '/help');
                       },
                     ),
-                    const Divider(height: 1, thickness: 1),  // ← FIXED: Thinner divider
+                    const Divider(
+                        height: 1, thickness: 1), // ← FIXED: Thinner divider
                     _MenuItem(
                       icon: Icons.logout_rounded,
                       label: 'Log out',
@@ -536,8 +540,10 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                     child: Image.asset(
                       'assets/images/logo.png',
                       height: 36,
-                      errorBuilder: (context, error, stackTrace) => 
-                        const Icon(Icons.favorite, color: AppColors.brandPrimary, size: 30),
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.favorite,
+                          color: AppColors.brandPrimary,
+                          size: 30),
                     ),
                   ),
                   Text(
@@ -588,7 +594,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 ],
               ),
             ),
-            
+
             // Content
             Expanded(
               child: IndexedStack(
@@ -670,7 +676,8 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = isActive ? AppColors.brandPrimary : AppColors.textSecondary;
+    final Color color =
+        isActive ? AppColors.brandPrimary : AppColors.textSecondary;
 
     return GestureDetector(
       onTap: onTap,
@@ -733,7 +740,8 @@ class _MenuItem extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(width: 12),
-            Expanded(  // ← FIXED: Added Expanded to prevent overflow
+            Expanded(
+              // ← FIXED: Added Expanded to prevent overflow
               child: Text(
                 label,
                 style: TextStyle(

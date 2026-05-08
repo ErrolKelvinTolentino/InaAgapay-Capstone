@@ -179,8 +179,9 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
       if (accountId == null) throw Exception('Not authenticated');
 
       final contextResult = await SupabaseService.getMidwifeContext(accountId);
-      if (!contextResult['success'])
+      if (!contextResult['success']) {
         throw Exception('Failed to load midwife context');
+      }
 
       final assignedBhcId = contextResult['assigned_bhc_id'] as int?;
       _bhcName = contextResult['bhc_name']?.toString() ?? 'Unknown BHC';

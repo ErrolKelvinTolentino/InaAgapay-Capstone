@@ -588,8 +588,9 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                         ),
                       ),
                       onSelected: (val) {
-                        if (val != null)
+                        if (val != null) {
                           setModalState(() => tempBarangay = val);
+                        }
                       },
                       dropdownMenuEntries: _barangayFilters
                           .map((b) => DropdownMenuEntry<String>(
