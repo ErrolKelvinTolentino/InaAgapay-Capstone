@@ -1771,27 +1771,32 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         }
       }
 
-      // Fetch symptom summary for this specific checkup
-      final symRows = await SupabaseService.client
-          .from('mother_symptoms')
-          .select('symptom_name, pregnancy_symptom:symptom_id (severity_level)')
-          .eq('prenatal_checkup_id', prenatalCheckupId);
-
+      // FIXED: Query pregnancy_symptoms instead of non-existent mother_symptoms
       String symptomSummaryStr = 'None recorded';
-      if ((symRows as List).isNotEmpty) {
-        final items = <String>[];
-        for (final row in symRows.cast<Map<String, dynamic>>()) {
-          final symName = row['symptom_name']?.toString() ?? 'Unknown';
-          final pSymRow = row['pregnancy_symptom'];
-          String risk = 'Minor';
-          if (pSymRow != null && pSymRow is Map) {
-            final sl = pSymRow['severity_level']?.toString();
-            if (sl == '3' || sl == 'Severe') risk = 'Danger';
-            if (sl == '2' || sl == 'Moderate') risk = 'Moderate';
+      try {
+        final symRows = await SupabaseService.client
+            .from('pregnancy_symptoms')
+            .select(
+                'symptom_type_id, notes, symptom_type:symptom_types(symptom_name, risk_category)')
+            .eq('prenatal_checkup_id', prenatalCheckupId);
+
+        if ((symRows as List).isNotEmpty) {
+          final items = <String>[];
+          for (final row in symRows.cast<Map<String, dynamic>>()) {
+            final symptomType = row['symptom_type'] as Map<String, dynamic>?;
+            final symName =
+                symptomType?['symptom_name']?.toString() ?? 'Unknown symptom';
+            final risk = symptomType?['risk_category']?.toString() ?? 'unknown';
+            final note = (row['notes'] as String?)?.trim();
+            final label = note != null && note.isNotEmpty
+                ? '$symName ($risk): $note'
+                : '$symName ($risk)';
+            items.add(label);
           }
-          items.add('$symName ($risk)');
+          symptomSummaryStr = items.join('; ');
         }
-        symptomSummaryStr = items.join('; ');
+      } catch (_) {
+        // Ignore symptom fetch errors
       }
 
       return {
@@ -1853,13 +1858,19 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           String symptomSummary = 'None recorded';
 
           final checkupId = checkup['prenatal_checkup_id'];
+          debugPrint('🔍 Checkup ID: $checkupId');
+
           if (checkupId is int) {
             final checkupDetails = await _fetchCheckupDetails(
                 checkupId, checkup['checkup_datetime']);
+            debugPrint('🔍 checkupDetails: $checkupDetails');
+
             if (checkupDetails != null) {
               riskLevel = checkupDetails['riskLevel'] as String?;
               riskFactors = checkupDetails['riskFactors'] ?? '';
               aiAnalysis = checkupDetails['aiResponse'] as String?;
+              debugPrint(
+                  '🔍 aiAnalysis from DB: ${aiAnalysis?.substring(0, aiAnalysis!.length > 100 ? 100 : aiAnalysis!.length)}...');
               medicationPlansSummary =
                   checkupDetails['medicationPlans'] ?? 'None';
               givenMedicationsSummary =
@@ -1869,14 +1880,26 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               symptomSummary =
                   checkupDetails['symptomSummary'] ?? 'None recorded';
             }
+
             if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
+              debugPrint('🔍 Trying MotherProfileService...');
               aiAnalysis =
                   await MotherProfileService.getCheckupAIAnalysis(checkupId);
+              debugPrint(
+                  '🔍 aiAnalysis from MotherProfileService: ${aiAnalysis?.substring(0, aiAnalysis!.length > 100 ? 100 : aiAnalysis!.length)}...');
             }
           }
-          aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
-              ? aiAnalysis.trim()
-              : _generatePrenatalAIInsights(checkup);
+
+          // Only fallback if nothing found
+          if (aiAnalysis == null || aiAnalysis!.trim().isEmpty) {
+            debugPrint('🔍 Using _generatePrenatalAIInsights fallback...');
+            aiAnalysis = _generatePrenatalAIInsights(checkup);
+          } else {
+            aiAnalysis = aiAnalysis!.trim();
+          }
+
+          debugPrint(
+              '🔍 Final aiAnalysis: ${aiAnalysis?.substring(0, aiAnalysis!.length > 100 ? 100 : aiAnalysis!.length)}...');
 
           _showRecordDetails(
             title: 'Prenatal Checkup',
@@ -1912,7 +1935,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               MapEntry('Next Schedule', _formatDate(checkup['next_schedule'])),
             ],
             aiAnalysis: aiAnalysis,
-            useStructuredAiInsights: true,
+            useStructuredAiInsights: false,
           );
         },
       ),

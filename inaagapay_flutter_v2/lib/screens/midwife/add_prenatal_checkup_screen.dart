@@ -629,11 +629,50 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   String _buildMergedAssessmentText(_RiskSnapshot snapshot, String? aiText) {
     final cleanedAiText = _sanitizeAiText(aiText);
     if (cleanedAiText.isNotEmpty) {
-      return cleanedAiText;
+      // Strip "AI INSIGHTS:" prefix and any section headers that the AI might have added
+      return _stripAiSectionHeaders(cleanedAiText);
     }
 
     return _buildRuleBasedAssessmentText(snapshot);
   }
+
+  String _stripAiSectionHeaders(String text) {
+    var result = text;
+
+    // Remove "AI INSIGHTS:" prefix (case insensitive)
+    if (result.toUpperCase().startsWith('AI INSIGHTS:')) {
+      result = result.substring('AI INSIGHTS:'.length).trim();
+    }
+
+    // Remove common section headers that AI might generate
+    final sectionHeaders = [
+      'OVERALL ASSESSMENT:',
+      'OVERALL HEALTH STATUS:',
+      'KEY OBSERVATIONS:',
+      'RECOMMENDATIONS:',
+      'RECOMMENDED NEXT ACTIONS:',
+      'CLINICAL IMPRESSION:',
+      'FOLLOW-UP SUGGESTIONS:',
+      'DETAILED MEASUREMENTS ASSESSMENT:',
+      'ANATOMICAL ASSESSMENT:',
+      'GESTATIONAL AGE ASSESSMENT:',
+      'LABORATORY RESULTS:',
+      'ABNORMAL FINDINGS:',
+      'NORMAL RANGES:',
+      'SUMMARY:',
+    ];
+
+    for (final header in sectionHeaders) {
+      if (result.toUpperCase().startsWith(header)) {
+        result = result.substring(header.length).trim();
+        break;
+      }
+    }
+
+    return result.trim();
+  }
+
+  // Replace the _sanitizeAiText method with this:
 
   String _sanitizeAiText(String? aiText) {
     final trimmed = aiText?.trim() ?? '';
@@ -642,9 +681,13 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     }
 
     final lower = trimmed.toLowerCase();
+
+    // Check for fallback indicators
     if (lower.contains('ai insight fallback') ||
         lower.contains('ai insight unavailable') ||
-        lower.contains('showing rule-based assessment')) {
+        lower.contains('showing rule-based assessment') ||
+        lower.contains('unable to generate') ||
+        lower.contains('error generating')) {
       return '';
     }
 
@@ -956,25 +999,17 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
             '- ${s.name} [${s.riskCategory}]${(s.notes ?? '').trim().isEmpty ? '' : ' | note: ${s.notes!.trim()}'}')
         .toList();
 
-    return '''
-You are assisting a barangay midwife in the Philippines.
-Generate a detailed prenatal risk assessment using ONLY the provided data.
-Do not diagnose. Use supportive and safe language suitable for clinical handoff.
-State uncertainty clearly when data is missing.
-You must consider ALL records together: demographics, comorbidities, allergies, complete past pregnancy history, multifetal history, and prior prenatal trends.
+    return '''You are assisting a barangay midwife in the Philippines with prenatal care.
 
-Return plain text with exactly one section:
-AI INSIGHTS:
+CRITICAL INSTRUCTION: Write a concise prenatal risk analysis as PLAIN TEXT ONLY.
+DO NOT use any section headers like "OVERALL ASSESSMENT:", "KEY OBSERVATIONS:", "RECOMMENDATIONS:" or similar.
+DO NOT use markdown formatting like **bold** or ## headers.
+DO NOT return any form of structured data.
+Just write 4-8 simple sentences or plain bullet points (using -) with your analysis.
+End with one sentence starting with "Priority next step:".
 
-Output rules:
-- In AI INSIGHTS: provide 4 to 8 concise bullets focused on interpretation, trend meaning, and immediate monitoring priorities.
-- Include a final bullet that starts with "Priority next step:".
-- Do not repeat full lists of risk factors, notable records, or actions already shown by the system UI.
-- Explicitly mention multifetal implications when fetal_count > 1 in current or prior records.
-- Explicitly mention recurrent pattern risks (repeated high BP, repeated danger symptoms, recurrent losses) when present.
-- If current medication plans or dispensed medications are present, incorporate their relevance into monitoring or follow-up recommendations.
-- Do not use the phrase "AI insight fallback" or label the response as a fallback.
-- Never invent data; only use what is present below.
+Use ONLY the data provided below. State uncertainty clearly when data is missing.
+Never invent data.
 
 PATIENT CONTEXT
 - Mother ID: ${widget.motherId}
@@ -1021,8 +1056,7 @@ RULE BASED PRE-ASSESSMENT
 - Notable records: ${draft.notableRecords.join('; ')}
 - Suggested actions: ${draft.suggestedActions.join('; ')}
 
-Make the response practical, accurate, and suitable for a midwife handoff note.
-''';
+IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write your analysis directly.''';
   }
 
   Future<void> _refreshRiskPreview({bool force = false}) async {

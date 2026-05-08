@@ -658,106 +658,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     return double.tryParse(value.toString());
   }
 
-  String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
-    final bpSys = _toDouble(checkup['blood_pressure_systolic']);
-    final bpDia = _toDouble(checkup['blood_pressure_diastolic']);
-    final weight = _toDouble(checkup['checkup_weight']);
-    final edemaRaw = _formatValue(checkup['edema']);
-    final edema = edemaRaw.toLowerCase();
-    final tdDose = _formatValue(checkup['td_vaccine_dose']);
-
-    final fhrRaw = _formatValue(checkup['fetal_heart_beat']);
-    final fhr = int.tryParse(fhrRaw);
-
-    String overallAssessment =
-        'Current prenatal checkup findings appear stable overall.';
-    if (bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) {
-      overallAssessment =
-          'Blood pressure is elevated and needs closer monitoring for hypertensive disorders of pregnancy.';
-    } else if (bpSys != null && bpDia != null && (bpSys < 90 || bpDia < 60)) {
-      overallAssessment =
-          'Blood pressure is lower than typical range; monitor hydration, symptoms, and follow-up trends.';
-    } else if (fhr != null && (fhr < 120 || fhr > 160)) {
-      overallAssessment =
-          'Fetal heart rate is outside the usual expected range and should be reviewed clinically.';
-    } else if (edema != '—' && edema != 'none') {
-      overallAssessment =
-          'Mild edema is noted; monitor progression and correlate with blood pressure and symptoms.';
-    }
-
-    final buffer = StringBuffer();
-    buffer.write('OVERALL ASSESSMENT: $overallAssessment\n\n');
-
-    buffer.write('KEY OBSERVATIONS:\n');
-    if (bpSys != null && bpDia != null) {
-      if (bpSys >= 140 || bpDia >= 90) {
-        buffer.write(
-            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [REVIEW].\n');
-      } else if (bpSys < 90 || bpDia < 60) {
-        buffer.write(
-            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [MONITOR].\n');
-      } else {
-        buffer.write(
-            '- Maternal Vitals - Blood Pressure: $bpSys/$bpDia mmHg [WITHIN NORMAL LIMITS].\n');
-      }
-    } else {
-      buffer.write(
-          '- Maternal Vitals - Blood Pressure: Not documented in this record.\n');
-    }
-
-    if (weight != null) {
-      buffer.write(
-          '- Maternal Vitals - Weight: ${weight.toStringAsFixed(1)} kg.\n');
-    }
-
-    if (fhr != null) {
-      if (fhr >= 120 && fhr <= 160) {
-        buffer.write(
-            '- Fetal Status - Heart Rate: $fhr bpm [WITHIN NORMAL LIMITS].\n');
-      } else {
-        buffer.write('- Fetal Status - Heart Rate: $fhr bpm [REVIEW].\n');
-      }
-    } else if (fhrRaw != '—') {
-      buffer.write('- Fetal Status - Heart Rate: $fhrRaw [REVIEW MANUALLY].\n');
-    }
-
-    final fetalPosition = _formatValue(checkup['fetal_position']);
-    if (fetalPosition != '—') {
-      buffer.write('- Fetal Status - Position: $fetalPosition.\n');
-    }
-
-    if (edemaRaw != '—') {
-      if (edema == 'none') {
-        buffer.write('- Maternal Observation - Edema: None reported.\n');
-      } else {
-        buffer.write('- Maternal Observation - Edema: $edemaRaw [MONITOR].\n');
-      }
-    }
-
-    if (tdDose != '—') {
-      buffer.write('- Preventive Care - TD Vaccine: $tdDose documented.\n');
-    }
-
-    final nextSchedule = _formatDate(checkup['next_schedule']);
-    if (nextSchedule != '—') {
-      buffer.write('- Follow-up - Next Schedule: $nextSchedule.\n');
-    }
-
-    buffer.write('\nRECOMMENDATIONS:\n');
-    buffer.write('- Continue scheduled prenatal follow-up visits.\n');
-    buffer
-        .write('- Monitor maternal warning signs and fetal movement daily.\n');
-    if ((bpSys != null && bpDia != null && (bpSys >= 140 || bpDia >= 90)) ||
-        (fhr != null && (fhr < 120 || fhr > 160))) {
-      buffer.write(
-          '- Prioritize clinician review for blood pressure and/or fetal heart findings.\n');
-    }
-    if (edema != '—' && edema != 'none') {
-      buffer.write('- Reassess edema severity in next checkup.\n');
-    }
-
-    return buffer.toString().trim();
-  }
+  // REMOVED: _generatePrenatalAIInsights - this was the culprit generating fake AI text
 
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
     final remarks = ultrasound['remarks']?.toString().toLowerCase() ?? '';
@@ -1300,6 +1201,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                               String? aiAnalysis;
                               String? riskLevel;
                               String riskFactors = '';
+                              List<String> riskFactorList = [];
+                              List<String> suggestedActionsList = [];
                               String medicationPlansSummary = 'None';
                               String givenMedicationsSummary = 'None';
                               String ferrousSummary = 'Not given';
@@ -1312,10 +1215,32 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 if (checkupDetails != null) {
                                   riskLevel =
                                       checkupDetails['riskLevel'] as String?;
-                                  riskFactors =
-                                      checkupDetails['riskFactors'] as String;
+
+                                  final rf = checkupDetails['riskFactors']
+                                          as String? ??
+                                      '';
+                                  if (rf.trim().isNotEmpty) {
+                                    riskFactors = rf;
+                                    riskFactorList = rf
+                                        .split('; ')
+                                        .where((s) => s.trim().isNotEmpty)
+                                        .toList();
+                                  }
+
+                                  // PRIMARY SOURCE: Database AI response
                                   aiAnalysis =
                                       checkupDetails['aiResponse'] as String?;
+
+                                  // FALLBACK: MotherProfileService
+                                  if (aiAnalysis == null ||
+                                      aiAnalysis!.trim().isEmpty) {
+                                    aiAnalysis = await MotherProfileService
+                                        .getCheckupAIAnalysis(checkupId);
+                                  }
+
+                                  // NO FALLBACK to _generatePrenatalAIInsights
+                                  // If still empty, leave as null (no AI section shown)
+
                                   medicationPlansSummary =
                                       checkupDetails['medicationPlans']
                                           as String;
@@ -1329,20 +1254,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       checkupDetails['calciumQuantity']
                                           as String;
                                 }
-
-                                if (aiAnalysis == null ||
-                                    aiAnalysis.trim().isEmpty) {
-                                  aiAnalysis = await MotherProfileService
-                                      .getCheckupAIAnalysis(
-                                    checkupId,
-                                  );
-                                }
                               }
 
-                              aiAnalysis = (aiAnalysis != null &&
-                                      aiAnalysis.trim().isNotEmpty)
-                                  ? aiAnalysis.trim()
-                                  : _generatePrenatalAIInsights(record);
                               final symptomSummary = _checkupSymptomSummaries[
                                       record['prenatal_checkup_id'] as int? ??
                                           -1] ??
@@ -1353,12 +1266,13 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   'Not inputted';
                               final riskLevelValue = (riskLevel != null &&
                                       riskLevel.trim().isNotEmpty)
-                                  ? _formatInputValue(riskLevel)
-                                  : 'Not inputted';
+                                  ? riskLevel
+                                  : '';
                               final riskFactorsValue =
                                   riskFactors.trim().isNotEmpty
                                       ? riskFactors
-                                      : 'Not inputted';
+                                      : '';
+
                               _showRecordDetails(
                                 title: 'Prenatal Checkup',
                                 subtitle:
@@ -1400,8 +1314,16 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       givenMedicationsSummary),
                                   MapEntry('Ferrous + FA', ferrousSummary),
                                   MapEntry('Calcium', calciumSummary),
-                                  MapEntry('Risk Level', riskLevelValue),
-                                  MapEntry('Risk Factors', riskFactorsValue),
+                                  MapEntry(
+                                      'Risk Level',
+                                      riskLevelValue.isNotEmpty
+                                          ? riskLevelValue
+                                          : 'Not inputted'),
+                                  MapEntry(
+                                      'Risk Factors',
+                                      riskFactorsValue.isNotEmpty
+                                          ? riskFactorsValue
+                                          : 'Not inputted'),
                                   MapEntry(
                                       'TD Vaccine',
                                       _formatInputValue(
@@ -1418,7 +1340,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                               record['next_schedule'])),
                                 ],
                                 aiAnalysis: aiAnalysis,
-                                useStructuredAiInsights: true,
+                                useStructuredAiInsights: false,
                               );
                             } else if (isUltrasound) {
                               final imageUrls =
@@ -1475,7 +1397,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       'Remarks', _formatValue(finalRemarks)),
                                 ],
                                 aiAnalysis: aiAnalysis,
-                                useStructuredAiInsights: aiAnalysis.isNotEmpty,
+                                useStructuredAiInsights:
+                                    aiAnalysis != null && aiAnalysis.isNotEmpty,
                               );
                             } else {
                               final imageUrls =

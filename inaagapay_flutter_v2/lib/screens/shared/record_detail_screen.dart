@@ -1,3 +1,5 @@
+// lib/screens/midwife/record_detail_screen.dart
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
@@ -13,6 +15,9 @@ class RecordDetailScreen extends StatefulWidget {
     this.imageUrls,
     this.aiAnalysis,
     this.useStructuredAiInsights = false,
+    this.riskLevel,
+    this.riskFactors,
+    this.suggestedActions,
   });
 
   final String title;
@@ -22,6 +27,9 @@ class RecordDetailScreen extends StatefulWidget {
   final List<String>? imageUrls;
   final String? aiAnalysis;
   final bool useStructuredAiInsights;
+  final String? riskLevel;
+  final List<String>? riskFactors;
+  final List<String>? suggestedActions;
 
   @override
   State<RecordDetailScreen> createState() => _RecordDetailScreenState();
@@ -39,6 +47,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   Widget build(BuildContext context) {
     final hasAi =
         widget.aiAnalysis != null && widget.aiAnalysis!.trim().isNotEmpty;
+    final isPrenatal = widget.title.toLowerCase().contains('prenatal');
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
@@ -116,12 +125,12 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                 const SizedBox(height: 14),
               ],
               _buildDetailsCard(),
+              if (isPrenatal && _shouldShowPrenatalRiskSummary()) ...[
+                const SizedBox(height: 14),
+                _buildPrenatalRiskSummaryCard(),
+              ],
               if (hasAi) ...[
                 const SizedBox(height: 14),
-                if (_shouldShowPrenatalRiskSummary())
-                  _buildPrenatalRiskSummaryCard(),
-                if (_shouldShowPrenatalRiskSummary())
-                  const SizedBox(height: 14),
                 _buildAiCard(widget.aiAnalysis!.trim()),
               ],
             ],
@@ -254,7 +263,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       final t = title.toLowerCase();
       if (t == 'vitals') return const Color(0xFFE6398D);
       if (t == 'fetal assessment') return const Color(0xFFD44B8A);
-      if (t == 'pregnancy symptoms') return const Color(0xFFF06292);
+      if (t == 'symptoms') return const Color(0xFFF06292);
       if (t == 'medications & supplements') return const Color(0xFFBA68C8);
       if (t == 'schedule & remarks') return const Color(0xFF9575CD);
     }
@@ -270,7 +279,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       final t = title.toLowerCase();
       if (t == 'vitals') return Icons.favorite_border;
       if (t == 'fetal assessment') return Icons.child_care;
-      if (t == 'pregnancy symptoms') return Icons.healing;
+      if (t == 'symptoms') return Icons.healing;
       if (t == 'medications & supplements') return Icons.medication_outlined;
       if (t == 'schedule & remarks') return Icons.event_note;
     }
@@ -343,31 +352,54 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
       for (final row in rows) {
         final key = _labelKey(row.key);
-        if (['date', 'ageofgestation', 'weight(kg)', 'bloodpressure']
-            .contains(key)) {
+        // Skip date from vitals - it's shown in the header/subtitle
+        if (key == 'date') continue;
+
+        // Vitals: weight, height, BMI, blood pressure, AOG
+        if ([
+          'ageofgestation',
+          'weight',
+          'weight(kg)',
+          'height',
+          'bmi',
+          'bloodpressure'
+        ].contains(key)) {
           vitals.add(row);
-        } else if ([
+        }
+        // Fetal Assessment: fetal count, position, heart rate, heart tone (NOT edema)
+        else if ([
           'fetalcount',
           'fetalposition',
-          'fetalhearttone',
+          'fetalheartrate',
           'fetalheartbeat',
-          'edema'
+          'fetalhearttone'
         ].contains(key)) {
           fetal.add(row);
-        } else if (['symptoms'].contains(key)) {
+        }
+        // Symptoms: symptoms list + edema
+        else if (['symptoms', 'edema'].contains(key)) {
           symptoms.add(row);
-        } else if ([
+        }
+        // Medications & Supplements: plans, given meds, ferrous, calcium, TD vaccine
+        else if ([
           'medicationplans',
           'givenmedications',
           'ferrous+fa',
+          'ferrous',
           'calcium',
-          'tdvaccine'
+          'tdvaccine',
+          'tddose'
         ].contains(key)) {
           meds.add(row);
-        } else if (['nextschedule', 'remarks'].contains(key)) {
+        }
+        // Schedule & Remarks: next schedule, remarks
+        else if (['nextschedule', 'nextvisit', 'remarks'].contains(key)) {
           schedule.add(row);
-        } else if (['risklevel', 'riskfactors'].contains(key)) {
-          // Skip risk level and factors (they go to the AI card area or can be ignored here since they're in card now)
+        }
+        // Skip risk level and factors (they go to the risk summary card)
+        else if (['risklevel', 'riskfactors', 'suggestedactions']
+            .contains(key)) {
+          continue;
         } else {
           vitals.add(row); // fallback
         }
@@ -376,7 +408,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       return {
         'Vitals': vitals,
         if (fetal.isNotEmpty) 'Fetal Assessment': fetal,
-        if (symptoms.isNotEmpty) 'Pregnancy Symptoms': symptoms,
+        if (symptoms.isNotEmpty) 'Symptoms': symptoms,
         if (meds.isNotEmpty) 'Medications & Supplements': meds,
         if (schedule.isNotEmpty) 'Schedule & Remarks': schedule,
       };
@@ -552,6 +584,8 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Widget _buildAiCard(String aiText) {
+    final isPrenatal = widget.title.toLowerCase().contains('prenatal');
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -594,11 +628,69 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          if (widget.useStructuredAiInsights)
+          if (isPrenatal)
+            _buildPrenatalAiInsights(aiText)
+          else if (widget.useStructuredAiInsights)
             _buildStructuredAiInsights(aiText)
           else
             _buildFormattedAiText(aiText),
         ],
+      ),
+    );
+  }
+
+  // In record_detail_screen.dart, replace _buildPrenatalAiInsights with:
+
+  Widget _buildPrenatalAiInsights(String aiText) {
+    if (aiText.isEmpty) {
+      return const Text(
+        'No AI insights available.',
+        style: TextStyle(color: AppColors.textSecondary),
+      );
+    }
+
+    // Strip common prefixes that AI might add
+    String displayText = aiText;
+    final prefixesToStrip = [
+      'AI INSIGHTS:',
+      'OVERALL ASSESSMENT:',
+      'OVERALL HEALTH STATUS:',
+      'KEY OBSERVATIONS:',
+      'RECOMMENDATIONS:',
+      'RECOMMENDED NEXT ACTIONS:',
+      'CLINICAL IMPRESSION:',
+      'FOLLOW-UP SUGGESTIONS:',
+      'DETAILED MEASUREMENTS ASSESSMENT:',
+      'ANATOMICAL ASSESSMENT:',
+      'GESTATIONAL AGE ASSESSMENT:',
+      'LABORATORY RESULTS:',
+      'ABNORMAL FINDINGS:',
+      'NORMAL RANGES:',
+      'SUMMARY:',
+    ];
+
+    for (final prefix in prefixesToStrip) {
+      if (displayText.toUpperCase().startsWith(prefix)) {
+        displayText = displayText.substring(prefix.length).trim();
+        break;
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Text(
+        displayText,
+        style: const TextStyle(
+          fontSize: 13,
+          color: AppColors.textPrimary,
+          height: 1.6,
+        ),
       ),
     );
   }
@@ -1590,25 +1682,12 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   bool _shouldShowPrenatalRiskSummary() {
-    if (!widget.useStructuredAiInsights) return false;
     final title = widget.title.toLowerCase();
-    if (!title.contains('prenatal') && !title.contains('checkup')) {
-      return false;
-    }
-    return _rowValue('Risk Level') != null || _rowValue('Risk Factors') != null;
-  }
-
-  String? _rowValue(String label) {
-    try {
-      return widget.rows
-          .firstWhere(
-            (row) =>
-                _normalizeForCompare(row.key) == _normalizeForCompare(label),
-          )
-          .value;
-    } catch (_) {
-      return null;
-    }
+    if (!title.contains('prenatal')) return false;
+    return widget.riskLevel != null ||
+        (widget.riskFactors != null && widget.riskFactors!.isNotEmpty) ||
+        (widget.suggestedActions != null &&
+            widget.suggestedActions!.isNotEmpty);
   }
 
   Color _riskLevelBadgeColor(String riskLevel) {
@@ -1619,11 +1698,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Widget _buildPrenatalRiskSummaryCard() {
-    final riskLevel = _rowValue('Risk Level') ?? 'Not inputted';
-    final riskFactors = _rowValue('Risk Factors') ?? 'Not inputted';
-    final factorCount = riskFactors.toLowerCase() == 'not inputted'
-        ? 0
-        : riskFactors.split(RegExp(r';\s*')).length;
+    final riskLevel = widget.riskLevel ?? '';
+    final riskFactors = widget.riskFactors ?? [];
+    final suggestedActions = widget.suggestedActions ?? [];
 
     return Container(
       width: double.infinity,
@@ -1668,71 +1745,170 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildSummaryPill(
-                icon: Icons.flag_outlined,
-                label: riskLevel,
-                color: _riskLevelBadgeColor(riskLevel),
-              ),
-              const SizedBox(width: 10),
-              _buildSummaryPill(
-                icon: Icons.fact_check_outlined,
-                label: 'Factors $factorCount',
-                color: AppColors.brandAccent,
-              ),
-            ],
-          ),
           const SizedBox(height: 16),
-          const Text(
-            'Clinical Signals',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textSecondary,
+
+          // Risk Level Section
+          if (riskLevel.isNotEmpty) ...[
+            _buildRiskSubSection(
+              title: 'Risk Level',
+              icon: Icons.flag_outlined,
+              child: Row(
+                children: [
+                  _buildRiskChip(
+                    label: riskLevel.toUpperCase(),
+                    color: _riskLevelBadgeColor(riskLevel),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            riskFactors,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.textPrimary,
-              height: 1.6,
+            const SizedBox(height: 14),
+          ],
+
+          // Risk Factors Section
+          if (riskFactors.isNotEmpty) ...[
+            _buildRiskSubSection(
+              title: 'Risk Factors',
+              icon: Icons.warning_amber_rounded,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: riskFactors.map((factor) {
+                  final parts = factor.split(':');
+                  final factorName =
+                      parts.length > 1 ? parts[0].trim() : factor;
+                  final isHigh = factor.toLowerCase().contains('high') ||
+                      (parts.length > 1 &&
+                          parts[1].trim().toLowerCase() == 'high');
+                  return Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isHigh
+                          ? AppColors.error.withValues(alpha: 0.1)
+                          : AppColors.warning.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isHigh
+                            ? AppColors.error.withValues(alpha: 0.3)
+                            : AppColors.warning.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      factorName,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isHigh ? AppColors.error : AppColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
+            const SizedBox(height: 14),
+          ],
+
+          // Suggested Actions Section
+          if (suggestedActions.isNotEmpty) ...[
+            _buildRiskSubSection(
+              title: 'Suggested Actions',
+              icon: Icons.lightbulb_outline,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: suggestedActions.asMap().entries.map((entry) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.brandPrimary.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${entry.key + 1}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.brandPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            entry.value,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textPrimary,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildSummaryPill({
+  Widget _buildRiskSubSection({
+    required String title,
     required IconData icon,
+    required Widget child,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 15, color: AppColors.textSecondary),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+
+  Widget _buildRiskChip({
     required String label,
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withAlpha(20),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withAlpha(100)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }
