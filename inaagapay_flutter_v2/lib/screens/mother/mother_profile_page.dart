@@ -1,4 +1,4 @@
-﻿// lib/screens/mother/mother_profile_page.dart
+// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -4066,7 +4066,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // HISTORY TAB (from Version 1)
+  // HISTORY TAB
   Widget _buildHistoryTab(List pastPregnancies) {
     if (pastPregnancies.isEmpty) {
       return Center(
@@ -4101,6 +4101,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         itemCount: pastPregnancies.length,
         itemBuilder: (context, index) {
           final p = pastPregnancies[index] as Map<String, dynamic>;
+          final checkups = (p['checkups'] as List?) ?? [];
+          final ultrasounds = (p['ultrasounds'] as List?) ?? [];
+          final labTests = (p['lab_tests'] as List?) ?? [];
           final deliveries =
               (p['delivery'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
                   [];
@@ -4191,6 +4194,64 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         }(),
                         const SizedBox(height: 8),
                       ],
+                      const Divider(height: 24),
+
+                      // ── Prenatal Checkups ─────────────────────────────
+                      _buildHistoryRecordSection(
+                        title: 'Prenatal Checkups',
+                        icon: Icons.medical_services_outlined,
+                        color: AppColors.brandPrimary,
+                        count: checkups.length,
+                        emptyMessage: 'No prenatal checkup records',
+                        children: (List<Map<String, dynamic>>.from(
+                            checkups.map((c) => c as Map<String, dynamic>))
+                          ..sort((a, b) {
+                            final da = _parseDateForSort(a['checkup_datetime']);
+                            final db = _parseDateForSort(b['checkup_datetime']);
+                            if (da == null || db == null) return 0;
+                            return db.compareTo(da);
+                          }))
+                            .map((c) => _buildCheckupCard(
+                                c,
+                                p['pregnancy_id'] as int? ?? -1,
+                                p['fetal_count'] as int? ?? 1))
+                            .toList(),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // ── Ultrasound Records ────────────────────────────
+                      _buildHistoryRecordSection(
+                        title: 'Ultrasound Records',
+                        icon: Icons.photo_outlined,
+                        color: Colors.purple,
+                        count: ultrasounds.length,
+                        emptyMessage: 'No ultrasound records',
+                        children: _sortByDate(
+                                ultrasounds
+                                    .cast<Map<String, dynamic>>(),
+                                'ultrasound_date',
+                                'desc')
+                            .map((u) => _buildUltrasoundCard(u))
+                            .toList(),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // ── Lab Test Records ──────────────────────────────
+                      _buildHistoryRecordSection(
+                        title: 'Lab Test Records',
+                        icon: Icons.science_outlined,
+                        color: Colors.orange,
+                        count: labTests.length,
+                        emptyMessage: 'No lab test records',
+                        children: _sortByDate(
+                                labTests.cast<Map<String, dynamic>>(),
+                                'lab_test_date',
+                                'desc')
+                            .map((l) => _buildLabTestCard(l))
+                            .toList(),
+                      ),
                     ],
                   ),
                 ),
@@ -4198,6 +4259,91 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Compact expandable sub-section used inside each past pregnancy card.
+  Widget _buildHistoryRecordSection({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required int count,
+    required String emptyMessage,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          leading: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          title: Row(
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: count > 0
+                      ? color.withValues(alpha: 0.15)
+                      : AppColors.borderPrimary,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: count > 0 ? color : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: count == 0
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.info_outline,
+                              size: 16, color: AppColors.textSecondary),
+                          const SizedBox(width: 8),
+                          Text(
+                            emptyMessage,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Column(children: children),
+            ),
+          ],
+        ),
       ),
     );
   }
