@@ -41,11 +41,11 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   final List<String> _riskFilters = ['All', 'Low Risk', 'High Risk'];
   final List<String> _barangayFilters = [
     'All',
+    'Sta Barbara',
     'Tarcan',
     'San Jose',
-    'Sta. Barbara',
+    'Tiaong',
     'Pinagbarilan',
-    'Tiaong'
   ];
 
   // Scroll controller

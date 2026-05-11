@@ -212,7 +212,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   String? _cityError;
   String? _provinceError;
 
-  static const List<String> _bhcBarangays = ['San Jose', 'Tarcan', 'Sta. Barbara', 'Tiaong', 'Pinagbarilan'];
+  static const List<String> _bhcBarangays = ['Sta Barbara', 'Tarcan', 'San Jose', 'Tiaong', 'Pinagbarilan'];
 
   // Step 2: Emergency Contacts
   final List<_EmergencyContact> _emergencyContacts = [];
