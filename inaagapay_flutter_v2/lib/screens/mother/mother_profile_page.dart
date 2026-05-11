@@ -17,8 +17,7 @@ import '../../widgets/secondary_button.dart';
 import '../../widgets/overview_info.dart';
 import '../../services/risk_engine.dart';
 import '../../services/smart_risk_engine.dart';
-import '../../models/smart_risk_models.dart';
-import '../../models/add_mother_form_data.dart';
+
 import '../shared/record_detail_screen.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 
@@ -898,17 +897,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
 // Show full screen image
-  void _showFullScreenImage(List<String> imageUrls, int initialIndex) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FullScreenImageViewer(
-          imageUrls: imageUrls,
-          initialIndex: initialIndex,
-        ),
-      ),
-    );
-  }
 
   String _normalizeMarkdownLine(String input) {
     var line = input;
@@ -1584,7 +1572,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  Widget _buildStructuredAiInsights(String text) {
+  // Unused method
+  Widget _buildStructuredAiInsights_unused(String text) {
     final sections = _extractAiSections(text);
     if (sections.isEmpty) return _buildFormattedAiText(text);
 
@@ -1643,6 +1632,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     List<String>? imageUrls,
     String? aiAnalysis,
     bool useStructuredAiInsights = false,
+    String? riskLevel,
+    String? riskFactors,
+    List<String>? suggestedActions,
   }) {
     Navigator.push(
       context,
@@ -1655,12 +1647,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           imageUrls: imageUrls,
           aiAnalysis: aiAnalysis,
           useStructuredAiInsights: useStructuredAiInsights,
+          riskLevel: (riskLevel != null && riskLevel.trim().isNotEmpty)
+              ? riskLevel
+              : null,
+          riskFactors: (riskFactors != null && riskFactors.trim().isNotEmpty)
+              ? riskFactors.split(';').map((s) => s.trim()).toList()
+              : null,
+          suggestedActions: suggestedActions,
         ),
       ),
     );
   }
-
-  AsyncSnapshot? _checkupFetchSnapshot;
 
   Future<Map<String, dynamic>?> _fetchCheckupDetails(
       int prenatalCheckupId, dynamic checkupDateTime) async {
@@ -1885,31 +1882,61 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               debugPrint('🔍 Trying MotherProfileService...');
               aiAnalysis =
                   await MotherProfileService.getCheckupAIAnalysis(checkupId);
-              debugPrint(
-                  '🔍 aiAnalysis from MotherProfileService: ${aiAnalysis?.substring(0, aiAnalysis!.length > 100 ? 100 : aiAnalysis!.length)}...');
+              if (aiAnalysis != null) {
+                debugPrint(
+                    '🔍 aiAnalysis from MotherProfileService: ${aiAnalysis.substring(0, aiAnalysis.length > 100 ? 100 : aiAnalysis.length)}...');
+              }
             }
           }
 
           // Only fallback if nothing found
-          if (aiAnalysis == null || aiAnalysis!.trim().isEmpty) {
+          if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
             debugPrint('🔍 Using _generatePrenatalAIInsights fallback...');
             aiAnalysis = _generatePrenatalAIInsights(checkup);
           } else {
-            aiAnalysis = aiAnalysis!.trim();
+            aiAnalysis = aiAnalysis.trim();
           }
 
-          debugPrint(
-              '🔍 Final aiAnalysis: ${aiAnalysis?.substring(0, aiAnalysis!.length > 100 ? 100 : aiAnalysis!.length)}...');
+          if (aiAnalysis != null && aiAnalysis.isNotEmpty) {
+            debugPrint(
+                '🔍 Final aiAnalysis: ${aiAnalysis.substring(0, aiAnalysis.length > 100 ? 100 : aiAnalysis.length)}...');
+          }
+
+          // include height and BMI (view-only) by reading mother's profile height
+          double? height = await _getMotherHeight();
+          String heightText =
+              height == null ? 'Not recorded' : '${height.toString()} cm';
+          String bmiText = '—';
+          String bmiStatus = '—';
+          try {
+            final w =
+                double.tryParse(checkup['checkup_weight']?.toString() ?? '');
+            if (w != null && height != null && height > 0) {
+              final hm = height / 100;
+              final bmi = w / (hm * hm);
+              bmiText = bmi.toStringAsFixed(1);
+              if (bmi < 18.5)
+                bmiStatus = 'Underweight';
+              else if (bmi < 25)
+                bmiStatus = 'Normal';
+              else if (bmi < 30)
+                bmiStatus = 'Overweight';
+              else
+                bmiStatus = 'Obese';
+            }
+          } catch (_) {}
 
           _showRecordDetails(
             title: 'Prenatal Checkup',
             subtitle: date,
             icon: Icons.medical_services,
             rows: [
-              MapEntry('Date', _formatDateTime(checkup['checkup_datetime'])),
               MapEntry('Fetal Count', fetalCount.toString()),
               MapEntry('Age of Gestation', aog),
               MapEntry('Weight (kg)', weight),
+              MapEntry('Height', heightText),
+              MapEntry('BMI', bmiText),
+              MapEntry('BMI Status', bmiStatus),
               MapEntry('Blood Pressure', '$bpSys/$bpDia'),
               MapEntry(
                   'Fetal Position', _formatValue(checkup['fetal_position'])),
@@ -1922,13 +1949,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               MapEntry('Given Medications', givenMedicationsSummary),
               MapEntry('Ferrous + FA', ferrousSummary),
               MapEntry('Calcium', calciumSummary),
-              MapEntry(
-                  'Risk Level',
-                  (riskLevel != null && riskLevel.trim().isNotEmpty)
-                      ? riskLevel
-                      : 'Not inputted'),
-              MapEntry('Risk Factors',
-                  riskFactors.trim().isNotEmpty ? riskFactors : 'Not inputted'),
               MapEntry('TD Vaccine', _formatValue(checkup['td_vaccine_dose'])),
               MapEntry('Edema', _formatValue(checkup['edema'])),
               MapEntry('Remarks', _formatValue(checkup['remarks'])),
@@ -1936,6 +1956,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ],
             aiAnalysis: aiAnalysis,
             useStructuredAiInsights: false,
+            riskLevel: riskLevel,
+            riskFactors: riskFactors,
           );
         },
       ),

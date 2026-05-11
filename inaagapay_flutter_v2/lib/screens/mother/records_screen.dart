@@ -9,6 +9,7 @@ import '../../services/supabase_service.dart';
 import '../../widgets/headline.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/full_screen_image_viewer.dart';
+import '../shared/record_detail_screen.dart';
 
 class RecordsScreen extends StatefulWidget {
   const RecordsScreen({super.key});
@@ -267,6 +268,42 @@ class _RecordsScreenState extends State<RecordsScreen>
   }
 
   void _showRecordDetails({
+    required String title,
+    required List<MapEntry<String, String>> rows,
+    IconData icon = Icons.receipt_long,
+    String? subtitle,
+    List<String>? imageUrls,
+    String? aiAnalysis,
+    bool useStructuredAiInsights = false,
+    String? riskLevel,
+    String? riskFactors,
+    List<String>? suggestedActions,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecordDetailScreen(
+          title: title,
+          rows: rows,
+          icon: icon,
+          subtitle: subtitle,
+          imageUrls: imageUrls,
+          aiAnalysis: aiAnalysis,
+          useStructuredAiInsights: useStructuredAiInsights,
+          riskLevel: (riskLevel != null && riskLevel.trim().isNotEmpty)
+              ? riskLevel
+              : null,
+          riskFactors: (riskFactors != null && riskFactors.trim().isNotEmpty)
+              ? riskFactors.split(';').map((s) => s.trim()).toList()
+              : null,
+          suggestedActions: suggestedActions,
+        ),
+      ),
+    );
+  }
+
+  // Legacy modal-based method (kept for non-prenatal records if needed)
+  void _showRecordDetailsModal({
     required String title,
     required List<MapEntry<String, String>> rows,
     IconData icon = Icons.receipt_long,
@@ -1341,6 +1378,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 ],
                                 aiAnalysis: aiAnalysis,
                                 useStructuredAiInsights: false,
+                                riskLevel: riskLevel,
+                                riskFactors: riskFactors,
                               );
                             } else if (isUltrasound) {
                               final imageUrls =
