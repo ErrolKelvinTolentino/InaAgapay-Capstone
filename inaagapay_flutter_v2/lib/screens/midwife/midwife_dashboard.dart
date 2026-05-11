@@ -10,6 +10,7 @@ import '../../widgets/midwife_statistics_card.dart';
 import '../../widgets/midwife_history_card.dart';
 import '../../widgets/chart_card.dart';
 import 'child_profile_page.dart';
+import '../mother/mother_profile_page.dart';
 
 class MidwifeDashboard extends StatefulWidget {
   const MidwifeDashboard({super.key});
@@ -492,6 +493,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
 
             _priorityTasks.add(PriorityTask(
               id: checkup['prenatal_checkup_id'],
+              motherId: pregnancyData['mother_id'] as int,
               title: 'Prenatal Checkup Scheduled',
               description:
                   '$name has a checkup scheduled for ${DateFormat('MMM d, yyyy').format(nextDate)}',
@@ -526,6 +528,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
 
         _priorityTasks.add(PriorityTask(
           id: pregnancy['pregnancy_id'],
+          motherId: pregnancy['mother_id'] as int,
           title: 'High-Risk Pregnancy',
           description: '$name requires close monitoring and follow-up',
           urgency: 'urgent',
@@ -1021,7 +1024,17 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                   ),
                                   const Divider(height: 1),
                                   ..._priorityTasks.take(5).map(
-                                      (task) => _PriorityTaskTile(task: task)),
+                                      (task) => _PriorityTaskTile(
+                                        task: task,
+                                        onTap: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => MotherProfilePage(
+                                              motherId: task.motherId,
+                                            ),
+                                          ),
+                                        ),
+                                      )),
                                   if (_priorityTasks.length > 5)
                                     Padding(
                                       padding: const EdgeInsets.all(12),
@@ -1154,6 +1167,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
 // Priority Task Model
 class PriorityTask {
   final int id;
+  final int motherId;
   final String title;
   final String description;
   final String urgency;
@@ -1162,6 +1176,7 @@ class PriorityTask {
 
   PriorityTask({
     required this.id,
+    required this.motherId,
     required this.title,
     required this.description,
     required this.urgency,
@@ -1173,8 +1188,9 @@ class PriorityTask {
 // Priority Task Tile Widget
 class _PriorityTaskTile extends StatelessWidget {
   final PriorityTask task;
+  final VoidCallback? onTap;
 
-  const _PriorityTaskTile({required this.task});
+  const _PriorityTaskTile({required this.task, this.onTap});
 
   Color _getUrgencyColor() {
     switch (task.urgency) {
@@ -1202,66 +1218,80 @@ class _PriorityTaskTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom:
-              BorderSide(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _getUrgencyColor().withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(_getTaskIcon(), color: _getUrgencyColor(), size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  task.description,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+    final urgencyColor = _getUrgencyColor();
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                  color: AppColors.borderPrimary.withValues(alpha: 0.5)),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _getUrgencyColor().withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              task.urgency.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: _getUrgencyColor(),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: urgencyColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child:
+                    Icon(_getTaskIcon(), color: urgencyColor, size: 20),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      task.description,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: urgencyColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  task.urgency.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: urgencyColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right,
+                  size: 18, color: AppColors.textSecondary),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
