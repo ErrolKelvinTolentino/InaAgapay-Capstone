@@ -1,4 +1,4 @@
-// lib/screens/mother/mother_profile_page.dart
+﻿// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -17,7 +17,6 @@ import '../../widgets/secondary_button.dart';
 import '../../widgets/overview_info.dart';
 import '../../services/risk_engine.dart';
 import '../../services/smart_risk_engine.dart';
-
 import '../shared/record_detail_screen.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 
@@ -33,6 +32,7 @@ const List<String> _bloodTypeOptions = [
   'O-',
   'Unknown'
 ];
+
 // Extension name options
 const List<String> _extensionOptions = [
   '',
@@ -65,11 +65,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   String _childQuery = '';
   String _childSort = 'recent';
   final Set<String> _expandedLabInsightAspects = <String>{};
-  StateSetter? _recordDetailsModalSetState;
 
   // Edit mode states
   bool _isEditingPersonal = false;
   bool _isEditingAddress = false;
+
+  // FIX #1: Guard so controllers are only created once per profile load,
+  // not on every rebuild.
+  bool _controllersInitialized = false;
   final Map<String, TextEditingController> _personalControllers = {};
   final Map<String, TextEditingController> _addressControllers = {};
 
@@ -96,10 +99,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   @override
   void dispose() {
     _tabController.dispose();
-    for (var controller in _personalControllers.values) {
+    for (final controller in _personalControllers.values) {
       controller.dispose();
     }
-    for (var controller in _addressControllers.values) {
+    for (final controller in _addressControllers.values) {
       controller.dispose();
     }
     super.dispose();
@@ -108,9 +111,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   Future<void> _loadProfilePicture() async {
     final url = await SupabaseService.getProfilePictureUrl(widget.motherId);
     if (mounted) {
-      setState(() {
-        _profilePictureUrl = url;
-      });
+      setState(() => _profilePictureUrl = url);
     }
   }
 
@@ -126,10 +127,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           .maybeSingle();
 
       if (pregnanciesResponse == null) {
-        setState(() {
-          _latestGrowthData = null;
-          _loadingGrowth = false;
-        });
+        if (mounted) {
+          setState(() {
+            _latestGrowthData = null;
+            _loadingGrowth = false;
+          });
+        }
         return;
       }
 
@@ -152,9 +155,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           .limit(1)
           .maybeSingle();
 
+      if (!mounted) return;
+
       if (checkupResponse != null) {
         final weight = checkupResponse['checkup_weight'] as num?;
         final height = await _getMotherHeight();
+        if (!mounted) return;
 
         double? bmi;
         String? bmiStatus;
@@ -184,10 +190,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       }
     } catch (e) {
       debugPrint('Error loading growth data: $e');
-      setState(() {
-        _latestGrowthData = null;
-        _loadingGrowth = false;
-      });
+      if (mounted) {
+        setState(() {
+          _latestGrowthData = null;
+          _loadingGrowth = false;
+        });
+      }
     }
   }
 
@@ -231,7 +239,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
   Future<void> _refresh() async {
+    // FIX #1 continued: reset the guard so controllers re-init from fresh data
     setState(() {
+      _controllersInitialized = false;
+      _isEditingPersonal = false;
+      _isEditingAddress = false;
       _profileFuture = MotherProfileService.fetchMotherProfile(widget.motherId);
     });
     await _loadProfilePicture();
@@ -244,29 +256,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
-  void _refreshRecordDetailsUi() {
-    final modalSetState = _recordDetailsModalSetState;
-    if (modalSetState != null) {
-      modalSetState(() {});
-      return;
-    }
-    if (!mounted) return;
-    setState(() {});
-  }
+  // ── Navigation helpers ──────────────────────────────────────────────────
 
-  // Navigate to add ultrasound form
-  void _goToAddUltrasound() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddUltrasoundPage(
-          motherId: widget.motherId,
-        ),
-      ),
-    ).then((_) => _refresh());
-  }
-
-  // Navigate to ultrasound analyzer
   void _goToUltrasoundAnalyzer(Map<String, dynamic> pregnancy) {
     Navigator.push(
       context,
@@ -279,7 +270,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     ).then((_) => _refresh());
   }
 
-  // Navigate to lab test analyzer
   void _goToLabTestAnalyzer(Map<String, dynamic> pregnancy) {
     Navigator.push(
       context,
@@ -292,7 +282,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     ).then((_) => _refresh());
   }
 
-  // Helper methods for formatting
+  // ── Formatting helpers ──────────────────────────────────────────────────
+
   String _formatDate(dynamic date) {
     if (date == null) return '-';
     try {
@@ -346,7 +337,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
-  // AI Analysis Generators (from Version 1)
+  // ── AI insight generators ───────────────────────────────────────────────
+
   String _generatePrenatalAIInsights(Map<String, dynamic> checkup) {
     final bpSys = _toDouble(checkup['blood_pressure_systolic']);
     final bpDia = _toDouble(checkup['blood_pressure_diastolic']);
@@ -354,7 +346,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final edemaRaw = _formatValue(checkup['edema']);
     final edema = edemaRaw.toLowerCase();
     final tdDose = _formatValue(checkup['td_vaccine_dose']);
-
     final fhrRaw = _formatValue(checkup['fetal_heart_beat']);
     final fhr = int.tryParse(fhrRaw);
 
@@ -492,15 +483,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   ({String cleanRemarks, String? extractedAi}) _splitRemarksAndAi(
       String? rawRemarks) {
     final source = rawRemarks?.trim() ?? '';
-    if (source.isEmpty) {
-      return (cleanRemarks: '', extractedAi: null);
-    }
+    if (source.isEmpty) return (cleanRemarks: '', extractedAi: null);
 
     final marker = RegExp(r'\bAI\s*Analysis\s*:', caseSensitive: false);
     final match = marker.firstMatch(source);
-    if (match == null) {
-      return (cleanRemarks: source, extractedAi: null);
-    }
+    if (match == null) return (cleanRemarks: source, extractedAi: null);
 
     final notesPart = source.substring(0, match.start).trim();
     final aiPart = source.substring(match.end).trim();
@@ -509,11 +496,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       cleanRemarks: notesPart,
       extractedAi: aiPart.isEmpty ? null : aiPart,
     );
-  }
-
-  ({String cleanRemarks, String? extractedAi}) _splitLabRemarksAndAi(
-      String? rawRemarks) {
-    return _splitRemarksAndAi(rawRemarks);
   }
 
   Map<String, dynamic>? _latestRecordByDate(List records, String dateField) {
@@ -533,168 +515,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return typed.first;
   }
 
-  ({String level, String structuredText}) _buildUnifiedMaternalInsight(
-      Map<String, dynamic> pregnancy) {
-    final checkups = (pregnancy['checkups'] as List?) ?? const [];
-    final ultrasounds = (pregnancy['ultrasounds'] as List?) ?? const [];
-    final labTests = (pregnancy['lab_tests'] as List?) ?? const [];
-
-    final latestCheckup = _latestRecordByDate(checkups, 'checkup_datetime');
-    final latestUltrasound =
-        _latestRecordByDate(ultrasounds, 'ultrasound_date');
-    final latestLab = _latestRecordByDate(labTests, 'lab_test_date');
-
-    final observations = <String>[];
-    final recommendations = <String>[];
-    int riskScore = 0;
-    bool hasSevereSignal = false;
-
-    if (latestCheckup != null) {
-      final checkupDate = _formatDateTime(latestCheckup['checkup_datetime']);
-      final bpSys = _toDouble(latestCheckup['blood_pressure_systolic']);
-      final bpDia = _toDouble(latestCheckup['blood_pressure_diastolic']);
-      if (bpSys != null && bpDia != null) {
-        if (bpSys >= 160 || bpDia >= 110) {
-          riskScore += 4;
-          hasSevereSignal = true;
-          observations.add(
-              'Latest Checkup ($checkupDate): BP $bpSys/$bpDia mmHg is severely elevated.');
-          recommendations.add(
-              'Urgent clinician review is advised for severe blood pressure elevation.');
-        } else if (bpSys >= 140 || bpDia >= 90) {
-          riskScore += 3;
-          observations.add(
-              'Latest Checkup ($checkupDate): BP $bpSys/$bpDia mmHg is elevated.');
-          recommendations.add(
-              'Increase BP monitoring frequency and assess warning signs.');
-        } else if (bpSys < 90 || bpDia < 60) {
-          riskScore += 1;
-          observations.add(
-              'Latest Checkup ($checkupDate): BP $bpSys/$bpDia mmHg is lower than expected.');
-          recommendations.add(
-              'Review hydration status and monitor dizziness/syncope symptoms.');
-        } else {
-          observations.add(
-              'Latest Checkup ($checkupDate): Blood pressure is within expected range.');
-        }
-      }
-
-      final fhrRaw = _formatValue(latestCheckup['fetal_heart_beat']);
-      final fhr = int.tryParse(fhrRaw);
-      if (fhr != null) {
-        if (fhr < 120 || fhr > 160) {
-          riskScore += 2;
-          observations.add(
-              'Latest Checkup ($checkupDate): Fetal heart rate $fhr bpm is outside expected range.');
-          recommendations.add(
-              'Correlate fetal heart findings with repeat assessment and clinical exam.');
-        } else {
-          observations.add(
-              'Latest Checkup ($checkupDate): Fetal heart rate $fhr bpm is within expected range.');
-        }
-      }
-
-      final edema = _formatValue(latestCheckup['edema']).toLowerCase();
-      if (edema != '-' && edema != 'none') {
-        riskScore += 1;
-        observations.add(
-            'Latest Checkup ($checkupDate): Edema is reported (${_formatValue(latestCheckup['edema'])}).');
-        recommendations.add('Track edema progression in succeeding checkups.');
-      }
-    } else {
-      observations.add('No prenatal checkup records are currently available.');
-      recommendations.add(
-          'Schedule a prenatal checkup to refresh current maternal status.');
-    }
-
-    if (latestUltrasound != null) {
-      final usDate = _formatDate(latestUltrasound['ultrasound_date']);
-      final remarks = _formatValue(latestUltrasound['remarks']).toLowerCase();
-      if (remarks != '-') {
-        if (RegExp(r'abnormal|concern|urgent|critical', caseSensitive: false)
-            .hasMatch(remarks)) {
-          riskScore += 3;
-          observations.add(
-              'Latest Ultrasound ($usDate): Findings indicate concern/abnormality in remarks.');
-          recommendations.add(
-              'Review latest ultrasound report with obstetric interpretation.');
-        } else if (RegExp(r'follow|monitor', caseSensitive: false)
-            .hasMatch(remarks)) {
-          riskScore += 1;
-          observations.add(
-              'Latest Ultrasound ($usDate): Follow-up monitoring is recommended.');
-          recommendations
-              .add('Maintain ultrasound follow-up schedule as advised.');
-        } else if (RegExp(r'normal|healthy', caseSensitive: false)
-            .hasMatch(remarks)) {
-          observations.add(
-              'Latest Ultrasound ($usDate): Remarks suggest stable/normal findings.');
-        } else {
-          observations.add(
-              'Latest Ultrasound ($usDate): Report available; review detailed notes for context.');
-        }
-      }
-    }
-
-    if (latestLab != null) {
-      final labDate = _formatDate(latestLab['lab_test_date']);
-      final split = _splitLabRemarksAndAi(latestLab['remarks']?.toString());
-      final labText = '${split.cleanRemarks} ${split.extractedAi ?? ''}'
-          .toLowerCase()
-          .trim();
-
-      if (labText.isNotEmpty) {
-        if (RegExp(
-          r'critical|abnormal \(review\)|positive \(review\)|outside normal range|higher than normal|lower than normal',
-          caseSensitive: false,
-        ).hasMatch(labText)) {
-          riskScore += 3;
-          observations.add(
-              'Latest Lab Test ($labDate): Review-level laboratory findings are present.');
-          recommendations.add(
-              'Prioritize clinical correlation of latest laboratory findings.');
-        } else if (RegExp(r'borderline|observe|monitor', caseSensitive: false)
-            .hasMatch(labText)) {
-          riskScore += 1;
-          observations.add(
-              'Latest Lab Test ($labDate): Borderline/observe findings were noted.');
-          recommendations
-              .add('Trend repeat labs if symptoms persist or worsen.');
-        } else if (RegExp(r'within normal limits|normal', caseSensitive: false)
-            .hasMatch(labText)) {
-          observations.add(
-              'Latest Lab Test ($labDate): Findings are generally within normal limits.');
-        } else {
-          observations.add(
-              'Latest Lab Test ($labDate): Result available; interpret with clinical context.');
-        }
-      }
-    }
-
-    if (recommendations.isEmpty) {
-      recommendations.add(
-          'Continue routine prenatal surveillance and document new symptoms promptly.');
-    }
-
-    final level = hasSevereSignal || riskScore >= 6 ? 'HIGH RISK' : 'LOW RISK';
-
-    final overall = level == 'HIGH RISK'
-        ? 'Risk signals are present across recent records and should be monitored closely.'
-        : 'Latest combined records suggest a relatively stable maternal state at this time.';
-
-    final buffer = StringBuffer();
-    buffer.write('OVERALL ASSESSMENT: $overall\n\n');
-    buffer.write('KEY OBSERVATIONS:\n');
-    for (final item in observations) {
-      buffer.write('- $item\n');
-    }
-    buffer.write('\nRECOMMENDATIONS:\n');
-    for (final item in recommendations.take(4)) {
-      buffer.write('- $item\n');
-    }
-
-    return (level: level, structuredText: buffer.toString().trim());
-  }
+  // ── Risk card ───────────────────────────────────────────────────────────
 
   Widget _buildSimpleRiskCard(
       Map<String, dynamic> profile, Map<String, dynamic> pregnancy) {
@@ -703,13 +524,23 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final pastPregnancies =
         (profile['past_pregnancies'] as List?)?.cast<Map<String, dynamic>>() ??
             [];
-    final latestCheckup = checkups.isNotEmpty ? checkups.last : null;
 
-    if (latestCheckup == null) {
-      return _buildNoDataCard();
-    }
+    // FIX #2: use latest by date, not .last (which is insertion order)
+    final latestCheckup = checkups.isNotEmpty
+        ? (List<Map<String, dynamic>>.from(checkups)
+              ..sort((a, b) {
+                final da =
+                    DateTime.tryParse(a['checkup_datetime']?.toString() ?? '');
+                final db =
+                    DateTime.tryParse(b['checkup_datetime']?.toString() ?? '');
+                if (da == null || db == null) return 0;
+                return db.compareTo(da);
+              }))
+            .first
+        : null;
 
-    // Get risk assessment
+    if (latestCheckup == null) return _buildNoDataCard();
+
     final risk = RiskEngine.evaluate(latestCheckup: latestCheckup);
     final history = SmartRiskEngine.buildHistory(
         allCheckups: checkups, pastPregnancies: pastPregnancies);
@@ -741,7 +572,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // BIG clear status
           Row(
             children: [
               Icon(
@@ -761,13 +591,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ],
           ),
           const SizedBox(height: 8),
-
-          // What's off (or all clear)
           if (isHigh) ...[
-            Text(
-              risk.note,
-              style: TextStyle(fontSize: 15, color: Colors.red.shade700),
-            ),
+            Text(risk.note,
+                style: TextStyle(fontSize: 15, color: Colors.red.shade700)),
             const SizedBox(height: 12),
             ...risk.findings.map((f) => Padding(
                   padding: const EdgeInsets.only(bottom: 6),
@@ -785,16 +611,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   ),
                 )),
           ] else ...[
-            Text(
-              'All readings within normal range',
-              style: TextStyle(fontSize: 15, color: Colors.green.shade700),
-            ),
+            Text('All readings within normal range',
+                style: TextStyle(fontSize: 15, color: Colors.green.shade700)),
           ],
-
           const SizedBox(height: 16),
           const Divider(),
-
-          // What happened before (collapsible)
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
@@ -819,18 +640,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              event.what,
-                              style: TextStyle(
-                                  fontSize: 13, color: Colors.grey.shade800),
-                            ),
+                            Text(event.what,
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.grey.shade800)),
                             if (event.week != null)
-                              Text(
-                                'Week ${event.week!.toInt()}',
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.textSecondary),
-                              ),
+                              Text('Week ${event.week!.toInt()}',
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary)),
                           ],
                         ),
                       ),
@@ -840,11 +657,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               }).toList(),
             ),
           ),
-
           const SizedBox(height: 8),
           const Divider(),
-
-          // What to watch
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
@@ -896,7 +710,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-// Show full screen image
+  // ── Markdown / AI text helpers ──────────────────────────────────────────
 
   String _normalizeMarkdownLine(String input) {
     var line = input;
@@ -921,22 +735,19 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     for (final match in pattern.allMatches(input)) {
       if (match.start > current) {
         spans.add(TextSpan(
-          text: _cleanResidualMarkdown(input.substring(current, match.start)),
-        ));
+            text:
+                _cleanResidualMarkdown(input.substring(current, match.start))));
       }
-
-      final boldText = match.group(1) ?? '';
       spans.add(TextSpan(
-        text: boldText,
+        text: match.group(1) ?? '',
         style: const TextStyle(fontWeight: FontWeight.bold),
       ));
       current = match.end;
     }
 
     if (current < input.length) {
-      spans.add(TextSpan(
-        text: _cleanResidualMarkdown(input.substring(current)),
-      ));
+      spans.add(
+          TextSpan(text: _cleanResidualMarkdown(input.substring(current))));
     }
 
     if (spans.isEmpty) {
@@ -955,9 +766,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     for (int i = 0; i < lines.length; i++) {
       final normalizedLine = _normalizeMarkdownLine(lines[i]);
       spans.addAll(_parseInlineMarkdown(normalizedLine));
-      if (i < lines.length - 1) {
-        spans.add(const TextSpan(text: '\n'));
-      }
+      if (i < lines.length - 1) spans.add(const TextSpan(text: '\n'));
     }
 
     return RichText(
@@ -987,9 +796,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     for (final line in lines) {
       if (line.isEmpty) continue;
       if (line.toUpperCase() == 'COMPREHENSIVE LABORATORY ANALYSIS') continue;
-      if (RegExp(r'^[-_=]{2,}$').hasMatch(line.replaceAll(' ', ''))) {
-        continue;
-      }
+      if (RegExp(r'^[-_=]{2,}$').hasMatch(line.replaceAll(' ', ''))) continue;
 
       final heading = headingPattern.firstMatch(line);
       if (heading != null) {
@@ -1014,11 +821,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
   bool _isConcerningAnalyte(String text) {
-    final t = text.toLowerCase();
     return RegExp(
       r'protein|glucose|ketone|nitrite|leukocyte|blood|pus|bacteria|bilirubin|hiv|hbsag|vdrl|rpr|syphilis|infection|pathogen',
       caseSensitive: false,
-    ).hasMatch(t);
+    ).hasMatch(text.toLowerCase());
   }
 
   String _classifyLabStatus(String testName, String rawValue) {
@@ -1026,11 +832,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final value = rawValue.toLowerCase();
     final merged = '$test $value';
 
-    final hasWithinNormal = RegExp(
-      r'within normal limits|within normal range|normal range|wnl',
-      caseSensitive: false,
-    ).hasMatch(value);
-    if (hasWithinNormal) return 'WITHIN NORMAL LIMITS';
+    if (RegExp(r'within normal limits|within normal range|normal range|wnl',
+            caseSensitive: false)
+        .hasMatch(value)) {
+      return 'WITHIN NORMAL LIMITS';
+    }
 
     final isColorFinding = test.contains('color') || test.contains('colour');
     if (isColorFinding) {
@@ -1161,7 +967,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return (
       testName: _stripDecorativeDashes(testName),
       value: _stripDecorativeDashes(value),
-      status: status
+      status: status,
     );
   }
 
@@ -1169,15 +975,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   String _stripDecorativeDashes(String value) {
     final trimmed = value.trim();
-    if (RegExp(r'^[-_=]{2,}$').hasMatch(trimmed)) {
-      return '';
-    }
+    if (RegExp(r'^[-_=]{2,}$').hasMatch(trimmed)) return '';
     return trimmed.replaceAll(RegExp(r'\s+--+\s+'), ' ').trim();
   }
 
-  String _normalizeAspectKey(String input) {
-    return input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-  }
+  String _normalizeAspectKey(String input) =>
+      input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
   bool _lineMatchesAspect(String line, String aspect) {
     final a = _normalizeAspectKey(_safeText(aspect));
@@ -1189,14 +992,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       String aspect, List<String> abnormalLines, List<String> rangeLines) {
     final matches = <String>[];
     for (final line in abnormalLines) {
-      if (_lineMatchesAspect(line, aspect)) {
-        matches.add(line);
-      }
+      if (_lineMatchesAspect(line, aspect)) matches.add(line);
     }
     for (final line in rangeLines) {
-      if (_lineMatchesAspect(line, aspect)) {
-        matches.add('Reference: $line');
-      }
+      if (_lineMatchesAspect(line, aspect)) matches.add('Reference: $line');
     }
     return matches.join('\n\n').trim();
   }
@@ -1226,8 +1025,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.science_outlined,
                   size: 18, color: AppColors.brandPrimary),
               SizedBox(width: 8),
@@ -1252,10 +1051,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             child: const Text(
               'Status guide: REVIEW = needs clinician review, BORDERLINE/OBSERVE = monitor and correlate, WITHIN NORMAL LIMITS = reassuring in context.',
               style: TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary,
-                height: 1.35,
-              ),
+                  fontSize: 11, color: AppColors.textSecondary, height: 1.35),
             ),
           ),
           const SizedBox(height: 10),
@@ -1279,13 +1075,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          row.testName,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        child: Text(row.testName,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w700)),
                       ),
                       SizedBox(
                         width: 24,
@@ -1294,13 +1086,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           splashRadius: 16,
                           onPressed: hasDetails
                               ? () {
-                                  if (isExpanded) {
-                                    _expandedLabInsightAspects
-                                        .remove(aspectKey);
-                                  } else {
-                                    _expandedLabInsightAspects.add(aspectKey);
-                                  }
-                                  _refreshRecordDetailsUi();
+                                  setState(() {
+                                    if (isExpanded) {
+                                      _expandedLabInsightAspects
+                                          .remove(aspectKey);
+                                    } else {
+                                      _expandedLabInsightAspects.add(aspectKey);
+                                    }
+                                  });
                                 }
                               : null,
                           icon: Icon(
@@ -1357,10 +1150,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   Text(
                     _statusMeaning(row.status),
                     style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                      height: 1.35,
-                    ),
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        height: 1.35),
                   ),
                   if (isExpanded && hasDetails)
                     Container(
@@ -1445,10 +1237,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 child: Text(
                   _friendlyAiSectionTitle(safeTitle),
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: accent,
-                  ),
+                      fontSize: 13, fontWeight: FontWeight.w700, color: accent),
                 ),
               ),
             ],
@@ -1469,10 +1258,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       margin: const EdgeInsets.only(top: 6, right: 8),
                       width: 6,
                       height: 6,
-                      decoration: BoxDecoration(
-                        color: accent,
-                        shape: BoxShape.circle,
-                      ),
+                      decoration:
+                          BoxDecoration(color: accent, shape: BoxShape.circle),
                     ),
                     Expanded(child: _buildFormattedAiText(cleaned)),
                   ],
@@ -1515,31 +1302,22 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      parsed.testName,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    Text(parsed.testName,
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700)),
                     if (parsed.value.isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      Text(
-                        parsed.value,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      Text(parsed.value,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary)),
                     ],
                     const SizedBox(height: 4),
                     Text(
                       _statusMeaning(parsed.status),
                       style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                        height: 1.35,
-                      ),
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                          height: 1.35),
                     ),
                   ],
                 ),
@@ -1559,10 +1337,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 child: Text(
                   parsed.status,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -1572,58 +1349,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // Unused method
-  Widget _buildStructuredAiInsights_unused(String text) {
-    final sections = _extractAiSections(text);
-    if (sections.isEmpty) return _buildFormattedAiText(text);
+  // ── Record detail navigation ────────────────────────────────────────────
 
-    const sectionOrder = [
-      'OVERALL ASSESSMENT',
-      'LABORATORY RESULTS',
-      'ABNORMAL FINDINGS',
-      'NORMAL RANGES',
-      'KEY OBSERVATIONS',
-      'RECOMMENDATIONS',
-      'SUMMARY',
-    ];
-
-    final orderedEntries = <MapEntry<String, List<String>>>[];
-    for (final key in sectionOrder) {
-      if (sections.containsKey(key)) {
-        orderedEntries.add(MapEntry(key, sections[key]!));
-      }
-    }
-    for (final entry in sections.entries) {
-      if (!sectionOrder.contains(entry.key)) {
-        orderedEntries.add(entry);
-      }
-    }
-
-    final widgets = <Widget>[];
-    for (final entry in orderedEntries) {
-      if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON') {
-        continue;
-      }
-
-      if (entry.key == 'LABORATORY RESULTS') {
-        widgets.add(_buildLabResultsSummaryCard(sections));
-        continue;
-      }
-
-      if (entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
-        continue;
-      }
-
-      widgets.add(_buildAiSectionCard(entry.key, entry.value));
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: widgets,
-    );
-  }
-
-  // Show record details on a full screen page
   void _showRecordDetails({
     required String title,
     required List<MapEntry<String, String>> rows,
@@ -1742,9 +1469,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               calciumQuantity = quantity;
             }
           }
-          if (givenItems.isNotEmpty) {
-            givenMedications = givenItems.join('; ');
-          }
+          if (givenItems.isNotEmpty) givenMedications = givenItems.join('; ');
 
           final planItems = <String>[];
           for (final row
@@ -1758,17 +1483,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               qty != 'null' ? 'Qty $qty' : null,
               freq,
               start != null ? 'Start $start' : null,
-              end != null ? 'End $end' : null
-            ].where((element) => element != null).join(' · ');
+              end != null ? 'End $end' : null,
+            ].whereType<String>().join(' · ');
             planItems.add('$name${details.isNotEmpty ? ' ($details)' : ''}');
           }
-          if (planItems.isNotEmpty) {
-            medicationPlans = planItems.join('; ');
-          }
+          if (planItems.isNotEmpty) medicationPlans = planItems.join('; ');
         }
       }
 
-      // FIXED: Query pregnancy_symptoms instead of non-existent mother_symptoms
       String symptomSummaryStr = 'None recorded';
       try {
         final symRows = await SupabaseService.client
@@ -1785,16 +1507,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 symptomType?['symptom_name']?.toString() ?? 'Unknown symptom';
             final risk = symptomType?['risk_category']?.toString() ?? 'unknown';
             final note = (row['notes'] as String?)?.trim();
-            final label = note != null && note.isNotEmpty
+            items.add(note != null && note.isNotEmpty
                 ? '$symName ($risk): $note'
-                : '$symName ($risk)';
-            items.add(label);
+                : '$symName ($risk)');
           }
           symptomSummaryStr = items.join('; ');
         }
-      } catch (_) {
-        // Ignore symptom fetch errors
-      }
+      } catch (_) {}
 
       return {
         'aiResponse': aiResponse,
@@ -1811,7 +1530,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
-  // Build checkup card with full details
+  // ── Record cards ────────────────────────────────────────────────────────
+
   Widget _buildCheckupCard(
       Map<String, dynamic> checkup, int pregnancyId, int fetalCount) {
     final date = _formatDateTime(checkup['checkup_datetime']);
@@ -1830,8 +1550,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           child: const Icon(Icons.medical_services,
               color: AppColors.brandPrimary, size: 20),
         ),
-        title: Text('Checkup',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text('Checkup',
+            style: TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1855,19 +1575,15 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           String symptomSummary = 'None recorded';
 
           final checkupId = checkup['prenatal_checkup_id'];
-          debugPrint('🔍 Checkup ID: $checkupId');
 
           if (checkupId is int) {
             final checkupDetails = await _fetchCheckupDetails(
                 checkupId, checkup['checkup_datetime']);
-            debugPrint('🔍 checkupDetails: $checkupDetails');
 
             if (checkupDetails != null) {
               riskLevel = checkupDetails['riskLevel'] as String?;
               riskFactors = checkupDetails['riskFactors'] ?? '';
               aiAnalysis = checkupDetails['aiResponse'] as String?;
-              debugPrint(
-                  '🔍 aiAnalysis from DB: ${aiAnalysis?.substring(0, aiAnalysis!.length > 100 ? 100 : aiAnalysis!.length)}...');
               medicationPlansSummary =
                   checkupDetails['medicationPlans'] ?? 'None';
               givenMedicationsSummary =
@@ -1879,33 +1595,27 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             }
 
             if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
-              debugPrint('🔍 Trying MotherProfileService...');
               aiAnalysis =
                   await MotherProfileService.getCheckupAIAnalysis(checkupId);
-              if (aiAnalysis != null) {
-                debugPrint(
-                    '🔍 aiAnalysis from MotherProfileService: ${aiAnalysis.substring(0, aiAnalysis.length > 100 ? 100 : aiAnalysis.length)}...');
-              }
             }
           }
 
-          // Only fallback if nothing found
+          // Fallback to local generator only if nothing found remotely
           if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
-            debugPrint('🔍 Using _generatePrenatalAIInsights fallback...');
             aiAnalysis = _generatePrenatalAIInsights(checkup);
           } else {
             aiAnalysis = aiAnalysis.trim();
           }
 
-          if (aiAnalysis != null && aiAnalysis.isNotEmpty) {
-            debugPrint(
-                '🔍 Final aiAnalysis: ${aiAnalysis.substring(0, aiAnalysis.length > 100 ? 100 : aiAnalysis.length)}...');
-          }
+          // FIX #5: guard against using context after async gap
+          if (!mounted) return;
 
-          // include height and BMI (view-only) by reading mother's profile height
-          double? height = await _getMotherHeight();
-          String heightText =
-              height == null ? 'Not recorded' : '${height.toString()} cm';
+          final double? height = await _getMotherHeight();
+          if (!mounted) return;
+
+          final heightText = height == null
+              ? 'Not recorded'
+              : '${height.toStringAsFixed(1)} cm';
           String bmiText = '—';
           String bmiStatus = '—';
           try {
@@ -1915,14 +1625,15 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               final hm = height / 100;
               final bmi = w / (hm * hm);
               bmiText = bmi.toStringAsFixed(1);
-              if (bmi < 18.5)
+              if (bmi < 18.5) {
                 bmiStatus = 'Underweight';
-              else if (bmi < 25)
+              } else if (bmi < 25) {
                 bmiStatus = 'Normal';
-              else if (bmi < 30)
+              } else if (bmi < 30) {
                 bmiStatus = 'Overweight';
-              else
+              } else {
                 bmiStatus = 'Obese';
+              }
             }
           } catch (_) {}
 
@@ -1978,8 +1689,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           ),
           child: const Icon(Icons.photo, color: Colors.purple, size: 20),
         ),
-        title: Text('Ultrasound',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text('Ultrasound',
+            style: TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(date),
         trailing:
             const Icon(Icons.chevron_right, color: AppColors.textSecondary),
@@ -2004,6 +1715,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             aiAnalysis = await MotherProfileService.getUltrasoundAIAnalysis(
                 ultrasoundId);
           }
+
+          if (!mounted) return;
 
           String finalRemarks = split.cleanRemarks;
           if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
@@ -2081,6 +1794,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 await MotherProfileService.getLabTestAIAnalysis(labTestId);
           }
 
+          if (!mounted) return;
+
           aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
               ? aiAnalysis.trim()
               : split.extractedAi;
@@ -2110,7 +1825,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // Helper methods
+  // ── Sorting / filtering helpers ─────────────────────────────────────────
+
   DateTime? _parseDateForSort(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return value;
@@ -2131,18 +1847,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   List<Map<String, dynamic>> _filterAndSortChildren(List children) {
     var filtered = List<Map<String, dynamic>>.from(children).where((c) {
-      final name = [
-        c['first_name'],
-        c['middle_name'],
-        c['last_name'],
-      ].where((e) => e != null).join(' ').toLowerCase();
+      final name = [c['first_name'], c['middle_name'], c['last_name']]
+          .whereType<String>()
+          .join(' ')
+          .toLowerCase();
       return name.contains(_childQuery.toLowerCase());
     }).toList();
 
     if (_childSort == 'name') {
       filtered.sort((a, b) {
-        final nameA = (a['last_name'] ?? '') + (a['first_name'] ?? '');
-        final nameB = (b['last_name'] ?? '') + (b['first_name'] ?? '');
+        final nameA = '${a['last_name'] ?? ''}${a['first_name'] ?? ''}';
+        final nameB = '${b['last_name'] ?? ''}${b['first_name'] ?? ''}';
         return nameA.compareTo(nameB);
       });
     }
@@ -2150,7 +1865,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return filtered;
   }
 
-  // Show conclude pregnancy dialog (detailed)
+  // ── Dialogs ─────────────────────────────────────────────────────────────
+
   Future<void> _showConcludePregnancyDialog(
       Map<String, dynamic> pregnancy) async {
     final int fetalCount = pregnancy['fetal_count'] as int? ?? 1;
@@ -2237,12 +1953,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                             if (fetalCount > 1)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
-                                child: Text(
-                                  'Fetus ${i + 1}',
-                                  style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold),
-                                ),
+                                child: Text('Fetus ${i + 1}',
+                                    style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold)),
                               ),
                             Container(
                               padding:
@@ -2314,12 +2028,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
-                                            'Outcome Date',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: AppColors.textSecondary),
-                                          ),
+                                          const Text('Outcome Date',
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color:
+                                                      AppColors.textSecondary)),
                                           const SizedBox(height: 4),
                                           Text(
                                             DateFormat('MMMM d, yyyy')
@@ -2409,11 +2122,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     outcomes[i] == 'stillbirth') {
                                   if (deliveryMethods[i] == null) {
                                     if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                          content: Text(
-                                              'Please select delivery method for Fetus ${i + 1}')),
-                                    );
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(SnackBar(
+                                      content: Text(
+                                          'Please select delivery method for Fetus ${i + 1}'),
+                                    ));
                                     return;
                                   }
                                 }
@@ -2443,16 +2156,16 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 fetalOutcomes,
                               );
 
-                              if (success && mounted) {
+                              if (!mounted) return;
+                              if (success) {
                                 Navigator.pop(ctx);
-                                if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                       content: Text(
                                           'Pregnancy concluded successfully')),
                                 );
                                 _refresh();
-                              } else if (mounted) {
+                              } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                       content:
@@ -2479,156 +2192,165 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
-  // Start new pregnancy dialog (detailed)
   Future<void> _startNewPregnancyDialog() async {
     DateTime? lmp;
     DateTime? edd;
 
     await showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const PageTitle(
-                title: 'Start New Pregnancy',
-                leadingIcon: Icons.pregnant_woman,
-              ),
-              const SizedBox(height: 20),
-              InkWell(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: DateTime.now(),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) {
-                    lmp = picked;
-                    edd = picked.add(const Duration(days: 280));
-                  }
-                },
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today,
-                          color: AppColors.brandPrimary),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Last Menstrual Period',
-                              style: TextStyle(
-                                  fontSize: 12, color: AppColors.textSecondary),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              lmp == null
-                                  ? 'Select date'
-                                  : DateFormat('MMMM d, yyyy').format(lmp!),
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PageTitle(
+                  title: 'Start New Pregnancy',
+                  leadingIcon: Icons.pregnant_woman,
                 ),
-              ),
-              if (lmp != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.event_available,
-                          color: AppColors.brandPrimary),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Estimated Due Date',
-                              style: TextStyle(
-                                  fontSize: 12, color: AppColors.textSecondary),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              DateFormat('MMMM d, yyyy').format(edd!),
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w500),
-                            ),
-                          ],
+                const SizedBox(height: 20),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setDialog(() {
+                        lmp = picked;
+                        edd = picked.add(const Duration(days: 280));
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSecondary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today,
+                            color: AppColors.brandPrimary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Last Menstrual Period',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary)),
+                              const SizedBox(height: 4),
+                              Text(
+                                lmp == null
+                                    ? 'Select date'
+                                    : DateFormat('MMMM d, yyyy').format(lmp!),
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: SecondaryButton(
-                      label: 'Cancel',
-                      onPressed: () => Navigator.pop(ctx),
-                      showIcons: false,
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: MainButton(
-                      label: 'Start',
-                      onPressed: lmp == null
-                          ? null
-                          : () async {
-                              final success =
-                                  await MotherProfileService.startNewPregnancy(
-                                widget.motherId,
-                                lmp!,
-                                edd!,
-                              );
-                              if (success && mounted) {
-                                Navigator.pop(ctx);
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('New pregnancy started')),
-                                );
-                                _refresh();
-                              }
-                            },
+                ),
+                if (lmp != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSecondary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.event_available,
+                            color: AppColors.brandPrimary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Estimated Due Date',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary)),
+                              const SizedBox(height: 4),
+                              Text(
+                                DateFormat('MMMM d, yyyy').format(edd!),
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
-              ),
-            ],
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SecondaryButton(
+                        label: 'Cancel',
+                        onPressed: () => Navigator.pop(ctx),
+                        showIcons: false,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: MainButton(
+                        label: 'Start',
+                        onPressed: lmp == null
+                            ? null
+                            : () async {
+                                final success = await MotherProfileService
+                                    .startNewPregnancy(
+                                  widget.motherId,
+                                  lmp!,
+                                  edd!,
+                                );
+                                if (!mounted) return;
+                                if (success) {
+                                  Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(const SnackBar(
+                                    content: Text('New pregnancy started'),
+                                  ));
+                                  _refresh();
+                                }
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // Editable functions (from Version 2)
+  // ── Editable profile controllers ────────────────────────────────────────
+
   void _initializePersonalControllers(Map<String, dynamic> profile) {
+    // Dispose existing controllers before creating new ones
+    for (final c in _personalControllers.values) {
+      c.dispose();
+    }
+    _personalControllers.clear();
+
     _personalControllers['height'] =
         TextEditingController(text: profile['height']?.toString() ?? '');
     _personalControllers['weight'] =
@@ -2676,6 +2398,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
   void _initializeAddressControllers(Map<String, dynamic> profile) {
+    for (final c in _addressControllers.values) {
+      c.dispose();
+    }
+    _addressControllers.clear();
+
     _addressControllers['house_number'] =
         TextEditingController(text: profile['house_number'] ?? '');
     _addressControllers['street'] =
@@ -2717,7 +2444,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
-  // Growth metric widget
+  // ── Growth metric widgets ───────────────────────────────────────────────
+
   Widget _buildGrowthMetric({
     required IconData icon,
     required String label,
@@ -2738,24 +2466,18 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             children: [
               Icon(icon, size: 14, color: color),
               const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: color,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 10, color: color, fontWeight: FontWeight.w500)),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -2764,7 +2486,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // Latest Growth Card
   Widget _buildLatestGrowthCard() {
     if (_loadingGrowth) {
       return Container(
@@ -2779,9 +2500,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             height: 20,
             width: 20,
             child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.brandPrimary,
-            ),
+                strokeWidth: 2, color: AppColors.brandPrimary),
           ),
         ),
       );
@@ -2800,10 +2519,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             Icon(Icons.bar_chart_outlined,
                 size: 48, color: AppColors.textSecondary),
             SizedBox(height: 8),
-            Text(
-              'No growth data yet',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
+            Text('No growth data yet',
+                style: TextStyle(color: AppColors.textSecondary)),
             SizedBox(height: 4),
             Text(
               'Growth data will appear after first prenatal checkup',
@@ -2838,10 +2555,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           const Text(
             '📊 Latest Growth Records',
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.brandText,
-            ),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.brandText),
           ),
           const SizedBox(height: 12),
           Container(
@@ -2858,10 +2574,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     Icon(Icons.calendar_today,
                         size: 16, color: AppColors.brandPrimary),
                     const SizedBox(width: 8),
-                    Text(
-                      _formatDate(data['date']),
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
+                    Text(_formatDate(data['date']),
+                        style: const TextStyle(fontWeight: FontWeight.w500)),
                   ],
                 ),
                 if (data['aog'] != 'N/A')
@@ -2875,10 +2589,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     child: Text(
                       '${data['aog']} weeks',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.brandPrimary,
-                      ),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandPrimary),
                     ),
                   ),
               ],
@@ -2891,8 +2604,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 child: _buildGrowthMetric(
                   icon: Icons.height,
                   label: 'Height',
-                  value: data['height'] > 0
-                      ? '${data['height'].toStringAsFixed(1)} cm'
+                  value: (data['height'] as double) > 0
+                      ? '${(data['height'] as double).toStringAsFixed(1)} cm'
                       : 'Not recorded',
                   color: AppColors.brandPrimary,
                 ),
@@ -2902,8 +2615,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 child: _buildGrowthMetric(
                   icon: Icons.monitor_weight,
                   label: 'Weight',
-                  value: data['weight'] > 0
-                      ? '${data['weight'].toStringAsFixed(1)} kg'
+                  value: (data['weight'] as double) > 0
+                      ? '${(data['weight'] as double).toStringAsFixed(1)} kg'
                       : 'Not recorded',
                   color: AppColors.brandPrimary,
                 ),
@@ -2914,7 +2627,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   icon: Icons.calculate,
                   label: 'BMI',
                   value: data['bmi'] != null
-                      ? '${data['bmi']!.toStringAsFixed(1)} (${data['bmi_status']})'
+                      ? '${(data['bmi'] as double).toStringAsFixed(1)} (${data['bmi_status']})'
                       : 'Not calculated',
                   color: bmiStatusColor,
                 ),
@@ -2926,7 +2639,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // Builders for expandable sections (from Version 1, enhanced)
+  // ── Expandable section shell ────────────────────────────────────────────
+
   Widget _buildExpandableSection(
       String title, IconData icon, List<Widget> children) {
     return Container(
@@ -2955,13 +2669,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             child: Icon(icon, color: AppColors.brandPrimary, size: 18),
           ),
-          title: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          title: Text(title,
+              style:
+                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
@@ -2981,24 +2691,22 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         children: [
           SizedBox(
             width: 120,
-            child: Text(
-              label,
-              style:
-                  const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
+            child: Text(label,
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 13)),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-            ),
+            child: Text(value,
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
           ),
         ],
       ),
     );
   }
 
-  // Medical Info Section (editable)
+  // ── Editable form widgets ───────────────────────────────────────────────
+
   Widget _buildMedicalInfoSection(Map<String, dynamic> profile) {
     return Container(
       decoration: BoxDecoration(
@@ -3032,13 +2740,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 _buildInfoRow(
                     'Height',
                     _personalControllers['height']?.text.isNotEmpty == true
-                        ? '${_personalControllers['height']?.text} cm'
+                        ? '${_personalControllers['height']!.text} cm'
                         : 'Not set'),
                 const SizedBox(height: 8),
                 _buildInfoRow(
                     'Weight',
                     _personalControllers['weight']?.text.isNotEmpty == true
-                        ? '${_personalControllers['weight']?.text} kg'
+                        ? '${_personalControllers['weight']!.text} kg'
                         : 'Not set'),
                 const SizedBox(height: 8),
                 _buildInfoRow('Blood Type', profile['blood_type'] ?? 'Not set'),
@@ -3049,7 +2757,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
-                    onPressed: () => setState(() => _isEditingPersonal = true),
+                    // FIX #6: close address edit if open
+                    onPressed: () => setState(() {
+                      _isEditingPersonal = true;
+                      _isEditingAddress = false;
+                    }),
                     icon: const Icon(Icons.edit_outlined, size: 16),
                     label: const Text('Edit Medical Info'),
                   ),
@@ -3101,33 +2813,25 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: _editingBloodType.isEmpty ? null : _editingBloodType,
+          value: _editingBloodType.isEmpty ? null : _editingBloodType,
           decoration: const InputDecoration(
               labelText: 'Blood Type', border: OutlineInputBorder()),
-          items: _bloodTypeOptions.map((type) {
-            return DropdownMenuItem(value: type, child: Text(type));
-          }).toList(),
-          onChanged: (value) {
-            setState(() {
-              _editingBloodType = value ?? '';
-            });
-          },
+          items: _bloodTypeOptions
+              .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+              .toList(),
+          onChanged: (value) => setState(() => _editingBloodType = value ?? ''),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: _editingExtension.isEmpty ? null : _editingExtension,
+          value: _editingExtension.isEmpty ? null : _editingExtension,
           decoration: const InputDecoration(
               labelText: 'Extension Name', border: OutlineInputBorder()),
-          items: _extensionOptions.map((ext) {
-            return DropdownMenuItem(
-                value: ext.isEmpty ? null : ext,
-                child: Text(ext.isEmpty ? 'None' : ext));
-          }).toList(),
-          onChanged: (value) {
-            setState(() {
-              _editingExtension = value ?? '';
-            });
-          },
+          items: _extensionOptions
+              .map((ext) => DropdownMenuItem(
+                  value: ext.isEmpty ? null : ext,
+                  child: Text(ext.isEmpty ? 'None' : ext)))
+              .toList(),
+          onChanged: (value) => setState(() => _editingExtension = value ?? ''),
         ),
       ],
     );
@@ -3169,7 +2873,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // Read-only section with edit capability
   Widget _buildReadOnlySection(
       String title, IconData icon, List<Widget> children) {
     return Container(
@@ -3203,7 +2906,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // OVERVIEW TAB (Combined from both versions)
+  // ══════════════════════════════════════════════════════════════════════════
+  // OVERVIEW TAB
+  // ══════════════════════════════════════════════════════════════════════════
+
   Widget _buildOverviewTab(
     Map<String, dynamic> profile,
     List medicalConditions,
@@ -3212,8 +2918,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     List children,
     Map<String, dynamic>? currentPregnancy,
   ) {
-    _initializePersonalControllers(profile);
-    _initializeAddressControllers(profile);
+    // FIX #1: initialise controllers only once per profile load
+    if (!_controllersInitialized) {
+      _initializePersonalControllers(profile);
+      _initializeAddressControllers(profile);
+      _controllersInitialized = true;
+    }
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -3224,7 +2934,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Profile Header Card with Profile Picture
+            // Profile header
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -3286,11 +2996,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 size: 14, color: AppColors.textSecondary),
                             const SizedBox(width: 4),
                             Expanded(
-                                child: Text(profile['email_address'] ?? '-',
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary),
-                                    overflow: TextOverflow.ellipsis)),
+                              child: Text(profile['email_address'] ?? '-',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary),
+                                  overflow: TextOverflow.ellipsis),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 2),
@@ -3313,7 +3024,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
-            // Quick Stats
+            // Quick stats
             Row(
               children: [
                 Expanded(
@@ -3343,21 +3054,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
-            // Simplified Risk Assessment
             if (currentPregnancy != null)
               _buildSimpleRiskCard(profile, currentPregnancy),
-
             const SizedBox(height: 16),
 
-            // Latest Growth Records (from Version 2)
             _buildLatestGrowthCard(),
             const SizedBox(height: 16),
 
-            // Medical Information (editable from Version 2)
             _buildMedicalInfoSection(profile),
             const SizedBox(height: 12),
 
-            // Address (editable from Version 2)
+            // Address (editable)
             _buildReadOnlySection(
               'Address',
               Icons.home_outlined,
@@ -3371,7 +3078,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
-                    onPressed: () => setState(() => _isEditingAddress = true),
+                    // FIX #6: close personal edit if open
+                    onPressed: () => setState(() {
+                      _isEditingAddress = true;
+                      _isEditingPersonal = false;
+                    }),
                     icon: const Icon(Icons.edit_outlined, size: 16),
                     label: const Text('Edit Address'),
                   ),
@@ -3520,7 +3231,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                       c['middle_name'],
                                       c['last_name'],
                                       c['extension_name']
-                                    ].where((e) => e != null).join(' '),
+                                    ].whereType<String>().join(' '),
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w600)),
                                 const SizedBox(height: 4),
@@ -3537,7 +3248,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                         size: 14,
                                         color: AppColors.textSecondary),
                                     const SizedBox(width: 4),
-                                    Text(c['affiliation'])
+                                    Text(c['affiliation'].toString())
                                   ]),
                                 ],
                               ],
@@ -3547,7 +3258,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 12),
 
-            // Children with search and sort (from Version 1)
+            // Children
             _buildExpandableSection(
               'Children',
               Icons.child_care_outlined,
@@ -3557,8 +3268,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     hintText: 'Search children...',
                     prefixIcon: const Icon(Icons.search),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                     filled: true,
                     fillColor: AppColors.bgSecondary,
                   ),
@@ -3572,11 +3282,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: DropdownButtonFormField<String>(
-                    initialValue: _childSort,
+                    value: _childSort,
                     decoration: const InputDecoration(
-                      labelText: 'Sort by',
-                      border: InputBorder.none,
-                    ),
+                        labelText: 'Sort by', border: InputBorder.none),
                     items: const [
                       DropdownMenuItem(
                           value: 'recent', child: Text('Most recent')),
@@ -3606,13 +3314,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           c['first_name'],
                           c['middle_name'],
                           c['last_name'],
-                        ].where((e) => e != null).join(' ')),
+                        ].whereType<String>().join(' ')),
                         subtitle: Text('Added: ${_formatDate(c['added_at'])}'),
                         trailing: const Icon(Icons.chevron_right,
                             color: AppColors.textSecondary),
-                        onTap: () {
-                          // Navigate to child profile (to be implemented)
-                        },
+                        onTap: () {},
                       ),
                     )),
               ],
@@ -3623,7 +3329,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // CURRENT PREGNANCY TAB (Combined from both versions)
+  // ══════════════════════════════════════════════════════════════════════════
+  // CURRENT PREGNANCY TAB
+  // ══════════════════════════════════════════════════════════════════════════
+
   Widget _buildCurrentPregnancyTab(
       Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
     if (pregnancy == null) {
@@ -3685,11 +3394,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Simplified Risk Assessment
             _buildSimpleRiskCard(profile, pregnancy),
             const SizedBox(height: 16),
 
-            // Quick Stats Card (from Version 1)
+            // Quick stats
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -3776,7 +3484,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
-            // Quick Actions (from Version 1 with Ultrasound Analyzer)
+            // Quick actions
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -3854,7 +3562,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
-            // Pregnancy Details (from Version 1)
             _buildExpandableSection(
               'Pregnancy Details',
               Icons.info_outline,
@@ -3869,45 +3576,18 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 12),
 
-            // Checkups (from Version 1)
             _buildExpandableSection(
               'Prenatal Checkups',
               Icons.medical_services_outlined,
               [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Text('Sort:',
-                        style: TextStyle(color: AppColors.textSecondary)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _checkupSort,
-                        underline: const SizedBox(),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'desc', child: Text('Newest')),
-                          DropdownMenuItem(value: 'asc', child: Text('Oldest')),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _checkupSort = v ?? 'desc'),
-                      ),
-                    ),
-                  ],
-                ),
+                _buildSortRow(_checkupSort,
+                    (v) => setState(() => _checkupSort = v ?? 'desc')),
                 const SizedBox(height: 12),
                 if (sortedCheckups.isEmpty)
                   const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('No checkups recorded'),
-                    ),
-                  )
+                      child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text('No checkups recorded')))
                 else
                   ...sortedCheckups.map((c) => _buildCheckupCard(
                       c,
@@ -3917,45 +3597,18 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 12),
 
-            // Ultrasounds (from Version 1)
             _buildExpandableSection(
               'Ultrasounds',
               Icons.photo_outlined,
               [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Text('Sort:',
-                        style: TextStyle(color: AppColors.textSecondary)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _ultrasoundSort,
-                        underline: const SizedBox(),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'desc', child: Text('Newest')),
-                          DropdownMenuItem(value: 'asc', child: Text('Oldest')),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _ultrasoundSort = v ?? 'desc'),
-                      ),
-                    ),
-                  ],
-                ),
+                _buildSortRow(_ultrasoundSort,
+                    (v) => setState(() => _ultrasoundSort = v ?? 'desc')),
                 const SizedBox(height: 12),
                 if (ultrasounds.isEmpty)
                   const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('No ultrasounds recorded'),
-                    ),
-                  )
+                      child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text('No ultrasounds recorded')))
                 else
                   ..._sortByDate(
                           ultrasounds, 'ultrasound_date', _ultrasoundSort)
@@ -3964,45 +3617,18 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 12),
 
-            // Lab Tests (from Version 1)
             _buildExpandableSection(
               'Lab Tests',
               Icons.science_outlined,
               [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Text('Sort:',
-                        style: TextStyle(color: AppColors.textSecondary)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _labSort,
-                        underline: const SizedBox(),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'desc', child: Text('Newest')),
-                          DropdownMenuItem(value: 'asc', child: Text('Oldest')),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _labSort = v ?? 'desc'),
-                      ),
-                    ),
-                  ],
-                ),
+                _buildSortRow(
+                    _labSort, (v) => setState(() => _labSort = v ?? 'desc')),
                 const SizedBox(height: 12),
                 if (labTests.isEmpty)
                   const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('No lab tests recorded'),
-                    ),
-                  )
+                      child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text('No lab tests recorded')))
                 else
                   ..._sortByDate(labTests, 'lab_test_date', _labSort)
                       .map((l) => _buildLabTestCard(l)),
@@ -4011,6 +3637,33 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           ],
         ),
       ),
+    );
+  }
+
+  /// Shared sort-dropdown row used in each record section.
+  Widget _buildSortRow(String currentValue, ValueChanged<String?> onChanged) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        const Text('Sort:', style: TextStyle(color: AppColors.textSecondary)),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondary,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: DropdownButton<String>(
+            value: currentValue,
+            underline: const SizedBox(),
+            items: const [
+              DropdownMenuItem(value: 'desc', child: Text('Newest')),
+              DropdownMenuItem(value: 'asc', child: Text('Oldest')),
+            ],
+            onChanged: onChanged,
+          ),
+        ),
+      ],
     );
   }
 
@@ -4023,19 +3676,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: color ?? AppColors.textPrimary,
-              ),
-            ),
-            Text(
-              label,
-              style:
-                  const TextStyle(fontSize: 10, color: AppColors.textSecondary),
-            ),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: color ?? AppColors.textPrimary)),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 10, color: AppColors.textSecondary)),
           ],
         ),
       ],
@@ -4066,7 +3714,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
   // HISTORY TAB
+  // ══════════════════════════════════════════════════════════════════════════
+
   Widget _buildHistoryTab(List pastPregnancies) {
     if (pastPregnancies.isEmpty) {
       return Center(
@@ -4111,6 +3762,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               (p['outcomes'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
                   [];
 
+          // FIX #3: use normalizedOutcomes consistently for both
+          // display string and date — not the raw outcomesList
           final normalizedOutcomes = outcomesList.isNotEmpty
               ? outcomesList
               : (p['outcome'] != null || p['outcome_date'] != null)
@@ -4118,16 +3771,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       {
                         'fetus_number': 1,
                         'outcome': p['outcome'],
-                        'outcome_date': p['outcome_date']
+                        'outcome_date': p['outcome_date'],
                       }
                     ]
-                  : [];
+                  : <Map<String, dynamic>>[];
 
           final primaryOutcomeStr = normalizedOutcomes.isNotEmpty
-              ? outcomesList
+              ? normalizedOutcomes
                   .map((o) => _formatOutcome(o['outcome'] as String?))
                   .join(', ')
               : '-';
+
           final primaryOutcomeDate = normalizedOutcomes.isNotEmpty
               ? _formatDate(normalizedOutcomes.first['outcome_date'] as String?)
               : '-';
@@ -4190,13 +3844,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                       '-'),
                             ];
                           }
-                          return [];
+                          return <Widget>[];
                         }(),
                         const SizedBox(height: 8),
                       ],
                       const Divider(height: 24),
-
-                      // ── Prenatal Checkups ─────────────────────────────
                       _buildHistoryRecordSection(
                         title: 'Prenatal Checkups',
                         icon: Icons.medical_services_outlined,
@@ -4204,23 +3856,22 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         count: checkups.length,
                         emptyMessage: 'No prenatal checkup records',
                         children: (List<Map<String, dynamic>>.from(
-                            checkups.map((c) => c as Map<String, dynamic>))
-                          ..sort((a, b) {
-                            final da = _parseDateForSort(a['checkup_datetime']);
-                            final db = _parseDateForSort(b['checkup_datetime']);
-                            if (da == null || db == null) return 0;
-                            return db.compareTo(da);
-                          }))
+                                checkups.map((c) => c as Map<String, dynamic>))
+                              ..sort((a, b) {
+                                final da =
+                                    _parseDateForSort(a['checkup_datetime']);
+                                final db =
+                                    _parseDateForSort(b['checkup_datetime']);
+                                if (da == null || db == null) return 0;
+                                return db.compareTo(da);
+                              }))
                             .map((c) => _buildCheckupCard(
                                 c,
                                 p['pregnancy_id'] as int? ?? -1,
                                 p['fetal_count'] as int? ?? 1))
                             .toList(),
                       ),
-
                       const SizedBox(height: 8),
-
-                      // ── Ultrasound Records ────────────────────────────
                       _buildHistoryRecordSection(
                         title: 'Ultrasound Records',
                         icon: Icons.photo_outlined,
@@ -4228,17 +3879,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         count: ultrasounds.length,
                         emptyMessage: 'No ultrasound records',
                         children: _sortByDate(
-                                ultrasounds
-                                    .cast<Map<String, dynamic>>(),
+                                ultrasounds.cast<Map<String, dynamic>>(),
                                 'ultrasound_date',
                                 'desc')
                             .map((u) => _buildUltrasoundCard(u))
                             .toList(),
                       ),
-
                       const SizedBox(height: 8),
-
-                      // ── Lab Test Records ──────────────────────────────
                       _buildHistoryRecordSection(
                         title: 'Lab Test Records',
                         icon: Icons.science_outlined,
@@ -4263,7 +3910,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  /// Compact expandable sub-section used inside each past pregnancy card.
   Widget _buildHistoryRecordSection({
     required String title,
     required IconData icon,
@@ -4281,8 +3927,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
           leading: Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
@@ -4293,15 +3938,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           ),
           title: Row(
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600),
-              ),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: count > 0
                       ? color.withValues(alpha: 0.15)
@@ -4331,12 +3973,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           const Icon(Icons.info_outline,
                               size: 16, color: AppColors.textSecondary),
                           const SizedBox(width: 8),
-                          Text(
-                            emptyMessage,
-                            style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary),
-                          ),
+                          Text(emptyMessage,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary)),
                         ],
                       ),
                     )
@@ -4348,14 +3988,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  // HEADER WITH PROFILE PICTURE
+  // ══════════════════════════════════════════════════════════════════════════
+  // HEADER
+  // ══════════════════════════════════════════════════════════════════════════
+
   Widget _buildHeader() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -4369,9 +4012,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             children: [
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.bgSecondary,
-                  shape: BoxShape.circle,
-                ),
+                    color: AppColors.bgSecondary, shape: BoxShape.circle),
                 child: IconButton(
                   icon: const Icon(Icons.arrow_back,
                       color: AppColors.textPrimary),
@@ -4387,10 +4028,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   'assets/images/logo.png',
                   height: 36,
                   errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.favorite,
-                    color: AppColors.brandPrimary,
-                    size: 30,
-                  ),
+                      Icons.favorite,
+                      color: AppColors.brandPrimary,
+                      size: 30),
                 ),
               ),
               const Text(
@@ -4407,11 +4047,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 onPressed: () {},
-                icon: const Icon(
-                  Icons.notifications_none_rounded,
-                  size: 24,
-                  color: AppColors.textPrimary,
-                ),
+                icon: const Icon(Icons.notifications_none_rounded,
+                    size: 24, color: AppColors.textPrimary),
               ),
               const SizedBox(width: 14),
               GestureDetector(
@@ -4430,14 +4067,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           )
                         : null,
                   ),
-                  child:
-                      _profilePictureUrl == null || _profilePictureUrl!.isEmpty
-                          ? const Icon(
-                              Icons.person,
-                              size: 20,
-                              color: Colors.white,
-                            )
-                          : null,
+                  child: _profilePictureUrl == null ||
+                          _profilePictureUrl!.isEmpty
+                      ? const Icon(Icons.person, size: 20, color: Colors.white)
+                      : null,
                 ),
               ),
             ],
@@ -4456,7 +4089,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         children: [
           GestureDetector(
               onTap: () => entry.remove(),
-              child: Container(color: Colors.black.withOpacity(0.35))),
+              child: Container(color: Colors.black.withValues(alpha: 0.35))),
           Positioned(
             top: 90,
             right: 16,
@@ -4470,7 +4103,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
+                          color: Colors.black.withValues(alpha: 0.15),
                           blurRadius: 20,
                           offset: const Offset(0, 8))
                     ]),
@@ -4479,9 +4112,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     _MenuItem(
                         icon: Icons.person_outline,
                         label: 'View Profile',
-                        onTap: () {
-                          entry.remove();
-                        }),
+                        onTap: () => entry.remove()),
                     _MenuItem(
                         icon: Icons.settings_outlined,
                         label: 'Settings',
@@ -4539,6 +4170,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       ),
     );
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BUILD
+  // ══════════════════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -4612,47 +4247,45 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               profile['emergency_contacts'] as List? ?? [];
           final children = profile['children'] as List? ?? [];
 
+          // FIX #7: removed the dead DefaultTabController wrapper.
+          // _tabController is created in initState and passed directly.
           return Column(
             children: [
               _buildHeader(),
               Expanded(
-                child: DefaultTabController(
-                  length: 3,
-                  child: Column(
-                    children: [
-                      Container(
-                        color: Colors.white,
-                        child: TabBar(
-                          controller: _tabController,
-                          indicatorColor: AppColors.brandPrimary,
-                          labelColor: AppColors.brandPrimary,
-                          unselectedLabelColor: AppColors.textSecondary,
-                          tabs: const [
-                            Tab(text: 'Overview'),
-                            Tab(text: 'Current'),
-                            Tab(text: 'History'),
-                          ],
-                        ),
+                child: Column(
+                  children: [
+                    Container(
+                      color: Colors.white,
+                      child: TabBar(
+                        controller: _tabController,
+                        indicatorColor: AppColors.brandPrimary,
+                        labelColor: AppColors.brandPrimary,
+                        unselectedLabelColor: AppColors.textSecondary,
+                        tabs: const [
+                          Tab(text: 'Overview'),
+                          Tab(text: 'Current'),
+                          Tab(text: 'History'),
+                        ],
                       ),
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildOverviewTab(
-                                profile,
-                                medicalConditions,
-                                allergies,
-                                emergencyContacts,
-                                children,
-                                currentPregnancy),
-                            _buildCurrentPregnancyTab(
-                                profile, currentPregnancy),
-                            _buildHistoryTab(pastPregnancies),
-                          ],
-                        ),
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildOverviewTab(
+                              profile,
+                              medicalConditions,
+                              allergies,
+                              emergencyContacts,
+                              children,
+                              currentPregnancy),
+                          _buildCurrentPregnancyTab(profile, currentPregnancy),
+                          _buildHistoryTab(pastPregnancies),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -4663,17 +4296,20 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 }
 
+// ── Menu item widget ──────────────────────────────────────────────────────────
+
 class _MenuItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool isDanger;
 
-  const _MenuItem(
-      {required this.icon,
-      required this.label,
-      required this.onTap,
-      this.isDanger = false});
+  const _MenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDanger = false,
+  });
 
   @override
   Widget build(BuildContext context) {

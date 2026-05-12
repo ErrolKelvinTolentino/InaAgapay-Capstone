@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
+import '../../services/language_service.dart';
 import '../../services/supabase_service.dart';
 import 'mother_dashboard.dart';
 import 'mother_journal_screen.dart';
@@ -31,13 +32,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     MotherJournalScreen(),
     MotherChildrenScreen(),
     RecordsScreen(),
-  ];
-
-  final List<String> _titles = [
-    'HOME',
-    'JOURNAL',
-    'CHILDREN',
-    'RECORDS',
   ];
 
   @override
@@ -116,9 +110,12 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Account Setup Incomplete',
-                style: TextStyle(
+              Text(
+                LanguageService.translate(
+                  'Account Setup Incomplete',
+                  'Hindi pa kumpleto ang pag-set up ng account',
+                ),
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
@@ -126,9 +123,12 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Your account has been created but needs to be linked to a Barangay Health Center (BHC) before you can fully access the system.',
-                style: TextStyle(
+              Text(
+                LanguageService.translate(
+                  'Your account has been created but needs to be linked to a Barangay Health Center (BHC) before you can fully access the system.',
+                  'Nagawa na ang iyong account ngunit kailangan itong i-link sa isang Barangay Health Center (BHC) bago mo lubos na ma-access ang sistema.',
+                ),
+                style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
                   height: 1.4,
@@ -155,7 +155,10 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Please visit your Barangay Health Center (BHC) and ask a midwife to complete your account registration.',
+                        LanguageService.translate(
+                          'Please visit your Barangay Health Center (BHC) and ask a midwife to complete your account registration.',
+                          'Pumunta sa iyong Barangay Health Center (BHC) at humingi ng midwife para tapusin ang pagpaparehistro ng iyong account.',
+                        ),
                         style: TextStyle(
                           fontSize: 13,
                           color: AppColors.brandPrimary,
@@ -183,7 +186,9 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                         ),
                         side: const BorderSide(color: AppColors.borderPrimary),
                       ),
-                      child: const Text('Logout'),
+                      child: Text(
+                        LanguageService.translate('Logout', 'Mag-logout'),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -200,7 +205,9 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                           borderRadius: BorderRadius.circular(30),
                         ),
                       ),
-                      child: const Text('Continue'),
+                      child: Text(
+                        LanguageService.translate('Continue', 'Magpatuloy'),
+                      ),
                     ),
                   ),
                 ],
@@ -218,23 +225,14 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
-  Future<void> _loadProfilePicture() async {
-    if (_motherId != null) {
-      final url = await SupabaseService.getProfilePictureUrl(_motherId!);
-      if (mounted) {
-        setState(() {
-          _profilePictureUrl = url;
-        });
-      }
-    }
-  }
-
   Future<void> _pickImage(ImageSource source) async {
     if (_motherId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Please complete your account setup with a midwife first.'),
+        SnackBar(
+          content: Text(LanguageService.translate(
+            'Please complete your account setup with a midwife first.',
+            'Kumpletuhin muna ang pag-setup ng account kasama ang midwife.',
+          )),
           backgroundColor: AppColors.warning,
         ),
       );
@@ -250,6 +248,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
       );
 
       if (image != null && _motherId != null) {
+        if (!mounted) return;
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -262,31 +261,33 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
         final url =
             await SupabaseService.uploadProfilePicture(_motherId!, bytes);
 
-        if (mounted) {
-          Navigator.pop(context);
+        if (!mounted) return;
+        Navigator.pop(context);
 
-          if (url != null) {
-            setState(() {
-              _profilePictureUrl = url;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Profile picture updated!'),
-                backgroundColor: AppColors.success,
-              ),
-            );
-          }
+        if (url != null) {
+          setState(() {
+            _profilePictureUrl = url;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(LanguageService.translate(
+                'Profile picture updated!',
+                'Na-update ang larawan ng profile!',
+              )),
+              backgroundColor: AppColors.success,
+            ),
+          );
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 
@@ -300,7 +301,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
           GestureDetector(
             onTap: () => entry.remove(),
             child: Container(
-              color: Colors.black.withOpacity(0.35),
+              color: Colors.black.withValues(alpha: 0.35),
             ),
           ),
           Positioned(
@@ -316,7 +317,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
+                      color: Colors.black.withValues(alpha: 0.15),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -327,7 +328,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                   children: [
                     _MenuItem(
                       icon: Icons.photo_camera_outlined,
-                      label: 'Change Photo',
+                      label: LanguageService.translate(
+                          'Change Photo', 'Palitan ang Larawan'),
                       onTap: () {
                         entry.remove();
                         _showImageSourceDialog(context);
@@ -335,7 +337,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                     ),
                     _MenuItem(
                       icon: Icons.person_outline,
-                      label: 'View Profile',
+                      label: LanguageService.translate(
+                          'View Profile', 'Tingnan ang Profile'),
                       onTap: () {
                         entry.remove();
                         if (_motherId != null && mounted) {
@@ -348,9 +351,13 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
-                                  'Please complete your account setup with a midwife first.'),
+                                LanguageService.translate(
+                                  'Please complete your account setup with a midwife first.',
+                                  'Kumpletuhin muna ang pag-setup ng account kasama ang midwife.',
+                                ),
+                              ),
                               backgroundColor: AppColors.warning,
                             ),
                           );
@@ -359,7 +366,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                     ),
                     _MenuItem(
                       icon: Icons.settings_outlined,
-                      label: 'Settings',
+                      label:
+                          LanguageService.translate('Settings', 'Mga Setting'),
                       onTap: () {
                         entry.remove();
                         Navigator.pushNamed(context, '/settings');
@@ -367,7 +375,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                     ),
                     _MenuItem(
                       icon: Icons.help_outline,
-                      label: 'Help',
+                      label: LanguageService.translate('Help', 'Tulong'),
                       onTap: () {
                         entry.remove();
                         Navigator.pushNamed(context, '/help');
@@ -377,7 +385,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                         height: 1, thickness: 1), // ← FIXED: Thinner divider
                     _MenuItem(
                       icon: Icons.logout_rounded,
-                      label: 'Log out',
+                      label: LanguageService.translate('Log out', 'Mag-logout'),
                       isDanger: true,
                       onTap: () {
                         entry.remove();
@@ -401,8 +409,12 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
       context: context,
       barrierDismissible: true,
       builder: (ctx) => AlertDialog(
-        title: const Text('Choose Source'),
-        content: const Text('Select where to get your photo from:'),
+        title: Text(LanguageService.translate(
+            'Choose Source', 'Piliin ang Pinagmulan')),
+        content: Text(
+          LanguageService.translate('Select where to get your photo from:',
+              'Piliin kung saan kukuha ng larawan:'),
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -413,7 +425,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
               _pickImage(ImageSource.gallery);
             },
             icon: const Icon(Icons.photo_library, size: 18),
-            label: const Text('Gallery'),
+            label: Text(LanguageService.translate('Gallery', 'Gallery')),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.brandPrimary,
             ),
@@ -424,7 +436,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
               _pickImage(ImageSource.camera);
             },
             icon: const Icon(Icons.camera_alt, size: 18),
-            label: const Text('Camera'),
+            label: Text(LanguageService.translate('Camera', 'Camera')),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.brandPrimary,
             ),
@@ -458,18 +470,21 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Log out',
-                style: TextStyle(
+              Text(
+                LanguageService.translate('Log out', 'Mag-logout'),
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Are you sure you want to log out of your account?',
+              Text(
+                LanguageService.translate(
+                  'Are you sure you want to log out of your account?',
+                  'Sigurado ka bang mag-logout sa iyong account?',
+                ),
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary),
+                style: const TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 24),
               Row(
@@ -483,7 +498,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                           borderRadius: BorderRadius.circular(30),
                         ),
                       ),
-                      child: const Text('Cancel'),
+                      child: Text(
+                          LanguageService.translate('Cancel', 'Kanselahin')),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -501,7 +517,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                           borderRadius: BorderRadius.circular(30),
                         ),
                       ),
-                      child: const Text('Log out'),
+                      child: Text(
+                          LanguageService.translate('Log out', 'Mag-logout')),
                     ),
                   ),
                 ],
@@ -515,146 +532,158 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      height: 36,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.favorite,
-                          color: AppColors.brandPrimary,
-                          size: 30),
-                    ),
-                  ),
-                  Text(
-                    _titles[_currentIndex],
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.brandText,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.notifications_none_rounded,
-                      size: 24,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  GestureDetector(
-                    onTap: () => _showProfileMenu(context),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.brandPrimary,
-                        image: _profilePictureUrl != null
-                            ? DecorationImage(
-                                image: NetworkImage(_profilePictureUrl!),
-                                fit: BoxFit.cover,
-                              )
-                            : null,
-                      ),
-                      child: _profilePictureUrl == null
-                          ? const Icon(
-                              Icons.person,
-                              size: 20,
-                              color: Colors.white,
-                            )
-                          : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, language, _) {
+        final titles = [
+          LanguageService.translate('HOME', 'Bahay'),
+          LanguageService.translate('JOURNAL', 'Journal'),
+          LanguageService.translate('CHILDREN', 'Mga Anak'),
+          LanguageService.translate('RECORDS', 'Mga Tala'),
+        ];
 
-            // Content
-            Expanded(
-              child: IndexedStack(
-                index: _currentIndex,
-                children: _screens,
-              ),
+        return Scaffold(
+          backgroundColor: AppColors.bgPrimary,
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          height: 36,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.favorite,
+                                  color: AppColors.brandPrimary, size: 30),
+                        ),
+                      ),
+                      Text(
+                        titles[_currentIndex],
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.brandText,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {},
+                        icon: const Icon(
+                          Icons.notifications_none_rounded,
+                          size: 24,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      GestureDetector(
+                        onTap: () => _showProfileMenu(context),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.brandPrimary,
+                            image: _profilePictureUrl != null
+                                ? DecorationImage(
+                                    image: NetworkImage(_profilePictureUrl!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: _profilePictureUrl == null
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 20,
+                                  color: Colors.white,
+                                )
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Expanded(
+                  child: IndexedStack(
+                    index: _currentIndex,
+                    children: _screens,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: Container(
-        height: 70,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
+          bottomNavigationBar: Container(
+            height: 70,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, -4),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(
-              icon: Icons.home_outlined,
-              activeIcon: Icons.home,
-              label: 'Home',
-              isActive: _currentIndex == 0,
-              onTap: () => setState(() => _currentIndex = 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _NavItem(
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home,
+                  label: LanguageService.translate('Home', 'Bahay'),
+                  isActive: _currentIndex == 0,
+                  onTap: () => setState(() => _currentIndex = 0),
+                ),
+                _NavItem(
+                  icon: Icons.menu_book_outlined,
+                  activeIcon: Icons.menu_book,
+                  label: LanguageService.translate('Journal', 'Journal'),
+                  isActive: _currentIndex == 1,
+                  onTap: () => setState(() => _currentIndex = 1),
+                ),
+                _NavItem(
+                  icon: Icons.child_care_outlined,
+                  activeIcon: Icons.child_care,
+                  label: LanguageService.translate('Children', 'Mga Anak'),
+                  isActive: _currentIndex == 2,
+                  onTap: () => setState(() => _currentIndex = 2),
+                ),
+                _NavItem(
+                  icon: Icons.folder_outlined,
+                  activeIcon: Icons.folder,
+                  label: LanguageService.translate('Records', 'Mga Tala'),
+                  isActive: _currentIndex == 3,
+                  onTap: () => setState(() => _currentIndex = 3),
+                ),
+              ],
             ),
-            _NavItem(
-              icon: Icons.menu_book_outlined,
-              activeIcon: Icons.menu_book,
-              label: 'Journal',
-              isActive: _currentIndex == 1,
-              onTap: () => setState(() => _currentIndex = 1),
-            ),
-            _NavItem(
-              icon: Icons.child_care_outlined,
-              activeIcon: Icons.child_care,
-              label: 'Children',
-              isActive: _currentIndex == 2,
-              onTap: () => setState(() => _currentIndex = 2),
-            ),
-            _NavItem(
-              icon: Icons.folder_outlined,
-              activeIcon: Icons.folder,
-              label: 'Records',
-              isActive: _currentIndex == 3,
-              onTap: () => setState(() => _currentIndex = 3),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

@@ -29,6 +29,7 @@ import 'screens/midwife/midwife_mothers_screen.dart';
 import 'screens/midwife/midwife_children_screen.dart';
 import 'screens/midwife/midwife_schedules_screen.dart';
 import 'screens/midwife/midwife_add_mother_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,7 +47,7 @@ void main() async {
 
   final envSupabaseUrl = dotenv.env['SUPABASE_URL']?.trim();
   final envSupabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY']?.trim();
-  
+
   final supabaseUrl = (envSupabaseUrl != null && envSupabaseUrl.isNotEmpty)
       ? envSupabaseUrl
       : fallbackSupabaseUrl;
@@ -79,7 +80,8 @@ class InaagapayApp extends StatelessWidget {
 
     if (role == 'mother') {
       final profileComplete = await AuthStorage.isProfileComplete();
-      final needsPasswordChange = await AuthStorage.isTemporaryPasswordChanged();
+      final needsPasswordChange =
+          await AuthStorage.isTemporaryPasswordChanged();
       final motherId = await AuthStorage.getMotherId();
       final accountId = await AuthStorage.getUserId();
 
@@ -122,11 +124,13 @@ class InaagapayApp extends StatelessWidget {
               (accountResponse?['first_name']?.toString() ?? '').isNotEmpty;
           final hasLastName = accountResponse?['last_name'] != null &&
               (accountResponse?['last_name']?.toString() ?? '').isNotEmpty;
-          final hasBirthdate = response != null && response['birthdate'] != null;
+          final hasBirthdate =
+              response != null && response['birthdate'] != null;
           final hasPhone = accountResponse?['phone_number'] != null &&
               (accountResponse?['phone_number']?.toString() ?? '').isNotEmpty;
 
-          final isActuallyComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
+          final isActuallyComplete =
+              hasFirstName && hasLastName && hasBirthdate && hasPhone;
 
           if (isActuallyComplete && !profileComplete) {
             await AuthStorage.saveProfileComplete(true);
@@ -198,14 +202,18 @@ class InaagapayApp extends StatelessWidget {
           routes: {
             '/login': (context) => const LoginScreen(),
             '/register': (context) => const MotherRegistrationScreen(),
-            '/verify-registration': (context) => const AccountVerificationRegistration(),
+            '/verify-registration': (context) =>
+                const AccountVerificationRegistration(),
             '/forgot-password': (context) => const ForgotPasswordScreen(),
-            '/forgot-password-verify': (context) => const ForgotPasswordVerificationScreen(),
-            '/change-forgot-password': (context) => const ChangeForgotPasswordScreen(),
+            '/forgot-password-verify': (context) =>
+                const ForgotPasswordVerificationScreen(),
+            '/change-forgot-password': (context) =>
+                const ChangeForgotPasswordScreen(),
             '/complete-profile': (context) => const CompleteProfileScreen(),
             '/welcome': (context) => const WelcomeScreen(),
             '/change-password': (context) => const ChangePasswordScreen(),
-            '/change-temporary-password': (context) => const ChangeTemporaryPasswordScreen(),
+            '/change-temporary-password': (context) =>
+                const ChangeTemporaryPasswordScreen(),
             '/mother-dashboard': (context) => const MotherDashboardShell(),
             '/midwife-dashboard': (context) => const MidwifeShell(),
             '/admin-dashboard': (context) => const AdminDashboard(),
@@ -219,6 +227,7 @@ class InaagapayApp extends StatelessWidget {
             '/mother-records': (context) => const RecordsScreen(),
             '/mother-journal': (context) => const MotherJournalScreen(),
             '/mother-children': (context) => const MotherChildrenScreen(),
+            '/settings': (context) => const SettingsScreen(),
             '/midwife-mothers': (context) => const MidwifeMothersScreen(),
             '/midwife-children': (context) => const MidwifeChildrenScreen(),
             '/midwife-schedules': (context) => const MidwifeSchedulesScreen(),
