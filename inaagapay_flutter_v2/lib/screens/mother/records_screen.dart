@@ -36,6 +36,10 @@ class _RecordsScreenState extends State<RecordsScreen>
   final Set<String> _expandedLabInsightAspects = <String>{};
   StateSetter? _recordDetailsModalSetState;
 
+  // Pagination — show 5 records at a time
+  static const int _pageSize = 5;
+  int _displayCount = _pageSize;
+
   late TabController _tabController;
 
   @override
@@ -97,6 +101,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     } finally {
       setState(() {
         _isLoading = false;
+        _displayCount = _pageSize; // Reset pagination on reload
       });
     }
   }
@@ -1029,6 +1034,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                   onChanged: (value) {
                     setState(() {
                       _searchQuery = value;
+                      _displayCount = _pageSize; // Reset on search change
                     });
                   },
                   decoration: InputDecoration(
@@ -1068,6 +1074,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                         onChanged: (value) {
                           setState(() {
                             _selectedFilter = value!;
+                            _displayCount = _pageSize; // Reset on filter change
                           });
                         },
                       ),
@@ -1142,8 +1149,47 @@ class _RecordsScreenState extends State<RecordsScreen>
                   color: AppColors.brandPrimary,
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: allRecords.length,
+                    itemCount: allRecords.length <= _displayCount
+                        ? allRecords.length
+                        : _displayCount + 1, // +1 for the Load More button
                     itemBuilder: (context, index) {
+                      // Show "Load More" button at the end
+                      if (index == _displayCount &&
+                          allRecords.length > _displayCount) {
+                        final remaining = allRecords.length - _displayCount;
+                        final nextBatch =
+                            remaining > _pageSize ? _pageSize : remaining;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () => setState(
+                                  () => _displayCount += _pageSize),
+                              icon:
+                                  const Icon(Icons.expand_more, size: 18),
+                              label: Text(
+                                'Load More ($nextBatch of $remaining remaining)',
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.brandPrimary,
+                                side: BorderSide(
+                                    color: AppColors.brandPrimary
+                                        .withOpacity(0.3)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
                       final record = allRecords[index];
                       final isCheckup = record['record_type'] == 'checkup';
                       final isUltrasound =

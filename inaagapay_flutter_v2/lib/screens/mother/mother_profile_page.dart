@@ -1,4 +1,4 @@
-﻿// lib/screens/mother/mother_profile_page.dart
+// lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -65,6 +65,16 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   String _childQuery = '';
   String _childSort = 'recent';
   final Set<String> _expandedLabInsightAspects = <String>{};
+
+  // Pagination states — show 5 records at a time
+  static const int _pageSize = 5;
+  int _checkupDisplayCount = _pageSize;
+  int _ultrasoundDisplayCount = _pageSize;
+  int _labTestDisplayCount = _pageSize;
+  // History tab pagination per pregnancy (keyed by pregnancy_id)
+  final Map<int, int> _historyCheckupDisplayCounts = {};
+  final Map<int, int> _historyUltrasoundDisplayCounts = {};
+  final Map<int, int> _historyLabTestDisplayCounts = {};
 
   // Edit mode states
   bool _isEditingPersonal = false;
@@ -245,6 +255,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       _isEditingPersonal = false;
       _isEditingAddress = false;
       _profileFuture = MotherProfileService.fetchMotherProfile(widget.motherId);
+      // Reset pagination counts
+      _checkupDisplayCount = _pageSize;
+      _ultrasoundDisplayCount = _pageSize;
+      _labTestDisplayCount = _pageSize;
+      _historyCheckupDisplayCounts.clear();
+      _historyUltrasoundDisplayCounts.clear();
+      _historyLabTestDisplayCounts.clear();
     });
     await _loadProfilePicture();
     await _loadLatestGrowthData();
@@ -3577,7 +3594,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             const SizedBox(height: 12),
 
             _buildExpandableSection(
-              'Prenatal Checkups',
+              'Prenatal Checkups (${sortedCheckups.length})',
               Icons.medical_services_outlined,
               [
                 _buildSortRow(_checkupSort,
@@ -3588,51 +3605,85 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       child: Padding(
                           padding: EdgeInsets.all(20),
                           child: Text('No checkups recorded')))
-                else
-                  ...sortedCheckups.map((c) => _buildCheckupCard(
-                      c,
-                      pregnancy['pregnancy_id'] ?? -1,
-                      pregnancy['fetal_count'] ?? 1)),
+                else ...[
+                  ...sortedCheckups.take(_checkupDisplayCount).map((c) =>
+                      _buildCheckupCard(
+                          c,
+                          pregnancy['pregnancy_id'] ?? -1,
+                          pregnancy['fetal_count'] ?? 1)),
+                  if (sortedCheckups.length > _checkupDisplayCount)
+                    _buildLoadMoreButton(
+                      current: _checkupDisplayCount,
+                      total: sortedCheckups.length,
+                      onPressed: () => setState(() =>
+                          _checkupDisplayCount += _pageSize),
+                    ),
+                ],
               ],
             ),
             const SizedBox(height: 12),
 
             _buildExpandableSection(
-              'Ultrasounds',
+              'Ultrasounds (${ultrasounds.length})',
               Icons.photo_outlined,
-              [
-                _buildSortRow(_ultrasoundSort,
-                    (v) => setState(() => _ultrasoundSort = v ?? 'desc')),
-                const SizedBox(height: 12),
-                if (ultrasounds.isEmpty)
-                  const Center(
-                      child: Padding(
-                          padding: EdgeInsets.all(20),
-                          child: Text('No ultrasounds recorded')))
-                else
-                  ..._sortByDate(
-                          ultrasounds, 'ultrasound_date', _ultrasoundSort)
-                      .map((u) => _buildUltrasoundCard(u)),
-              ],
+              () {
+                final sortedUltrasounds = _sortByDate(
+                    ultrasounds, 'ultrasound_date', _ultrasoundSort);
+                return [
+                  _buildSortRow(_ultrasoundSort,
+                      (v) => setState(() => _ultrasoundSort = v ?? 'desc')),
+                  const SizedBox(height: 12),
+                  if (ultrasounds.isEmpty)
+                    const Center(
+                        child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('No ultrasounds recorded')))
+                  else ...[
+                    ...sortedUltrasounds
+                        .take(_ultrasoundDisplayCount)
+                        .map((u) => _buildUltrasoundCard(u)),
+                    if (sortedUltrasounds.length > _ultrasoundDisplayCount)
+                      _buildLoadMoreButton(
+                        current: _ultrasoundDisplayCount,
+                        total: sortedUltrasounds.length,
+                        onPressed: () => setState(() =>
+                            _ultrasoundDisplayCount += _pageSize),
+                      ),
+                  ],
+                ];
+              }(),
             ),
             const SizedBox(height: 12),
 
             _buildExpandableSection(
-              'Lab Tests',
+              'Lab Tests (${labTests.length})',
               Icons.science_outlined,
-              [
-                _buildSortRow(
-                    _labSort, (v) => setState(() => _labSort = v ?? 'desc')),
-                const SizedBox(height: 12),
-                if (labTests.isEmpty)
-                  const Center(
-                      child: Padding(
-                          padding: EdgeInsets.all(20),
-                          child: Text('No lab tests recorded')))
-                else
-                  ..._sortByDate(labTests, 'lab_test_date', _labSort)
-                      .map((l) => _buildLabTestCard(l)),
-              ],
+              () {
+                final sortedLabTests =
+                    _sortByDate(labTests, 'lab_test_date', _labSort);
+                return [
+                  _buildSortRow(
+                      _labSort, (v) => setState(() => _labSort = v ?? 'desc')),
+                  const SizedBox(height: 12),
+                  if (labTests.isEmpty)
+                    const Center(
+                        child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('No lab tests recorded')))
+                  else ...[
+                    ...sortedLabTests
+                        .take(_labTestDisplayCount)
+                        .map((l) => _buildLabTestCard(l)),
+                    if (sortedLabTests.length > _labTestDisplayCount)
+                      _buildLoadMoreButton(
+                        current: _labTestDisplayCount,
+                        total: sortedLabTests.length,
+                        onPressed: () => setState(
+                            () => _labTestDisplayCount += _pageSize),
+                      ),
+                  ],
+                ];
+              }(),
             ),
           ],
         ),
@@ -3664,6 +3715,38 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           ),
         ),
       ],
+    );
+  }
+
+  /// "Load More" button shown when a list has more items than currently displayed.
+  Widget _buildLoadMoreButton({
+    required int current,
+    required int total,
+    required VoidCallback onPressed,
+  }) {
+    final remaining = total - current;
+    final nextBatch = remaining > _pageSize ? _pageSize : remaining;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: onPressed,
+          icon: const Icon(Icons.expand_more, size: 18),
+          label: Text(
+            'Load More ($nextBatch of $remaining remaining)',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.brandPrimary,
+            side: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.3)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      ),
     );
   }
 
@@ -3849,56 +3932,97 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         const SizedBox(height: 8),
                       ],
                       const Divider(height: 24),
-                      _buildHistoryRecordSection(
-                        title: 'Prenatal Checkups',
-                        icon: Icons.medical_services_outlined,
-                        color: AppColors.brandPrimary,
-                        count: checkups.length,
-                        emptyMessage: 'No prenatal checkup records',
-                        children: (List<Map<String, dynamic>>.from(
-                                checkups.map((c) => c as Map<String, dynamic>))
-                              ..sort((a, b) {
-                                final da =
-                                    _parseDateForSort(a['checkup_datetime']);
-                                final db =
-                                    _parseDateForSort(b['checkup_datetime']);
-                                if (da == null || db == null) return 0;
-                                return db.compareTo(da);
-                              }))
-                            .map((c) => _buildCheckupCard(
-                                c,
-                                p['pregnancy_id'] as int? ?? -1,
-                                p['fetal_count'] as int? ?? 1))
-                            .toList(),
-                      ),
+                      () {
+                        final pregnancyId = p['pregnancy_id'] as int? ?? -1;
+                        final sortedHistCheckups = List<Map<String, dynamic>>.from(
+                            checkups.map((c) => c as Map<String, dynamic>))
+                          ..sort((a, b) {
+                            final da = _parseDateForSort(a['checkup_datetime']);
+                            final db = _parseDateForSort(b['checkup_datetime']);
+                            if (da == null || db == null) return 0;
+                            return db.compareTo(da);
+                          });
+                        final histCheckupLimit =
+                            _historyCheckupDisplayCounts[pregnancyId] ?? _pageSize;
+                        return _buildHistoryRecordSection(
+                          title: 'Prenatal Checkups',
+                          icon: Icons.medical_services_outlined,
+                          color: AppColors.brandPrimary,
+                          count: checkups.length,
+                          emptyMessage: 'No prenatal checkup records',
+                          children: [
+                            ...sortedHistCheckups.take(histCheckupLimit).map((c) =>
+                                _buildCheckupCard(c, pregnancyId,
+                                    p['fetal_count'] as int? ?? 1)),
+                            if (sortedHistCheckups.length > histCheckupLimit)
+                              _buildLoadMoreButton(
+                                current: histCheckupLimit,
+                                total: sortedHistCheckups.length,
+                                onPressed: () => setState(() =>
+                                    _historyCheckupDisplayCounts[pregnancyId] =
+                                        histCheckupLimit + _pageSize),
+                              ),
+                          ],
+                        );
+                      }(),
                       const SizedBox(height: 8),
-                      _buildHistoryRecordSection(
-                        title: 'Ultrasound Records',
-                        icon: Icons.photo_outlined,
-                        color: Colors.purple,
-                        count: ultrasounds.length,
-                        emptyMessage: 'No ultrasound records',
-                        children: _sortByDate(
-                                ultrasounds.cast<Map<String, dynamic>>(),
-                                'ultrasound_date',
-                                'desc')
-                            .map((u) => _buildUltrasoundCard(u))
-                            .toList(),
-                      ),
+                      () {
+                        final pregnancyId = p['pregnancy_id'] as int? ?? -1;
+                        final sortedHistUltrasounds = _sortByDate(
+                            ultrasounds.cast<Map<String, dynamic>>(),
+                            'ultrasound_date', 'desc');
+                        final histUltrasoundLimit =
+                            _historyUltrasoundDisplayCounts[pregnancyId] ?? _pageSize;
+                        return _buildHistoryRecordSection(
+                          title: 'Ultrasound Records',
+                          icon: Icons.photo_outlined,
+                          color: Colors.purple,
+                          count: ultrasounds.length,
+                          emptyMessage: 'No ultrasound records',
+                          children: [
+                            ...sortedHistUltrasounds
+                                .take(histUltrasoundLimit)
+                                .map((u) => _buildUltrasoundCard(u)),
+                            if (sortedHistUltrasounds.length > histUltrasoundLimit)
+                              _buildLoadMoreButton(
+                                current: histUltrasoundLimit,
+                                total: sortedHistUltrasounds.length,
+                                onPressed: () => setState(() =>
+                                    _historyUltrasoundDisplayCounts[pregnancyId] =
+                                        histUltrasoundLimit + _pageSize),
+                              ),
+                          ],
+                        );
+                      }(),
                       const SizedBox(height: 8),
-                      _buildHistoryRecordSection(
-                        title: 'Lab Test Records',
-                        icon: Icons.science_outlined,
-                        color: Colors.orange,
-                        count: labTests.length,
-                        emptyMessage: 'No lab test records',
-                        children: _sortByDate(
-                                labTests.cast<Map<String, dynamic>>(),
-                                'lab_test_date',
-                                'desc')
-                            .map((l) => _buildLabTestCard(l))
-                            .toList(),
-                      ),
+                      () {
+                        final pregnancyId = p['pregnancy_id'] as int? ?? -1;
+                        final sortedHistLabTests = _sortByDate(
+                            labTests.cast<Map<String, dynamic>>(),
+                            'lab_test_date', 'desc');
+                        final histLabLimit =
+                            _historyLabTestDisplayCounts[pregnancyId] ?? _pageSize;
+                        return _buildHistoryRecordSection(
+                          title: 'Lab Test Records',
+                          icon: Icons.science_outlined,
+                          color: Colors.orange,
+                          count: labTests.length,
+                          emptyMessage: 'No lab test records',
+                          children: [
+                            ...sortedHistLabTests
+                                .take(histLabLimit)
+                                .map((l) => _buildLabTestCard(l)),
+                            if (sortedHistLabTests.length > histLabLimit)
+                              _buildLoadMoreButton(
+                                current: histLabLimit,
+                                total: sortedHistLabTests.length,
+                                onPressed: () => setState(() =>
+                                    _historyLabTestDisplayCounts[pregnancyId] =
+                                        histLabLimit + _pageSize),
+                              ),
+                          ],
+                        );
+                      }(),
                     ],
                   ),
                 ),
