@@ -1616,6 +1616,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   Future<void> _showConcludePregnancyDialog(
       Map<String, dynamic> pregnancy) async {
     final int fetalCount = pregnancy['fetal_count'] as int? ?? 1;
+    final lmpDate = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
 
     List<String> outcomes = List.filled(fetalCount, 'live_birth');
     List<DateTime> outcomeDates = List.filled(fetalCount, DateTime.now());
@@ -1623,16 +1624,15 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     List<String?> placesOfDelivery = List.filled(fetalCount, null);
     List<String?> deliveryMethods = List.filled(fetalCount, null);
 
-    double? gestationalAge;
-    final lmpDate = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
-    final gestAgeController = TextEditingController();
     final placeControllers =
         List.generate(fetalCount, (_) => TextEditingController());
 
-    if (lmpDate != null) {
-      final weeks = DateTime.now().difference(lmpDate).inDays / 7;
-      gestationalAge = double.parse(weeks.toStringAsFixed(1));
-      gestAgeController.text = gestationalAge.toString();
+    // Helper: compute gestational age from LMP to earliest outcome date
+    double? computeGestAge(List<DateTime> dates) {
+      if (lmpDate == null) return null;
+      final earliest = dates.reduce((a, b) => a.isBefore(b) ? a : b);
+      final weeks = earliest.difference(lmpDate).inDays / 7;
+      return weeks < 0 ? null : double.parse(weeks.toStringAsFixed(1));
     }
 
     await showModalBottomSheet(
@@ -1642,14 +1642,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModal) {
+            final gestAge = computeGestAge(outcomeDates);
+
             return Container(
-              height: MediaQuery.of(context).size.height * 0.8,
+              height: MediaQuery.of(context).size.height * 0.85,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
                 children: [
+                  // Drag handle
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     width: 40,
@@ -1670,6 +1673,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // ── Header ──
                           Row(
                             children: [
                               Container(
@@ -1682,28 +1686,74 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     const Icon(Icons.flag, color: Colors.red),
                               ),
                               const SizedBox(width: 12),
-                              const Text(
-                                'Conclude Pregnancy',
-                                style: TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.bold),
+                              const Expanded(
+                                child: Text(
+                                  'Conclude Pregnancy',
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
+                                ),
                               ),
-                              const Spacer(),
                               IconButton(
                                 icon: const Icon(Icons.close),
                                 onPressed: () => Navigator.pop(ctx),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 20),
+
+                          // ── Fetal count badge ──
+                          if (fetalCount > 1) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.info.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                    color:
+                                        AppColors.info.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.info_outline,
+                                      size: 16, color: AppColors.info),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'This pregnancy has $fetalCount fetuses. '
+                                    'Please fill out the outcome for each.',
+                                    style: const TextStyle(
+                                        fontSize: 12, color: AppColors.info),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 16),
+
+                          // ── Per-fetus forms ──
                           for (int i = 0; i < fetalCount; i++) ...[
                             if (fetalCount > 1)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
-                                child: Text('Fetus ${i + 1}',
-                                    style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold)),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brandPrimary
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text('Fetus ${i + 1} of $fetalCount',
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.brandPrimary)),
+                                ),
                               ),
+
+                            // Outcome dropdown
                             Container(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 16),
@@ -1712,7 +1762,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: DropdownButtonFormField<String>(
-                                initialValue: outcomes[i],
+                                value: outcomes[i],
                                 decoration: const InputDecoration(
                                   labelText: 'Outcome',
                                   border: InputBorder.none,
@@ -1731,19 +1781,22 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                       value: 'abortion',
                                       child: Text('Abortion')),
                                   DropdownMenuItem(
-                                      value: 'ectopic', child: Text('Ectopic')),
+                                      value: 'ectopic',
+                                      child: Text('Ectopic')),
                                 ],
                                 onChanged: (v) => setModal(
                                     () => outcomes[i] = v ?? outcomes[i]),
                               ),
                             ),
                             const SizedBox(height: 12),
+
+                            // Outcome date picker
                             InkWell(
                               onTap: () async {
                                 final picked = await showDatePicker(
                                   context: ctx,
                                   initialDate: outcomeDates[i],
-                                  firstDate: DateTime(1900),
+                                  firstDate: lmpDate ?? DateTime(1900),
                                   lastDate: DateTime.now(),
                                 );
                                 if (picked != null) {
@@ -1796,6 +1849,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 ),
                               ),
                             ),
+
+                            // Delivery fields (only for live_birth / stillbirth)
                             if (outcomes[i] == 'live_birth' ||
                                 outcomes[i] == 'stillbirth') ...[
                               const SizedBox(height: 12),
@@ -1820,7 +1875,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: DropdownButtonFormField<String>(
-                                  initialValue: deliveryMethods[i],
+                                  value: deliveryMethods[i],
                                   decoration: const InputDecoration(
                                     labelText: 'Delivery Method',
                                     border: InputBorder.none,
@@ -1843,26 +1898,86 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               ),
                             ],
                             const SizedBox(height: 20),
-                            if (i < fetalCount - 1) const Divider(height: 24),
+                            if (i < fetalCount - 1)
+                              const Divider(height: 24),
                           ],
-                          TextField(
-                            controller: gestAgeController,
-                            decoration: InputDecoration(
-                              labelText: 'Gestational Age at End (weeks)',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              filled: true,
-                              fillColor: AppColors.bgSecondary,
+
+                          // ── Gestational age (auto-computed, read-only) ──
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.bgSecondary,
+                              borderRadius: BorderRadius.circular(12),
+                              border:
+                                  Border.all(color: AppColors.borderPrimary),
                             ),
-                            keyboardType: TextInputType.number,
-                            onChanged: (v) =>
-                                gestationalAge = double.tryParse(v),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brandPrimary
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.timer_outlined,
+                                      size: 18,
+                                      color: AppColors.brandPrimary),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Gestational Age at End',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary,
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        gestAge != null
+                                            ? '${gestAge.toStringAsFixed(1)} weeks'
+                                            : 'Unable to compute (no LMP)',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: gestAge != null
+                                              ? AppColors.textPrimary
+                                              : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.lock_outline,
+                                    size: 16,
+                                    color: AppColors.textSecondary),
+                              ],
+                            ),
                           ),
+                          const SizedBox(height: 6),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              'Auto-computed from LMP and outcome date',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                  fontStyle: FontStyle.italic),
+                            ),
+                          ),
+
                           const SizedBox(height: 24),
+
+                          // ── Submit ──
                           MainButton(
                             label: 'Conclude Pregnancy',
                             onPressed: () async {
+                              // Validate delivery method for live/stillbirth
                               for (int i = 0; i < fetalCount; i++) {
                                 if (outcomes[i] == 'live_birth' ||
                                     outcomes[i] == 'stillbirth') {
@@ -1872,6 +1987,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                         .showSnackBar(SnackBar(
                                       content: Text(
                                           'Please select delivery method for Fetus ${i + 1}'),
+                                    ));
+                                    return;
+                                  }
+                                }
+                              }
+
+                              // Validate outcome dates are not before LMP
+                              if (lmpDate != null) {
+                                for (int i = 0; i < fetalCount; i++) {
+                                  if (outcomeDates[i].isBefore(lmpDate)) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(SnackBar(
+                                      content: Text(
+                                          'Outcome date for Fetus ${i + 1} cannot be before LMP'),
                                     ));
                                     return;
                                   }
@@ -1889,16 +2019,18 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                   'delivery_date': deliveryDates[i]
                                       ?.toIso8601String()
                                       .split('T')[0],
-                                  'place_of_delivery': placesOfDelivery[i] ??
-                                      placeControllers[i].text,
+                                  'place_of_delivery':
+                                      placesOfDelivery[i] ??
+                                          placeControllers[i].text,
                                   'delivery_method': deliveryMethods[i],
                                 });
                               }
 
                               final success =
-                                  await MotherProfileService.concludePregnancy(
+                                  await MotherProfileService
+                                      .concludePregnancy(
                                 pregnancy['pregnancy_id'],
-                                gestationalAge,
+                                gestAge,
                                 fetalOutcomes,
                               );
 
@@ -1914,8 +2046,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                      content:
-                                          Text('Failed to conclude pregnancy')),
+                                      content: Text(
+                                          'Failed to conclude pregnancy')),
                                 );
                               }
                             },
@@ -1932,7 +2064,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       },
     );
 
-    gestAgeController.dispose();
     for (final pc in placeControllers) {
       pc.dispose();
     }
@@ -2818,14 +2949,41 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             _buildExpandableSection(
               'Pregnancy Details',
               Icons.info_outline,
-              [
-                _buildInfoRow(
-                    'LMP', _formatDate(pregnancy['last_menstrual_period'])),
-                _buildInfoRow(
-                    'EDD', _formatDate(pregnancy['expected_date_of_delivery'])),
-                _buildInfoRow('Status',
-                    pregnancy['status']?.toString().toUpperCase() ?? '-'),
-              ],
+              () {
+                // Compute current trimester
+                String trimesterLabel = '-';
+                if (gestWeeks != null) {
+                  if (gestWeeks <= 12) {
+                    trimesterLabel = '1st Trimester (Weeks 1–12)';
+                  } else if (gestWeeks <= 27) {
+                    trimesterLabel = '2nd Trimester (Weeks 13–27)';
+                  } else {
+                    trimesterLabel = '3rd Trimester (Week 28+)';
+                  }
+                }
+
+                // Fetal count display
+                final fc = pregnancy['fetal_count'] as int? ?? 1;
+                String fetalLabel;
+                if (fc == 1) {
+                  fetalLabel = 'Singleton';
+                } else if (fc == 2) {
+                  fetalLabel = 'Twins';
+                } else {
+                  fetalLabel = '$fc (Multiple)';
+                }
+
+                return [
+                  _buildInfoRow(
+                      'LMP', _formatDate(pregnancy['last_menstrual_period'])),
+                  _buildInfoRow(
+                      'EDD', _formatDate(pregnancy['expected_date_of_delivery'])),
+                  _buildInfoRow('Current Trimester', trimesterLabel),
+                  _buildInfoRow('Fetal Count', fetalLabel),
+                  _buildInfoRow('Status',
+                      pregnancy['status']?.toString().toUpperCase() ?? '-'),
+                ];
+              }(),
             ),
             const SizedBox(height: 12),
 
