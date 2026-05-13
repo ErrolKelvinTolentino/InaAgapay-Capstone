@@ -1,0 +1,440 @@
+// lib/screens/mother/profile_widgets/record_cards.dart
+// Checkup, Ultrasound, and Lab Test card widgets used in both
+// Current Pregnancy and History tabs.
+
+import 'package:flutter/material.dart';
+import '../../../theme/app_colors.dart';
+import 'profile_helpers.dart';
+
+// ── Checkup Card ──────────────────────────────────────────────────────────
+
+class CheckupRecordCard extends StatelessWidget {
+  final Map<String, dynamic> checkup;
+  final VoidCallback onTap;
+
+  const CheckupRecordCard({
+    super.key,
+    required this.checkup,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final date = formatProfileDateTime(checkup['checkup_datetime']);
+    final bpSys = formatValue(checkup['blood_pressure_systolic']);
+    final bpDia = formatValue(checkup['blood_pressure_diastolic']);
+    final aog = formatValue(checkup['age_of_gestation']);
+
+    return _RecordCardShell(
+      accentColor: AppColors.brandPrimary,
+      icon: Icons.medical_services_outlined,
+      title: 'Prenatal Checkup',
+      subtitle: date,
+      badges: [
+        if (aog != '-') _Badge(label: '$aog wks', color: AppColors.brandPrimary),
+        if (bpSys != '-' && bpDia != '-')
+          _Badge(label: 'BP $bpSys/$bpDia', color: AppColors.textSecondary),
+      ],
+      onTap: onTap,
+    );
+  }
+}
+
+// ── Ultrasound Card ───────────────────────────────────────────────────────
+
+class UltrasoundRecordCard extends StatelessWidget {
+  final Map<String, dynamic> ultrasound;
+  final VoidCallback onTap;
+
+  const UltrasoundRecordCard({
+    super.key,
+    required this.ultrasound,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final date = formatProfileDate(ultrasound['ultrasound_date']);
+    final location = ultrasound['ultrasound_location']?.toString();
+
+    return _RecordCardShell(
+      accentColor: Colors.purple,
+      icon: Icons.monitor_heart_outlined,
+      title: 'Ultrasound',
+      subtitle: date,
+      badges: [
+        if (location != null && location.isNotEmpty)
+          _Badge(label: location, color: Colors.purple),
+      ],
+      onTap: onTap,
+    );
+  }
+}
+
+// ── Lab Test Card ─────────────────────────────────────────────────────────
+
+class LabTestRecordCard extends StatelessWidget {
+  final Map<String, dynamic> labTest;
+  final VoidCallback onTap;
+
+  const LabTestRecordCard({
+    super.key,
+    required this.labTest,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final date = formatProfileDate(labTest['lab_test_date']);
+    final type = labTest['lab_test_type']?.toString() ?? 'Lab Test';
+
+    return _RecordCardShell(
+      accentColor: Colors.orange,
+      icon: Icons.science_outlined,
+      title: type,
+      subtitle: date,
+      badges: const [],
+      onTap: onTap,
+    );
+  }
+}
+
+// ── Shared record card shell ──────────────────────────────────────────────
+
+class _RecordCardShell extends StatelessWidget {
+  final Color accentColor;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<_Badge> badges;
+  final VoidCallback onTap;
+
+  const _RecordCardShell({
+    required this.accentColor,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.badges,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.borderPrimary,
+              ),
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  // Left accent strip
+                  Container(
+                    width: 4,
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        bottomLeft: Radius.circular(12),
+                      ),
+                    ),
+                  ),
+
+                  // Icon
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, color: accentColor, size: 18),
+                    ),
+                  ),
+
+                  // Content
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          if (badges.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: badges,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Chevron
+                  const Padding(
+                    padding: EdgeInsets.only(right: 12),
+                    child: Icon(Icons.chevron_right,
+                        color: AppColors.textSecondary, size: 20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Badge chip ────────────────────────────────────────────────────────────
+
+class _Badge extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _Badge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+// ── Sort row ──────────────────────────────────────────────────────────────
+
+class RecordSortRow extends StatelessWidget {
+  final String currentValue;
+  final ValueChanged<String?> onChanged;
+
+  const RecordSortRow({
+    super.key,
+    required this.currentValue,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        const Text('Sort:',
+            style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500)),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondary,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: DropdownButton<String>(
+            value: currentValue,
+            underline: const SizedBox(),
+            isDense: true,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+            items: const [
+              DropdownMenuItem(value: 'desc', child: Text('Newest')),
+              DropdownMenuItem(value: 'asc', child: Text('Oldest')),
+            ],
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Load-more button ──────────────────────────────────────────────────────
+
+class RecordLoadMoreButton extends StatelessWidget {
+  final int current;
+  final int total;
+  final int pageSize;
+  final VoidCallback onPressed;
+
+  const RecordLoadMoreButton({
+    super.key,
+    required this.current,
+    required this.total,
+    required this.pageSize,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = total - current;
+    final nextBatch = remaining > pageSize ? pageSize : remaining;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: onPressed,
+          icon: const Icon(Icons.expand_more, size: 18),
+          label: Text(
+            'Load More ($nextBatch of $remaining remaining)',
+            style:
+                const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.brandPrimary,
+            side: BorderSide(
+                color: AppColors.brandPrimary.withValues(alpha: 0.3)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 11),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── History record sub-section ────────────────────────────────────────────
+
+class HistoryRecordSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final int count;
+  final String emptyMessage;
+  final List<Widget> children;
+
+  const HistoryRecordSection({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.count,
+    required this.emptyMessage,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          leading: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          title: Row(
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: count > 0
+                      ? color.withValues(alpha: 0.15)
+                      : AppColors.borderPrimary,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: count > 0 ? color : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: count == 0
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.info_outline,
+                              size: 16, color: AppColors.textSecondary),
+                          const SizedBox(width: 8),
+                          Text(emptyMessage,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    )
+                  : Column(children: children),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

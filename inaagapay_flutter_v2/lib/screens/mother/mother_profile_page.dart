@@ -14,11 +14,11 @@ import '../../widgets/headline.dart';
 import '../../widgets/page_title.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/secondary_button.dart';
-import '../../widgets/overview_info.dart';
 import '../../services/risk_engine.dart';
 import '../../services/smart_risk_engine.dart';
 import '../shared/record_detail_screen.dart';
 import '../../widgets/full_screen_image_viewer.dart';
+import 'profile_widgets/profile_widgets.dart';
 
 // Blood type options
 const List<String> _bloodTypeOptions = [
@@ -1555,31 +1555,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final bpSys = _formatValue(checkup['blood_pressure_systolic']);
     final bpDia = _formatValue(checkup['blood_pressure_diastolic']);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.brandPrimary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.medical_services,
-              color: AppColors.brandPrimary, size: 20),
-        ),
-        title: const Text('Checkup',
-            style: TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(date, style: const TextStyle(fontSize: 12)),
-            if (bpSys != '-' && bpDia != '-')
-              Text('BP: $bpSys/$bpDia', style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-        trailing:
-            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        onTap: () async {
+    return CheckupRecordCard(
+      checkup: checkup,
+      onTap: () async {
           final aog = _formatValue(checkup['age_of_gestation']);
           final weight = _formatValue(checkup['checkup_weight']);
           String? aiAnalysis;
@@ -1617,14 +1595,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             }
           }
 
-          // Fallback to local generator only if nothing found remotely
           if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
             aiAnalysis = _generatePrenatalAIInsights(checkup);
           } else {
             aiAnalysis = aiAnalysis.trim();
           }
 
-          // FIX #5: guard against using context after async gap
           if (!mounted) return;
 
           final double? height = await _getMotherHeight();
@@ -1688,85 +1664,69 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             riskFactors: riskFactors,
           );
         },
-      ),
     );
   }
 
   Widget _buildUltrasoundCard(Map<String, dynamic> ultrasound) {
     final date = _formatDate(ultrasound['ultrasound_date']);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.purple.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.photo, color: Colors.purple, size: 20),
-        ),
-        title: const Text('Ultrasound',
-            style: TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(date),
-        trailing:
-            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        onTap: () async {
-          List<String> imageUrls = [];
+    return UltrasoundRecordCard(
+      ultrasound: ultrasound,
+      onTap: () async {
+        List<String> imageUrls = [];
 
-          if (ultrasound['ultrasound_image'] != null) {
-            final imageField = ultrasound['ultrasound_image'].toString();
-            if (imageField.contains(',')) {
-              imageUrls =
-                  imageField.split(',').map((url) => url.trim()).toList();
-            } else if (imageField.isNotEmpty) {
-              imageUrls = [imageField];
-            }
+        if (ultrasound['ultrasound_image'] != null) {
+          final imageField = ultrasound['ultrasound_image'].toString();
+          if (imageField.contains(',')) {
+            imageUrls =
+                imageField.split(',').map((url) => url.trim()).toList();
+          } else if (imageField.isNotEmpty) {
+            imageUrls = [imageField];
           }
+        }
 
-          final split = _splitRemarksAndAi(ultrasound['remarks']?.toString());
+        final split = _splitRemarksAndAi(ultrasound['remarks']?.toString());
 
-          String? aiAnalysis;
-          final ultrasoundId = ultrasound['ultrasound_id'];
-          if (ultrasoundId is int) {
-            aiAnalysis = await MotherProfileService.getUltrasoundAIAnalysis(
-                ultrasoundId);
-          }
+        String? aiAnalysis;
+        final ultrasoundId = ultrasound['ultrasound_id'];
+        if (ultrasoundId is int) {
+          aiAnalysis = await MotherProfileService.getUltrasoundAIAnalysis(
+              ultrasoundId);
+        }
 
-          if (!mounted) return;
+        if (!mounted) return;
 
-          String finalRemarks = split.cleanRemarks;
-          if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
-            finalRemarks = '';
-          }
+        String finalRemarks = split.cleanRemarks;
+        if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
+          finalRemarks = '';
+        }
 
-          aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
-              ? aiAnalysis.trim()
-              : split.extractedAi ?? _generateUltrasoundAIInsights(ultrasound);
+        aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
+            ? aiAnalysis.trim()
+            : split.extractedAi ?? _generateUltrasoundAIInsights(ultrasound);
 
-          _showRecordDetails(
-            title: 'Ultrasound',
-            subtitle: date,
-            icon: Icons.monitor_heart,
-            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-            rows: [
-              MapEntry('Ultrasound Date',
-                  _formatDate(ultrasound['ultrasound_date'])),
-              MapEntry(
-                  'Location', _formatValue(ultrasound['ultrasound_location'])),
-              MapEntry(
-                  'Full Name', _formatValue(ultrasound['health_worker_name'])),
-              MapEntry('Institution',
-                  _formatValue(ultrasound['health_worker_institution'])),
-              MapEntry('Profession',
-                  _formatValue(ultrasound['health_worker_profession'])),
-              MapEntry('Remarks', _formatValue(finalRemarks)),
-            ],
-            aiAnalysis: aiAnalysis,
-            useStructuredAiInsights: aiAnalysis.isNotEmpty,
-          );
-        },
-      ),
+        _showRecordDetails(
+          title: 'Ultrasound',
+          subtitle: date,
+          icon: Icons.monitor_heart,
+          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+          rows: [
+            MapEntry('Ultrasound Date',
+                _formatDate(ultrasound['ultrasound_date'])),
+            MapEntry(
+                'Location', _formatValue(ultrasound['ultrasound_location'])),
+            MapEntry(
+                'Full Name', _formatValue(ultrasound['health_worker_name'])),
+            MapEntry('Institution',
+                _formatValue(ultrasound['health_worker_institution'])),
+            MapEntry('Profession',
+                _formatValue(ultrasound['health_worker_profession'])),
+            MapEntry('Remarks', _formatValue(finalRemarks)),
+          ],
+          aiAnalysis: aiAnalysis,
+          useStructuredAiInsights: aiAnalysis.isNotEmpty,
+        );
+      },
     );
   }
 
@@ -1774,71 +1734,57 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final date = _formatDate(labTest['lab_test_date']);
     final type = labTest['lab_test_type'] ?? 'Lab Test';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.science, color: Colors.orange, size: 20),
-        ),
-        title: Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(date),
-        trailing:
-            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-        onTap: () async {
-          List<String> imageUrls = [];
+    return LabTestRecordCard(
+      labTest: labTest,
+      onTap: () async {
+        List<String> imageUrls = [];
 
-          if (labTest['lab_test_image'] != null) {
-            final imageField = labTest['lab_test_image'].toString();
-            if (imageField.contains(',')) {
-              imageUrls =
-                  imageField.split(',').map((url) => url.trim()).toList();
-            } else if (imageField.isNotEmpty) {
-              imageUrls = [imageField];
-            }
+        if (labTest['lab_test_image'] != null) {
+          final imageField = labTest['lab_test_image'].toString();
+          if (imageField.contains(',')) {
+            imageUrls =
+                imageField.split(',').map((url) => url.trim()).toList();
+          } else if (imageField.isNotEmpty) {
+            imageUrls = [imageField];
           }
+        }
 
-          final split = _splitRemarksAndAi(labTest['remarks']?.toString());
+        final split = _splitRemarksAndAi(labTest['remarks']?.toString());
 
-          String? aiAnalysis;
-          final labTestId = labTest['lab_test_id'];
-          if (labTestId is int) {
-            aiAnalysis =
-                await MotherProfileService.getLabTestAIAnalysis(labTestId);
-          }
+        String? aiAnalysis;
+        final labTestId = labTest['lab_test_id'];
+        if (labTestId is int) {
+          aiAnalysis =
+              await MotherProfileService.getLabTestAIAnalysis(labTestId);
+        }
 
-          if (!mounted) return;
+        if (!mounted) return;
 
-          aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
-              ? aiAnalysis.trim()
-              : split.extractedAi;
+        aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
+            ? aiAnalysis.trim()
+            : split.extractedAi;
 
-          _showRecordDetails(
-            title: type,
-            subtitle: date,
-            icon: Icons.science,
-            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-            rows: [
-              MapEntry('Lab Test Type', type),
-              MapEntry('Lab Test Date', _formatDate(labTest['lab_test_date'])),
-              MapEntry(
-                  'Full Name', _formatValue(labTest['health_worker_name'])),
-              MapEntry('Institution',
-                  _formatValue(labTest['health_worker_institution'])),
-              MapEntry('Profession',
-                  _formatValue(labTest['health_worker_profession'])),
-              MapEntry('Notes', _formatValue(split.cleanRemarks)),
-            ],
-            aiAnalysis: aiAnalysis,
-            useStructuredAiInsights:
-                aiAnalysis != null && aiAnalysis.isNotEmpty,
-          );
-        },
-      ),
+        _showRecordDetails(
+          title: type,
+          subtitle: date,
+          icon: Icons.science,
+          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+          rows: [
+            MapEntry('Lab Test Type', type),
+            MapEntry('Lab Test Date', _formatDate(labTest['lab_test_date'])),
+            MapEntry(
+                'Full Name', _formatValue(labTest['health_worker_name'])),
+            MapEntry('Institution',
+                _formatValue(labTest['health_worker_institution'])),
+            MapEntry('Profession',
+                _formatValue(labTest['health_worker_profession'])),
+            MapEntry('Notes', _formatValue(split.cleanRemarks)),
+          ],
+          aiAnalysis: aiAnalysis,
+          useStructuredAiInsights:
+              aiAnalysis != null && aiAnalysis.isNotEmpty,
+        );
+      },
     );
   }
 
@@ -2660,66 +2606,15 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   Widget _buildExpandableSection(
       String title, IconData icon, List<Widget> children) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          dividerColor: Colors.transparent,
-          splashColor: Colors.transparent,
-        ),
-        child: ExpansionTile(
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.brandPrimary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: AppColors.brandPrimary, size: 18),
-          ),
-          title: Text(title,
-              style:
-                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(children: children),
-            ),
-          ],
-        ),
-      ),
+    return ProfileSection(
+      title: title,
+      icon: icon,
+      children: children,
     );
   }
 
   Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(label,
-                style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 13)),
-          ),
-          Expanded(
-            child: Text(value,
-                style:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-          ),
-        ],
-      ),
-    );
+    return ProfileInfoRow(label: label, value: value);
   }
 
   // ── Editable form widgets ───────────────────────────────────────────────
@@ -2892,34 +2787,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   Widget _buildReadOnlySection(
       String title, IconData icon, List<Widget> children) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 5,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: ExpansionTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-              color: AppColors.brandPrimary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, color: AppColors.brandPrimary, size: 18),
-        ),
-        title: Text(title,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(children: children),
-          ),
-        ],
-      ),
+    return ProfileSection(
+      title: title,
+      icon: icon,
+      children: children,
     );
   }
 
@@ -2952,130 +2823,35 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Profile header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2))
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: AppColors.brandPrimary,
-                      shape: BoxShape.circle,
-                      image: _profilePictureUrl != null &&
-                              _profilePictureUrl!.isNotEmpty
-                          ? DecorationImage(
-                              image: NetworkImage(_profilePictureUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                    ),
-                    child: _profilePictureUrl == null ||
-                            _profilePictureUrl!.isEmpty
-                        ? Center(
-                            child: Text(
-                              profile['full_name']
-                                      ?.toString()
-                                      .substring(0, 1)
-                                      .toUpperCase() ??
-                                  'M',
-                              style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white),
-                            ),
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(profile['full_name'] ?? 'Unnamed',
-                            style: const TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.email_outlined,
-                                size: 14, color: AppColors.textSecondary),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(profile['email_address'] ?? '-',
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary),
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            const Icon(Icons.phone_outlined,
-                                size: 14, color: AppColors.textSecondary),
-                            const SizedBox(width: 4),
-                            Text(profile['phone_number'] ?? '-',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            ProfileHeaderCard(
+              fullName: profile['full_name'] ?? '',
+              email: profile['email_address'],
+              phone: profile['phone_number'],
+              profilePictureUrl: _profilePictureUrl,
             ),
             const SizedBox(height: 16),
 
             // Quick stats
-            Row(
-              children: [
-                Expanded(
-                    child: OverviewInfo(
-                        value: profile['birthdate'] != null
-                            ? DateTime.now()
-                                    .difference(
-                                        DateTime.parse(profile['birthdate']))
-                                    .inDays ~/
-                                365
-                            : 0,
-                        label: 'Age',
-                        icon: Icons.cake)),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: OverviewInfo(
-                        value: profile['children_count'] ?? 0,
-                        label: 'Children',
-                        icon: Icons.child_care)),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: OverviewInfo(
-                        value: profile['pregnancies_count'] ?? 0,
-                        label: 'Pregnancies',
-                        icon: Icons.pregnant_woman)),
-              ],
+            ProfileQuickStats(
+              age: profile['birthdate'] != null
+                  ? DateTime.now()
+                          .difference(DateTime.parse(profile['birthdate']))
+                          .inDays ~/
+                      365
+                  : 0,
+              childrenCount: profile['children_count'] ?? 0,
+              pregnanciesCount: profile['pregnancies_count'] ?? 0,
             ),
             const SizedBox(height: 16),
 
             if (currentPregnancy != null)
-              _buildSimpleRiskCard(profile, currentPregnancy),
+              ProfileRiskCard(profile: profile, pregnancy: currentPregnancy),
             const SizedBox(height: 16),
 
-            _buildLatestGrowthCard(),
+            ProfileGrowthCard(
+              isLoading: _loadingGrowth,
+              growthData: _latestGrowthData,
+            ),
             const SizedBox(height: 16),
 
             _buildMedicalInfoSection(profile),
@@ -3411,171 +3187,40 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSimpleRiskCard(profile, pregnancy),
+            ProfileRiskCard(profile: profile, pregnancy: pregnancy),
             const SizedBox(height: 16),
 
             // Quick stats
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2))
-                ],
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Text(gestWeeks != null ? '$gestWeeks' : '-',
-                                style: const TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.brandPrimary)),
-                            const Text('Weeks',
-                                style:
-                                    TextStyle(color: AppColors.textSecondary)),
-                          ],
-                        ),
-                      ),
-                      Container(
-                          height: 40, width: 1, color: AppColors.borderPrimary),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Text(
-                                daysToEdd != null
-                                    ? (daysToEdd < 0
-                                        ? 'Past Due'
-                                        : (daysToEdd ~/ 30 > 0
-                                            ? '${daysToEdd ~/ 30}m ${(daysToEdd % 30) ~/ 7}w'
-                                            : '${daysToEdd ~/ 7}w ${daysToEdd % 7}d'))
-                                    : '-',
-                                style: TextStyle(
-                                    fontSize: daysToEdd != null && daysToEdd < 0
-                                        ? 20
-                                        : 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.brandPrimary)),
-                            const Text('Time to EDD',
-                                style:
-                                    TextStyle(color: AppColors.textSecondary)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(height: 1),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatItem('Checkups',
-                            sortedCheckups.length.toString(), Icons.fact_check),
-                      ),
-                      Expanded(
-                        child: _buildStatItem(
-                          'Risk Level',
-                          pregnancy['pregnancy_risk_level']
-                                  ?.toString()
-                                  .toUpperCase() ??
-                              '-',
-                          Icons.warning,
-                          color: pregnancy['pregnancy_risk_level'] == 'high'
-                              ? Colors.red
-                              : Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            PregnancyStatsCard(
+              gestWeeks: gestWeeks,
+              daysToEdd: daysToEdd,
+              checkupCount: sortedCheckups.length,
+              riskLevel: pregnancy['pregnancy_risk_level']?.toString(),
             ),
             const SizedBox(height: 16),
 
             // Quick actions
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2))
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Quick Actions',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildActionButton(
-                            'Add Checkup', Icons.add, AppColors.brandPrimary,
-                            () async {
-                          final pregnancyId = pregnancy['pregnancy_id'];
-                          if (pregnancyId == null) return;
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => AddPrenatalCheckupScreen(
-                                motherId: widget.motherId,
-                                pregnancyId: pregnancyId as int,
-                                lmp: DateTime.tryParse(
-                                    pregnancy['last_menstrual_period'] ?? ''),
-                                motherWeight: _toDouble(profile['weight']),
-                              ),
-                            ),
-                          );
-                          _refresh();
-                        }),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildActionButton(
-                            'Ultrasound',
-                            Icons.photo,
-                            Colors.purple,
-                            () => _goToUltrasoundAnalyzer(pregnancy)),
-                      ),
-                    ],
+            PregnancyActionsCard(
+              onAddCheckup: () async {
+                final pregnancyId = pregnancy['pregnancy_id'];
+                if (pregnancyId == null) return;
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AddPrenatalCheckupScreen(
+                      motherId: widget.motherId,
+                      pregnancyId: pregnancyId as int,
+                      lmp: DateTime.tryParse(
+                          pregnancy['last_menstrual_period'] ?? ''),
+                      motherWeight: _toDouble(profile['weight']),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildActionButton(
-                            'Lab Test',
-                            Icons.science,
-                            Colors.orange,
-                            () => _goToLabTestAnalyzer(pregnancy)),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildActionButton(
-                            'Conclude',
-                            Icons.flag,
-                            Colors.red,
-                            () => _showConcludePregnancyDialog(pregnancy)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                );
+                _refresh();
+              },
+              onUltrasound: () => _goToUltrasoundAnalyzer(pregnancy),
+              onLabTest: () => _goToLabTestAnalyzer(pregnancy),
+              onConclude: () => _showConcludePregnancyDialog(pregnancy),
             ),
             const SizedBox(height: 16),
 
@@ -3693,29 +3338,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   /// Shared sort-dropdown row used in each record section.
   Widget _buildSortRow(String currentValue, ValueChanged<String?> onChanged) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        const Text('Sort:', style: TextStyle(color: AppColors.textSecondary)),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: AppColors.bgSecondary,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: DropdownButton<String>(
-            value: currentValue,
-            underline: const SizedBox(),
-            items: const [
-              DropdownMenuItem(value: 'desc', child: Text('Newest')),
-              DropdownMenuItem(value: 'asc', child: Text('Oldest')),
-            ],
-            onChanged: onChanged,
-          ),
-        ),
-      ],
-    );
+    return RecordSortRow(currentValue: currentValue, onChanged: onChanged);
   }
 
   /// "Load More" button shown when a list has more items than currently displayed.
@@ -3724,76 +3347,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     required int total,
     required VoidCallback onPressed,
   }) {
-    final remaining = total - current;
-    final nextBatch = remaining > _pageSize ? _pageSize : remaining;
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: onPressed,
-          icon: const Icon(Icons.expand_more, size: 18),
-          label: Text(
-            'Load More ($nextBatch of $remaining remaining)',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.brandPrimary,
-            side: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.3)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem(String label, String value, IconData icon,
-      {Color? color}) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: color ?? AppColors.textSecondary),
-        const SizedBox(width: 4),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(value,
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: color ?? AppColors.textPrimary)),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 10, color: AppColors.textSecondary)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionButton(
-      String label, IconData icon, Color color, VoidCallback onTap) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color.withValues(alpha: 0.1),
-        foregroundColor: color,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 4),
-          Text(label,
-              style:
-                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        ],
-      ),
+    return RecordLoadMoreButton(
+      current: current,
+      total: total,
+      pageSize: _pageSize,
+      onPressed: onPressed,
     );
   }
 
@@ -4042,73 +3600,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     required String emptyMessage,
     required List<Widget> children,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.bgSecondary,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-          leading: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          title: Row(
-            children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: count > 0
-                      ? color.withValues(alpha: 0.15)
-                      : AppColors.borderPrimary,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: count > 0 ? color : AppColors.textSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              child: count == 0
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.info_outline,
-                              size: 16, color: AppColors.textSecondary),
-                          const SizedBox(width: 8),
-                          Text(emptyMessage,
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary)),
-                        ],
-                      ),
-                    )
-                  : Column(children: children),
-            ),
-          ],
-        ),
-      ),
+    return HistoryRecordSection(
+      title: title,
+      icon: icon,
+      color: color,
+      count: count,
+      emptyMessage: emptyMessage,
+      children: children,
     );
   }
 
@@ -4380,12 +3878,30 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 child: Column(
                   children: [
                     Container(
-                      color: Colors.white,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: AppColors.borderPrimary.withValues(alpha: 0.5),
+                            width: 1,
+                          ),
+                        ),
+                      ),
                       child: TabBar(
                         controller: _tabController,
                         indicatorColor: AppColors.brandPrimary,
+                        indicatorWeight: 3,
                         labelColor: AppColors.brandPrimary,
+                        labelStyle: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
                         unselectedLabelColor: AppColors.textSecondary,
+                        unselectedLabelStyle: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                         tabs: const [
                           Tab(text: 'Overview'),
                           Tab(text: 'Current'),
