@@ -1,8 +1,8 @@
-// lib/screens/mother/profile_widgets/profile_header_card.dart
+// lib/widgets/profile_header_card.dart
 // Redesigned profile header with gradient banner and overlapping avatar.
 
 import 'package:flutter/material.dart';
-import '../../../theme/app_colors.dart';
+import '../theme/app_colors.dart';
 
 class ProfileHeaderCard extends StatelessWidget {
   final String fullName;

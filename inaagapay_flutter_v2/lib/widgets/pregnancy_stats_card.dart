@@ -1,7 +1,7 @@
-// lib/screens/mother/profile_widgets/pregnancy_stats_card.dart
+// lib/widgets/pregnancy_stats_card.dart
 
 import 'package:flutter/material.dart';
-import '../../../theme/app_colors.dart';
+import '../theme/app_colors.dart';
 
 class PregnancyStatsCard extends StatelessWidget {
   final int? gestWeeks;

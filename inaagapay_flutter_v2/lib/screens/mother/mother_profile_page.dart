@@ -6,7 +6,6 @@ import '../../theme/app_colors.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/auth_storage.dart';
 import '../../services/supabase_service.dart';
-import '../midwife/add_ultrasound_page.dart';
 import '../midwife/ultrasound_analyzer_screen.dart';
 import '../midwife/lab_test_analyzer_screen.dart';
 import '../midwife/add_prenatal_checkup_screen.dart';
@@ -14,11 +13,8 @@ import '../../widgets/headline.dart';
 import '../../widgets/page_title.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/secondary_button.dart';
-import '../../services/risk_engine.dart';
-import '../../services/smart_risk_engine.dart';
 import '../shared/record_detail_screen.dart';
-import '../../widgets/full_screen_image_viewer.dart';
-import 'profile_widgets/profile_widgets.dart';
+import '../../widgets/profile_widgets.dart';
 
 // Blood type options
 const List<String> _bloodTypeOptions = [
@@ -178,7 +174,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         if (weight != null && height != null && height > 0) {
           final heightM = height / 100;
           bmi = weight / (heightM * heightM);
-          bmiStatus = _getBMIStatus(bmi);
+          bmiStatus = getBMIStatus(bmi);
         }
 
         setState(() {
@@ -226,27 +222,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
-  String _getBMIStatus(double bmi) {
-    if (bmi < 18.5) return 'Underweight';
-    if (bmi < 25) return 'Normal';
-    if (bmi < 30) return 'Overweight';
-    return 'Obese';
-  }
-
-  Color _getBMIStatusColor(String status) {
-    switch (status) {
-      case 'Underweight':
-        return AppColors.warning;
-      case 'Normal':
-        return AppColors.success;
-      case 'Overweight':
-        return AppColors.warning;
-      case 'Obese':
-        return AppColors.error;
-      default:
-        return AppColors.textSecondary;
-    }
-  }
 
   Future<void> _refresh() async {
     // FIX #1 continued: reset the guard so controllers re-init from fresh data
@@ -532,200 +507,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return typed.first;
   }
 
-  // ── Risk card ───────────────────────────────────────────────────────────
 
-  Widget _buildSimpleRiskCard(
-      Map<String, dynamic> profile, Map<String, dynamic> pregnancy) {
-    final checkups =
-        (pregnancy['checkups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final pastPregnancies =
-        (profile['past_pregnancies'] as List?)?.cast<Map<String, dynamic>>() ??
-            [];
 
-    // FIX #2: use latest by date, not .last (which is insertion order)
-    final latestCheckup = checkups.isNotEmpty
-        ? (List<Map<String, dynamic>>.from(checkups)
-              ..sort((a, b) {
-                final da =
-                    DateTime.tryParse(a['checkup_datetime']?.toString() ?? '');
-                final db =
-                    DateTime.tryParse(b['checkup_datetime']?.toString() ?? '');
-                if (da == null || db == null) return 0;
-                return db.compareTo(da);
-              }))
-            .first
-        : null;
-
-    if (latestCheckup == null) return _buildNoDataCard();
-
-    final risk = RiskEngine.evaluate(latestCheckup: latestCheckup);
-    final history = SmartRiskEngine.buildHistory(
-        allCheckups: checkups, pastPregnancies: pastPregnancies);
-    final watchList = SmartRiskEngine.buildWatchList(
-      allCheckups: checkups,
-      pastPregnancies: pastPregnancies,
-      latestCheckup: latestCheckup,
-    );
-
-    final isHigh = risk.level == 'high';
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isHigh ? Colors.red.shade300 : Colors.green.shade300,
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isHigh ? Icons.warning_rounded : Icons.check_circle_rounded,
-                color: isHigh ? Colors.red : Colors.green,
-                size: 32,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                isHigh ? 'HIGH RISK' : 'LOW RISK',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: isHigh ? Colors.red : Colors.green,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (isHigh) ...[
-            Text(risk.note,
-                style: TextStyle(fontSize: 15, color: Colors.red.shade700)),
-            const SizedBox(height: 12),
-            ...risk.findings.map((f) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('• ',
-                          style: TextStyle(fontSize: 16, color: Colors.red)),
-                      Expanded(
-                        child: Text(f,
-                            style: TextStyle(
-                                fontSize: 14, color: Colors.grey.shade800)),
-                      ),
-                    ],
-                  ),
-                )),
-          ] else ...[
-            Text('All readings within normal range',
-                style: TextStyle(fontSize: 15, color: Colors.green.shade700)),
-          ],
-          const SizedBox(height: 16),
-          const Divider(),
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: const Text('What happened before',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-              children: history.map((event) {
-                final isElevated = event.type == 'elevated';
-                return Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        isElevated ? Icons.arrow_upward : Icons.circle,
-                        size: 14,
-                        color: isElevated ? Colors.orange : Colors.grey,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(event.what,
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.grey.shade800)),
-                            if (event.week != null)
-                              Text('Week ${event.week!.toInt()}',
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Divider(),
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: const Text('What to watch',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-              children: watchList
-                  .map((item) => Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.remove_red_eye,
-                                size: 14, color: Colors.blue),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(item,
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade800)),
-                            ),
-                          ],
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNoDataCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderPrimary),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.info_outline, color: AppColors.textSecondary),
-          SizedBox(width: 12),
-          Text('No checkup data available yet'),
-        ],
-      ),
-    );
-  }
 
   // ── Markdown / AI text helpers ──────────────────────────────────────────
 
@@ -2407,200 +2190,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
-  // ── Growth metric widgets ───────────────────────────────────────────────
 
-  Widget _buildGrowthMetric({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 4),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 10, color: color, fontWeight: FontWeight.w500)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildLatestGrowthCard() {
-    if (_loadingGrowth) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.borderPrimary),
-        ),
-        child: const Center(
-          child: SizedBox(
-            height: 20,
-            width: 20,
-            child: CircularProgressIndicator(
-                strokeWidth: 2, color: AppColors.brandPrimary),
-          ),
-        ),
-      );
-    }
-
-    if (_latestGrowthData == null) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.borderPrimary),
-        ),
-        child: const Column(
-          children: [
-            Icon(Icons.bar_chart_outlined,
-                size: 48, color: AppColors.textSecondary),
-            SizedBox(height: 8),
-            Text('No growth data yet',
-                style: TextStyle(color: AppColors.textSecondary)),
-            SizedBox(height: 4),
-            Text(
-              'Growth data will appear after first prenatal checkup',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    final data = _latestGrowthData!;
-    final bmiStatusColor = _getBMIStatusColor(data['bmi_status'] ?? 'Normal');
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderPrimary),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '📊 Latest Growth Records',
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.brandText),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.brandPrimary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.calendar_today,
-                        size: 16, color: AppColors.brandPrimary),
-                    const SizedBox(width: 8),
-                    Text(_formatDate(data['date']),
-                        style: const TextStyle(fontWeight: FontWeight.w500)),
-                  ],
-                ),
-                if (data['aog'] != 'N/A')
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandPrimary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${data['aog']} weeks',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.brandPrimary),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildGrowthMetric(
-                  icon: Icons.height,
-                  label: 'Height',
-                  value: (data['height'] as double) > 0
-                      ? '${(data['height'] as double).toStringAsFixed(1)} cm'
-                      : 'Not recorded',
-                  color: AppColors.brandPrimary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildGrowthMetric(
-                  icon: Icons.monitor_weight,
-                  label: 'Weight',
-                  value: (data['weight'] as double) > 0
-                      ? '${(data['weight'] as double).toStringAsFixed(1)} kg'
-                      : 'Not recorded',
-                  color: AppColors.brandPrimary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildGrowthMetric(
-                  icon: Icons.calculate,
-                  label: 'BMI',
-                  value: data['bmi'] != null
-                      ? '${(data['bmi'] as double).toStringAsFixed(1)} (${data['bmi_status']})'
-                      : 'Not calculated',
-                  color: bmiStatusColor,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   // ── Expandable section shell ────────────────────────────────────────────
 

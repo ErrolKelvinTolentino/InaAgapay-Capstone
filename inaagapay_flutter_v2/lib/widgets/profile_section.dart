@@ -1,9 +1,9 @@
-// lib/screens/mother/profile_widgets/profile_section.dart
+// lib/widgets/profile_section.dart
 // A consistently-styled expandable section wrapper used everywhere on the
 // Mother Profile page.
 
 import 'package:flutter/material.dart';
-import '../../../theme/app_colors.dart';
+import '../theme/app_colors.dart';
 
 class ProfileSection extends StatelessWidget {
   final String title;

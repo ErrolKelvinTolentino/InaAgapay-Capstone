@@ -1,9 +1,9 @@
-// lib/screens/mother/profile_widgets/profile_helpers.dart
+// lib/widgets/profile_helpers.dart
 // Shared formatting & utility functions for the mother profile page.
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../theme/app_colors.dart';
+import '../theme/app_colors.dart';
 
 // ── Date / value formatters ────────────────────────────────────────────────
 

@@ -1,8 +1,8 @@
-// lib/screens/mother/profile_widgets/profile_quick_stats.dart
+// lib/widgets/profile_quick_stats.dart
 // Quick stat row showing Age, Children count, and Pregnancies count.
 
 import 'package:flutter/material.dart';
-import '../../../theme/app_colors.dart';
+import '../theme/app_colors.dart';
 
 class ProfileQuickStats extends StatelessWidget {
   final int age;

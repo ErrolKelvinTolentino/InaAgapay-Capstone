@@ -1,4 +1,4 @@
-// lib/screens/mother/profile_widgets/profile_widgets.dart
+// lib/widgets/profile_widgets.dart
 // Barrel export for all profile widget files.
 
 export 'profile_helpers.dart';

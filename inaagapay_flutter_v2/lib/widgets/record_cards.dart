@@ -1,9 +1,9 @@
-// lib/screens/mother/profile_widgets/record_cards.dart
+// lib/widgets/record_cards.dart
 // Checkup, Ultrasound, and Lab Test card widgets used in both
 // Current Pregnancy and History tabs.
 
 import 'package:flutter/material.dart';
-import '../../../theme/app_colors.dart';
+import '../theme/app_colors.dart';
 import 'profile_helpers.dart';
 
 // ── Checkup Card ──────────────────────────────────────────────────────────

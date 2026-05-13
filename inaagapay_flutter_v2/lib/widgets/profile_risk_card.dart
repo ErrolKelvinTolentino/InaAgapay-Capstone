@@ -1,10 +1,10 @@
-// lib/screens/mother/profile_widgets/profile_risk_card.dart
+// lib/widgets/profile_risk_card.dart
 // Risk assessment card, extracted from _buildSimpleRiskCard.
 
 import 'package:flutter/material.dart';
-import '../../../theme/app_colors.dart';
-import '../../../services/risk_engine.dart';
-import '../../../services/smart_risk_engine.dart';
+import '../theme/app_colors.dart';
+import '../services/risk_engine.dart';
+import '../services/smart_risk_engine.dart';
 
 class ProfileRiskCard extends StatelessWidget {
   final Map<String, dynamic> profile;

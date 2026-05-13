@@ -1,8 +1,8 @@
-// lib/screens/mother/profile_widgets/profile_growth_card.dart
+// lib/widgets/profile_growth_card.dart
 // Latest growth data card (height, weight, BMI) for the Overview tab.
 
 import 'package:flutter/material.dart';
-import '../../../theme/app_colors.dart';
+import '../theme/app_colors.dart';
 import 'profile_helpers.dart';
 
 class ProfileGrowthCard extends StatelessWidget {
