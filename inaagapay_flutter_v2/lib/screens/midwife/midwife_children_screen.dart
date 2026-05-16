@@ -52,10 +52,12 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
       
       await _fetchChildren();
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -152,17 +154,21 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         return dateB.compareTo(dateA);
       });
       
-      setState(() {
-        _children = childrenList;
-        _filteredChildren = childrenList;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _children = childrenList;
+          _filteredChildren = childrenList;
+          _loading = false;
+        });
+      }
       
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 

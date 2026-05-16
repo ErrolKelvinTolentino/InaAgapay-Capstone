@@ -81,11 +81,13 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
       
       debugPrint('Loaded ${records.length} immunization records');
 
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
     } catch (e) {
       debugPrint('Error loading immunizations: $e');
-      setState(() => loading = false);
       if (mounted) {
+        setState(() => loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading immunizations: $e'),

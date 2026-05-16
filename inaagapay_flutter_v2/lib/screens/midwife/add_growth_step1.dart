@@ -84,17 +84,19 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
       _gender = childResponse['sex']?.toString().toLowerCase() ?? '';
 
-      setState(() {
-        _childData = childResponse;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _childData = childResponse;
+          _loading = false;
+        });
+      }
 
       // After loading, trigger an initial calculation if there are values
       _onMeasurementChanged();
     } catch (e) {
       debugPrint('Error loading child data: $e');
-      setState(() => _loading = false);
       if (mounted) {
+        setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading child data: $e'),

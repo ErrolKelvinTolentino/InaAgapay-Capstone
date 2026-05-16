@@ -174,12 +174,15 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
       final childId = childResponse['child_id'] as int;
 
+      final birthWeight = double.parse(birthWeightCtrl.text);
+      final birthLength = double.parse(birthLengthCtrl.text);
+
       await Supabase.instance.client.from('birth_details').insert({
         'child_id': childId,
         'birthdate': birthdateCtrl.text,
         'is_birthdate_estimated': _isEstimatedBirthdate,
-        'birth_weight': double.parse(birthWeightCtrl.text),
-        'birth_length': double.parse(birthLengthCtrl.text),
+        'birth_weight': birthWeight,
+        'birth_length': birthLength,
         'head_circumference':
             headCtrl.text.isEmpty ? null : double.parse(headCtrl.text),
         'birthplace_city_municipality': cityCtrl.text,
@@ -187,6 +190,13 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
         'birthplace_facility': birthplaceCtrl.text.trim(),
         'birth_complications':
             complicationsCtrl.text.isEmpty ? null : complicationsCtrl.text,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      await Supabase.instance.client.from('child_details').insert({
+        'child_id': childId,
+        'child_height': birthLength,
+        'child_weight': birthWeight,
         'created_at': DateTime.now().toIso8601String(),
       });
 

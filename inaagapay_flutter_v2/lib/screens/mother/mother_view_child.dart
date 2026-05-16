@@ -54,15 +54,19 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
 
     try {
       final data = await ChildService.fetchChildDetails(widget.childId);
-      setState(() {
-        _data = data;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _data = data;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 

@@ -15,27 +15,19 @@ import '../widgets/main_button.dart';
 import 'add_immunization_page.dart';
 
 // Simple enum for vaccine status
-enum VaccineStatus {
-  done,
-  pending,
-  locked,
-}
+enum VaccineStatus { done, pending, locked }
 
 class ChildImmunizationListPage extends StatefulWidget {
   final int childId;
 
-  const ChildImmunizationListPage({
-    super.key,
-    required this.childId,
-  });
+  const ChildImmunizationListPage({super.key, required this.childId});
 
   @override
   State<ChildImmunizationListPage> createState() =>
       _ChildImmunizationListPageState();
 }
 
-class _ChildImmunizationListPageState
-    extends State<ChildImmunizationListPage> {
+class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
   bool loading = true;
   List records = [];
   Map<String, dynamic>? childData;
@@ -53,7 +45,7 @@ class _ChildImmunizationListPageState
       );
 
       final decoded = jsonDecode(res.body);
-      
+
       // Fetch child profile for name and age
       final childRes = await http.get(
         Uri.parse(
@@ -105,7 +97,7 @@ class _ChildImmunizationListPageState
 
   String getNextDueVaccine() {
     if (records.isEmpty) return 'Start vaccination schedule';
-    
+
     // Simple logic - you should replace with actual vaccine schedule logic
     final administeredCount = records.length;
     if (administeredCount < 3) return 'Next primary vaccines';
@@ -115,7 +107,7 @@ class _ChildImmunizationListPageState
 
   StatusIndicatorType getProtectionStatus() {
     if (records.isEmpty) return StatusIndicatorType.overdue;
-    
+
     if (records.length >= 6) return StatusIndicatorType.onTime;
     if (records.length >= 3) return StatusIndicatorType.ongoing;
     return StatusIndicatorType.overdue;
@@ -129,10 +121,11 @@ class _ChildImmunizationListPageState
 
   @override
   Widget build(BuildContext context) {
-    final childName = childData != null 
-        ? '${childData!['first_name'] ?? ''} ${childData!['last_name'] ?? ''}'.trim()
+    final childName = childData != null
+        ? '${childData!['first_name'] ?? ''} ${childData!['last_name'] ?? ''}'
+              .trim()
         : 'Child';
-    
+
     final childAge = childData != null
         ? calculateAge(childData!['birthdate']?.toString())
         : 'Unknown age';
@@ -160,14 +153,19 @@ class _ChildImmunizationListPageState
                   ),
                 )
               : SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       /// 👶 Child Hero
                       HeroCard(
                         image: const AssetImage('assets/images/vaccine.png'),
-                        title: childName.isNotEmpty ? childName : 'Unnamed Child',
+                        title: childName.isNotEmpty
+                            ? childName
+                            : 'Unnamed Child',
                         subtitle: childAge,
                         showWeekBadge: false,
                         showHeartRow: false,
@@ -216,16 +214,21 @@ class _ChildImmunizationListPageState
                           title: 'Administered Vaccines',
                           headerIcon: Icons.check_circle_outline,
                           items: records.map<RecordItem>((record) {
-                            final vaccineName = record['vaccine_name']?.toString() ?? 'Unknown Vaccine';
-                            final doseNumber = record['dose_number']?.toString() ?? '';
-                            final date = record['vaccination_date']?.toString() ?? '';
-                            final remarks = record['remarks']?.toString() ?? '';
-                            
+                            final vaccineName =
+                                record['vaccine_name']?.toString() ??
+                                'Unknown Vaccine';
+                            final doseNumber =
+                                record['dose_number']?.toString() ?? '';
+                            final date =
+                                record['vaccination_date']?.toString() ?? '';
+
                             String formattedDate = 'Not recorded';
                             if (date.isNotEmpty) {
                               try {
                                 final parsed = DateTime.parse(date);
-                                formattedDate = DateFormat('MMM d, yyyy').format(parsed);
+                                formattedDate = DateFormat(
+                                  'MMM d, yyyy',
+                                ).format(parsed);
                               } catch (e) {
                                 formattedDate = date;
                               }
@@ -233,7 +236,7 @@ class _ChildImmunizationListPageState
 
                             return RecordItem(
                               leadingIcon: Icons.vaccines,
-                              label: doseNumber.isNotEmpty 
+                              label: doseNumber.isNotEmpty
                                   ? '$vaccineName (Dose $doseNumber)'
                                   : vaccineName,
                               value: formattedDate,
@@ -315,16 +318,66 @@ class _ChildImmunizationListPageState
                             ),
                             const SizedBox(height: 16),
                             // Simple vaccine schedule - you can replace with your actual data
-                            _buildScheduleItem('BCG', 'Birth', records.any((r) => 
-                              r['vaccine_name']?.toString().toLowerCase().contains('bcg') ?? false)),
-                            _buildScheduleItem('Hepatitis B', 'Birth', records.any((r) => 
-                              r['vaccine_name']?.toString().toLowerCase().contains('hepatitis') ?? false)),
-                            _buildScheduleItem('Pentavalent 1', '6 weeks', records.any((r) => 
-                              r['vaccine_name']?.toString().toLowerCase().contains('penta') ?? false)),
-                            _buildScheduleItem('OPV 1', '6 weeks', records.any((r) => 
-                              r['vaccine_name']?.toString().toLowerCase().contains('opv') ?? false)),
-                            _buildScheduleItem('PCV 1', '6 weeks', records.any((r) => 
-                              r['vaccine_name']?.toString().toLowerCase().contains('pcv') ?? false)),
+                            _buildScheduleItem(
+                              'BCG',
+                              'Birth',
+                              records.any(
+                                (r) =>
+                                    r['vaccine_name']
+                                        ?.toString()
+                                        .toLowerCase()
+                                        .contains('bcg') ??
+                                    false,
+                              ),
+                            ),
+                            _buildScheduleItem(
+                              'Hepatitis B',
+                              'Birth',
+                              records.any(
+                                (r) =>
+                                    r['vaccine_name']
+                                        ?.toString()
+                                        .toLowerCase()
+                                        .contains('hepatitis') ??
+                                    false,
+                              ),
+                            ),
+                            _buildScheduleItem(
+                              'Pentavalent 1',
+                              '6 weeks',
+                              records.any(
+                                (r) =>
+                                    r['vaccine_name']
+                                        ?.toString()
+                                        .toLowerCase()
+                                        .contains('penta') ??
+                                    false,
+                              ),
+                            ),
+                            _buildScheduleItem(
+                              'OPV 1',
+                              '6 weeks',
+                              records.any(
+                                (r) =>
+                                    r['vaccine_name']
+                                        ?.toString()
+                                        .toLowerCase()
+                                        .contains('opv') ??
+                                    false,
+                              ),
+                            ),
+                            _buildScheduleItem(
+                              'PCV 1',
+                              '6 weeks',
+                              records.any(
+                                (r) =>
+                                    r['vaccine_name']
+                                        ?.toString()
+                                        .toLowerCase()
+                                        .contains('pcv') ??
+                                    false,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -340,10 +393,11 @@ class _ChildImmunizationListPageState
                           final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => AddImmunizationPage(childId: widget.childId),
+                              builder: (_) =>
+                                  AddImmunizationPage(childId: widget.childId),
                             ),
                           );
-                          
+
                           // Refresh if immunization was added
                           if (result == true) {
                             await fetchImmunizations();
@@ -379,7 +433,9 @@ class _ChildImmunizationListPageState
                   vaccine,
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
-                    color: isDone ? AppColors.textPrimary : AppColors.textSecondary,
+                    color: isDone
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
                   ),
                 ),
                 Text(
@@ -395,7 +451,7 @@ class _ChildImmunizationListPageState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: isDone 
+              color: isDone
                   ? AppColors.success.withOpacity(0.1)
                   : AppColors.bgSecondary,
               borderRadius: BorderRadius.circular(8),

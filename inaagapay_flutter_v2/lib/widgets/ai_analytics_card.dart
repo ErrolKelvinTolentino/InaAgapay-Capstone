@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import 'profile_helpers.dart';
 
 class AiAnalyticsCard extends StatelessWidget {
   final String text;
@@ -73,14 +74,7 @@ class AiAnalyticsCard extends StatelessWidget {
               ),
             )
           else
-            Text(
-              text,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: AppColors.textPrimary,
-              ),
-            ),
+            buildFormattedAiText(text),
         ],
       ),
     );

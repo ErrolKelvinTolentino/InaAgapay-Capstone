@@ -110,24 +110,26 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
         final firstName = account?['first_name']?.toString() ?? '';
         final lastName = account?['last_name']?.toString() ?? '';
         
-        setState(() {
-          _selectedMother = {
-            'mother_id': response['mother_id'],
-            'account_id': response['account_id'],
-            'first_name': firstName,
-            'last_name': lastName,
-            'display_name': '$firstName $lastName'.trim(),
-            'phone_number': account?['phone_number']?.toString() ?? '',
-            'email_address': account?['email_address']?.toString() ?? '',
-          };
-          _loadingMothers = false;
-        });
+        if (mounted) {
+          setState(() {
+            _selectedMother = {
+              'mother_id': response['mother_id'],
+              'account_id': response['account_id'],
+              'first_name': firstName,
+              'last_name': lastName,
+              'display_name': '$firstName $lastName'.trim(),
+              'phone_number': account?['phone_number']?.toString() ?? '',
+              'email_address': account?['email_address']?.toString() ?? '',
+            };
+            _loadingMothers = false;
+          });
+        }
       } else {
-        setState(() => _loadingMothers = false);
+        if (mounted) setState(() => _loadingMothers = false);
       }
     } catch (e) {
       debugPrint('Error loading selected mother: $e');
-      setState(() => _loadingMothers = false);
+      if (mounted) setState(() => _loadingMothers = false);
     }
   }
 
@@ -153,11 +155,13 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
           .eq('status', 'active');
 
       if (accountsResponse.isEmpty) {
-        setState(() {
-          _allMothers = [];
-          _filteredMothers = [];
-          _loadingMothers = false;
-        });
+        if (mounted) {
+          setState(() {
+            _allMothers = [];
+            _filteredMothers = [];
+            _loadingMothers = false;
+          });
+        }
         return;
       }
 
@@ -197,14 +201,16 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
         }
       }
 
-      setState(() {
-        _allMothers = mothers;
-        _filteredMothers = mothers;
-        _loadingMothers = false;
-      });
+      if (mounted) {
+        setState(() {
+          _allMothers = mothers;
+          _filteredMothers = mothers;
+          _loadingMothers = false;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading mothers: $e');
-      setState(() => _loadingMothers = false);
+      if (mounted) setState(() => _loadingMothers = false);
     }
   }
 

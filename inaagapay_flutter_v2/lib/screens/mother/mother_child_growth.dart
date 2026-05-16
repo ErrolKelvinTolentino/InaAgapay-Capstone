@@ -49,15 +49,19 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
 
     try {
       final data = await ChildService.fetchGrowthHistory(widget.childId);
-      setState(() {
-        _growthData = data;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _growthData = data;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 

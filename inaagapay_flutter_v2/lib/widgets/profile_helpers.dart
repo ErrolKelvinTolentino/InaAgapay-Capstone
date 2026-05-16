@@ -92,8 +92,7 @@ DateTime? parseDateForSort(dynamic value) {
   return DateTime.tryParse(value.toString());
 }
 
-List<Map<String, dynamic>> sortByDate(
-    List list, String field, String order) {
+List<Map<String, dynamic>> sortByDate(List list, String field, String order) {
   final sorted = List<Map<String, dynamic>>.from(list);
   sorted.sort((a, b) {
     final dateA = parseDateForSort(a[field]);
@@ -160,20 +159,120 @@ List<TextSpan> parseInlineMarkdown(String input) {
 Widget buildFormattedAiText(String text) {
   if (text.isEmpty) return const SizedBox.shrink();
 
-  final lines = text.split('\n');
-  final List<TextSpan> spans = [];
+  final lines = text.trimRight().split('\n');
+  final List<Widget> children = [];
+  final defaultStyle = const TextStyle(
+    color: Colors.black87,
+    fontSize: 15,
+    height: 1.5,
+  );
 
-  for (int i = 0; i < lines.length; i++) {
-    final normalizedLine = normalizeMarkdownLine(lines[i]);
-    spans.addAll(parseInlineMarkdown(normalizedLine));
-    if (i < lines.length - 1) spans.add(const TextSpan(text: '\n'));
+  int index = 0;
+  while (index < lines.length) {
+    if (_isMarkdownTableLine(lines[index])) {
+      final tableLines = <String>[];
+      while (index < lines.length && _isMarkdownTableLine(lines[index])) {
+        tableLines.add(lines[index]);
+        index += 1;
+      }
+      children.add(_buildMarkdownTable(tableLines));
+      continue;
+    }
+
+    final normalizedLine = normalizeMarkdownLine(lines[index]);
+    final spans = parseInlineMarkdown(normalizedLine);
+    children.add(RichText(
+      text: TextSpan(style: defaultStyle, children: spans),
+    ));
+
+    if (index < lines.length - 1) {
+      children.add(const SizedBox(height: 8));
+    }
+    index += 1;
   }
 
-  return RichText(
-    text: TextSpan(
-      style:
-          const TextStyle(color: Colors.black87, fontSize: 15, height: 1.5),
-      children: spans,
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: children,
+  );
+}
+
+bool _isMarkdownTableLine(String line) {
+  final trimmed = line.trim();
+  if (!trimmed.contains('|')) return false;
+  final segments = trimmed.split('|');
+  return segments.length > 2 &&
+      segments.any((segment) => segment.trim().isNotEmpty);
+}
+
+List<String> _splitTableRow(String line) {
+  var raw = line.trim();
+  if (raw.startsWith('|')) raw = raw.substring(1);
+  if (raw.endsWith('|')) raw = raw.substring(0, raw.length - 1);
+  return raw.split('|').map((cell) => cell.trim()).toList();
+}
+
+bool _isTableDividerRow(String line) {
+  final cells = _splitTableRow(line);
+  if (cells.isEmpty) return false;
+  return cells.every((cell) => RegExp(r'^[:\-\s]+$').hasMatch(cell));
+}
+
+Widget _buildMarkdownTable(List<String> lines) {
+  final rows = lines
+      .where((line) => !_isTableDividerRow(line))
+      .map(_splitTableRow)
+      .toList();
+
+  if (rows.isEmpty) {
+    return const SizedBox.shrink();
+  }
+
+  return Container(
+    margin: const EdgeInsets.symmetric(vertical: 12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.black12),
+    ),
+    child: Table(
+      defaultColumnWidth: const FlexColumnWidth(),
+      border: TableBorder.symmetric(
+        inside: const BorderSide(color: Colors.black12, width: 1),
+      ),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        TableRow(
+          decoration: const BoxDecoration(color: Color(0xFFF7F7F7)),
+          children: rows.first
+              .map((cell) => _buildTableCell(cell, isHeader: true))
+              .toList(),
+        ),
+        ...rows.skip(1).map((row) => TableRow(
+              children: row.map((cell) => _buildTableCell(cell)).toList(),
+            )),
+      ],
+    ),
+  );
+}
+
+Widget _buildTableCell(String content, {bool isHeader = false}) {
+  final textStyle = TextStyle(
+    fontSize: isHeader ? 14 : 13,
+    fontWeight: isHeader ? FontWeight.w700 : FontWeight.w500,
+    color: Colors.black87,
+    height: 1.4,
+  );
+
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+    child: Text.rich(
+      TextSpan(
+        style: textStyle,
+        children: parseInlineMarkdown(content),
+      ),
+      softWrap: true,
+      overflow: TextOverflow.visible,
     ),
   );
 }

@@ -48,15 +48,19 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
 
     try {
       final immunizations = await ChildService.fetchImmunizations(widget.childId);
-      setState(() {
-        _immunizations = immunizations;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _immunizations = immunizations;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
