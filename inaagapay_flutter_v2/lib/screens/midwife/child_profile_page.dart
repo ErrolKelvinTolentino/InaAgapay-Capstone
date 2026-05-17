@@ -826,6 +826,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                         color: AppColors.textSecondary,
                       ),
                     ),
+                    // Classification label removed to avoid redundancy. Only badge chip remains.
                   ],
                 ),
               ),
@@ -992,9 +993,9 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
     required double height,
     required double weight,
     required double bmi,
-    required double heightZ,
-    required double weightZ,
-    required double bmiZ,
+    required double? heightZ,
+    required double? weightZ,
+    required double? bmiZ,
   }) {
     final recordsSummary = growthRecords.map((record) {
       final heightVal = (record['child_height'] as num?)?.toDouble() ?? 0;
@@ -1005,8 +1006,10 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
     }).join('\n');
 
     return '''
-You are a pediatric growth analyst.
-Provide output in the exact structured format below using markdown headings and bullet points only. Do not add extra sections or narrative.
+You are a warm, caring assistant writing a short growth update for a parent and midwife.
+Do not use the phrase "your baby". Use "the child" or "the baby" instead.
+Provide the response in both English and Filipino. Only one language will be shown at a time.
+Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
 
 Child: $childName
 Sex: ${sex.toLowerCase()}
@@ -1015,42 +1018,43 @@ Current age: $ageWeeks weeks
 Latest measurements:
 Height: ${height.toStringAsFixed(1)} cm
 Weight: ${weight.toStringAsFixed(1)} kg
-BMI: ${bmi.toStringAsFixed(1)}
 
-Z-scores:
-Height z-score: ${heightZ.toStringAsFixed(2)}
-Weight z-score: ${weightZ.toStringAsFixed(2)}
-BMI z-score: ${bmiZ.toStringAsFixed(2)}
-
-Growth history:
+Recent growth:
 $recordsSummary
 
 Output format:
 
-## SUMMARY
-- One clear sentence describing the overall growth status.
+## English
+## Baby Growth Summary
+- A short, gentle explanation of how the child is growing.
 
-## KEY FINDINGS
-- Height: ...
-- Weight: ...
-- BMI: ...
+### Current Measurements
+- Length: ${height.toStringAsFixed(1)} cm
+- Weight: ${weight.toStringAsFixed(1)} kg
 
-## Z-SCORE REVIEW
-- Height z-score: ...
-- Weight z-score: ...
-- BMI z-score: ...
+### What This Means
+- ...
+- ...
 
-## TABLE
-| Metric | Current | Status | Note |
-|---|---|---|---|
-| Height | ... | ... | ... |
-| Weight | ... | ... | ... |
-| BMI | ... | ... | ... |
+### Helpful Note
+- ...
 
-## RECOMMENDATIONS
-- Practical advice for the caregiver or midwife.
+## Filipino
+## Buod ng Paglaki ng Bata
+- Maikling, banayad na paliwanag kung paano lumalago ang bata.
 
-Keep language concise, professional, and supportive. Do not provide a medical diagnosis.
+### Kasalukuyang Sukat
+- Haba: ${height.toStringAsFixed(1)} cm
+- Timbang: ${weight.toStringAsFixed(1)} kg
+
+### Ano ang Kahulugan Nito
+- ...
+- ...
+
+### Paalala
+- ...
+
+Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for everyday care and follow-up.
 ''';
   }
 

@@ -1,4 +1,4 @@
-// lib/screens/midwife/add_growth_step1.dart
+﻿// lib/screens/midwife/add_growth_step1.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -352,11 +352,23 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     }
   }
 
-  String _formatZScore(double? zScore) {
-    if (zScore == null) return 'N/A';
-    if (zScore > 3) return '> +3';
-    if (zScore < -3) return '< -3';
-    return zScore.toStringAsFixed(2);
+  String _growthStatusDescription(String metric, double? zScore) {
+    if (zScore == null) {
+      return '$metric status unavailable';
+    }
+    if (zScore < -2) {
+      return '$metric is below the expected range';
+    }
+    if (zScore < -1) {
+      return '$metric is slightly below the expected range';
+    }
+    if (zScore <= 1) {
+      return '$metric is within the expected range';
+    }
+    if (zScore <= 2) {
+      return '$metric is slightly above the expected range';
+    }
+    return '$metric is above the expected range';
   }
 
   String? _calculatePreviousBMI() {
@@ -548,7 +560,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                       Padding(
                         padding: const EdgeInsets.only(left: 16),
                         child: Text(
-                          'Z-Score: ${_formatZScore(_heightZScore)}',
+                          _growthStatusDescription('Height', _heightZScore),
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
@@ -593,7 +605,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                       Padding(
                         padding: const EdgeInsets.only(left: 16),
                         child: Text(
-                          'Z-Score: ${_formatZScore(_weightZScore)}',
+                          _growthStatusDescription('Weight', _weightZScore),
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
@@ -667,26 +679,13 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                                 ),
                             ],
                           ),
-                          if (_previousGrowth != null) ...[
-                            const SizedBox(height: 8),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 16),
-                              child: Text(
-                                'Previous BMI: ${_calculatePreviousBMI() ?? 'n/a'} • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ],
                           if (_bmiZScore != null &&
                               _bmiController.text.isNotEmpty) ...[
                             const SizedBox(height: 8),
                             Align(
                               alignment: Alignment.centerRight,
                               child: Text(
-                                'Z-Score: ${_formatZScore(_bmiZScore)}',
+                                _growthStatusDescription('BMI', _bmiZScore),
                                 style: TextStyle(
                                   fontSize: 11,
                                   color:
@@ -698,6 +697,19 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                         ],
                       ),
                     ),
+                    if (_previousGrowth != null) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Text(
+                          'Previous BMI: ${_calculatePreviousBMI() ?? 'n/a'} • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
 
                     Container(
