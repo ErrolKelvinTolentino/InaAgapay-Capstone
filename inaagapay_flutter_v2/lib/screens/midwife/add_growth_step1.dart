@@ -9,7 +9,6 @@ import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/main_button.dart';
-import '../../widgets/page_title.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/validation_message.dart';
@@ -44,7 +43,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   double? _bmiZScore;
 
   String _bmiCategoryText = 'Normal';
-  Color _bmiCategoryColor = AppColors.success;
+  Color _bmiCategoryColor = AppColors.textPrimary;
 
   bool _isFormValid = false;
   String? _validationMessage;
@@ -186,7 +185,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
         debugPrint('Category: Mildly Underweight (-2 < zScore < -1)');
       } else if (zScore <= 1) {
         _bmiCategoryText = 'Normal';
-        _bmiCategoryColor = AppColors.success;
+        _bmiCategoryColor = AppColors.textPrimary;
         debugPrint('Category: Normal (-1 <= zScore <= 1)');
       } else if (zScore <= 2) {
         _bmiCategoryText = 'Overweight';
@@ -230,7 +229,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     if (_heightController.text.isEmpty || _weightController.text.isEmpty) {
       setState(() {
         _isFormValid = false;
-        _validationMessage = 'Height and weight are required.';
+        _validationMessage = null;
       });
       return;
     }
@@ -360,6 +359,18 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     return zScore.toStringAsFixed(2);
   }
 
+  String? _calculatePreviousBMI() {
+    if (_previousGrowth == null) return null;
+    final prevHeight =
+        (_previousGrowth!['child_height'] as num?)?.toDouble() ?? 0;
+    final prevWeight =
+        (_previousGrowth!['child_weight'] as num?)?.toDouble() ?? 0;
+    if (prevHeight <= 0 || prevWeight <= 0) return null;
+    final prevHeightM = prevHeight / 100.0;
+    final prevBmi = prevWeight / (prevHeightM * prevHeightM);
+    return prevBmi.toStringAsFixed(1);
+  }
+
   String _formatDate(String date) {
     try {
       final parsed = DateTime.parse(date);
@@ -446,13 +457,6 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: PageTitle(
-                        title: 'Growth Details',
-                        leadingIcon: Icons.edit_rounded,
-                        trailingIcon: Icons.check_circle,
-                      ),
-                    ),
                     const SizedBox(height: 16),
 
                     // Child Info Card
@@ -525,6 +529,20 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                       isRequired: true,
                     ),
 
+                    if (_previousGrowth != null) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Text(
+                          'Previous height: ${(_previousGrowth!['child_height'] as num?)?.toStringAsFixed(1) ?? 'n/a'} cm • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+
                     if (_heightZScore != null) ...[
                       const SizedBox(height: 4),
                       Padding(
@@ -556,6 +574,20 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                       isRequired: true,
                     ),
 
+                    if (_previousGrowth != null) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Text(
+                          'Previous weight: ${(_previousGrowth!['child_weight'] as num?)?.toStringAsFixed(1) ?? 'n/a'} kg • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+
                     if (_weightZScore != null) ...[
                       const SizedBox(height: 4),
                       Padding(
@@ -572,67 +604,24 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
                     const SizedBox(height: 16),
 
-                    if (_previousGrowth != null) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.bgSecondary,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.borderPrimary),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Previous Growth Record',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Date: ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Height: ${(_previousGrowth!['child_height'] as num?)?.toStringAsFixed(1) ?? 'n/a'} cm',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Weight: ${(_previousGrowth!['child_weight'] as num?)?.toStringAsFixed(1) ?? 'n/a'} kg',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
                     // BMI Display with Real-time Status (calculated in app, NOT saved)
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
-                        color: _bmiCategoryColor.withValues(alpha: 0.15),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: _bmiCategoryColor.withValues(alpha: 0.4),
-                          width: 1.5,
+                          color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                          width: 1.4,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Column(
                         children: [
@@ -640,7 +629,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                             children: [
                               Icon(
                                 Icons.calculate,
-                                color: _bmiCategoryColor,
+                                color: AppColors.brandPrimary,
                                 size: 22,
                               ),
                               const SizedBox(width: 12),
@@ -654,7 +643,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                                     fontWeight: FontWeight.w600,
                                     color: _bmiController.text.isEmpty
                                         ? AppColors.textSecondary
-                                        : _bmiCategoryColor,
+                                        : AppColors.textPrimary,
                                   ),
                                 ),
                               ),
@@ -678,6 +667,19 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                                 ),
                             ],
                           ),
+                          if (_previousGrowth != null) ...[
+                            const SizedBox(height: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 16),
+                              child: Text(
+                                'Previous BMI: ${_calculatePreviousBMI() ?? 'n/a'} • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
                           if (_bmiZScore != null &&
                               _bmiController.text.isNotEmpty) ...[
                             const SizedBox(height: 8),
@@ -700,45 +702,39 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.borderPrimary),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: AppColors.borderPrimary.withValues(alpha: 0.4),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.02),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
-                      child: Column(
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Measurement Guide',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
+                          Icon(
+                            Icons.help_outline,
+                            size: 18,
+                            color: AppColors.textSecondary,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Enter height in centimeters and weight in kilograms. Use the child\'s current age to choose realistic values.',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Typical range for this child: ${_heightRangeForAge().min.toStringAsFixed(0)}–${_heightRangeForAge().max.toStringAsFixed(0)} cm height, ${_weightRangeForAge().min.toStringAsFixed(1)}–${_weightRangeForAge().max.toStringAsFixed(1)} kg weight.',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'If values look unusual, please double-check the measuring tape and scale before saving.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Measurement guide: enter height in cm and weight in kg. Use the child\'s age range to choose realistic values and double-check the measuring tool if numbers seem unusual.',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                                fontStyle: FontStyle.italic,
+                              ),
                             ),
                           ),
                         ],
@@ -747,24 +743,67 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
                     const SizedBox(height: 16),
 
-                    // Remarks Field (UI only, NOT saved to DB)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 16),
                       decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(28),
-                        border: Border.all(color: AppColors.borderPrimary),
-                      ),
-                      child: TextField(
-                        controller: _remarksController,
-                        maxLines: 3,
-                        minLines: 1,
-                        decoration: const InputDecoration(
-                          hintText: 'Remarks (optional - not saved)',
-                          border: InputBorder.none,
-                          icon: Icon(Icons.notes_rounded,
-                              color: AppColors.brandPrimary),
+                        border: Border.all(
+                          color:
+                              AppColors.textSecondary.withValues(alpha: 0.22),
+                          width: 1.2,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.02),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(
+                                Icons.notes_rounded,
+                                size: 18,
+                                color: AppColors.textSecondary,
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'Remarks (optional)',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _remarksController,
+                            minLines: 4,
+                            maxLines: 6,
+                            decoration: const InputDecoration(
+                              hintText:
+                                  'Add optional notes to describe the measurement context',
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(vertical: 0),
+                            ),
+                            style: TextStyle(
+                              color:
+                                  AppColors.textPrimary.withValues(alpha: 0.85),
+                              fontSize: 15,
+                            ),
+                            cursorColor: AppColors.brandPrimary,
+                          ),
+                        ],
                       ),
                     ),
 

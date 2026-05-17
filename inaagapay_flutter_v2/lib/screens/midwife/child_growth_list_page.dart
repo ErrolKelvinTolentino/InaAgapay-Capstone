@@ -530,13 +530,11 @@ Keep language concise, professional, and supportive. Do not provide a medical di
         _buildTabBar(),
         const SizedBox(height: 20),
         _buildMetricCard(
-          label: 'Height',
-          value: latestHeight > 0
-              ? '${latestHeight.toStringAsFixed(1)} cm'
-              : 'n/a',
-          zScore: heightZ,
-          icon: Icons.height,
-          color: AppColors.brandPrimary,
+          label: 'BMI',
+          value: latestBMI > 0 ? latestBMI.toStringAsFixed(1) : 'n/a',
+          zScore: bmiZ,
+          icon: Icons.straighten,
+          color: AppColors.brandSecondary,
           show: activeTab == 0,
         ),
         _buildMetricCard(
@@ -550,70 +548,16 @@ Keep language concise, professional, and supportive. Do not provide a medical di
           show: activeTab == 1,
         ),
         _buildMetricCard(
-          label: 'BMI',
-          value: latestBMI > 0 ? latestBMI.toStringAsFixed(1) : 'n/a',
-          zScore: bmiZ,
-          icon: Icons.straighten,
-          color: AppColors.brandSecondary,
+          label: 'Height',
+          value: latestHeight > 0
+              ? '${latestHeight.toStringAsFixed(1)} cm'
+              : 'n/a',
+          zScore: heightZ,
+          icon: Icons.height,
+          color: AppColors.brandPrimary,
           show: activeTab == 2,
         ),
-        if (activeTab == 0 && heightValues.isNotEmpty)
-          ChartCard(
-            title: 'Height History',
-            lineColor: AppColors.brandPrimary,
-            values: heightValues,
-            labels: chartLabels,
-            unit: 'cm',
-            startingLabel: 'First',
-            startingValue: '${heightValues.first.toStringAsFixed(1)} cm',
-            latestLabel: 'Latest',
-            latestValue: '${latestHeight.toStringAsFixed(1)} cm',
-            insightText:
-                'Weekly height measurements showing growth pattern over time.',
-          ),
-        if (activeTab == 1 && weightValues.isNotEmpty)
-          ChartCard(
-            title: 'Weight History',
-            lineColor: AppColors.brandAccent,
-            values: weightValues,
-            labels: chartLabels,
-            unit: 'kg',
-            startingLabel: 'First',
-            startingValue: '${weightValues.first.toStringAsFixed(1)} kg',
-            latestLabel: 'Latest',
-            latestValue: '${latestWeight.toStringAsFixed(1)} kg',
-            insightText:
-                'Weight tracking provides insight into nutritional status.',
-          ),
-        if (activeTab == 0 && heightValues.isNotEmpty)
-          ChartCard(
-            title: 'Height History',
-            lineColor: AppColors.brandPrimary,
-            values: heightValues,
-            labels: chartLabels,
-            unit: 'cm',
-            startingLabel: 'First',
-            startingValue: '${heightValues.first.toStringAsFixed(1)} cm',
-            latestLabel: 'Latest',
-            latestValue: '${latestHeight.toStringAsFixed(1)} cm',
-            insightText:
-                'Weekly height measurements showing growth pattern over time.',
-          ),
-        if (activeTab == 1 && weightValues.isNotEmpty)
-          ChartCard(
-            title: 'Weight History',
-            lineColor: AppColors.brandAccent,
-            values: weightValues,
-            labels: chartLabels,
-            unit: 'kg',
-            startingLabel: 'First',
-            startingValue: '${weightValues.first.toStringAsFixed(1)} kg',
-            latestLabel: 'Latest',
-            latestValue: '${latestWeight.toStringAsFixed(1)} kg',
-            insightText:
-                'Weight tracking provides insight into nutritional status.',
-          ),
-        if (activeTab == 2 && bmiValues.isNotEmpty)
+        if (activeTab == 0 && bmiValues.isNotEmpty)
           ChartCard(
             title: 'BMI History',
             lineColor: AppColors.brandSecondary,
@@ -625,6 +569,34 @@ Keep language concise, professional, and supportive. Do not provide a medical di
             latestLabel: 'Latest',
             latestValue: latestBMI > 0 ? latestBMI.toStringAsFixed(1) : 'n/a',
             insightText: 'BMI trend indicates body composition changes.',
+          ),
+        if (activeTab == 1 && weightValues.isNotEmpty)
+          ChartCard(
+            title: 'Weight History',
+            lineColor: AppColors.brandAccent,
+            values: weightValues,
+            labels: chartLabels,
+            unit: 'kg',
+            startingLabel: 'First',
+            startingValue: '${weightValues.first.toStringAsFixed(1)} kg',
+            latestLabel: 'Latest',
+            latestValue: '${latestWeight.toStringAsFixed(1)} kg',
+            insightText:
+                'Weight tracking provides insight into nutritional status.',
+          ),
+        if (activeTab == 2 && heightValues.isNotEmpty)
+          ChartCard(
+            title: 'Height History',
+            lineColor: AppColors.brandPrimary,
+            values: heightValues,
+            labels: chartLabels,
+            unit: 'cm',
+            startingLabel: 'First',
+            startingValue: '${heightValues.first.toStringAsFixed(1)} cm',
+            latestLabel: 'Latest',
+            latestValue: '${latestHeight.toStringAsFixed(1)} cm',
+            insightText:
+                'Weekly height measurements showing growth pattern over time.',
           ),
         const SizedBox(height: 20),
         AiAnalyticsCard(
@@ -638,7 +610,7 @@ Keep language concise, professional, and supportive. Do not provide a medical di
   }
 
   Widget _buildTabBar() {
-    final tabs = ['Height', 'Weight', 'BMI'];
+    final tabs = ['BMI', 'Weight', 'Height'];
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
