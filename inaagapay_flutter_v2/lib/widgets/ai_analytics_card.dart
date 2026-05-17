@@ -102,7 +102,8 @@ class _AiAnalyticsCardState extends State<AiAnalyticsCard> {
         backgroundColor: selected
             ? AppColors.brandPrimary.withValues(alpha: 0.12)
             : AppColors.bgSecondary,
-        foregroundColor: selected ? AppColors.brandPrimary : AppColors.textSecondary,
+        foregroundColor:
+            selected ? AppColors.brandPrimary : AppColors.textSecondary,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       ),
       child: Text(
@@ -183,6 +184,8 @@ class _AiAnalyticsCardState extends State<AiAnalyticsCard> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _buildLanguageToggle(),
+                const SizedBox(height: 12),
                 buildFormattedAiText(displayText),
                 if (shouldShowToggle) ...[
                   const SizedBox(height: 12),

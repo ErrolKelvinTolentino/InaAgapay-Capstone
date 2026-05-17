@@ -234,7 +234,9 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
     }).join('\n');
 
     return '''
-You are a warm, caring assistant writing a short growth update for a parent.
+You are a warm, caring assistant writing a short growth update for a parent and midwife.
+Do not use the phrase "your baby". Use "the child" or "the baby" instead.
+Provide the response in both English and Filipino. Only one language will be shown at a time.
 Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
 
 Child: $childName
@@ -250,6 +252,7 @@ $recordsSummary
 
 Output format:
 
+## English
 ## Baby Growth Summary
 - A short, gentle explanation of how the child is growing.
 
@@ -262,6 +265,21 @@ Output format:
 - ...
 
 ### Helpful Note
+- ...
+
+## Filipino
+## Buod ng Paglaki ng Bata
+- Maikling, banayad na paliwanag kung paano lumalago ang bata.
+
+### Kasalukuyang Sukat
+- Haba: ${height.toStringAsFixed(1)} cm
+- Timbang: ${weight.toStringAsFixed(1)} kg
+
+### Ano ang Kahulugan Nito
+- ...
+- ...
+
+### Paalala
 - ...
 
 Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for daily care and follow-up.
