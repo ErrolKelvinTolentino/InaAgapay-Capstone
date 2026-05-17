@@ -423,14 +423,14 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                           children: [
                             const Icon(
                               Icons.error_outline,
-                              color: Colors.red,
+                              color: AppColors.error,
                               size: 48,
                             ),
                             const SizedBox(height: 16),
                             const Text(
                               'Error loading schedules',
                               style: TextStyle(
-                                color: Colors.red,
+                                color: AppColors.error,
                                 fontSize: 16,
                               ),
                             ),

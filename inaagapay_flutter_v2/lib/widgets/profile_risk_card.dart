@@ -49,7 +49,7 @@ class ProfileRiskCard extends StatelessWidget {
     );
 
     final isHigh = risk.level == 'high';
-    final riskColor = isHigh ? Colors.red : Colors.green;
+    final riskColor = isHigh ? AppColors.error : AppColors.success;
 
     return Container(
       padding: const EdgeInsets.all(0),
@@ -73,8 +73,8 @@ class ProfileRiskCard extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isHigh
-                    ? [Colors.red.shade400, Colors.red.shade600]
-                    : [Colors.green.shade400, Colors.green.shade600],
+                    ? [AppColors.error, const Color(0xFFD32F2F)]
+                    : [AppColors.success, const Color(0xFF4CAF93)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -129,7 +129,7 @@ class ProfileRiskCard extends StatelessWidget {
                     risk.note,
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.red.shade700,
+                      color: AppColors.error,
                       height: 1.4,
                     ),
                   ),
@@ -144,7 +144,7 @@ class ProfileRiskCard extends StatelessWidget {
                               width: 5,
                               height: 5,
                               decoration: const BoxDecoration(
-                                color: Colors.red,
+                                color: AppColors.error,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -166,7 +166,7 @@ class ProfileRiskCard extends StatelessWidget {
 
                 // ── Expandable: What happened before ──
                 if (history.isNotEmpty) ...[
-                  const Divider(height: 20),
+                  const Divider(height: 20, color: AppColors.borderPrimary),
                   Theme(
                     data: Theme.of(context)
                         .copyWith(dividerColor: Colors.transparent),
@@ -195,7 +195,7 @@ class ProfileRiskCard extends StatelessWidget {
                                     : Icons.circle,
                                 size: 12,
                                 color: isElevated
-                                    ? Colors.orange
+                                    ? AppColors.warning
                                     : Colors.grey.shade400,
                               ),
                               const SizedBox(width: 8),
@@ -225,7 +225,7 @@ class ProfileRiskCard extends StatelessWidget {
 
                 // ── Expandable: What to watch ──
                 if (watchList.isNotEmpty) ...[
-                  const Divider(height: 8),
+                  const Divider(height: 8, color: AppColors.borderPrimary),
                   Theme(
                     data: Theme.of(context)
                         .copyWith(dividerColor: Colors.transparent),

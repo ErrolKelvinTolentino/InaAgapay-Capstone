@@ -1323,9 +1323,9 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   Color _edemaColor(String level) {
     switch (level) {
       case 'mild':
-        return Colors.orange.shade300;
+        return AppColors.warning.withValues(alpha: 0.6);
       case 'moderate':
-        return Colors.orange.shade600;
+        return AppColors.warning;
       case 'severe':
         return AppColors.error;
       default:

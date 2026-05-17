@@ -66,7 +66,7 @@ class PregnancyActionsCard extends StatelessWidget {
                 child: _ActionBtn(
                     label: 'Conclude',
                     icon: Icons.flag_outlined,
-                    color: Colors.red,
+                    color: AppColors.error,
                     onTap: onConclude)),
           ]),
         ],

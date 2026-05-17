@@ -670,13 +670,13 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: Colors.red.shade50,
+                              color: AppColors.error.withValues(alpha: 0.08),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
                               Icons.error_outline,
                               size: 48,
-                              color: Colors.red,
+                              color: AppColors.error,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -838,7 +838,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                       ),
                                     ),
                                   ),
-                                  const Divider(height: 1),
+                                  const Divider(height: 1, color: AppColors.borderPrimary),
                                   ..._searchResults.map((result) => ListTile(
                                         leading: CircleAvatar(
                                           backgroundColor: AppColors
@@ -1022,7 +1022,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                       ],
                                     ),
                                   ),
-                                  const Divider(height: 1),
+                                  const Divider(height: 1, color: AppColors.borderPrimary),
                                   ..._priorityTasks.take(5).map(
                                       (task) => _PriorityTaskTile(
                                         task: task,

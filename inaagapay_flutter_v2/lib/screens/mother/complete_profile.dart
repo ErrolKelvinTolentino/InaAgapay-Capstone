@@ -222,7 +222,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
             ),
             child: const Text('Exit'),
@@ -280,7 +280,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             icon: const Icon(Icons.exit_to_app, size: 20),
             label: const Text('Exit'),
             style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
+              foregroundColor: AppColors.error,
             ),
           ),
         ],
@@ -324,8 +324,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   icon: const Icon(Icons.logout, size: 18),
                   label: const Text('Emergency Exit to Login'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
+                    foregroundColor: AppColors.error,
+                    side: BorderSide(color: AppColors.error),
                     minimumSize: const Size(double.infinity, 45),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(28),
@@ -588,7 +588,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                const Divider(),
+                const Divider(color: AppColors.borderPrimary),
                 const SizedBox(height: 16),
                 _infoRow(
                   Icons.calendar_today,

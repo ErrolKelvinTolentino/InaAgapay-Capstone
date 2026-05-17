@@ -810,14 +810,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 18),
+                Icon(Icons.check_circle, color: AppColors.success, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     line,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: Colors.green,
+                      color: AppColors.success,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -842,14 +842,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.warning, color: Colors.orange, size: 18),
+                Icon(Icons.warning, color: AppColors.warning, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     line,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: Colors.orange,
+                      color: AppColors.warning,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -933,21 +933,21 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   Color _statusChipBackground(String status) {
-    if (_isConcerningStatus(status)) return Colors.red.shade50;
-    if (_isCautionStatus(status)) return Colors.orange.shade50;
-    return Colors.green.shade50;
+    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.08);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.08);
+    return AppColors.success.withValues(alpha: 0.08);
   }
 
   Color _statusChipBorder(String status) {
-    if (_isConcerningStatus(status)) return Colors.red.shade200;
-    if (_isCautionStatus(status)) return Colors.orange.shade200;
-    return Colors.green.shade200;
+    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.25);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.25);
+    return AppColors.success.withValues(alpha: 0.25);
   }
 
   Color _statusChipTextColor(String status) {
-    if (_isConcerningStatus(status)) return Colors.red;
-    if (_isCautionStatus(status)) return Colors.orange.shade800;
-    return Colors.green;
+    if (_isConcerningStatus(status)) return AppColors.error;
+    if (_isCautionStatus(status)) return AppColors.warning;
+    return AppColors.success;
   }
 
   ({String testName, String value, String status, String remark})
@@ -1189,16 +1189,16 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       if (entry.key.contains('HEALTH STATUS')) {
         final hasHealthy =
             entry.value.any((v) => v.toLowerCase().contains('healthy'));
-        accentColor = hasHealthy ? Colors.green : Colors.orange;
+        accentColor = hasHealthy ? AppColors.success : AppColors.warning;
         icon = Icons.monitor_heart_outlined;
       } else if (isMeasurements) {
         accentColor = Colors.teal;
         icon = Icons.straighten;
       } else if (isAnatomical) {
-        accentColor = Colors.green;
+        accentColor = AppColors.success;
         icon = Icons.child_care_outlined;
       } else if (isAbnormal) {
-        accentColor = Colors.red;
+        accentColor = AppColors.error;
         icon = Icons.warning_amber_rounded;
       } else if (entry.key.contains('RECOMMENDED')) {
         accentColor = Colors.blue;
@@ -1608,9 +1608,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   Color _getHealthStatusColor() {
     final status = _getHealthStatus();
-    if (status.contains('HEALTHY')) return Colors.green;
-    if (status.contains('MONITORING')) return Colors.orange;
-    if (status.contains('REVIEW')) return Colors.red;
+    if (status.contains('HEALTHY')) return AppColors.success;
+    if (status.contains('MONITORING')) return AppColors.warning;
+    if (status.contains('REVIEW')) return AppColors.error;
     return AppColors.brandPrimary;
   }
 
@@ -2077,7 +2077,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         _isEditing = false;
                       });
                     },
-                    icon: const Icon(Icons.save, color: Colors.green),
+                    icon: Icon(Icons.save, color: AppColors.success),
                     tooltip: 'Save changes',
                   ),
                   IconButton(
@@ -2088,7 +2088,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         _isEditing = false;
                       });
                     },
-                    icon: const Icon(Icons.close, color: Colors.red),
+                    icon: Icon(Icons.close, color: AppColors.error),
                     tooltip: 'Cancel',
                   ),
                 ],
@@ -2200,7 +2200,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   ),
                   if (_selectedImages.isNotEmpty)
                     IconButton(
-                      icon: const Icon(Icons.delete_sweep, color: Colors.red),
+                      icon: Icon(Icons.delete_sweep, color: AppColors.error),
                       onPressed: _clearAll,
                       tooltip: 'Clear all images',
                     ),
@@ -2319,7 +2319,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                                         child: CircularProgressIndicator(
                                           valueColor:
                                               AlwaysStoppedAnimation<Color>(
-                                                  Colors.green),
+                                                  AppColors.success),
                                         ),
                                       ),
                                     )

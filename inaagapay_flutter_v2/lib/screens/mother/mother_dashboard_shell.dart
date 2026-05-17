@@ -382,7 +382,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                       },
                     ),
                     const Divider(
-                        height: 1, thickness: 1), // ← FIXED: Thinner divider
+                        height: 1, thickness: 1, color: AppColors.borderPrimary),
                     _MenuItem(
                       icon: Icons.logout_rounded,
                       label: LanguageService.translate('Log out', 'Mag-logout'),
@@ -460,13 +460,13 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color: AppColors.error.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.logout_rounded,
                   size: 32,
-                  color: Colors.red,
+                  color: AppColors.error,
                 ),
               ),
               const SizedBox(height: 16),
@@ -510,7 +510,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                         _logout();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
+                        backgroundColor: AppColors.error,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
@@ -759,7 +759,7 @@ class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isDanger ? Colors.redAccent : AppColors.textPrimary;
+    final color = isDanger ? AppColors.error : AppColors.textPrimary;
 
     return InkWell(
       onTap: onTap,

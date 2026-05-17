@@ -987,21 +987,21 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   }
 
   Color _statusChipBackground(String status) {
-    if (_isConcerningStatus(status)) return Colors.red.shade50;
-    if (_isCautionStatus(status)) return Colors.orange.shade50;
-    return Colors.green.shade50;
+    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.08);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.08);
+    return AppColors.success.withValues(alpha: 0.08);
   }
 
   Color _statusChipBorder(String status) {
-    if (_isConcerningStatus(status)) return Colors.red.shade200;
-    if (_isCautionStatus(status)) return Colors.orange.shade200;
-    return Colors.green.shade200;
+    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.25);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.25);
+    return AppColors.success.withValues(alpha: 0.25);
   }
 
   Color _statusChipTextColor(String status) {
-    if (_isConcerningStatus(status)) return Colors.red;
-    if (_isCautionStatus(status)) return Colors.orange.shade800;
-    return Colors.green;
+    if (_isConcerningStatus(status)) return AppColors.error;
+    if (_isCautionStatus(status)) return AppColors.warning;
+    return AppColors.success;
   }
 
   String _statusMeaning(String status) {
@@ -1336,17 +1336,17 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             color: concerning
-                ? Colors.red.shade50
+                ? AppColors.error.withValues(alpha: 0.08)
                 : caution
-                    ? Colors.orange.shade50
-                    : Colors.green.shade50,
+                    ? AppColors.warning.withValues(alpha: 0.08)
+                    : AppColors.success.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: concerning
-                  ? Colors.red.shade200
+                  ? AppColors.error.withValues(alpha: 0.25)
                   : caution
-                      ? Colors.orange.shade200
-                      : Colors.green.shade200,
+                      ? AppColors.warning.withValues(alpha: 0.25)
+                      : AppColors.success.withValues(alpha: 0.25),
             ),
           ),
           child: Row(
@@ -1391,10 +1391,10 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: concerning
-                      ? Colors.red
+                      ? AppColors.error
                       : caution
-                          ? Colors.orange.shade700
-                          : Colors.green,
+                          ? AppColors.warning
+                          : AppColors.success,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -1447,11 +1447,11 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     final isAssessment = safeTitle.contains('ASSESSMENT');
 
     final Color accent = isAbnormal
-        ? Colors.red
+        ? AppColors.error
         : isRecommendation
             ? Colors.blue
             : isAssessment
-                ? Colors.deepPurple
+                ? AppColors.brandAccent
                 : AppColors.brandPrimary;
 
     final IconData icon = isAbnormal
@@ -1594,7 +1594,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.deepPurple.shade800,
+                  color: AppColors.brandAccent,
                 ),
               ),
             ),
@@ -1602,11 +1602,11 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               leading: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
+                  color: AppColors.brandAccent.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(Icons.photo_library,
-                    color: Colors.deepPurple.shade700),
+                    color: AppColors.brandAccent),
               ),
               title: const Text('Choose from Gallery'),
               subtitle: const Text('Select multiple images'),
@@ -1893,15 +1893,15 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     if (_combinedResponse == null) return Colors.grey;
 
     if (_hasWithinNormalOverallAssessment() && !_hasAbnormalSignals()) {
-      return Colors.green;
+      return AppColors.success;
     }
 
     if (_hasWithinNormalOverallAssessment() && _hasAbnormalSignals()) {
-      return Colors.orange.shade700;
+      return AppColors.warning;
     }
 
     if (_hasAbnormalSignals()) {
-      return Colors.red;
+      return AppColors.error;
     }
 
     return Colors.blueGrey;
@@ -1955,7 +1955,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                         _isEditing = false;
                       });
                     },
-                    icon: const Icon(Icons.save, color: Colors.green),
+                    icon: Icon(Icons.save, color: AppColors.success),
                     tooltip: 'Save changes',
                   ),
                   IconButton(
@@ -1966,7 +1966,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                         _isEditing = false;
                       });
                     },
-                    icon: const Icon(Icons.close, color: Colors.red),
+                    icon: Icon(Icons.close, color: AppColors.error),
                     tooltip: 'Cancel',
                   ),
                 ],
@@ -2066,11 +2066,11 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
+                  color: AppColors.brandAccent.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.science,
-                    color: Colors.deepPurple, size: 20),
+                    color: AppColors.brandAccent, size: 20),
               ),
               const SizedBox(width: 12),
               const Text(
@@ -2101,13 +2101,13 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: result.isNormal
-                      ? Colors.green.shade50
-                      : Colors.red.shade50,
+                      ? AppColors.success.withValues(alpha: 0.08)
+                      : AppColors.error.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: result.isNormal
-                        ? Colors.green.shade200
-                        : Colors.red.shade200,
+                        ? AppColors.success.withValues(alpha: 0.25)
+                        : AppColors.error.withValues(alpha: 0.25),
                   ),
                 ),
                 child: Row(
@@ -2120,7 +2120,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       ),
                       child: Icon(
                         result.isNormal ? Icons.check_circle : Icons.warning,
-                        color: result.isNormal ? Colors.green : Colors.red,
+                        color: result.isNormal ? AppColors.success : AppColors.error,
                         size: 20,
                       ),
                     ),
@@ -2142,8 +2142,8 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                             style: TextStyle(
                               fontSize: 14,
                               color: result.isNormal
-                                  ? Colors.green.shade700
-                                  : Colors.red.shade700,
+                                  ? AppColors.success
+                                  : AppColors.error,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -2156,7 +2156,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: result.isNormal ? Colors.green : Colors.red,
+                        color: result.isNormal ? AppColors.success : AppColors.error,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -2191,13 +2191,13 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color: AppColors.error.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
+                  border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning, color: Colors.red, size: 16),
+                    Icon(Icons.warning, color: AppColors.error, size: 16),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -2781,7 +2781,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                   ),
                   if (_selectedImages.isNotEmpty)
                     IconButton(
-                      icon: const Icon(Icons.delete_sweep, color: Colors.red),
+                      icon: Icon(Icons.delete_sweep, color: AppColors.error),
                       onPressed: _clearAll,
                       tooltip: 'Clear all images',
                     ),
@@ -2800,10 +2800,10 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
-                              color: Colors.deepPurple.shade50,
+                              color: AppColors.brandAccent.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(12),
                               border:
-                                  Border.all(color: Colors.deepPurple.shade200),
+                                  Border.all(color: AppColors.brandAccent.withValues(alpha: 0.25)),
                             ),
                             child: Row(
                               children: [
@@ -2815,7 +2815,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                                   ),
                                   child: Icon(Icons.person,
                                       size: 20,
-                                      color: Colors.deepPurple.shade700),
+                                      color: AppColors.brandAccent),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -2828,14 +2828,14 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                                         style: const TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.deepPurple,
+                                          color: AppColors.brandAccent,
                                         ),
                                       ),
                                       Text(
                                         'Pregnancy ID: $_pregnancyId',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.deepPurple.shade700,
+                                          color: AppColors.brandAccent,
                                         ),
                                       ),
                                     ],
@@ -2905,7 +2905,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                                         child: CircularProgressIndicator(
                                           valueColor:
                                               AlwaysStoppedAnimation<Color>(
-                                                  Colors.green),
+                                                  AppColors.success),
                                         ),
                                       ),
                                     )

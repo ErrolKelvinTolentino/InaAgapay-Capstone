@@ -70,7 +70,7 @@ class MainHeader extends StatelessWidget {
         subtitle: 'Are you sure you want to log out of your account?',
         confirmText: 'Log out',
         cancelText: 'Cancel',
-        accentColor: Colors.redAccent,
+        accentColor: AppColors.error,
         onCancel: () => Navigator.pop(context),
         onConfirm: () {
           Navigator.pop(context);
@@ -231,7 +231,7 @@ class _ProfileMenu extends StatelessWidget {
                 onHelp?.call();
               },
             ),
-            const Divider(height: 8),
+            const Divider(height: 8, color: AppColors.borderPrimary),
             _MenuItem(
               icon: Icons.logout_rounded,
               label: 'Log out',
@@ -262,7 +262,7 @@ class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isDanger ? Colors.redAccent : AppColors.textPrimary;
+    final color = isDanger ? AppColors.error : AppColors.textPrimary;
 
     return InkWell(
       onTap: onTap,

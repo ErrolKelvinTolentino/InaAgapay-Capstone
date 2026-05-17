@@ -588,13 +588,13 @@ class _RecordsScreenState extends State<RecordsScreen>
                                         icon: Icon(Icons.edit_outlined,
                                             size: 16,
                                             color: isEditing
-                                                ? Colors.green
+                                                ? AppColors.success
                                                 : AppColors.brandPrimary),
                                         label: Text(
                                           isEditing ? 'Cancel' : 'Edit',
                                           style: TextStyle(
                                               color: isEditing
-                                                  ? Colors.green
+                                                  ? AppColors.success
                                                   : AppColors.brandPrimary),
                                         ),
                                       ),
@@ -959,13 +959,13 @@ class _RecordsScreenState extends State<RecordsScreen>
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color: AppColors.error.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.error_outline,
                   size: 48,
-                  color: Colors.red,
+                  color: AppColors.error,
                 ),
               ),
               const SizedBox(height: 16),
@@ -1612,7 +1612,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                   'Ultrasounds',
                   totalUltrasounds.toString(),
                   Icons.photo,
-                  Colors.purple,
+                  AppColors.brandAccent,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1621,7 +1621,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                   'Lab Tests',
                   totalLabTests.toString(),
                   Icons.science,
-                  Colors.orange,
+                  AppColors.warning,
                 ),
               ),
             ],
@@ -1671,10 +1671,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                               ? Icons.medical_services
                               : Icons.science,
                       color: latestRecord['record_type'] == 'ultrasound'
-                          ? Colors.purple
+                          ? AppColors.brandAccent
                           : latestRecord['record_type'] == 'checkup'
                               ? AppColors.brandPrimary
-                              : Colors.orange,
+                              : AppColors.warning,
                       size: 24,
                     ),
                   ),
@@ -1831,7 +1831,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                       child: _buildActionButton(
                         'View Lab Tests',
                         Icons.science,
-                        Colors.orange,
+                        AppColors.warning,
                         () {
                           setState(() {
                             _selectedFilter = 'labtest';
@@ -1849,7 +1849,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                       child: _buildActionButton(
                         'View Ultrasounds',
                         Icons.photo,
-                        Colors.purple,
+                        AppColors.brandAccent,
                         () {
                           setState(() {
                             _selectedFilter = 'ultrasound';

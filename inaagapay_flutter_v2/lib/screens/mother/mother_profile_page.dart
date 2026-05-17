@@ -700,21 +700,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   }
 
   Color _statusChipBackground(String status) {
-    if (_isConcerningStatus(status)) return Colors.red.shade50;
-    if (_isCautionStatus(status)) return Colors.orange.shade50;
-    return Colors.green.shade50;
+    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.08);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.08);
+    return AppColors.success.withValues(alpha: 0.08);
   }
 
   Color _statusChipBorder(String status) {
-    if (_isConcerningStatus(status)) return Colors.red.shade200;
-    if (_isCautionStatus(status)) return Colors.orange.shade200;
-    return Colors.green.shade200;
+    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.25);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.25);
+    return AppColors.success.withValues(alpha: 0.25);
   }
 
   Color _statusChipTextColor(String status) {
-    if (_isConcerningStatus(status)) return Colors.red;
-    if (_isCautionStatus(status)) return Colors.orange.shade800;
-    return Colors.green;
+    if (_isConcerningStatus(status)) return AppColors.error;
+    if (_isCautionStatus(status)) return AppColors.warning;
+    return AppColors.success;
   }
 
   String _statusMeaning(String status) {
@@ -1003,11 +1003,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final isAssessment = safeTitle.contains('ASSESSMENT');
 
     final Color accent = isAbnormal
-        ? Colors.red
+        ? AppColors.error
         : isRecommendation
             ? Colors.blue
             : isAssessment
-                ? Colors.deepPurple
+                ? AppColors.brandAccent
                 : AppColors.brandPrimary;
 
     final IconData icon = isAbnormal
@@ -1082,17 +1082,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             color: concerning
-                ? Colors.red.shade50
+                ? AppColors.error.withValues(alpha: 0.08)
                 : caution
-                    ? Colors.orange.shade50
-                    : Colors.green.shade50,
+                    ? AppColors.warning.withValues(alpha: 0.08)
+                    : AppColors.success.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: concerning
-                  ? Colors.red.shade200
+                  ? AppColors.error.withValues(alpha: 0.25)
                   : caution
-                      ? Colors.orange.shade200
-                      : Colors.green.shade200,
+                      ? AppColors.warning.withValues(alpha: 0.25)
+                      : AppColors.success.withValues(alpha: 0.25),
             ),
           ),
           child: Row(
@@ -1128,10 +1128,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: concerning
-                      ? Colors.red
+                      ? AppColors.error
                       : caution
-                          ? Colors.orange.shade700
-                          : Colors.green,
+                          ? AppColors.warning
+                          : AppColors.success,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -1679,11 +1679,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: Colors.red.shade50,
+                                  color: AppColors.error.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child:
-                                    const Icon(Icons.flag, color: Colors.red),
+                                    Icon(Icons.flag, color: AppColors.error),
                               ),
                               const SizedBox(width: 12),
                               const Expanded(
@@ -1899,7 +1899,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                             ],
                             const SizedBox(height: 20),
                             if (i < fetalCount - 1)
-                              const Divider(height: 24),
+                              const Divider(height: 24, color: AppColors.borderPrimary),
                           ],
 
                           // ── Gestational age (auto-computed, read-only) ──
@@ -2353,7 +2353,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               offset: const Offset(0, 2))
         ],
       ),
-      child: ExpansionTile(
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+        ),
+        child: ExpansionTile(
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -2425,6 +2429,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -2648,8 +2653,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     height: 8,
                                     decoration: BoxDecoration(
                                         color: c['status'] == 'active'
-                                            ? Colors.orange
-                                            : Colors.green,
+                                            ? AppColors.warning
+                                            : AppColors.success,
                                         shape: BoxShape.circle)),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -2696,8 +2701,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     height: 8,
                                     decoration: BoxDecoration(
                                         color: a['status'] == 'active'
-                                            ? Colors.orange
-                                            : Colors.green,
+                                            ? AppColors.warning
+                                            : AppColors.success,
                                         shape: BoxShape.circle)),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -3178,7 +3183,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
-            child: ExpansionTile(
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
               leading: CircleAvatar(
                 backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
                 child:
@@ -3238,7 +3247,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         }(),
                         const SizedBox(height: 8),
                       ],
-                      const Divider(height: 24),
+                      const Divider(height: 24, color: AppColors.borderPrimary),
                       () {
                         final pregnancyId = p['pregnancy_id'] as int? ?? -1;
                         final sortedHistCheckups = List<Map<String, dynamic>>.from(
@@ -3283,7 +3292,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         return _buildHistoryRecordSection(
                           title: 'Ultrasound Records',
                           icon: Icons.photo_outlined,
-                          color: Colors.purple,
+                          color: AppColors.brandAccent,
                           count: ultrasounds.length,
                           emptyMessage: 'No ultrasound records',
                           children: [
@@ -3312,7 +3321,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         return _buildHistoryRecordSection(
                           title: 'Lab Test Records',
                           icon: Icons.science_outlined,
-                          color: Colors.orange,
+                          color: AppColors.warning,
                           count: labTests.length,
                           emptyMessage: 'No lab test records',
                           children: [
@@ -3334,6 +3343,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   ),
                 ),
               ],
+            ),
             ),
           );
         },
@@ -3498,7 +3508,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           entry.remove();
                           Navigator.pushNamed(context, '/help');
                         }),
-                    const Divider(height: 8),
+                    const Divider(height: 8, color: AppColors.borderPrimary),
                     _MenuItem(
                         icon: Icons.logout_rounded,
                         label: 'Log out',
@@ -3536,7 +3546,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 _logout();
               },
               child:
-                  const Text('Log out', style: TextStyle(color: Colors.red))),
+                  const Text('Log out', style: TextStyle(color: AppColors.error))),
         ],
       ),
     );
@@ -3638,6 +3648,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       ),
                       child: TabBar(
                         controller: _tabController,
+                        dividerColor: Colors.transparent,
                         indicatorColor: AppColors.brandPrimary,
                         indicatorWeight: 3,
                         labelColor: AppColors.brandPrimary,
@@ -3702,7 +3713,7 @@ class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isDanger ? Colors.redAccent : AppColors.textPrimary;
+    final color = isDanger ? AppColors.error : AppColors.textPrimary;
     return InkWell(
       onTap: onTap,
       child: Padding(

@@ -911,21 +911,21 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Color _statusChipBackground(String status) {
-    if (_isConcerningStatus(status)) return Colors.red.shade50;
-    if (_isCautionStatus(status)) return Colors.orange.shade50;
-    return Colors.green.shade50;
+    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.08);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.08);
+    return AppColors.success.withValues(alpha: 0.08);
   }
 
   Color _statusChipBorder(String status) {
-    if (_isConcerningStatus(status)) return Colors.red.shade200;
-    if (_isCautionStatus(status)) return Colors.orange.shade200;
-    return Colors.green.shade200;
+    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.25);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.25);
+    return AppColors.success.withValues(alpha: 0.25);
   }
 
   Color _statusChipTextColor(String status) {
-    if (_isConcerningStatus(status)) return Colors.red;
-    if (_isCautionStatus(status)) return Colors.orange.shade800;
-    return Colors.green;
+    if (_isConcerningStatus(status)) return AppColors.error;
+    if (_isCautionStatus(status)) return AppColors.warning;
+    return AppColors.success;
   }
 
   String _statusMeaning(String status) {
@@ -1350,10 +1350,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       headerColor = Colors.teal;
       headerIcon = Icons.straighten;
     } else if (normalized == 'ANATOMICAL ASSESSMENT') {
-      headerColor = Colors.green;
+        headerColor = AppColors.success;
       headerIcon = Icons.child_care_outlined;
     } else if (normalized == 'ABNORMAL FINDINGS') {
-      headerColor = Colors.red;
+        headerColor = AppColors.error;
       headerIcon = Icons.warning_amber_rounded;
     } else if (normalized.contains('NORMAL RANGES')) {
       headerIcon = Icons.analytics_outlined;
@@ -1480,16 +1480,16 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     final normalized = title.trim().toUpperCase();
     if (normalized.contains('HEALTH STATUS')) {
       final hasHealthy = lines.any((v) => v.toLowerCase().contains('healthy'));
-      color = hasHealthy ? Colors.green : Colors.orange;
+        color = hasHealthy ? AppColors.success : AppColors.warning;
       icon = Icons.monitor_heart_outlined;
     } else if (normalized == 'DETAILED MEASUREMENTS ASSESSMENT') {
       color = Colors.teal;
       icon = Icons.straighten;
     } else if (normalized == 'ANATOMICAL ASSESSMENT') {
-      color = Colors.green;
+        color = AppColors.success;
       icon = Icons.child_care_outlined;
     } else if (normalized == 'ABNORMAL FINDINGS') {
-      color = Colors.red;
+        color = AppColors.error;
       icon = Icons.warning_amber_rounded;
     } else if (normalized.contains('RECOMMENDED')) {
       color = Colors.blue;

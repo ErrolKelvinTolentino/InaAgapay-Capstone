@@ -391,9 +391,9 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   Color _getRiskColor(String riskLevel) {
     switch (riskLevel.toLowerCase()) {
       case 'high':
-        return Colors.red;
+        return AppColors.error;
       default:
-        return Colors.green;
+        return AppColors.success;
     }
   }
 
@@ -1041,10 +1041,10 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   Widget _getRiskFilterIcon(String filter) {
     switch (filter) {
       case 'High Risk':
-        return const Icon(Icons.error_outline, size: 16, color: Colors.red);
+        return Icon(Icons.error_outline, size: 16, color: AppColors.error);
       case 'Low Risk':
         return const Icon(Icons.check_circle_outline,
-            size: 16, color: Colors.green);
+            size: 16, color: AppColors.success);
       case 'Due Soon':
         return Icon(Icons.event_available, size: 16, color: Colors.pink[300]);
       default:

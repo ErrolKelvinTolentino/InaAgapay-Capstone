@@ -81,7 +81,7 @@ class PregnancyStatsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          const Divider(height: 1),
+          const Divider(height: 1, color: AppColors.borderPrimary),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -106,7 +106,7 @@ class PregnancyStatsCard extends StatelessWidget {
                 child: Row(children: [
                   Icon(Icons.shield_outlined,
                       size: 16,
-                      color: riskLevel == 'high' ? Colors.red : Colors.green),
+                      color: riskLevel == 'high' ? AppColors.error : AppColors.success),
                   const SizedBox(width: 6),
                   Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,8 +116,8 @@ class PregnancyStatsCard extends StatelessWidget {
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: riskLevel == 'high'
-                                    ? Colors.red
-                                    : Colors.green)),
+                                    ? AppColors.error
+                                    : AppColors.success)),
                         const Text('Risk Level',
                             style: TextStyle(
                                 fontSize: 10, color: AppColors.textSecondary)),

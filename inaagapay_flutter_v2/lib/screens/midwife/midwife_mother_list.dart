@@ -128,10 +128,10 @@ class _MidwifeMotherListState extends State<MidwifeMotherList> {
     Color riskColor;
     IconData riskIcon;
     if (mother['risk'] == 'high') {
-      riskColor = Colors.red;
+      riskColor = AppColors.error;
       riskIcon = Icons.error;
     } else {
-      riskColor = Colors.green;
+      riskColor = AppColors.success;
       riskIcon = Icons.check_circle;
     }
 
@@ -232,7 +232,7 @@ class _MidwifeMotherListState extends State<MidwifeMotherList> {
             ],
           ),
           const SizedBox(height: 12),
-          const Divider(height: 1),
+          const Divider(height: 1, color: AppColors.borderPrimary),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
