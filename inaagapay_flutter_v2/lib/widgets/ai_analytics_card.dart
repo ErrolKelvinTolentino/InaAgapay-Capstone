@@ -20,19 +20,19 @@ class AiAnalyticsCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.brandPrimary.withValues(alpha: 0.08),
-            AppColors.brandAccent.withValues(alpha: 0.05),
-          ],
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: AppColors.brandPrimary.withValues(alpha: 0.2),
-          width: 1,
+          color: AppColors.brandPrimary.withValues(alpha: 0.22),
+          width: 1.2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

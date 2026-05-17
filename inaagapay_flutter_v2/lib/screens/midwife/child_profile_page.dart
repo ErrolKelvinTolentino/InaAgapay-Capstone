@@ -7,11 +7,13 @@ import '../../widgets/secondary_header.dart';
 import '../../widgets/hero_card.dart';
 import '../../widgets/records_display_card.dart';
 import '../../widgets/status_indicator.dart';
+import '../../widgets/ai_analytics_card.dart';
+import '../../services/groq_service.dart';
+import '../../services/growth_calculator.dart';
 import 'add_growth_step1.dart';
 import 'add_immunization_page.dart';
 import 'child_growth_list_page.dart';
 import 'child_immunization_list_page.dart';
-import 'child_growth_ai_page.dart';
 
 class ChildProfilePage extends StatefulWidget {
   final int childId;
@@ -30,6 +32,10 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
   Map<String, dynamic>? childData;
   Map<String, dynamic>? birthData;
   Map<String, dynamic>? latestGrowth;
+  List<Map<String, dynamic>> growthRecords = [];
+  String? aiAnalysis;
+  bool aiLoading = false;
+  String? aiError;
   List<Map<String, dynamic>> immunizations = [];
   Map<String, dynamic>? guardianData;
   bool hasGuardian = false;
@@ -88,11 +94,14 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
           .from('child_details')
           .select('*')
           .eq('child_id', widget.childId)
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
+          .order('created_at', ascending: true);
 
-      latestGrowth = growthResponse;
+      growthRecords = List<Map<String, dynamic>>.from(growthResponse);
+      latestGrowth = growthRecords.isNotEmpty ? growthRecords.last : null;
+
+      if (latestGrowth != null && latestGrowth!['child_details_id'] != null) {
+        await _loadProfileAiInsight(latestGrowth!['child_details_id'] as int);
+      }
 
       final immunizationResponse = await Supabase.instance.client
           .from('immunization_record')
@@ -150,6 +159,26 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
     }
   }
 
+  int _ageInWeeks(DateTime recordDate) {
+    if (birthData == null) return 0;
+    final birthdate = birthData!['birthdate']?.toString();
+    if (birthdate == null || birthdate.isEmpty) return 0;
+
+    try {
+      final birth = DateTime.parse(birthdate);
+      final difference = recordDate.difference(birth);
+      return (difference.inDays / 7).round();
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  double _calculateBMI(double heightCm, double weightKg) {
+    if (heightCm <= 0 || weightKg <= 0) return 0;
+    final heightM = heightCm / 100.0;
+    return weightKg / (heightM * heightM);
+  }
+
   String formatDate(String? date) {
     if (date == null || date.isEmpty) return 'Not recorded';
     try {
@@ -177,7 +206,17 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
       }
     }
 
-    return 'Unknown';
+    final firstName = childData?['first_name']?.toString() ?? '';
+    final lastName = childData?['last_name']?.toString() ?? '';
+    final fullName = '$firstName $lastName'.trim();
+    return fullName.isNotEmpty ? fullName : 'Child';
+  }
+
+  String getChildName() {
+    final firstName = childData?['first_name']?.toString() ?? '';
+    final lastName = childData?['last_name']?.toString() ?? '';
+    final fullName = '$firstName $lastName'.trim();
+    return fullName.isNotEmpty ? fullName : 'Child';
   }
 
   String getParentRelationship() {
@@ -532,8 +571,8 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
               _buildGrowthCards(displayHeight, displayWeight),
               const SizedBox(height: 12),
               _buildBMICard(latestBMI, bmiStatus),
-              const SizedBox(height: 16),
-              _buildAICard(),
+              const SizedBox(height: 12),
+              _buildProfileAiCard(),
 
               _buildSectionDivider(),
 
@@ -820,6 +859,199 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
         ],
       ),
     );
+  }
+
+  Widget _buildProfileAiCard() {
+    return AiAnalyticsCard(
+      isLoading: aiLoading,
+      text: aiAnalysis ??
+          aiError ??
+          'AI growth insight will appear here once the latest height and weight records are available.',
+    );
+  }
+
+  Future<void> _loadProfileAiInsight(int latestRecordId) async {
+    if (!mounted) return;
+    setState(() {
+      aiLoading = true;
+      aiError = null;
+    });
+
+    try {
+      final saved = await Supabase.instance.client
+          .from('ai_responses')
+          .select('response')
+          .eq('reference_table', 'child_details')
+          .eq('reference_id', latestRecordId)
+          .eq('response_type', 'growth_analysis')
+          .maybeSingle();
+
+      if (saved != null &&
+          saved['response'] != null &&
+          saved['response'].toString().trim().isNotEmpty) {
+        aiAnalysis = saved['response'].toString().trim();
+      } else {
+        await _generateAndSaveProfileAiInsight(latestRecordId);
+      }
+    } catch (e) {
+      aiError = 'Unable to load AI insight.';
+      aiAnalysis = null;
+    } finally {
+      if (mounted) {
+        setState(() => aiLoading = false);
+      }
+    }
+  }
+
+  Future<void> _generateAndSaveProfileAiInsight(int latestRecordId) async {
+    if (growthRecords.isEmpty || childData == null || latestGrowth == null) {
+      aiAnalysis = 'Not enough data for AI insight.';
+      return;
+    }
+
+    try {
+      final latestHeight =
+          (latestGrowth!['child_height'] as num?)?.toDouble() ?? 0;
+      final latestWeight =
+          (latestGrowth!['child_weight'] as num?)?.toDouble() ?? 0;
+      final latestBMI = _calculateBMI(latestHeight, latestWeight);
+      final latestAgeWeeks =
+          _ageInWeeks(DateTime.parse(latestGrowth!['created_at']));
+      final sex = (childData!['sex'] as String?) ?? 'female';
+
+      final prompt = _buildGrowthAiPrompt(
+        childName: getChildName(),
+        sex: sex,
+        ageWeeks: latestAgeWeeks,
+        height: latestHeight,
+        weight: latestWeight,
+        bmi: latestBMI,
+        heightZ: GrowthCalculator.calculateHeightZScore(
+            latestHeight, latestAgeWeeks, sex),
+        weightZ: GrowthCalculator.calculateWeightZScore(
+            latestWeight, latestAgeWeeks, sex),
+        bmiZ:
+            GrowthCalculator.calculateBMIZScore(latestBMI, latestAgeWeeks, sex),
+      );
+
+      final generated = await GroqService().generateTextInsight(
+        prompt: prompt,
+        temperature: 0.2,
+        maxOutputTokens: 512,
+      );
+
+      aiAnalysis = generated.trim();
+      await _saveProfileAiResponse(aiAnalysis!, latestRecordId);
+    } catch (e) {
+      aiError = 'AI insight could not be generated right now.';
+      aiAnalysis = null;
+    }
+  }
+
+  Future<void> _saveProfileAiResponse(
+      String responseText, int latestRecordId) async {
+    try {
+      final existing = await Supabase.instance.client
+          .from('ai_responses')
+          .select('ai_response_id')
+          .eq('reference_table', 'child_details')
+          .eq('reference_id', latestRecordId)
+          .eq('response_type', 'growth_analysis')
+          .maybeSingle();
+
+      final values = {
+        'reference_table': 'child_details',
+        'reference_id': latestRecordId,
+        'response_type': 'growth_analysis',
+        'response_category': 'growth',
+        'generated_by_ai': true,
+        'ai_model': 'groq',
+        'status': 'generated',
+        'response': responseText,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (existing != null && existing['ai_response_id'] != null) {
+        await Supabase.instance.client
+            .from('ai_responses')
+            .update(values)
+            .eq('ai_response_id', existing['ai_response_id']);
+      } else {
+        values['created_at'] = DateTime.now().toIso8601String();
+        await Supabase.instance.client.from('ai_responses').insert(values);
+      }
+    } catch (e) {
+      debugPrint('Error saving profile AI response: $e');
+    }
+  }
+
+  String _buildGrowthAiPrompt({
+    required String childName,
+    required String sex,
+    required int ageWeeks,
+    required double height,
+    required double weight,
+    required double bmi,
+    required double heightZ,
+    required double weightZ,
+    required double bmiZ,
+  }) {
+    final recordsSummary = growthRecords.map((record) {
+      final heightVal = (record['child_height'] as num?)?.toDouble() ?? 0;
+      final weightVal = (record['child_weight'] as num?)?.toDouble() ?? 0;
+      final bmiVal = _calculateBMI(heightVal, weightVal);
+      final weeks = _ageInWeeks(DateTime.parse(record['created_at']));
+      return '- Week $weeks: ${heightVal.toStringAsFixed(1)} cm, ${weightVal.toStringAsFixed(1)} kg, BMI ${bmiVal.toStringAsFixed(1)}';
+    }).join('\n');
+
+    return '''
+You are a pediatric growth analyst.
+Provide output in the exact structured format below using markdown headings and bullet points only. Do not add extra sections or narrative.
+
+Child: $childName
+Sex: ${sex.toLowerCase()}
+Current age: $ageWeeks weeks
+
+Latest measurements:
+Height: ${height.toStringAsFixed(1)} cm
+Weight: ${weight.toStringAsFixed(1)} kg
+BMI: ${bmi.toStringAsFixed(1)}
+
+Z-scores:
+Height z-score: ${heightZ.toStringAsFixed(2)}
+Weight z-score: ${weightZ.toStringAsFixed(2)}
+BMI z-score: ${bmiZ.toStringAsFixed(2)}
+
+Growth history:
+$recordsSummary
+
+Output format:
+
+## SUMMARY
+- One clear sentence describing the overall growth status.
+
+## KEY FINDINGS
+- Height: ...
+- Weight: ...
+- BMI: ...
+
+## Z-SCORE REVIEW
+- Height z-score: ...
+- Weight z-score: ...
+- BMI z-score: ...
+
+## TABLE
+| Metric | Current | Status | Note |
+|---|---|---|---|
+| Height | ... | ... | ... |
+| Weight | ... | ... | ... |
+| BMI | ... | ... | ... |
+
+## RECOMMENDATIONS
+- Practical advice for the caregiver or midwife.
+
+Keep language concise, professional, and supportive. Do not provide a medical diagnosis.
+''';
   }
 
   Widget _buildGuardianCard(String parentName, String parentRelationship) {
@@ -1115,97 +1347,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildAICard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.brandPrimary.withValues(alpha: 0.05),
-            AppColors.brandPrimary.withValues(alpha: 0.02),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.brandPrimary.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.psychology_outlined,
-                  color: AppColors.brandPrimary,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'AI Growth Analysis',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Get personalized insights and predictions',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ChildGrowthAIPage(childId: widget.childId),
-                  ),
-                ).then((_) => fetchProfile());
-              },
-              icon: const Icon(Icons.auto_awesome, size: 18),
-              label: const Text('Analyze Growth'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandPrimary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

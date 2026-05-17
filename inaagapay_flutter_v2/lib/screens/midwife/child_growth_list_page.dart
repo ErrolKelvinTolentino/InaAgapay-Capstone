@@ -232,7 +232,8 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
     }).join('\n');
 
     return '''
-You are a friendly pediatric growth coach.
+You are a pediatric growth analyst.
+Provide output in the exact structured format below using markdown headings and bullet points only. Do not add extra sections or narrative.
 
 Child: $childName
 Sex: ${sex.toLowerCase()}
@@ -251,11 +252,32 @@ BMI z-score: ${bmiZ.toStringAsFixed(2)}
 Growth history:
 $recordsSummary
 
-Write a concise, easy-to-read summary of the child's growth status. Include:
-- whether height, weight, and BMI are tracking near expected values for age
-- if any z-score suggests catch-up growth, faltering growth, or healthy growth
-- practical guidance for the caregiver in simple terms
-- do not include medical diagnosis, only supportive growth insight
+Output format:
+
+## SUMMARY
+- One clear sentence describing the overall growth status.
+
+## KEY FINDINGS
+- Height: ...
+- Weight: ...
+- BMI: ...
+
+## Z-SCORE REVIEW
+- Height z-score: ...
+- Weight z-score: ...
+- BMI z-score: ...
+
+## TABLE
+| Metric | Current | Status | Note |
+|---|---|---|---|
+| Height | ... | ... | ... |
+| Weight | ... | ... | ... |
+| BMI | ... | ... | ... |
+
+## RECOMMENDATIONS
+- Practical advice for the caregiver or midwife.
+
+Keep language concise, professional, and supportive. Do not provide a medical diagnosis.
 ''';
   }
 
@@ -563,6 +585,34 @@ Write a concise, easy-to-read summary of the child's growth status. Include:
             insightText:
                 'Weight tracking provides insight into nutritional status.',
           ),
+        if (activeTab == 0 && heightValues.isNotEmpty)
+          ChartCard(
+            title: 'Height History',
+            lineColor: AppColors.brandPrimary,
+            values: heightValues,
+            labels: chartLabels,
+            unit: 'cm',
+            startingLabel: 'First',
+            startingValue: '${heightValues.first.toStringAsFixed(1)} cm',
+            latestLabel: 'Latest',
+            latestValue: '${latestHeight.toStringAsFixed(1)} cm',
+            insightText:
+                'Weekly height measurements showing growth pattern over time.',
+          ),
+        if (activeTab == 1 && weightValues.isNotEmpty)
+          ChartCard(
+            title: 'Weight History',
+            lineColor: AppColors.brandAccent,
+            values: weightValues,
+            labels: chartLabels,
+            unit: 'kg',
+            startingLabel: 'First',
+            startingValue: '${weightValues.first.toStringAsFixed(1)} kg',
+            latestLabel: 'Latest',
+            latestValue: '${latestWeight.toStringAsFixed(1)} kg',
+            insightText:
+                'Weight tracking provides insight into nutritional status.',
+          ),
         if (activeTab == 2 && bmiValues.isNotEmpty)
           ChartCard(
             title: 'BMI History',
@@ -610,7 +660,8 @@ Write a concise, easy-to-read summary of the child's growth status. Include:
                   boxShadow: isActive
                       ? [
                           BoxShadow(
-                            color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                            color:
+                                AppColors.brandPrimary.withValues(alpha: 0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),

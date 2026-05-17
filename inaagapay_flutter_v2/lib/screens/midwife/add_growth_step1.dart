@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_colors.dart';
@@ -33,6 +34,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   final TextEditingController _remarksController = TextEditingController();
 
   Map<String, dynamic>? _childData;
+  Map<String, dynamic>? _previousGrowth;
   bool _loading = true;
   int _ageInWeeks = 0;
   String _gender = '';
@@ -83,6 +85,16 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       }
 
       _gender = childResponse['sex']?.toString().toLowerCase() ?? '';
+
+      final previousGrowthResponse = await Supabase.instance.client
+          .from('child_details')
+          .select('*')
+          .eq('child_id', widget.childId)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      _previousGrowth = previousGrowthResponse;
 
       if (mounted) {
         setState(() {
@@ -243,6 +255,24 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       return;
     }
 
+    final heightRange = _heightRangeForAge();
+    final weightRange = _weightRangeForAge();
+    final heightValid = height >= heightRange.min && height <= heightRange.max;
+    final weightValid = weight >= weightRange.min && weight <= weightRange.max;
+
+    if (!heightValid || !weightValid) {
+      final heightText =
+          'Height should be ${heightRange.min.toStringAsFixed(0)}–${heightRange.max.toStringAsFixed(0)} cm.';
+      final weightText =
+          'Weight should be ${weightRange.min.toStringAsFixed(1)}–${weightRange.max.toStringAsFixed(1)} kg.';
+      setState(() {
+        _isFormValid = false;
+        _validationMessage =
+            'This measurement is outside the typical range for the child\'s age. $heightText $weightText';
+      });
+      return;
+    }
+
     setState(() {
       _isFormValid = true;
       _validationMessage = null;
@@ -328,6 +358,29 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     if (zScore > 3) return '> +3';
     if (zScore < -3) return '< -3';
     return zScore.toStringAsFixed(2);
+  }
+
+  String _formatDate(String date) {
+    try {
+      final parsed = DateTime.parse(date);
+      return DateFormat('MMM d, yyyy').format(parsed);
+    } catch (_) {
+      return date;
+    }
+  }
+
+  _Range _heightRangeForAge() {
+    if (_ageInWeeks < 13) return _Range(40, 70);
+    if (_ageInWeeks < 26) return _Range(45, 80);
+    if (_ageInWeeks < 52) return _Range(50, 90);
+    return _Range(60, 140);
+  }
+
+  _Range _weightRangeForAge() {
+    if (_ageInWeeks < 13) return _Range(2, 6);
+    if (_ageInWeeks < 26) return _Range(2.5, 10);
+    if (_ageInWeeks < 52) return _Range(3, 12);
+    return _Range(4, 35);
   }
 
   @override
@@ -519,6 +572,56 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
                     const SizedBox(height: 16),
 
+                    if (_previousGrowth != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgSecondary,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.borderPrimary),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Previous Growth Record',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Date: ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Height: ${(_previousGrowth!['child_height'] as num?)?.toStringAsFixed(1) ?? 'n/a'} cm',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Weight: ${(_previousGrowth!['child_weight'] as num?)?.toStringAsFixed(1) ?? 'n/a'} kg',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
                     // BMI Display with Real-time Status (calculated in app, NOT saved)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -595,6 +698,55 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                     ),
                     const SizedBox(height: 16),
 
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSecondary,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.borderPrimary),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Measurement Guide',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Enter height in centimeters and weight in kilograms. Use the child\'s current age to choose realistic values.',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Typical range for this child: ${_heightRangeForAge().min.toStringAsFixed(0)}–${_heightRangeForAge().max.toStringAsFixed(0)} cm height, ${_weightRangeForAge().min.toStringAsFixed(1)}–${_weightRangeForAge().max.toStringAsFixed(1)} kg weight.',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'If values look unusual, please double-check the measuring tape and scale before saving.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
                     // Remarks Field (UI only, NOT saved to DB)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -638,4 +790,10 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       ),
     );
   }
+}
+
+class _Range {
+  final double min;
+  final double max;
+  const _Range(this.min, this.max);
 }
