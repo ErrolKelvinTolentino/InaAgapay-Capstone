@@ -3116,6 +3116,10 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                 alignment: Alignment.centerRight,
                 child: FilledButton.tonal(
                   onPressed: _openAddMedicationPlanDialog,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.12),
+                    foregroundColor: AppColors.brandPrimary,
+                  ),
                   child: const Text('+ Add Plan'),
                 ),
               ),
@@ -3167,6 +3171,10 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                 alignment: Alignment.centerRight,
                 child: FilledButton.tonal(
                   onPressed: _openAddGivenMedicationDialog,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.12),
+                    foregroundColor: AppColors.brandPrimary,
+                  ),
                   child: const Text('+ Dispense'),
                 ),
               ),
@@ -3343,9 +3351,9 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: AppColors.info.withAlpha(20),
+            color: AppColors.brandPrimary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.info.withAlpha(80)),
+            border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.3)),
           ),
           child: const Row(
             children: [
