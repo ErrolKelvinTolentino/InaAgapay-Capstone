@@ -117,7 +117,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
             left: 16,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 shape: BoxShape.circle,
               ),
               child: IconButton(
@@ -134,7 +134,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -156,7 +156,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
               top: MediaQuery.of(context).size.height / 2 - 20,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
@@ -179,7 +179,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
               top: MediaQuery.of(context).size.height / 2 - 20,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(

@@ -3715,7 +3715,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                         ChoiceChip(
                           label: const Text('Low'),
                           selected: _editableRiskLevel == 'low',
-                          selectedColor: AppColors.success.withOpacity(0.14),
+                          selectedColor: AppColors.success.withValues(alpha: 0.14),
                           labelStyle:
                               const TextStyle(color: AppColors.textPrimary),
                           onSelected: _isEditingAiAssessment
@@ -3728,7 +3728,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                         ChoiceChip(
                           label: const Text('High'),
                           selected: _editableRiskLevel == 'high',
-                          selectedColor: AppColors.error.withOpacity(0.14),
+                          selectedColor: AppColors.error.withValues(alpha: 0.14),
                           labelStyle:
                               const TextStyle(color: AppColors.textPrimary),
                           onSelected: _isEditingAiAssessment
@@ -3793,12 +3793,12 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                                     : AppColors.textPrimary,
                               ),
                               backgroundColor: isHigh
-                                  ? AppColors.error.withOpacity(0.12)
-                                  : AppColors.success.withOpacity(0.12),
+                                  ? AppColors.error.withValues(alpha: 0.12)
+                                  : AppColors.success.withValues(alpha: 0.12),
                               side: BorderSide(
                                 color: isHigh
-                                    ? AppColors.error.withOpacity(0.35)
-                                    : AppColors.success.withOpacity(0.35),
+                                    ? AppColors.error.withValues(alpha: 0.35)
+                                    : AppColors.success.withValues(alpha: 0.35),
                               ),
                               onPressed: _isEditingAiAssessment
                                   ? () => setState(() {

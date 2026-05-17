@@ -77,8 +77,8 @@ class _VisitRow extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        splashColor: AppColors.brandPrimary.withOpacity(0.08),
-        highlightColor: AppColors.brandPrimary.withOpacity(0.04),
+        splashColor: AppColors.brandPrimary.withValues(alpha: 0.08),
+        highlightColor: AppColors.brandPrimary.withValues(alpha: 0.04),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(

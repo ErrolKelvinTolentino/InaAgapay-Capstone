@@ -58,13 +58,13 @@ class UltrasoundRecordCard extends StatelessWidget {
     final location = ultrasound['ultrasound_location']?.toString();
 
     return _RecordCardShell(
-      accentColor: Colors.purple,
+      accentColor: AppColors.brandAccent,
       icon: Icons.monitor_heart_outlined,
       title: 'Ultrasound',
       subtitle: date,
       badges: [
         if (location != null && location.isNotEmpty)
-          _Badge(label: location, color: Colors.purple),
+          _Badge(label: location, color: AppColors.brandAccent),
       ],
       onTap: onTap,
     );
@@ -89,7 +89,7 @@ class LabTestRecordCard extends StatelessWidget {
     final type = labTest['lab_test_type']?.toString() ?? 'Lab Test';
 
     return _RecordCardShell(
-      accentColor: Colors.orange,
+      accentColor: AppColors.warning,
       icon: Icons.science_outlined,
       title: type,
       subtitle: date,

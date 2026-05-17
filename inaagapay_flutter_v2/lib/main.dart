@@ -1,9 +1,11 @@
-﻿// lib/main.dart
+// lib/main.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'theme/app_theme.dart';
+import 'theme/app_colors.dart';
 import 'services/auth_storage.dart';
 import 'services/supabase_service.dart';
 import 'screens/auth/login.dart';
@@ -183,16 +185,10 @@ class InaagapayApp extends StatelessWidget {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Inaagapay',
-          theme: ThemeData(
-            primaryColor: const Color(0xFFFF68A5),
-            colorScheme: ColorScheme.fromSwatch().copyWith(
-              primary: const Color(0xFFFF68A5),
-              secondary: const Color(0xFFE6398D),
-            ),
-            fontFamily: 'Poppins',
+          theme: AppTheme.lightTheme.copyWith(
             appBarTheme: const AppBarTheme(elevation: 0, centerTitle: true),
             bottomNavigationBarTheme: BottomNavigationBarThemeData(
-              selectedItemColor: const Color(0xFFFF68A5),
+              selectedItemColor: AppColors.brandPrimary,
               unselectedItemColor: Colors.grey.shade600,
               type: BottomNavigationBarType.fixed,
               backgroundColor: Colors.white,

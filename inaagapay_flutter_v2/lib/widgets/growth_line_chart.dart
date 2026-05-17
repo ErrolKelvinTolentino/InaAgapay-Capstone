@@ -31,14 +31,14 @@ class GrowthLineChart extends StatelessWidget {
   getDrawingHorizontalLine: (value) {
     return FlLine(
       strokeWidth: 1,
-      color: Colors.grey.withOpacity(0.2),
+      color: Colors.grey.withValues(alpha: 0.2),
       dashArray: [5, 5],
     );
   },
   getDrawingVerticalLine: (value) {
     return FlLine(
       strokeWidth: 1,
-      color: Colors.grey.withOpacity(0.2),
+      color: Colors.grey.withValues(alpha: 0.2),
       dashArray: [5, 5],
     );
   },
@@ -94,7 +94,7 @@ class GrowthLineChart extends StatelessWidget {
               dotData: const FlDotData(show: true),
               belowBarData: BarAreaData(
                 show: true,
-                color: lineColor.withOpacity(0.15),
+                color: lineColor.withValues(alpha: 0.15),
               ),
             ),
           ],

@@ -450,13 +450,13 @@ Write a concise, easy-to-read summary of the child's growth status. Include:
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.brandPrimary.withOpacity(0.1),
+                color: AppColors.brandPrimary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.child_care,
                 size: 64,
-                color: AppColors.brandPrimary.withOpacity(0.6),
+                color: AppColors.brandPrimary.withValues(alpha: 0.6),
               ),
             ),
             const SizedBox(height: 24),
@@ -610,7 +610,7 @@ Write a concise, easy-to-read summary of the child's growth status. Include:
                   boxShadow: isActive
                       ? [
                           BoxShadow(
-                            color: AppColors.brandPrimary.withOpacity(0.3),
+                            color: AppColors.brandPrimary.withValues(alpha: 0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -659,7 +659,7 @@ Write a concise, easy-to-read summary of the child's growth status. Include:
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.08),
+              color: color.withValues(alpha: 0.08),
               blurRadius: 20,
               offset: const Offset(0, 4),
             ),
@@ -673,7 +673,7 @@ Write a concise, easy-to-read summary of the child's growth status. Include:
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: color, size: 20),
@@ -712,7 +712,7 @@ Write a concise, easy-to-read summary of the child's growth status. Include:
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: zScoreColor.withOpacity(0.1),
+                      color: zScoreColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -767,7 +767,7 @@ Write a concise, easy-to-read summary of the child's growth status. Include:
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.brandPrimary.withOpacity(0.1),
+                color: AppColors.brandPrimary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -843,13 +843,13 @@ class GrowthRecordCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: isLatest
             ? Border.all(
-                color: AppColors.brandPrimary.withOpacity(0.3),
+                color: AppColors.brandPrimary.withValues(alpha: 0.3),
                 width: 1.5,
               )
             : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -891,7 +891,7 @@ class GrowthRecordCard extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.brandPrimary.withOpacity(0.1),
+                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -941,10 +941,10 @@ class GrowthRecordCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: color.withOpacity(0.15),
+          color: color.withValues(alpha: 0.15),
           width: 1,
         ),
       ),

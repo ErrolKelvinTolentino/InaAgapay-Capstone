@@ -54,7 +54,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'May 15, 2026',
               '24 weeks',
               'Normal',
-              Colors.green,
+              AppColors.success,
             ),
             const SizedBox(height: 10),
             _buildUltrasoundRecord(
@@ -62,7 +62,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'May 10, 2026',
               '32 weeks',
               'Requires Monitoring',
-              Colors.orange,
+              AppColors.warning,
             ),
             const SizedBox(height: 10),
             _buildUltrasoundRecord(
@@ -70,7 +70,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'May 5, 2026',
               '16 weeks',
               'Normal',
-              Colors.green,
+              AppColors.success,
             ),
             const SizedBox(height: 30),
             _buildSectionHeader('Recent Lab Test Records', Icons.science),
@@ -80,7 +80,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'CBC',
               'May 14, 2026',
               'All Normal',
-              Colors.green,
+              AppColors.success,
             ),
             const SizedBox(height: 10),
             _buildLabTestRecord(
@@ -88,7 +88,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'Blood Glucose',
               'May 12, 2026',
               'Borderline',
-              Colors.orange,
+              AppColors.warning,
             ),
             const SizedBox(height: 10),
             _buildLabTestRecord(
@@ -96,7 +96,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'Urinalysis',
               'May 8, 2026',
               'Normal',
-              Colors.green,
+              AppColors.success,
             ),
             const SizedBox(height: 30),
             _buildSectionHeader('Pending Reviews', Icons.pending_actions),
@@ -104,20 +104,20 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
+                      color: AppColors.warning.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.warning,
-                        color: Colors.orange.shade700, size: 20),
+                        color: AppColors.warning, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -186,10 +186,10 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.purple.shade50,
+              color: AppColors.brandAccent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.photo, color: Colors.purple),
+            child: Icon(Icons.photo, color: AppColors.brandAccent),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -262,10 +262,10 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.orange.shade50,
+              color: AppColors.warning.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.science, color: Colors.orange),
+            child: Icon(Icons.science, color: AppColors.warning),
           ),
           const SizedBox(width: 16),
           Expanded(

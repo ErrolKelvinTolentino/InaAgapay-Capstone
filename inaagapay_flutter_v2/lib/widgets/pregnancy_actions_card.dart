@@ -50,7 +50,7 @@ class PregnancyActionsCard extends StatelessWidget {
                 child: _ActionBtn(
                     label: 'Ultrasound',
                     icon: Icons.monitor_heart_outlined,
-                    color: Colors.purple,
+                    color: AppColors.brandAccent,
                     onTap: onUltrasound)),
           ]),
           const SizedBox(height: 8),
@@ -59,7 +59,7 @@ class PregnancyActionsCard extends StatelessWidget {
                 child: _ActionBtn(
                     label: 'Lab Test',
                     icon: Icons.science_outlined,
-                    color: Colors.orange,
+                    color: AppColors.warning,
                     onTap: onLabTest)),
             const SizedBox(width: 8),
             Expanded(
