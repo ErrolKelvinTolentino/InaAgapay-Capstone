@@ -7,8 +7,6 @@ import '../../widgets/secondary_header.dart';
 import '../../widgets/hero_card.dart';
 import '../../widgets/records_display_card.dart';
 import '../../widgets/status_indicator.dart';
-import '../../widgets/main_button.dart';
-import '../../widgets/important_button.dart';
 import 'add_growth_step1.dart';
 import 'add_immunization_page.dart';
 import 'child_growth_list_page.dart';
@@ -453,7 +451,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             children: [
-              // Child Hero Card with enhanced UI
+              // ── Hero Card ──────────────────────────────────────
               HeroCard(
                 image: null,
                 title: fullName.isNotEmpty ? fullName : 'Unnamed Child',
@@ -464,16 +462,17 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
 
               const SizedBox(height: 20),
 
-              // Quick Stats Row
+              // ── Quick Stats ────────────────────────────────────
               _buildQuickStatsRow(displayHeight, displayWeight),
+
               const SizedBox(height: 24),
 
-              // Parent/Guardian Card
+              // ── Parent / Guardian ──────────────────────────────
               _buildGuardianCard(parentName, parentRelationship),
 
               const SizedBox(height: 16),
 
-              // Birth Details Card
+              // ── Birth Details ──────────────────────────────────
               RecordsDisplayCard(
                 title: 'Birth Details',
                 headerIcon: Icons.cake_outlined,
@@ -496,6 +495,13 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                         : 'Not recorded',
                   ),
                   RecordItem(
+                    leadingIcon: Icons.monitor_weight_outlined,
+                    label: 'Birth Weight',
+                    value: birthData?['birth_weight'] != null
+                        ? '${birthData!['birth_weight']} kg'
+                        : 'Not recorded',
+                  ),
+                  RecordItem(
                     leadingIcon: Icons.circle_outlined,
                     label: 'Head Circumference',
                     value: birthData?['head_circumference'] != null
@@ -505,9 +511,9 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                 ],
               ),
 
-              const SizedBox(height: 16),
+              _buildSectionDivider(),
 
-              // Growth & Development Section
+              // ── Growth & Development ──────────────────────────
               _buildSectionHeader(
                 title: 'Growth & Development',
                 icon: Icons.trending_up,
@@ -523,19 +529,15 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
               ),
               const SizedBox(height: 12),
 
-              // Growth Cards
               _buildGrowthCards(displayHeight, displayWeight),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               _buildBMICard(latestBMI, bmiStatus),
-
-              const SizedBox(height: 20),
-
-              // AI Analysis Card
+              const SizedBox(height: 16),
               _buildAICard(),
 
-              const SizedBox(height: 24),
+              _buildSectionDivider(),
 
-              // Immunization Section
+              // ── Immunization ───────────────────────────────────
               _buildSectionHeader(
                 title: 'Immunization',
                 icon: Icons.vaccines_outlined,
@@ -551,7 +553,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
               ),
               const SizedBox(height: 12),
 
-              // Recent Immunizations
               RecordsDisplayCard(
                 title: 'Recent Immunizations',
                 headerIcon: Icons.vaccines_outlined,
@@ -771,7 +772,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isAvailable ? bmi!.toStringAsFixed(1) : 'No data',
+                      isAvailable ? bmi.toStringAsFixed(1) : 'No data',
                       style: TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.w800,
@@ -794,7 +795,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: _bmiStatusColor(status).withOpacity(0.14),
+                    color: _bmiStatusColor(status).withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
@@ -987,6 +988,22 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSectionDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 1,
+              color: AppColors.borderPrimary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
