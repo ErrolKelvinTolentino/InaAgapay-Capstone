@@ -469,8 +469,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
             birthdate,
             height,
             weight,
-            blood_type,
-            accounts!inner(first_name, last_name)
+            blood_type
           ''').eq('mother_id', widget.motherId).maybeSingle();
 
       final pregnancy = await client.from('pregnancies').select('''
@@ -479,6 +478,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
             pregnancy_risk_level,
             last_menstrual_period,
             expected_date_of_delivery,
+            pre_pregnancy_weight,
             created_at
           ''').eq('pregnancy_id', widget.pregnancyId).maybeSingle();
 
@@ -497,7 +497,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       final pastPregnancies = await client
           .from('pregnancies')
           .select(
-              'pregnancy_id, fetal_count, outcome, outcome_date, gestational_age_at_end, status, created_at')
+              'pregnancy_id, fetal_count, gestational_age_at_end, status, created_at')
           .eq('mother_id', widget.motherId)
           .neq('pregnancy_id', widget.pregnancyId)
           .order('created_at', ascending: false);
@@ -517,9 +517,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
                 outcome,
                 outcome_date,
                 is_outcome_date_estimated,
-                gestational_age_at_end,
-                place_of_delivery,
-                delivery_method
+                gestational_age_at_end
               ''')
               .inFilter('pregnancy_id', pastPregnancyIds)
               .order('outcome_date', ascending: false);
@@ -557,7 +555,8 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           'previous_checkups': previousCheckups,
         };
       });
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('Error loading mother risk context: $e\n$st');
       // Risk preview should still work with form-only data.
     }
   }
@@ -1001,6 +1000,42 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
             '- ${s.name} [${s.riskCategory}]${(s.notes ?? '').trim().isEmpty ? '' : ' | note: ${s.notes!.trim()}'}')
         .toList();
 
+    // Calculate Maternal Age
+    final maternalAge = _ageFromBirthdate(_tryDate(mother?['birthdate']));
+
+    // Calculate Weight Gain Evaluation inline
+    WeightGainResult? wgResult;
+    try {
+      final currentWeight = double.tryParse(_weightCtrl.text.trim());
+      if (currentWeight != null && _aogWeeks != null && _aogWeeks! > 0) {
+        final heightCm = mother?['height'] != null ? double.tryParse(mother!['height'].toString()) : null;
+        final prePregnancyWeight = pregnancy?['pre_pregnancy_weight'] != null ? double.tryParse(pregnancy!['pre_pregnancy_weight'].toString()) : null;
+        final motherWeight = mother?['weight'] != null ? double.tryParse(mother!['weight'].toString()) : null;
+        final baselineWeight = prePregnancyWeight ?? motherWeight;
+        
+        final checkupList = previousCheckups.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        
+        // Ensure the current checkup is part of the longitudinal history so the engine can calculate trends properly.
+        checkupList.add({
+           'checkup_datetime': _checkupDateTime.toIso8601String(),
+           'age_of_gestation': _aogWeeks,
+           'checkup_weight': currentWeight,
+        });
+        checkupList.sort((a, b) => DateTime.parse(a['checkup_datetime']).compareTo(DateTime.parse(b['checkup_datetime'])));
+        
+        wgResult = WeightGainEngine.evaluate(
+          currentWeight: currentWeight,
+          aogWeeks: _aogWeeks!,
+          allCheckups: checkupList,
+          prePregnancyWeight: baselineWeight,
+          heightCm: heightCm,
+          fetalCount: _fetalCount,
+        );
+      }
+    } catch (_) {
+      // ignore
+    }
+
     return '''You are assisting a barangay midwife in the Philippines with prenatal care.
 
 CRITICAL INSTRUCTION: Write a concise prenatal risk analysis as PLAIN TEXT ONLY.
@@ -1016,9 +1051,10 @@ Never invent data.
 PATIENT CONTEXT
 - Mother ID: ${widget.motherId}
 - Pregnancy ID: ${widget.pregnancyId}
+- Maternal age: ${maternalAge ?? 'unknown'} years
 - Maternal birthdate: ${mother?['birthdate'] ?? 'unknown'}
 - Maternal height: ${mother?['height'] ?? 'unknown'} cm
-- Maternal weight baseline: ${mother?['weight'] ?? 'unknown'} kg
+- Pre-pregnancy weight (or baseline): ${pregnancy?['pre_pregnancy_weight'] ?? mother?['weight'] ?? 'unknown'} kg
 - Blood type: ${mother?['blood_type'] ?? 'unknown'}
 - Current pregnancy fetal count: $_fetalCount
 - Active medical conditions:
@@ -1029,8 +1065,8 @@ ${activeAllergyLines.isEmpty ? '- none recorded' : activeAllergyLines.join('\n')
 ${pastPregnancyLines.isEmpty ? '- none recorded' : pastPregnancyLines.join('\n')}
 - Previous prenatal checkups:
 ${previousCheckupLines.isEmpty ? '- none recorded' : previousCheckupLines.join('\n')}
-- LMP: ${pregnancy?['last_menstrual_period'] ?? widget.lmp?.toIso8601String().split('T')[0] ?? 'unknown'}
-- EDD: ${pregnancy?['expected_date_of_delivery'] ?? 'unknown'}
+- LMP: ${_formatDate(_effectiveLmp(pregnancy))}
+- EDD: ${_formatDate(_effectiveEdd(pregnancy))}
 - Age of gestation: ${_aogWeeks?.toStringAsFixed(1) ?? 'unknown'} weeks
 - Planned follow-up date: ${_nextSchedule != null ? DateFormat('yyyy-MM-dd').format(_nextSchedule!) : 'none'}
 
@@ -1038,6 +1074,7 @@ CURRENT CHECKUP DRAFT
 - Checkup datetime: ${_checkupDateTime.toIso8601String()}
 - Current pregnancy fetal count: $_fetalCount
 - Weight: ${_weightCtrl.text.trim()} kg
+- Weight Gain Engine Assessment: ${wgResult != null ? '${wgResult.status.name.toUpperCase()} - ${wgResult.message}' : 'Not evaluated'}
 - Blood pressure: ${_sysCtrl.text.trim()}/${_diaCtrl.text.trim()} mmHg
 - Fetal heart beat: ${_fetalBeatCtrl.text.trim().isEmpty ? 'not recorded' : '${_fetalBeatCtrl.text.trim()} bpm'}
 - Fetal position: ${_fetalPosition ?? 'not recorded'}
@@ -1165,10 +1202,30 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         .toList();
   }
 
+  DateTime? _effectiveLmp([Map<String, dynamic>? pregnancy]) {
+    final lmpFromPregnancy = _tryDate(pregnancy?['last_menstrual_period']);
+    return lmpFromPregnancy ??
+        widget.lmp ??
+        _tryDate((_motherRiskContext?['pregnancy']
+            as Map<String, dynamic>?)?['last_menstrual_period']);
+  }
+
+  DateTime? _effectiveEdd([Map<String, dynamic>? pregnancy]) {
+    final eddFromPregnancy = _tryDate(pregnancy?['expected_date_of_delivery']);
+    if (eddFromPregnancy != null) return eddFromPregnancy;
+    final lmp = _effectiveLmp(pregnancy);
+    return lmp?.add(const Duration(days: 280));
+  }
+
+  String _formatDate(DateTime? date) {
+    return date == null ? 'unknown' : DateFormat('yyyy-MM-dd').format(date);
+  }
+
   double? get _aogWeeks {
-    if (widget.lmp == null) return null;
+    final lmp = _effectiveLmp();
+    if (lmp == null) return null;
     final days = _normalizedDate(_checkupDateTime)
-        .difference(_normalizedDate(widget.lmp!))
+        .difference(_normalizedDate(lmp))
         .inDays;
     if (days < 0) return null;
     return double.parse((days / 7).toStringAsFixed(1));
@@ -2253,7 +2310,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       // Guard: skip if gestational age is unknown
       final aog = _aogWeeks;
       if (aog == null || aog <= 0) {
-        debugPrint('Weight gain evaluation skipped: gestational age unavailable.');
+        debugPrint(
+            'Weight gain evaluation skipped: gestational age unavailable.');
         return;
       }
 
@@ -3220,7 +3278,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                 child: FilledButton.tonal(
                   onPressed: _openAddMedicationPlanDialog,
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.12),
+                    backgroundColor:
+                        AppColors.brandPrimary.withValues(alpha: 0.12),
                     foregroundColor: AppColors.brandPrimary,
                   ),
                   child: const Text('+ Add Plan'),
@@ -3275,7 +3334,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                 child: FilledButton.tonal(
                   onPressed: _openAddGivenMedicationDialog,
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.12),
+                    backgroundColor:
+                        AppColors.brandPrimary.withValues(alpha: 0.12),
                     foregroundColor: AppColors.brandPrimary,
                   ),
                   child: const Text('+ Dispense'),
@@ -3456,7 +3516,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
           decoration: BoxDecoration(
             color: AppColors.brandPrimary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.3)),
+            border: Border.all(
+                color: AppColors.brandPrimary.withValues(alpha: 0.3)),
           ),
           child: const Row(
             children: [
@@ -3818,7 +3879,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                         ChoiceChip(
                           label: const Text('Low'),
                           selected: _editableRiskLevel == 'low',
-                          selectedColor: AppColors.success.withValues(alpha: 0.14),
+                          selectedColor:
+                              AppColors.success.withValues(alpha: 0.14),
                           labelStyle:
                               const TextStyle(color: AppColors.textPrimary),
                           onSelected: _isEditingAiAssessment
@@ -3831,7 +3893,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                         ChoiceChip(
                           label: const Text('High'),
                           selected: _editableRiskLevel == 'high',
-                          selectedColor: AppColors.error.withValues(alpha: 0.14),
+                          selectedColor:
+                              AppColors.error.withValues(alpha: 0.14),
                           labelStyle:
                               const TextStyle(color: AppColors.textPrimary),
                           onSelected: _isEditingAiAssessment
