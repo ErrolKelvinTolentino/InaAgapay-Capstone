@@ -18,6 +18,7 @@ class AppInputField extends StatefulWidget {
   final bool readOnly;
   final List<TextInputFormatter>? inputFormatters;
   final String? errorText;
+  final FocusNode? focusNode;
 
   const AppInputField({
     super.key,
@@ -34,6 +35,7 @@ class AppInputField extends StatefulWidget {
     this.readOnly = false,
     this.inputFormatters,
     this.errorText,
+    this.focusNode,
   });
 
   @override
@@ -93,6 +95,7 @@ class _AppInputFieldState extends State<AppInputField> {
                   Expanded(
                     child: TextField(
                       controller: widget.controller,
+                      focusNode: widget.focusNode,
                       obscureText: widget.obscureText,
                       keyboardType: widget.keyboardType,
                       readOnly: widget.readOnly,

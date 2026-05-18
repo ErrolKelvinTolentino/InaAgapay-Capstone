@@ -1046,7 +1046,8 @@ class SupabaseService {
   static Future<Map<String, dynamic>> addMotherFullByMidwifeWithAutoPassword({
     required int midwifeId,
     required int assignedBhcId,
-    required String email,
+    String? email,
+
     required String firstName,
     String? middleName,
     required String lastName,
@@ -1070,9 +1071,11 @@ class SupabaseService {
     int fetalCount = 1,
   }) async {
     try {
-      final emailFree = await isEmailAvailable(email);
-      if (!emailFree) {
-        return {'success': false, 'message': 'This email is already in use.'};
+      if (email != null && email.isNotEmpty) {
+        final emailFree = await isEmailAvailable(email);
+        if (!emailFree) {
+          return {'success': false, 'message': 'This email is already in use.'};
+        }
       }
 
       final generatedPassword = _generateSecurePassword();
@@ -1081,7 +1084,7 @@ class SupabaseService {
       final accountRow = await client
           .from('accounts')
           .insert({
-            'email_address': email,
+            'email_address': email?.isEmpty == true ? null : email,
             'password_hash': hashedPassword,
             'account_type': 'mother',
             'first_name': firstName,
@@ -1215,12 +1218,15 @@ class SupabaseService {
         }
       }
 
-      final emailSent = await EmailService.sendAccountCredentials(
-        email: email,
-        password: generatedPassword,
-        firstName: firstName,
-        lastName: lastName,
-      );
+      bool emailSent = false;
+      if (email != null && email.isNotEmpty) {
+        emailSent = await EmailService.sendAccountCredentials(
+          email: email,
+          password: generatedPassword,
+          firstName: firstName,
+          lastName: lastName,
+        );
+      }
 
       return {
         'success': true,
@@ -1229,9 +1235,11 @@ class SupabaseService {
         'account_id': accountId,
         'generated_password': generatedPassword,
         'email_sent': emailSent,
-        'message': emailSent
-            ? 'Mother account created. Credentials sent to $email'
-            : 'Mother account created but email failed to send. Please provide the password manually.',
+        'message': (email != null && email.isNotEmpty)
+            ? (emailSent
+                ? 'Mother account created. Credentials sent to $email'
+                : 'Mother account created but email failed to send. Please provide the password manually.')
+            : 'Mother account created successfully. Please provide the password manually.',
       };
     } catch (e) {
       if (kDebugMode) debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');

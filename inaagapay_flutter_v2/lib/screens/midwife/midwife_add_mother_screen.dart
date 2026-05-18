@@ -9,10 +9,12 @@ import '../../models/ocr_result.dart';
 import '../../services/auth_storage.dart';
 import '../../services/groq_service.dart';
 import '../../services/supabase_service.dart';
+import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/progressive_step_indicator.dart';
 import '../../widgets/dialog_box.dart';
+import '../../widgets/secondary_header.dart';
 import 'add_prenatal_checkup_screen.dart';
 
 enum _GestationMethod { lmp, edd, aog }
@@ -212,8 +214,20 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   String? _cityError;
   String? _provinceError;
 
+  final FocusNode _provinceFocus = FocusNode();
+  final FocusNode _cityFocus = FocusNode();
+  final FocusNode _barangayFocus = FocusNode();
+
   static const List<String> _bhcBarangays = ['Sta Barbara', 'Tarcan', 'San Jose', 'Tiaong', 'Pinagbarilan'];
 
+  List<Map<String, dynamic>> _provinces = [];
+  List<Map<String, dynamic>> _cities = [];
+  List<Map<String, dynamic>> _barangays = [];
+  
+  String? _selectedProvinceCode;
+  String? _selectedCityCode;
+  String? _selectedBarangayCode;
+  bool _loadingLocation = false;
   // Step 2: Emergency Contacts
   final List<_EmergencyContact> _emergencyContacts = [];
 
@@ -255,9 +269,46 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   void initState() {
     super.initState();
     _loadContext();
+    _loadProvinces();
     _phoneCtrl.addListener(_onPhoneChanged);
     _heightCtrl.addListener(_validateHeightWeight);
     _weightCtrl.addListener(_validateHeightWeight);
+  }
+
+  Future<void> _loadProvinces() async {
+    setState(() => _loadingLocation = true);
+    _provinces = await LocationService.fetchProvinces();
+    _provinces.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    if (mounted) setState(() => _loadingLocation = false);
+  }
+
+  Future<void> _loadCities(String provinceCode) async {
+    setState(() {
+      _loadingLocation = true;
+      _selectedCityCode = null;
+      _selectedBarangayCode = null;
+      _selectedBarangay = null;
+      _cities = [];
+      _barangays = [];
+      _cityCtrl.clear();
+      _barangayCtrl.clear();
+    });
+    _cities = await LocationService.fetchCitiesMunicipalities(provinceCode);
+    _cities.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    if (mounted) setState(() => _loadingLocation = false);
+  }
+
+  Future<void> _loadBarangays(String cityCode) async {
+    setState(() {
+      _loadingLocation = true;
+      _selectedBarangayCode = null;
+      _selectedBarangay = null;
+      _barangays = [];
+      _barangayCtrl.clear();
+    });
+    _barangays = await LocationService.fetchBarangays(cityCode);
+    _barangays.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    if (mounted) setState(() => _loadingLocation = false);
   }
 
   @override
@@ -268,6 +319,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       _houseCtrl, _streetCtrl, _barangayCtrl, _cityCtrl, _provinceCtrl, _heightCtrl, _weightCtrl,
       _lmpCtrl, _eddCtrl, _aogWeeksCtrl, _aogDaysCtrl, _fetalCountCtrl]) {
       c.dispose();
+    }
+    for (final f in [_provinceFocus, _cityFocus, _barangayFocus]) {
+      f.dispose();
     }
     super.dispose();
   }
@@ -341,14 +395,34 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final age = (DateTime.now().difference(_birthdate!).inDays / 365.25).floor();
     _calculatedAge = age;
     
-    setState(() => _birthdateError = (age < 10 || age > 50) ? 'Maternal age ($age years) must be between 10 and 50' : null);
+    setState(() => _birthdateError = (age < 5) ? 'Maternal age ($age years) is too low' : null);
 
-    if (age < 18) {
-      setState(() => _riskWarning = '⚠️ High-risk: Adolescent pregnancy (under 18). Close monitoring required.');
-    } else if (age > 35) {
-      setState(() => _riskWarning = '⚠️ High-risk: Advanced maternal age (over 35). Regular checkups recommended.');
+    if (age >= 5 && age <= 14) {
+      setState(() => _riskWarning = 'Entered maternal age is outside typical reproductive ranges. Please verify the information.');
+    } else if (age >= 15 && age <= 19) {
+      setState(() => _riskWarning = 'High-Risk Adolescent Pregnancy');
+    } else if (age >= 20 && age <= 34) {
+      setState(() => _riskWarning = null);
+    } else if (age >= 35 && age <= 60) {
+      setState(() => _riskWarning = 'High-Risk Advanced Maternal Age Pregnancy');
+    } else if (age > 60) {
+      setState(() => _riskWarning = 'Entered maternal age is outside supported maternal monitoring ranges. Please verify the information.');
     } else {
       setState(() => _riskWarning = null);
+    }
+    
+    if (age < 13) {
+      setState(() {
+        _emailCtrl.clear();
+        _emailError = null;
+        _existingAccountId = null;
+        _existingMotherId = null;
+        _isUpdatingExisting = false;
+        _isEmailReadOnly = false;
+        _isExistingSelfRegistered = false;
+        _emailChecking = false;
+        _emailTimer?.cancel();
+      });
     }
   }
 
@@ -616,8 +690,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         setState(() {
           _firstNameError = firstNameEmpty ? 'First name is required' : null;
           _lastNameError = lastNameEmpty ? 'Last name is required' : null;
+          _phoneError = phoneEmpty ? 'Phone number is required' : null;
+          if (birthdateEmpty) _birthdateError = 'Birthdate is required';
         });
-        return !firstNameEmpty && !lastNameEmpty && !phoneEmpty && !emailEmpty && !birthdateEmpty && _birthdateError == null;
+        return !firstNameEmpty && !lastNameEmpty && !phoneEmpty && !birthdateEmpty && _birthdateError == null && _emailError == null;
         
       case 1:
         final houseEmpty = _houseCtrl.text.trim().isEmpty;
@@ -647,6 +723,27 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         if (_gestationError != null) return false;
         return true;
         
+      default:
+        return true;
+    }
+  }
+
+  bool _isStepValid(int step) {
+    switch (step) {
+      case 0:
+        final normalizedPhone = _phoneCtrl.text.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+        final isPhoneValid = RegExp(r'^(\+?63|0)9\d{9}$').hasMatch(normalizedPhone);
+        return _firstNameCtrl.text.trim().isNotEmpty && _lastNameCtrl.text.trim().isNotEmpty && isPhoneValid && _birthdate != null && _birthdateError == null && _emailError == null;
+      case 1:
+        return _houseCtrl.text.trim().isNotEmpty && _streetCtrl.text.trim().isNotEmpty && (_addressSameAsBhc || ((_selectedBarangay ?? '').isNotEmpty && _cityCtrl.text.trim().isNotEmpty && _provinceCtrl.text.trim().isNotEmpty));
+      case 3:
+        return double.tryParse(_heightCtrl.text.trim()) != null && double.tryParse(_weightCtrl.text.trim()) != null;
+      case 7:
+        if (_gestationMethod == _GestationMethod.lmp && _lmp == null) return false;
+        if (_gestationMethod == _GestationMethod.edd && _edd == null) return false;
+        if (_gestationMethod == _GestationMethod.aog && _aogWeeksCtrl.text.trim().isEmpty && _aogDaysCtrl.text.trim().isEmpty) return false;
+        if (_gestationError != null) return false;
+        return true;
       default:
         return true;
     }
@@ -811,42 +908,90 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final firstNameCtrl = TextEditingController();
     final lastNameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
+    final otherRelCtrl = TextEditingController();
     String? relationship;
+    final relCtrl = TextEditingController();
+    final relFocus = FocusNode();
+    String? phoneError;
 
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Add Emergency Contact'),
+        builder: (ctx, setS) {
+          final normalizedPhone = phoneCtrl.text.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+          final isPhoneValid = RegExp(r'^(\+?63|0)9\d{9}$').hasMatch(normalizedPhone);
+          final isValid = firstNameCtrl.text.trim().isNotEmpty && lastNameCtrl.text.trim().isNotEmpty && isPhoneValid && relationship != null && (relationship != 'Other' || otherRelCtrl.text.trim().isNotEmpty);
+
+          return AlertDialog(
+            backgroundColor: AppColors.bgPrimary,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Add Emergency Contact', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18, color: AppColors.textPrimary)),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: firstNameCtrl, decoration: const InputDecoration(labelText: 'First Name *', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                TextField(controller: lastNameCtrl, decoration: const InputDecoration(labelText: 'Last Name *', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone Number *', border: OutlineInputBorder()), keyboardType: TextInputType.phone),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  hint: const Text('Relationship *'),
-                  items: _relationshipOptions.map((rel) => DropdownMenuItem(value: rel, child: Text(rel))).toList(),
-                  onChanged: (value) => setS(() => relationship = value),
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                ),
-              ],
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppInputField(hintText: 'First Name', controller: firstNameCtrl, isRequired: true, onChanged: (v) => setS(() {})),
+                  const SizedBox(height: 12),
+                  AppInputField(hintText: 'Last Name', controller: lastNameCtrl, isRequired: true, onChanged: (v) => setS(() {})),
+                  const SizedBox(height: 12),
+                  AppInputField(
+                    hintText: 'Phone Number',
+                    controller: phoneCtrl,
+                    isRequired: true,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    errorText: phoneError,
+                    onChanged: (v) {
+                      final normalized = v.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+                      final valid = RegExp(r'^(\+?63|0)9\d{9}$').hasMatch(normalized);
+                      setS(() => phoneError = v.trim().isEmpty ? null : (valid ? null : 'Enter a valid PH number'));
+                    }
+                  ),
+                  const SizedBox(height: 12),
+                  _searchableDropdown(
+                    hint: 'Relationship',
+                    controller: relCtrl,
+                    focusNode: relFocus,
+                    items: _relationshipOptions.map((e) => {'code': e, 'name': e}).toList(),
+                    icon: Icons.people_outline_rounded,
+                    onChanged: (value) => setS(() => relationship = value),
+                  ),
+                  if (relationship == 'Other') ...[
+                    const SizedBox(height: 12),
+                    AppInputField(
+                      hintText: 'Others - Specify',
+                      controller: otherRelCtrl,
+                      isRequired: true,
+                      onChanged: (v) => setS(() {}),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary))),
             ElevatedButton(
-              onPressed: () => firstNameCtrl.text.trim().isNotEmpty && lastNameCtrl.text.trim().isNotEmpty && phoneCtrl.text.trim().isNotEmpty && relationship != null ? Navigator.pop(ctx, true) : null,
+              onPressed: isValid ? () => Navigator.pop(ctx, true) : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary, 
+                foregroundColor: Colors.white, 
+                elevation: 0, 
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                disabledBackgroundColor: AppColors.borderPrimary,
+                disabledForegroundColor: AppColors.textSecondary,
+              ),
               child: const Text('Add'),
             ),
           ],
-        ),
-      ),
+        );
+      },
+    ),
     );
 
     if (result == true) {
@@ -855,7 +1000,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ..firstName = firstNameCtrl.text.trim()
           ..lastName = lastNameCtrl.text.trim()
           ..phoneNumber = phoneCtrl.text.trim()
-          ..relationship = relationship);
+          ..relationship = relationship == 'Other' ? otherRelCtrl.text.trim() : relationship!);
       });
     }
   }
@@ -975,7 +1120,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () async {
-                    final picked = await showDatePicker(context: ctx, initialDate: diagDate ?? DateTime.now(), firstDate: DateTime(1900), lastDate: DateTime.now());
+                    final picked = await _showCustomDatePicker(ctx: ctx, initialDate: diagDate ?? DateTime.now(), firstDate: DateTime(1900), lastDate: DateTime.now());
                     if (picked != null) setS(() => diagDate = picked);
                   },
                   child: Container(
@@ -1093,7 +1238,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     const SizedBox(height: 8),
                     GestureDetector(
                       onTap: () async {
-                        final picked = await showDatePicker(context: ctx, initialDate: outcomeDates[i] ?? DateTime.now(), firstDate: DateTime(1900), lastDate: DateTime.now());
+                        final picked = await _showCustomDatePicker(ctx: ctx, initialDate: outcomeDates[i] ?? DateTime.now(), firstDate: DateTime(1900), lastDate: DateTime.now());
                         if (picked != null) setS(() => outcomeDates[i] = picked);
                       },
                       child: Container(
@@ -1684,6 +1829,98 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     );
   }
 
+  Future<DateTime?> _showCustomDatePicker({BuildContext? ctx, required DateTime initialDate, required DateTime firstDate, required DateTime lastDate}) {
+    return showDatePicker(
+      context: ctx ?? context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.brandPrimary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.textPrimary,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: AppColors.brandPrimary),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
+
+  Widget _searchableDropdown({Key? key, required String hint, required TextEditingController controller, required FocusNode focusNode, required List<Map<String, dynamic>> items, required IconData icon, required ValueChanged<String?> onChanged, String? errorText}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RawAutocomplete<Map<String, dynamic>>(
+          key: key,
+          textEditingController: controller,
+          focusNode: focusNode,
+          optionsBuilder: (textEditingValue) {
+            if (textEditingValue.text.isEmpty) return items;
+            return items.where((item) => (item['name'] as String).toLowerCase().contains(textEditingValue.text.toLowerCase()));
+          },
+          displayStringForOption: (item) => item['name'] as String,
+          onSelected: (selection) {
+            controller.text = selection['name'] as String;
+            onChanged(selection['code'] as String);
+            focusNode.unfocus();
+          },
+          fieldViewBuilder: (context, fieldController, focusNode, onEditingComplete) {
+            return AppInputField(
+              controller: fieldController,
+              focusNode: focusNode,
+              hintText: hint,
+              leadingIcon: icon,
+              isRequired: true,
+              errorText: errorText,
+              onChanged: (text) {
+                final match = items.where((item) => (item['name'] as String).toLowerCase() == text.toLowerCase()).toList();
+                if (match.isNotEmpty) {
+                  onChanged(match.first['code'] as String);
+                } else {
+                  onChanged(null);
+                }
+                _validateStepInline(1);
+              },
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                child: Container(
+                  width: MediaQuery.of(context).size.width - 40,
+                  constraints: const BoxConstraints(maxHeight: 250),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: options.length,
+                    shrinkWrap: true,
+                    itemBuilder: (context, index) {
+                      final item = options.elementAt(index);
+                      return ListTile(
+                        title: Text(item['name'] as String, style: const TextStyle(fontSize: 14)),
+                        onTap: () => onSelected(item),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _emptyState(IconData icon, String message) => Center(
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 28),
@@ -1777,7 +2014,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         _sectionLabel('Full Name'),
         Row(
           children: [
-            Expanded(flex: 3, child: AppInputField(hintText: 'First Name *', controller: _firstNameCtrl, isRequired: true, errorText: _firstNameError, inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")), LengthLimitingTextInputFormatter(100)], onChanged: (_) => _validateStepInline(0))),
+            Expanded(flex: 3, child: AppInputField(hintText: 'First Name', controller: _firstNameCtrl, isRequired: true, errorText: _firstNameError, inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")), LengthLimitingTextInputFormatter(100)], onChanged: (_) => _validateStepInline(0))),
             const SizedBox(width: 10),
             Expanded(flex: 2, child: AppInputField(hintText: 'Middle', controller: _middleNameCtrl, inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")), LengthLimitingTextInputFormatter(100)])),
           ],
@@ -1785,7 +2022,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(flex: 3, child: AppInputField(hintText: 'Last Name *', controller: _lastNameCtrl, isRequired: true, errorText: _lastNameError, inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")), LengthLimitingTextInputFormatter(100)], onChanged: (_) => _validateStepInline(0))),
+            Expanded(flex: 3, child: AppInputField(hintText: 'Last Name', controller: _lastNameCtrl, isRequired: true, errorText: _lastNameError, inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")), LengthLimitingTextInputFormatter(100)], onChanged: (_) => _validateStepInline(0))),
             const SizedBox(width: 10),
             Expanded(flex: 2, child: _buildExtensionDropdown()),
           ],
@@ -1800,8 +2037,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           readOnly: true,
           errorText: _birthdateError,
           onTap: () async {
-            final picked = await showDatePicker(context: context, initialDate: _birthdate ?? DateTime(1990), firstDate: DateTime(1900), lastDate: DateTime.now());
-            if (picked != null) { setState(() { _birthdate = picked; _birthdateCtrl.text = _dateFmt.format(picked); }); _validateBirthdate(); }
+            final maxDate = DateTime(DateTime.now().year - 5, DateTime.now().month, DateTime.now().day);
+            DateTime initDate = _birthdate ?? DateTime(2000);
+            if (initDate.isAfter(maxDate)) initDate = maxDate;
+            final picked = await _showCustomDatePicker(initialDate: initDate, firstDate: DateTime(1900), lastDate: maxDate);
+            if (picked != null) { setState(() { _birthdate = picked; _birthdateCtrl.text = _dateFmt.format(picked); }); _validateBirthdate(); _validateStepInline(0); }
           },
         ),
         if (_calculatedAge != null) ...[
@@ -1814,30 +2054,32 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         ],
         const SizedBox(height: 24),
         _sectionLabel('Contact'),
-        AppInputField(hintText: 'Phone Number *', controller: _phoneCtrl, isRequired: true, leadingIcon: Icons.phone_outlined, keyboardType: TextInputType.phone, errorText: _phoneError, onChanged: (_) => _validateStepInline(0)),
+        AppInputField(hintText: 'Phone Number', controller: _phoneCtrl, isRequired: true, leadingIcon: Icons.phone_outlined, keyboardType: TextInputType.phone, inputFormatters: [FilteringTextInputFormatter.digitsOnly], errorText: _phoneError, onChanged: (_) { _onPhoneChanged(); _validateStepInline(0); }),
         const SizedBox(height: 24),
-        _sectionLabel('Account Credentials'),
-        AppInputField(hintText: 'Email Address', controller: _emailCtrl, leadingIcon: Icons.email_outlined, keyboardType: TextInputType.emailAddress, onChanged: _onEmailChanged, errorText: _emailError, readOnly: _isEmailReadOnly),
-        if (_emailChecking) ...[
-          const SizedBox(height: 6),
-          Padding(padding: const EdgeInsets.only(left: 16), child: Row(children: const [SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8, color: AppColors.brandAccent)), SizedBox(width: 8), Text('Checking availability...', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))])),
-        ],
-        if (_checkingAccount) ...[
-          const SizedBox(height: 6),
-          Padding(padding: const EdgeInsets.only(left: 16), child: Row(children: const [SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8, color: AppColors.brandAccent)), SizedBox(width: 8), Text('Checking for existing account...', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))])),
-        ],
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: AppColors.info.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.info.withValues(alpha: 0.3))),
-          child: Row(
-            children: [
-              Icon(Icons.email_outlined, color: AppColors.info, size: 20),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [Text('Password will be auto-generated', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.info)), SizedBox(height: 4), Text('A secure temporary password will be sent to the mother\'s email address.', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))])),
-            ],
+        if (_calculatedAge == null || _calculatedAge! >= 13) ...[
+          _sectionLabel('Account Credentials'),
+          AppInputField(hintText: 'Email Address (Optional)', controller: _emailCtrl, leadingIcon: Icons.email_outlined, keyboardType: TextInputType.emailAddress, onChanged: _onEmailChanged, errorText: _emailError, readOnly: _isEmailReadOnly),
+          if (_emailChecking) ...[
+            const SizedBox(height: 6),
+            Padding(padding: const EdgeInsets.only(left: 16), child: Row(children: const [SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8, color: AppColors.brandAccent)), SizedBox(width: 8), Text('Checking availability...', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))])),
+          ],
+          if (_checkingAccount) ...[
+            const SizedBox(height: 6),
+            Padding(padding: const EdgeInsets.only(left: 16), child: Row(children: const [SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8, color: AppColors.brandAccent)), SizedBox(width: 8), Text('Checking for existing account...', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))])),
+          ],
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: AppColors.info.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.info.withValues(alpha: 0.3))),
+            child: Row(
+              children: [
+                Icon(Icons.email_outlined, color: AppColors.info, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [Text('Password will be auto-generated', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.info)), SizedBox(height: 4), Text('A secure temporary password will be sent to the mother\'s email address if provided.', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))])),
+              ],
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -1854,16 +2096,100 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         _addressOption(title: 'Custom address', subtitle: 'Enter a different barangay, city or province', selected: !_addressSameAsBhc, onTap: () => setState(() { _addressSameAsBhc = false; _selectedBarangay = null; _barangayCtrl.clear(); _validateStepInline(1); })),
         const SizedBox(height: 20),
         _sectionLabel('Address Details'),
-        AppInputField(hintText: 'House No. *', controller: _houseCtrl, isRequired: true, leadingIcon: Icons.home_outlined, errorText: _houseError, onChanged: (_) => _validateStepInline(1)),
-        const SizedBox(height: 12),
-        AppInputField(hintText: 'Street *', controller: _streetCtrl, isRequired: true, leadingIcon: Icons.streetview_outlined, errorText: _streetError, onChanged: (_) => _validateStepInline(1)),
-        const SizedBox(height: 12),
-        if (_addressSameAsBhc) AppInputField(hintText: 'Barangay', controller: _barangayCtrl, leadingIcon: Icons.location_on_outlined, readOnly: true)
-        else _styledDropdown(hint: 'Barangay *', value: _selectedBarangay, items: _bhcBarangays, icon: Icons.location_on_outlined, errorText: _barangayError, onChanged: (v) => setState(() { _selectedBarangay = v; _validateStepInline(1); })),
-        const SizedBox(height: 12),
-        AppInputField(hintText: 'City / Municipality', controller: _cityCtrl, readOnly: _addressSameAsBhc, errorText: _cityError, onChanged: (_) => _validateStepInline(1)),
-        const SizedBox(height: 12),
-        AppInputField(hintText: 'Province', controller: _provinceCtrl, readOnly: _addressSameAsBhc, errorText: _provinceError, onChanged: (_) => _validateStepInline(1)),
+        if (_addressSameAsBhc) ...[
+          AppInputField(hintText: 'Province', controller: _provinceCtrl, readOnly: true, errorText: _provinceError, onChanged: (_) => _validateStepInline(1)),
+          const SizedBox(height: 12),
+          AppInputField(hintText: 'City / Municipality', controller: _cityCtrl, readOnly: true, errorText: _cityError, onChanged: (_) => _validateStepInline(1)),
+          const SizedBox(height: 12),
+          AppInputField(hintText: 'Barangay', controller: _barangayCtrl, leadingIcon: Icons.location_on_outlined, readOnly: true),
+          const SizedBox(height: 12),
+          AppInputField(hintText: 'Street', controller: _streetCtrl, isRequired: true, leadingIcon: Icons.streetview_outlined, errorText: _streetError, onChanged: (_) => _validateStepInline(1)),
+          const SizedBox(height: 12),
+          AppInputField(hintText: 'House No.', controller: _houseCtrl, isRequired: true, leadingIcon: Icons.home_outlined, errorText: _houseError, onChanged: (_) => _validateStepInline(1)),
+        ] else ...[
+          if (_loadingLocation)
+            const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandPrimary)))),
+          _searchableDropdown(
+            hint: 'Province',
+            controller: _provinceCtrl,
+            focusNode: _provinceFocus,
+            items: _provinces,
+            icon: Icons.map_outlined,
+            errorText: _provinceError,
+            onChanged: (v) {
+              if (v != null) {
+                setState(() { _selectedProvinceCode = v; });
+                _loadCities(v);
+              } else {
+                setState(() {
+                  _selectedProvinceCode = null;
+                  _selectedCityCode = null;
+                  _selectedBarangayCode = null;
+                  _selectedBarangay = null;
+                  _cities = [];
+                  _barangays = [];
+                  _cityCtrl.clear();
+                  _barangayCtrl.clear();
+                });
+              }
+              _validateStepInline(1);
+            }
+          ),
+          const SizedBox(height: 12),
+          _searchableDropdown(
+            key: ValueKey('city_$_selectedProvinceCode'),
+            hint: 'City / Municipality',
+            controller: _cityCtrl,
+            focusNode: _cityFocus,
+            items: _cities,
+            icon: Icons.location_city_outlined,
+            errorText: _cityError,
+            onChanged: (v) {
+              if (v != null) {
+                setState(() { _selectedCityCode = v; });
+                _loadBarangays(v);
+              } else {
+                setState(() {
+                  _selectedCityCode = null;
+                  _selectedBarangayCode = null;
+                  _selectedBarangay = null;
+                  _barangays = [];
+                  _barangayCtrl.clear();
+                });
+              }
+              _validateStepInline(1);
+            }
+          ),
+          const SizedBox(height: 12),
+          _searchableDropdown(
+            key: ValueKey('brgy_$_selectedCityCode'),
+            hint: 'Barangay',
+            controller: _barangayCtrl,
+            focusNode: _barangayFocus,
+            items: _barangays,
+            icon: Icons.location_on_outlined,
+            errorText: _barangayError,
+            onChanged: (v) {
+              if (v != null) {
+                final b = _barangays.firstWhere((b) => b['code'] == v);
+                setState(() {
+                  _selectedBarangayCode = v;
+                  _selectedBarangay = b['name'];
+                });
+              } else {
+                setState(() {
+                  _selectedBarangayCode = null;
+                  _selectedBarangay = null;
+                });
+              }
+              _validateStepInline(1);
+            }
+          ),
+          const SizedBox(height: 12),
+          AppInputField(hintText: 'Street', controller: _streetCtrl, isRequired: true, leadingIcon: Icons.streetview_outlined, errorText: _streetError, onChanged: (_) => _validateStepInline(1)),
+          const SizedBox(height: 12),
+          AppInputField(hintText: 'House No.', controller: _houseCtrl, isRequired: true, leadingIcon: Icons.home_outlined, errorText: _houseError, onChanged: (_) => _validateStepInline(1)),
+        ],
       ],
     );
   }
@@ -1964,8 +2290,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         _styledDropdown(hint: 'Select method', value: _gestationMethod.name, items: methodItems, itemLabels: methodLabels, icon: Icons.calculate_outlined, onChanged: (v) { if (v == null) return; setState(() { _gestationMethod = _GestationMethod.values.firstWhere((e) => e.name == v); _gestationError = null; }); }),
         const SizedBox(height: 20),
         _sectionLabel('Date Entry'),
-        if (_gestationMethod == _GestationMethod.lmp) GestureDetector(onTap: () async { final picked = await showDatePicker(context: context, initialDate: _lmp ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime.now()); if (picked != null) setState(() => _updateFromLmp(picked)); }, child: AppInputField(hintText: 'Last Menstrual Period', controller: _lmpCtrl, isRequired: true, leadingIcon: Icons.calendar_today_outlined, readOnly: true, errorText: _gestationError))
-        else if (_gestationMethod == _GestationMethod.edd) GestureDetector(onTap: () async { final picked = await showDatePicker(context: context, initialDate: _edd ?? DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 300))); if (picked != null) setState(() => _updateFromEdd(picked)); }, child: AppInputField(hintText: 'Estimated Delivery Date', controller: _eddCtrl, isRequired: true, leadingIcon: Icons.event_available_outlined, readOnly: true, errorText: _gestationError))
+        if (_gestationMethod == _GestationMethod.lmp) GestureDetector(onTap: () async { final picked = await _showCustomDatePicker(initialDate: _lmp ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime.now()); if (picked != null) setState(() => _updateFromLmp(picked)); }, child: AppInputField(hintText: 'Last Menstrual Period', controller: _lmpCtrl, isRequired: true, leadingIcon: Icons.calendar_today_outlined, readOnly: true, errorText: _gestationError))
+        else if (_gestationMethod == _GestationMethod.edd) GestureDetector(onTap: () async { final picked = await _showCustomDatePicker(initialDate: _edd ?? DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 300))); if (picked != null) setState(() => _updateFromEdd(picked)); }, child: AppInputField(hintText: 'Estimated Delivery Date', controller: _eddCtrl, isRequired: true, leadingIcon: Icons.event_available_outlined, readOnly: true, errorText: _gestationError))
         else Row(children: [Expanded(child: AppInputField(hintText: 'Weeks', controller: _aogWeeksCtrl, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly], onChanged: (_) => _updateFromAog())), const SizedBox(width: 12), Expanded(child: AppInputField(hintText: 'Days', controller: _aogDaysCtrl, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly], onChanged: (_) => _updateFromAog()))]),
         const SizedBox(height: 20),
         _sectionLabel('Fetal Details'),
@@ -2073,30 +2399,22 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        title: const Text('Add Mother', style: TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: AppColors.bgPrimary,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: TextButton.icon(
-              onPressed: _startOcrFlow,
-              icon: const Icon(Icons.document_scanner_outlined, size: 18),
-              label: const Text('OCR'),
-              style: TextButton.styleFrom(foregroundColor: AppColors.brandPrimary),
-            ),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: AppColors.borderPrimary),
-        ),
-      ),
       body: Column(
         children: [
+          SecondaryHeader(
+            title: 'Add Mother',
+            onBack: () => Navigator.pop(context),
+            trailingWidget: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: _startOcrFlow,
+                icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                label: const Text('OCR'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.brandPrimary),
+              ),
+            ),
+          ),
+          Container(height: 1, color: AppColors.borderPrimary),
           LinearProgressIndicator(
             value: (_step + 1) / _totalSteps,
             backgroundColor: AppColors.borderPrimary,
@@ -2160,7 +2478,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     height: 48,
                     child: _step < _totalSteps - 1
                         ? ElevatedButton(
-                            onPressed: _submitting ? null : _goNext,
+                            onPressed: (_submitting || !_isStepValid(_step)) ? null : _goNext,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.brandPrimary,
                               foregroundColor: Colors.white,
@@ -2173,7 +2491,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                             ),
                           )
                         : ElevatedButton.icon(
-                            onPressed: _submitting ? null : _submit,
+                            onPressed: (_submitting || !_isStepValid(_step)) ? null : _submit,
                             icon: _submitting
                                 ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                 : const Icon(Icons.check_rounded, size: 17),

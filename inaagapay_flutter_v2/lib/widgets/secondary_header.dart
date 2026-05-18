@@ -6,11 +6,13 @@ import '../theme/app_colors.dart';
 class SecondaryHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onBack;
+  final Widget? trailingWidget;
 
   const SecondaryHeader({
     super.key,
     required this.title,
     this.onBack,
+    this.trailingWidget,
   });
 
   @override
@@ -40,7 +42,7 @@ class SecondaryHeader extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 48),
+            if (trailingWidget != null) trailingWidget! else const SizedBox(width: 48),
           ],
         ),
       ),

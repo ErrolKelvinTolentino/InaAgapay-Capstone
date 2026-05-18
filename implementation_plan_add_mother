@@ -1,0 +1,55 @@
+# Modify Add Mother Feature
+
+This plan outlines the required modifications to the Add Mother functionality (`midwife_add_mother_screen.dart` and `supabase_service.dart`) to align with the new business rules regarding maternal age, optional emails, and dynamic addresses.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Database Schema**: The `email_address` column in the `accounts` table is already defined without a `NOT NULL` constraint (`email_address VARCHAR(255) UNIQUE`), which means it currently supports `NULL` values. No schema modification is required for this.
+> **Address Data**: The `LocationService` currently fetching data from the PSGC API will be integrated to dynamically populate the cascading dropdowns for Province, City, and Barangay.
+
+## Open Questions
+
+None at this time. The backend `accounts` table currently allows `email_address` to be `null` based on my check of the `supabase_setup.sql` file.
+
+## Proposed Changes
+
+### `lib/screens/midwife/midwife_add_mother_screen.dart`
+
+- **Maternal Age Constraints**:
+  - Update the `_validateBirthdate()` method.
+  - Apply new calculated age constraints:
+    - `< 5`: Block registration (disable next step).
+    - `5-14`: Red warning: "Entered maternal age is outside typical reproductive ranges. Please verify the information."
+    - `15-19`: Yellow warning: "High-Risk Adolescent Pregnancy"
+    - `20-34`: No warning.
+    - `35-60`: Yellow warning: "High-Risk Advanced Maternal Age Pregnancy"
+    - `> 60`: Red warning: "Entered maternal age is outside supported maternal monitoring ranges. Please verify the information."
+- **Email Address Logic**:
+  - Utilize `_calculatedAge` to dynamically adjust the email input UI.
+  - If `< 13`: Hide the email field completely.
+  - If `>= 13`: Show the email field but mark it as optional.
+  - Modify validation and uniqueness checks to trigger only if an email string is provided.
+- **Address Information**:
+  - Add a toggle/radio button choice between "Same as Barangay Health Center (BHC) Address" and "Custom Address".
+  - For "Same as BHC": Auto-fill and disable editing for Province, City, and Barangay using the midwife's BHC info.
+  - For "Custom Address": Fetch hierarchical options using `LocationService` (Province -> City -> Barangay) and allow user selection via dropdowns.
+- **Emergency Contacts UI**:
+  - In the "Add Emergency Contact" dialog, add an "Others - Specify" text field conditionally displayed when "Other" is chosen from the Relationship dropdown.
+  - Use system styling (`DialogBox` or similar matching UI).
+
+### `lib/services/supabase_service.dart`
+
+- **`addMotherFullByMidwifeWithAutoPassword`**:
+  - Change the `email` parameter signature to `String? email`.
+  - Add logic to bypass the email uniqueness check and avoid sending the account credential email if `email` is null or empty.
+  - Insert `null` into the `email_address` column when no email is provided.
+
+## Verification Plan
+
+### Manual Testing
+1. **Age Constraints**: Input birthdates corresponding to < 5, 10, 16, 25, 40, and 65 years old. Validate that the UI displays the correct color-coded warnings and properly enables/disables the registration process.
+2. **Email Logic**: Check that the email field is hidden for ages < 13, and visible but optional for >= 13.
+3. **Address Logic**: Toggle between "Same as BHC" and "Custom Address", ensuring BHC sync locks the fields while "Custom" opens PSGC dropdowns populated from the API.
+4. **Emergency Contact**: Add an emergency contact, select "Other", and confirm the specification text field renders.
+5. **Backend Save**: Submit the form without providing an email address and confirm the account is created successfully in the database.
