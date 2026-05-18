@@ -7,7 +7,10 @@
 .buildlog/
 .history
 
-
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
 
 # Flutter repo-specific
 /bin/cache/
@@ -37,6 +40,11 @@ analysis_benchmark.json
 .flutter-plugins
 .flutter-plugins-dependencies
 **/generated_plugin_registrant.dart
+**/generated_plugin_registrant.cc
+**/generated_plugin_registrant.h
+**/GeneratedPluginRegistrant.java
+**/GeneratedPluginRegistrant.swift
+**/generated_plugins.cmake
 .packages
 .pub-preload-cache/
 .pub/
@@ -45,6 +53,9 @@ flutter_*.png
 linked_*.ds
 unlinked.ds
 unlinked_spec.ds
+
+# Ignore lockfile (optional for apps, not recommended for packages)
+pubspec.lock
 
 # Android related
 **/android/**/gradle-wrapper.jar
