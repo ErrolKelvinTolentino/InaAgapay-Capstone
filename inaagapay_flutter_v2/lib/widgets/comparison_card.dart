@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../services/language_service.dart';
 
 class ComparisonCard extends StatelessWidget {
   final int week;
@@ -59,6 +60,67 @@ class ComparisonCard extends StatelessWidget {
     return 'assets/images/$imageName';
   }
 
+  String _localizedLabel(String label) {
+    switch (label) {
+      case 'Baby will soon be as small as':
+        return LanguageService.translate(
+            label, 'Malapit nang maging kasing liit ng');
+      case 'Baby is as small as':
+        return LanguageService.translate(label, 'Ang sanggol ay kasing liit ng');
+      case 'Baby is about as big as':
+        return LanguageService.translate(
+            label, 'Ang sanggol ay halos kasing laki ng');
+      case 'Baby is now as big as':
+        return LanguageService.translate(
+            label, 'Ang sanggol ay kasing laki na ng');
+      default:
+        return label;
+    }
+  }
+
+  String _localizedName(String name) {
+    const filipinoNames = {
+      'A Rice Grain': 'Butil ng Bigas',
+      'A Green Pea': 'Berdeng Gisantes',
+      'A Coffee Bean': 'Butil ng Kape',
+      'A Blueberry': 'Blueberry',
+      'A Raspberry': 'Raspberry',
+      'A Cherry': 'Cherry',
+      'A Strawberry': 'Strawberry',
+      'A Lime': 'Dayap',
+      'A Plum': 'Plum',
+      'A Lemon': 'Lemon',
+      'A Peach': 'Peach',
+      'An Apple': 'Mansanas',
+      'An Avocado': 'Abukado',
+      'A Pear': 'Peras',
+      'A Bell Pepper': 'Bell Pepper',
+      'A Mango': 'Mangga',
+      'A Banana': 'Saging',
+      'A Carrot': 'Karot',
+      'An Orange': 'Kahel',
+      'A Pomelo': 'Suha',
+      'An Ear of Corn': 'Mais',
+      'A Cucumber': 'Pipino',
+      'An Eggplant': 'Talong',
+      'A Cauliflower': 'Cauliflower',
+      'A Large Carrot': 'Malaking Karot',
+      'A Sweet Potato': 'Kamote',
+      'A Cabbage': 'Repolyo',
+      'A Coconut': 'Niyog',
+      'A Large White Onion': 'Malaking Puting Sibuyas',
+      'A Pineapple': 'Pinya',
+      'A Melon': 'Melon',
+      'A Large Melon': 'Malaking Melon',
+      'A Kabocha Squash': 'Kalabasa',
+      'A Taro (Gabi)': 'Gabi',
+      'A Beetroot': 'Beetroot',
+      'A Mini Watermelon': 'Maliit na Pakwan',
+      'A Small Pumpkin': 'Maliit na Kalabasa',
+    };
+    return LanguageService.isFilipino ? filipinoNames[name] ?? name : name;
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _comparisonData[week];
@@ -80,7 +142,7 @@ class ComparisonCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    data['label']!,
+                    _localizedLabel(data['label']!),
                     style: const TextStyle(
                       fontSize: 13,
                       color: AppColors.textPrimary,
@@ -89,7 +151,7 @@ class ComparisonCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    data['name']!,
+                    _localizedName(data['name']!),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,

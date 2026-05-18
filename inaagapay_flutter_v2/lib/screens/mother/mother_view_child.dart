@@ -9,6 +9,7 @@ import '../../widgets/records_display_card.dart';
 import '../../widgets/status_indicator.dart';
 import '../../widgets/important_button.dart';
 import '../../services/child_service.dart';
+import '../../services/language_service.dart';
 import '../../models/child_model.dart';
 
 class MotherViewChildPage extends StatefulWidget {
@@ -83,18 +84,32 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     return parts.isNotEmpty ? parts.join(', ') : '--';
   }
 
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
+
+  String _genderLabel() {
+    if (widget.childGender == 'female') {
+      return _t('Girl', 'Babae');
+    }
+    return _t('Boy', 'Lalaki');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: PreferredSize(
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, _, __) {
+        return Scaffold(
+          backgroundColor: AppColors.bgPrimary,
+          appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: SecondaryHeader(
-          title: 'Child Information',
+          title: _t('Child Information', 'Impormasyon ng Anak'),
           onBack: widget.onBackToChildren,
         ),
       ),
-      body: RefreshIndicator(
+          body: RefreshIndicator(
         onRefresh: _fetchChildDetails,
         color: AppColors.brandPrimary,
         child: _loading
@@ -127,7 +142,7 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.brandPrimary,
                           ),
-                          child: const Text('Retry'),
+                          child: Text(_t('Retry', 'Subukan Muli')),
                         ),
                       ],
                     ),
@@ -140,36 +155,36 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                         HeroCard(
                           image: null,
                           title: widget.childName,
-                          subtitle: '${widget.childAge} • ${widget.childGender == 'female' ? 'Girl' : 'Boy'}',
+                          subtitle: '${widget.childAge} • ${_genderLabel()}',
                           showWeekBadge: false,
                           showHeartRow: false,
                         ),
                         const SizedBox(height: 24),
 
                         RecordsDisplayCard(
-                          title: 'Birth Details',
+                          title: _t('Birth Details', 'Detalye ng Kapanganakan'),
                           headerIcon: Icons.cake_outlined,
                           items: [
                             RecordItem(
                               leadingIcon: Icons.calendar_month_rounded,
-                              label: 'Birth Date',
+                              label: _t('Birth Date', 'Petsa ng Kapanganakan'),
                               value: _formatDate(_data?['child']?.birthdate),
                             ),
                             RecordItem(
                               leadingIcon: Icons.location_on_outlined,
-                              label: 'Birthplace',
+                              label: _t('Birthplace', 'Lugar ng Kapanganakan'),
                               value: _getBirthplace(_data?['child']),
                             ),
                             if (_data?['child']?.birthWeight != null)
                               RecordItem(
                                 leadingIcon: Icons.monitor_weight,
-                                label: 'Birth Weight',
+                                label: _t('Birth Weight', 'Timbang sa Kapanganakan'),
                                 value: '${_data?['child']?.birthWeight} kg',
                               ),
                             if (_data?['child']?.birthLength != null)
                               RecordItem(
                                 leadingIcon: Icons.height,
-                                label: 'Birth Length',
+                                label: _t('Birth Length', 'Haba sa Kapanganakan'),
                                 value: '${_data?['child']?.birthLength} cm',
                               ),
                           ],
@@ -178,19 +193,20 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                         const SizedBox(height: 16),
 
                         RecordsDisplayCard(
-                          title: 'Latest Growth Records',
+                          title: _t('Latest Growth Records',
+                              'Pinakabagong Growth Records'),
                           headerIcon: Icons.bar_chart_rounded,
                           items: [
                             RecordItem(
                               leadingIcon: Icons.height,
-                              label: 'Height',
+                              label: _t('Height', 'Taas'),
                               value: _data?['latest_growth'] != null
                                   ? '${(_data?['latest_growth'] as GrowthRecord).height.toStringAsFixed(1)} cm'
                                   : '-- cm',
                             ),
                             RecordItem(
                               leadingIcon: Icons.monitor_weight,
-                              label: 'Weight',
+                              label: _t('Weight', 'Timbang'),
                               value: _data?['latest_growth'] != null
                                   ? '${(_data?['latest_growth'] as GrowthRecord).weight.toStringAsFixed(1)} kg'
                                   : '-- kg',
@@ -201,7 +217,8 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                         const SizedBox(height: 20),
 
                         ImportantButton(
-                          label: 'View Growth Statistics',
+                          label: _t('View Growth Statistics',
+                              'Tingnan ang Growth Statistics'),
                           leadingIcon: Icons.bar_chart_rounded,
                           onPressed: widget.onViewGrowth,
                         ),
@@ -209,18 +226,19 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                         const SizedBox(height: 20),
 
                         RecordsDisplayCard(
-                          title: 'Latest Immunization',
+                          title: _t('Latest Immunization',
+                              'Pinakabagong Bakuna'),
                           headerIcon: Icons.vaccines_outlined,
                           items: (_data?['immunizations'] as List?)?.isNotEmpty == true
                               ? [
                                   RecordItem(
                                     leadingIcon: Icons.vaccines,
-                                    label: 'Name',
+                                    label: _t('Name', 'Pangalan'),
                                     value: (_data?['immunizations'] as List).first.vaccineName,
                                   ),
                                   RecordItem(
                                     leadingIcon: Icons.calendar_month_rounded,
-                                    label: 'Taken',
+                                    label: _t('Taken', 'Nakuha'),
                                     value: DateFormat('MMM d, yyyy').format(
                                       (_data?['immunizations'] as List).first.vaccinationDate
                                     ),
@@ -230,10 +248,12 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                                   ),
                                 ]
                               : [
-                                  const RecordItem(
+                                  RecordItem(
                                     leadingIcon: Icons.info_outline,
-                                    label: 'Status',
-                                    value: 'No immunizations recorded yet',
+                                    label: _t('Status', 'Status'),
+                                    value: _t(
+                                        'No immunizations recorded yet',
+                                        'Wala pang naitalang bakuna'),
                                   ),
                                 ],
                         ),
@@ -241,7 +261,8 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                         const SizedBox(height: 20),
 
                         ImportantButton(
-                          label: 'View Vaccination Details',
+                          label: _t('View Vaccination Details',
+                              'Tingnan ang Detalye ng Bakuna'),
                           leadingIcon: Icons.vaccines_outlined,
                           onPressed: widget.onViewVaccines,
                         ),
@@ -249,6 +270,8 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                     ),
                   ),
       ),
+        );
+      },
     );
   }
 }

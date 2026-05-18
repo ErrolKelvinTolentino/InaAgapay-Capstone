@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
+import '../../services/language_service.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/headline.dart';
@@ -53,6 +54,26 @@ class _RecordsScreenState extends State<RecordsScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
+
+  String _notInputted() => _t('Not inputted', 'Hindi nailagay');
+
+  String _noneRecorded() => _t('None recorded', 'Walang naitala');
+
+  String _recordTypeLabel(String type, [dynamic labTestType]) {
+    if (type == 'checkup') {
+      return _t('Prenatal Checkup', 'Prenatal Checkup');
+    }
+    if (type == 'ultrasound') {
+      return _t('Ultrasound', 'Ultrasound');
+    }
+    return _formatValue(labTestType) == '—'
+        ? _t('Lab Test', 'Lab Test')
+        : _formatValue(labTestType);
   }
 
   void _refreshRecordDetailsUi() {
@@ -150,8 +171,10 @@ class _RecordsScreenState extends State<RecordsScreen>
           if (checkupId == null) continue;
           final symptomType = symbol['symptom_type'] as Map<String, dynamic>?;
           final name =
-              symptomType?['symptom_name']?.toString() ?? 'Unknown symptom';
-          final risk = symptomType?['risk_category']?.toString() ?? 'unknown';
+              symptomType?['symptom_name']?.toString() ??
+                  _t('Unknown symptom', 'Hindi alam na sintomas');
+          final risk = symptomType?['risk_category']?.toString() ??
+              _t('unknown', 'hindi alam');
           final note = (symbol['notes'] as String?)?.trim();
           final label = note != null && note.isNotEmpty
               ? '$name ($risk): $note'
@@ -218,7 +241,7 @@ class _RecordsScreenState extends State<RecordsScreen>
 
   String _formatInputValue(dynamic value) {
     final formatted = _formatValue(value);
-    return formatted == '—' ? 'Not inputted' : formatted;
+    return formatted == '—' ? _notInputted() : formatted;
   }
 
   List<String> _parseImageUrls(dynamic imageField) {
@@ -421,7 +444,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                               errorBuilder: (_, __, ___) =>
                                                   Container(
                                                 color: AppColors.bgSecondary,
-                                                child: const Center(
+                                                child: Center(
                                                   child: Column(
                                                     mainAxisAlignment:
                                                         MainAxisAlignment
@@ -430,10 +453,12 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                       Icon(Icons.broken_image,
                                                           size: 32,
                                                           color: Colors.grey),
-                                                      SizedBox(height: 4),
+                                                      const SizedBox(height: 4),
                                                       Text(
-                                                        'Image not available',
-                                                        style: TextStyle(
+                                                        LanguageService.translate(
+                                                            'Image not available',
+                                                            'Hindi available ang larawan'),
+                                                        style: const TextStyle(
                                                             fontSize: 10),
                                                         textAlign:
                                                             TextAlign.center,
@@ -482,7 +507,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                             12),
                                                   ),
                                                   child: Text(
-                                                    '+${imageUrls.length - 1} more',
+                                                    '+${imageUrls.length - 1} ${_t('more', 'pa')}',
                                                     style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 10,
@@ -567,9 +592,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                                           color: const Color(0xFF7E57C2),
                                           size: 20),
                                       const SizedBox(width: 8),
-                                      const Text(
-                                        'AI-Powered Insights',
-                                        style: TextStyle(
+                                      Text(
+                                        _t('AI-Powered Insights',
+                                            'AI na Pagsusuri'),
+                                        style: const TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
                                           color: Color(0xFF5E35B1),
@@ -591,7 +617,9 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                 ? AppColors.success
                                                 : AppColors.brandPrimary),
                                         label: Text(
-                                          isEditing ? 'Cancel' : 'Edit',
+                                          isEditing
+                                              ? _t('Cancel', 'Kanselahin')
+                                              : _t('Edit', 'I-edit'),
                                           style: TextStyle(
                                               color: isEditing
                                                   ? AppColors.success
@@ -613,9 +641,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                                         TextField(
                                           controller: editController,
                                           maxLines: 10,
-                                          decoration: const InputDecoration(
+                                          decoration: InputDecoration(
                                             border: OutlineInputBorder(),
-                                            hintText: 'Edit AI insights...',
+                                            hintText: _t('Edit AI insights...',
+                                                'I-edit ang AI na pagsusuri...'),
                                           ),
                                         ),
                                         const SizedBox(height: 8),
@@ -631,7 +660,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                       aiAnalysis;
                                                 });
                                               },
-                                              child: const Text('Discard'),
+                                              child:
+                                                  Text(_t('Discard', 'Itapon')),
                                             ),
                                             const SizedBox(width: 8),
                                             ElevatedButton(
@@ -641,9 +671,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                 });
                                                 ScaffoldMessenger.of(context)
                                                     .showSnackBar(
-                                                  const SnackBar(
+                                                  SnackBar(
                                                     content: Text(
-                                                        'AI insights updated locally'),
+                                                        _t('AI insights updated locally',
+                                                            'Na-update ang AI na pagsusuri sa lokal')),
                                                     backgroundColor:
                                                         AppColors.success,
                                                   ),
@@ -653,7 +684,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                 backgroundColor:
                                                     AppColors.brandPrimary,
                                               ),
-                                              child: const Text('Save'),
+                                              child: Text(_t('Save', 'I-save')),
                                             ),
                                           ],
                                         ),
@@ -667,9 +698,11 @@ class _RecordsScreenState extends State<RecordsScreen>
                                           Colors.white.withValues(alpha: 0.7),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: const Text(
-                                      'Note: This is AI-generated analysis for informational purposes only.',
-                                      style: TextStyle(
+                                    child: Text(
+                                      _t(
+                                          'Note: This is AI-generated analysis for informational purposes only.',
+                                          'Paalala: Ang pagsusuring ito ay gawa ng AI at para lamang sa impormasyon.'),
+                                      style: const TextStyle(
                                         fontSize: 11,
                                         color: AppColors.textSecondary,
                                         fontStyle: FontStyle.italic,
@@ -706,25 +739,31 @@ class _RecordsScreenState extends State<RecordsScreen>
     final remarks = ultrasound['remarks']?.toString().toLowerCase() ?? '';
     final buffer = StringBuffer();
 
-    buffer.write('🤖 Ultrasound AI Insights:\n\n');
+    buffer.write('${_t('Ultrasound AI Insights', 'AI na Pagsusuri ng Ultrasound')}:\n\n');
 
     if (remarks.contains('normal') || remarks.contains('healthy')) {
-      buffer.write(
-          '✅ **Normal Findings**: Ultrasound appears normal with healthy fetal development.\n\n');
+      buffer.write(_t(
+          'Normal Findings: Ultrasound appears normal with healthy fetal development.\n\n',
+          'Normal na Resulta: Mukhang normal ang ultrasound at malusog ang paglaki ng sanggol.\n\n'));
     } else if (remarks.contains('follow') || remarks.contains('monitor')) {
-      buffer.write(
-          '📊 **Follow-up Recommended**: Some findings require additional observation.\n\n');
+      buffer.write(_t(
+          'Follow-up Recommended: Some findings require additional observation.\n\n',
+          'Kailangan ng Follow-up: May ilang resulta na kailangang masubaybayan pa.\n\n'));
     } else if (remarks.contains('concern') || remarks.contains('abnormal')) {
-      buffer.write(
-          '🔍 **Further Evaluation Needed**: Discuss findings with healthcare provider.\n\n');
+      buffer.write(_t(
+          'Further Evaluation Needed: Discuss findings with healthcare provider.\n\n',
+          'Kailangan ng Dagdag na Pagsusuri: Ipag-usap ang resulta sa healthcare provider.\n\n'));
     } else {
-      buffer.write(
-          '📋 **Diagnostic Information**: The ultrasound provides important diagnostic information.\n\n');
+      buffer.write(_t(
+          'Diagnostic Information: The ultrasound provides important diagnostic information.\n\n',
+          'Impormasyong Diagnostic: Nagbibigay ang ultrasound ng mahalagang impormasyon.\n\n'));
     }
 
-    buffer.write('💡 **Key Recommendations**:\n');
-    buffer.write('• Discuss findings with your healthcare provider\n');
-    buffer.write('• Continue all scheduled prenatal appointments\n');
+    buffer.write('${_t('Key Recommendations', 'Mahahalagang Rekomendasyon')}:\n');
+    buffer.write(
+        '• ${_t('Discuss findings with your healthcare provider', 'Ipag-usap ang resulta sa iyong healthcare provider')}\n');
+    buffer.write(
+        '• ${_t('Continue all scheduled prenatal appointments', 'Ipagpatuloy ang lahat ng nakatakdang prenatal appointment')}\n');
 
     return buffer.toString();
   }
@@ -745,10 +784,10 @@ class _RecordsScreenState extends State<RecordsScreen>
       String? aiResponse = aiRow?['response'] as String?;
       String? riskLevel;
       String riskFactors = '';
-      String medicationPlans = 'None';
-      String givenMedications = 'None';
-      String ferrousQuantity = 'Not given';
-      String calciumQuantity = 'Not given';
+      String medicationPlans = _t('None', 'Wala');
+      String givenMedications = _t('None', 'Wala');
+      String ferrousQuantity = _t('Not given', 'Hindi ibinigay');
+      String calciumQuantity = _t('Not given', 'Hindi ibinigay');
 
       if (aiRow != null) {
         final aiResponseId = aiRow['ai_response_id'] as int?;
@@ -802,7 +841,8 @@ class _RecordsScreenState extends State<RecordsScreen>
 
           final givenItems = <String>[];
           for (final row in (givenRows as List).cast<Map<String, dynamic>>()) {
-            final name = row['given_medication_name']?.toString() ?? 'Unknown';
+            final name = row['given_medication_name']?.toString() ??
+                _t('Unknown', 'Hindi alam');
             final quantity = row['quantity']?.toString() ?? '1';
             givenItems.add('$name x$quantity');
             if (name.toLowerCase().contains('ferrous')) {
@@ -819,16 +859,17 @@ class _RecordsScreenState extends State<RecordsScreen>
           final planItems = <String>[];
           for (final row
               in (medicationRows as List).cast<Map<String, dynamic>>()) {
-            final name = row['mother_medication_name']?.toString() ?? 'Unknown';
+            final name = row['mother_medication_name']?.toString() ??
+                _t('Unknown', 'Hindi alam');
             final qty = row['quantity']?.toString() ?? '1';
             final freq = row['frequency']?.toString();
             final start = row['start_date']?.toString();
             final end = row['end_date']?.toString();
             final details = [
-              qty != 'null' ? 'Qty $qty' : null,
+              qty != 'null' ? '${_t('Qty', 'Dami')} $qty' : null,
               freq,
-              start != null ? 'Start $start' : null,
-              end != null ? 'End $end' : null
+              start != null ? '${_t('Start', 'Simula')} $start' : null,
+              end != null ? '${_t('End', 'Katapusan')} $end' : null
             ].where((element) => element != null).join(' · ');
             planItems.add('$name${details.isNotEmpty ? ' ($details)' : ''}');
           }
@@ -941,16 +982,19 @@ class _RecordsScreenState extends State<RecordsScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
-        ),
-      );
-    }
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, _, __) {
+        if (_isLoading) {
+          return const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+            ),
+          );
+        }
 
-    if (_errorMessage != null) {
-      return Center(
+        if (_errorMessage != null) {
+          return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -969,7 +1013,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                 ),
               ),
               const SizedBox(height: 16),
-              const Headline(text: 'Failed to Load Records'),
+              Headline(text: _t('Failed to Load Records', 'Hindi Na-load ang Records')),
               const SizedBox(height: 8),
               Text(
                 _errorMessage!,
@@ -978,29 +1022,30 @@ class _RecordsScreenState extends State<RecordsScreen>
               ),
               const SizedBox(height: 24),
               MainButton(
-                label: 'Retry',
+                label: _t('Retry', 'Subukan Muli'),
                 onPressed: _loadMotherData,
               ),
             ],
           ),
         ),
-      );
-    }
+          );
+        }
 
-    final allRecords = _getFilteredAndSortedRecords();
+        final allRecords = _getFilteredAndSortedRecords();
 
-    return Column(
+        return Column(
       children: [
         Container(
           color: Colors.white,
           child: TabBar(
             controller: _tabController,
             indicatorColor: AppColors.brandPrimary,
+            dividerColor: AppColors.borderPrimary.withValues(alpha: 0.6),
             labelColor: AppColors.brandPrimary,
             unselectedLabelColor: AppColors.textSecondary,
-            tabs: const [
-              Tab(text: 'All Records'),
-              Tab(text: 'Statistics'),
+            tabs: [
+              Tab(text: _t('All Records', 'Lahat ng Records')),
+              Tab(text: _t('Statistics', 'Estadistika')),
             ],
           ),
         ),
@@ -1014,6 +1059,8 @@ class _RecordsScreenState extends State<RecordsScreen>
           ),
         ),
       ],
+        );
+      },
     );
   }
 
@@ -1038,7 +1085,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                     });
                   },
                   decoration: InputDecoration(
-                    hintText: 'Search records...',
+                    hintText: _t('Search records...', 'Maghanap ng records...'),
                     prefixIcon: const Icon(Icons.search,
                         color: AppColors.textSecondary),
                     border: InputBorder.none,
@@ -1060,16 +1107,22 @@ class _RecordsScreenState extends State<RecordsScreen>
                         value: _selectedFilter,
                         isExpanded: true,
                         underline: const SizedBox(),
-                        items: const [
+                        items: [
                           DropdownMenuItem(
-                              value: 'all', child: Text('All Records')),
+                              value: 'all',
+                              child: Text(_t('All Records', 'Lahat ng Records'))),
                           DropdownMenuItem(
-                              value: 'checkup', child: Text('Checkups Only')),
+                              value: 'checkup',
+                              child:
+                                  Text(_t('Checkups Only', 'Checkups Lang'))),
                           DropdownMenuItem(
                               value: 'ultrasound',
-                              child: Text('Ultrasounds Only')),
+                              child: Text(
+                                  _t('Ultrasounds Only', 'Ultrasounds Lang'))),
                           DropdownMenuItem(
-                              value: 'labtest', child: Text('Lab Tests Only')),
+                              value: 'labtest',
+                              child:
+                                  Text(_t('Lab Tests Only', 'Lab Tests Lang'))),
                         ],
                         onChanged: (value) {
                           setState(() {
@@ -1090,11 +1143,13 @@ class _RecordsScreenState extends State<RecordsScreen>
                     child: DropdownButton<String>(
                       value: _sortOrder,
                       underline: const SizedBox(),
-                      items: const [
+                      items: [
                         DropdownMenuItem(
-                            value: 'desc', child: Text('Newest First')),
+                            value: 'desc',
+                            child: Text(_t('Newest First', 'Pinakabago Muna'))),
                         DropdownMenuItem(
-                            value: 'asc', child: Text('Oldest First')),
+                            value: 'asc',
+                            child: Text(_t('Oldest First', 'Pinakaluma Muna'))),
                       ],
                       onChanged: (value) {
                         setState(() {
@@ -1124,8 +1179,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                       const SizedBox(height: 16),
                       Text(
                         _searchQuery.isNotEmpty
-                            ? 'No matching records found'
-                            : 'No records available',
+                            ? _t('No matching records found',
+                                'Walang record na tumugma')
+                            : _t('No records available',
+                                'Walang available na records'),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -1135,8 +1192,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                       const SizedBox(height: 8),
                       Text(
                         _searchQuery.isNotEmpty
-                            ? 'Try adjusting your search or filters'
-                            : 'Your medical records will appear here',
+                            ? _t('Try adjusting your search or filters',
+                                'Subukang baguhin ang paghahanap o filter')
+                            : _t('Your medical records will appear here',
+                                'Lalabas dito ang iyong medical records'),
                         style: const TextStyle(
                           color: AppColors.textSecondary,
                         ),
@@ -1169,7 +1228,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                               icon:
                                   const Icon(Icons.expand_more, size: 18),
                               label: Text(
-                                'Load More ($nextBatch of $remaining remaining)',
+                                _t(
+                                  'Load More ($nextBatch of $remaining remaining)',
+                                  'Mag-load Pa ($nextBatch sa $remaining natitira)',
+                                ),
                                 style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500),
@@ -1224,10 +1286,11 @@ class _RecordsScreenState extends State<RecordsScreen>
                           ),
                           title: Text(
                             isCheckup
-                                ? 'Prenatal Checkup'
+                                ? _t('Prenatal Checkup', 'Prenatal Checkup')
                                 : isUltrasound
-                                    ? 'Ultrasound'
-                                    : (record['lab_test_type'] ?? 'Lab Test'),
+                                    ? _t('Ultrasound', 'Ultrasound')
+                                    : (record['lab_test_type'] ??
+                                        _t('Lab Test', 'Lab Test')),
                             style: const TextStyle(
                               fontWeight: FontWeight.w600,
                             ),
@@ -1251,7 +1314,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                               if (isCheckup) ...[
                                 const SizedBox(height: 2),
                                 Text(
-                                  'BP: ${_formatValue(record['blood_pressure_systolic'])}/${_formatValue(record['blood_pressure_diastolic'])}',
+                                  '${_t('BP', 'BP')}: ${_formatValue(record['blood_pressure_systolic'])}/${_formatValue(record['blood_pressure_diastolic'])}',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     color: AppColors.textSecondary,
@@ -1261,7 +1324,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                               if (record['health_worker_name'] != null) ...[
                                 const SizedBox(height: 2),
                                 Text(
-                                  'By: ${record['health_worker_name']}',
+                                  '${_t('By', 'Ni')}: ${record['health_worker_name']}',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     color: AppColors.textSecondary,
@@ -1286,10 +1349,12 @@ class _RecordsScreenState extends State<RecordsScreen>
                               String riskFactors = '';
                               List<String> riskFactorList = [];
                               List<String> suggestedActionsList = [];
-                              String medicationPlansSummary = 'None';
-                              String givenMedicationsSummary = 'None';
-                              String ferrousSummary = 'Not given';
-                              String calciumSummary = 'Not given';
+                              String medicationPlansSummary = _t('None', 'Wala');
+                              String givenMedicationsSummary = _t('None', 'Wala');
+                              String ferrousSummary =
+                                  _t('Not given', 'Hindi ibinigay');
+                              String calciumSummary =
+                                  _t('Not given', 'Hindi ibinigay');
 
                               if (checkupId is int) {
                                 final checkupDetails =
@@ -1342,11 +1407,11 @@ class _RecordsScreenState extends State<RecordsScreen>
                               final symptomSummary = _checkupSymptomSummaries[
                                       record['prenatal_checkup_id'] as int? ??
                                           -1] ??
-                                  'None recorded';
+                                  _noneRecorded();
                               final fetalCount = (_pregnancyFetalCounts[
                                           record['pregnancy_id'] as int? ?? -1]
                                       ?.toString()) ??
-                                  'Not inputted';
+                                  _notInputted();
                               final riskLevelValue = (riskLevel != null &&
                                       riskLevel.trim().isNotEmpty)
                                   ? riskLevel
@@ -1357,68 +1422,81 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       : '';
 
                               _showRecordDetails(
-                                title: 'Prenatal Checkup',
+                                title: _t('Prenatal Checkup', 'Prenatal Checkup'),
                                 subtitle:
                                     _formatDateTime(record['checkup_datetime']),
                                 icon: Icons.medical_services,
                                 rows: [
                                   MapEntry(
-                                      'Date',
+                                      _t('Date', 'Petsa'),
                                       record['checkup_datetime'] == null
-                                          ? 'Not inputted'
+                                          ? _notInputted()
                                           : _formatDateTime(
                                               record['checkup_datetime'])),
-                                  MapEntry('Fetal Count', fetalCount),
                                   MapEntry(
-                                      'Age of Gestation',
+                                      _t('Fetal Count', 'Bilang ng Sanggol'),
+                                      fetalCount),
+                                  MapEntry(
+                                      _t('Age of Gestation',
+                                          'Edad ng Pagbubuntis'),
                                       _formatInputValue(
                                           record['age_of_gestation'])),
                                   MapEntry(
-                                      'Weight (kg)',
+                                      _t('Weight (kg)', 'Timbang (kg)'),
                                       _formatInputValue(
                                           record['checkup_weight'])),
-                                  MapEntry('Blood Pressure', '$bpSys/$bpDia'),
                                   MapEntry(
-                                      'Fetal Position',
+                                      _t('Blood Pressure', 'Blood Pressure'),
+                                      '$bpSys/$bpDia'),
+                                  MapEntry(
+                                      _t('Fetal Position',
+                                          'Posisyon ng Sanggol'),
                                       _formatInputValue(
                                           record['fetal_position'])),
                                   MapEntry(
-                                      'Fetal Heart Tone',
+                                      _t('Fetal Heart Tone',
+                                          'Tono ng Tibok ng Sanggol'),
                                       _formatInputValue(
                                           record['fetal_heart_tone'])),
                                   MapEntry(
-                                      'Fetal Heart Beat',
+                                      _t('Fetal Heart Beat',
+                                          'Tibok ng Puso ng Sanggol'),
                                       _formatInputValue(
                                           record['fetal_heart_beat'])),
-                                  MapEntry('Symptoms', symptomSummary),
-                                  MapEntry('Medication Plans',
+                                  MapEntry(_t('Symptoms', 'Mga Sintomas'),
+                                      symptomSummary),
+                                  MapEntry(_t('Medication Plans',
+                                          'Plano sa Gamot'),
                                       medicationPlansSummary),
-                                  MapEntry('Given Medications',
+                                  MapEntry(_t('Given Medications',
+                                          'Mga Gamot na Ibinigay'),
                                       givenMedicationsSummary),
                                   MapEntry('Ferrous + FA', ferrousSummary),
                                   MapEntry('Calcium', calciumSummary),
                                   MapEntry(
-                                      'Risk Level',
+                                      _t('Risk Level', 'Antas ng Panganib'),
                                       riskLevelValue.isNotEmpty
                                           ? riskLevelValue
-                                          : 'Not inputted'),
+                                          : _notInputted()),
                                   MapEntry(
-                                      'Risk Factors',
+                                      _t('Risk Factors',
+                                          'Mga Salik ng Panganib'),
                                       riskFactorsValue.isNotEmpty
                                           ? riskFactorsValue
-                                          : 'Not inputted'),
+                                          : _notInputted()),
                                   MapEntry(
-                                      'TD Vaccine',
+                                      _t('TD Vaccine', 'Bakunang TD'),
                                       _formatInputValue(
                                           record['td_vaccine_dose'])),
-                                  MapEntry('Edema',
+                                  MapEntry(_t('Edema', 'Pamamaga'),
                                       _formatInputValue(record['edema'])),
-                                  MapEntry('Remarks',
+                                  MapEntry(_t('Remarks', 'Mga Tala'),
                                       _formatInputValue(record['remarks'])),
                                   MapEntry(
-                                      'Next Schedule',
+                                      _t('Next Schedule',
+                                          'Susunod na Schedule'),
                                       record['next_schedule'] == null
-                                          ? 'Not inputted'
+                                          ? _notInputted()
                                           : _formatDate(
                                               record['next_schedule'])),
                                 ],
@@ -1453,33 +1531,35 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   : split.extractedAi ??
                                       _generateUltrasoundAIInsights(record);
                               _showRecordDetails(
-                                title: 'Ultrasound',
+                                title: _t('Ultrasound', 'Ultrasound'),
                                 subtitle:
                                     _formatDate(record['ultrasound_date']),
                                 icon: Icons.monitor_heart,
                                 imageUrls:
                                     imageUrls.isNotEmpty ? imageUrls : null,
                                 rows: [
-                                  MapEntry('Ultrasound Date',
+                                  MapEntry(
+                                      _t('Ultrasound Date',
+                                          'Petsa ng Ultrasound'),
                                       _formatDate(record['ultrasound_date'])),
                                   MapEntry(
-                                      'Location',
+                                      _t('Location', 'Lokasyon'),
                                       _formatValue(
                                           record['ultrasound_location'])),
                                   MapEntry(
-                                      'Full Name',
+                                      _t('Full Name', 'Buong Pangalan'),
                                       _formatValue(
                                           record['health_worker_name'])),
                                   MapEntry(
-                                      'Institution',
+                                      _t('Institution', 'Institusyon'),
                                       _formatValue(
                                           record['health_worker_institution'])),
                                   MapEntry(
-                                      'Profession',
+                                      _t('Profession', 'Propesyon'),
                                       _formatValue(
                                           record['health_worker_profession'])),
-                                  MapEntry(
-                                      'Remarks', _formatValue(finalRemarks)),
+                                  MapEntry(_t('Remarks', 'Mga Tala'),
+                                      _formatValue(finalRemarks)),
                                 ],
                                 aiAnalysis: aiAnalysis,
                                 useStructuredAiInsights:
@@ -1506,29 +1586,34 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   : split.extractedAi;
 
                               _showRecordDetails(
-                                title: record['lab_test_type'] ?? 'Lab Test',
+                                title: record['lab_test_type'] ??
+                                    _t('Lab Test', 'Lab Test'),
                                 subtitle: _formatDate(record['lab_test_date']),
                                 icon: Icons.science,
                                 imageUrls:
                                     imageUrls.isNotEmpty ? imageUrls : null,
                                 rows: [
-                                  MapEntry('Lab Test Type',
+                                  MapEntry(
+                                      _t('Lab Test Type',
+                                          'Uri ng Lab Test'),
                                       _formatValue(record['lab_test_type'])),
-                                  MapEntry('Lab Test Date',
+                                  MapEntry(
+                                      _t('Lab Test Date',
+                                          'Petsa ng Lab Test'),
                                       _formatDate(record['lab_test_date'])),
                                   MapEntry(
-                                      'Full Name',
+                                      _t('Full Name', 'Buong Pangalan'),
                                       _formatValue(
                                           record['health_worker_name'])),
                                   MapEntry(
-                                      'Institution',
+                                      _t('Institution', 'Institusyon'),
                                       _formatValue(
                                           record['health_worker_institution'])),
                                   MapEntry(
-                                      'Profession',
+                                      _t('Profession', 'Propesyon'),
                                       _formatValue(
                                           record['health_worker_profession'])),
-                                  MapEntry('Notes',
+                                  MapEntry(_t('Notes', 'Mga Tala'),
                                       _formatValue(split.cleanRemarks)),
                                 ],
                                 aiAnalysis: aiAnalysis,
@@ -1587,7 +1672,7 @@ class _RecordsScreenState extends State<RecordsScreen>
             children: [
               Expanded(
                 child: _buildStatCard(
-                  'Total Records',
+                  _t('Total Records', 'Kabuuang Records'),
                   totalRecords.toString(),
                   Icons.folder,
                   AppColors.brandPrimary,
@@ -1596,7 +1681,7 @@ class _RecordsScreenState extends State<RecordsScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: _buildStatCard(
-                  'Checkups',
+                  _t('Checkups', 'Checkups'),
                   totalCheckups.toString(),
                   Icons.medical_services,
                   AppColors.brandPrimary,
@@ -1609,7 +1694,7 @@ class _RecordsScreenState extends State<RecordsScreen>
             children: [
               Expanded(
                 child: _buildStatCard(
-                  'Ultrasounds',
+                  _t('Ultrasounds', 'Ultrasounds'),
                   totalUltrasounds.toString(),
                   Icons.photo,
                   AppColors.brandAccent,
@@ -1618,7 +1703,7 @@ class _RecordsScreenState extends State<RecordsScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: _buildStatCard(
-                  'Lab Tests',
+                  _t('Lab Tests', 'Lab Tests'),
                   totalLabTests.toString(),
                   Icons.science,
                   AppColors.warning,
@@ -1628,9 +1713,9 @@ class _RecordsScreenState extends State<RecordsScreen>
           ),
           const SizedBox(height: 24),
           if (latestRecord != null) ...[
-            const Text(
-              'LATEST RECORD',
-              style: TextStyle(
+            Text(
+              _t('LATEST RECORD', 'PINAKABAGONG RECORD'),
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: Colors.grey,
@@ -1685,11 +1770,11 @@ class _RecordsScreenState extends State<RecordsScreen>
                       children: [
                         Text(
                           latestRecord['record_type'] == 'checkup'
-                              ? 'Prenatal Checkup'
+                              ? _t('Prenatal Checkup', 'Prenatal Checkup')
                               : latestRecord['record_type'] == 'ultrasound'
-                                  ? 'Ultrasound'
+                                  ? _t('Ultrasound', 'Ultrasound')
                                   : (latestRecord['lab_test_type'] ??
-                                      'Lab Test'),
+                                      _t('Lab Test', 'Lab Test')),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1713,9 +1798,9 @@ class _RecordsScreenState extends State<RecordsScreen>
             ),
           ],
           const SizedBox(height: 24),
-          const Text(
-            'RECORDS BY MONTH',
-            style: TextStyle(
+          Text(
+            _t('RECORDS BY MONTH', 'RECORDS BAWAT BUWAN'),
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Colors.grey,
@@ -1801,9 +1886,9 @@ class _RecordsScreenState extends State<RecordsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'QUICK ACTIONS',
-                  style: TextStyle(
+                Text(
+                  _t('QUICK ACTIONS', 'MABILIS NA AKSYON'),
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: Colors.grey,
@@ -1815,7 +1900,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                   children: [
                     Expanded(
                       child: _buildActionButton(
-                        'View Checkups',
+                        _t('View Checkups', 'Tingnan ang Checkups'),
                         Icons.medical_services,
                         AppColors.brandPrimary,
                         () {
@@ -1829,7 +1914,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildActionButton(
-                        'View Lab Tests',
+                        _t('View Lab Tests', 'Tingnan ang Lab Tests'),
                         Icons.science,
                         AppColors.warning,
                         () {
@@ -1847,7 +1932,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                   children: [
                     Expanded(
                       child: _buildActionButton(
-                        'View Ultrasounds',
+                        _t('View Ultrasounds', 'Tingnan ang Ultrasounds'),
                         Icons.photo,
                         AppColors.brandAccent,
                         () {

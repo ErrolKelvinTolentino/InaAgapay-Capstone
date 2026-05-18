@@ -526,6 +526,23 @@ const _contentTranslationsFilipino = {
   'Bloating': 'Panunumpa',
   'Avoid gas-producing foods; eat slowly.':
       'Iwasan ang mga pagkain na nagdudulot ng hangin; kumain nang dahan-dahan.',
+  'Back pain': 'Pananakit ng likod',
+  'Use a pregnancy pillow; avoid heavy lifting.':
+      'Gumamit ng pregnancy pillow; iwasan ang mabibigat na buhat.',
+  'Round ligament pain': 'Pananakit ng round ligament',
+  'Sharp pain on lower belly sides — normal. Move slowly.':
+      'Matalim na sakit sa gilid ng ibabang tiyan — normal ito. Kumilos nang dahan-dahan.',
+  'Heartburn': 'Pangangasim ng sikmura',
+  'Eat smaller meals; avoid spicy and acidic foods.':
+      'Kumain ng mas maliliit na meal; iwasan ang maaanghang at acidic na pagkain.',
+  'Leg cramps': 'Pulikat sa binti',
+  'Stay hydrated; stretch calves before bed.':
+      'Uminom ng sapat na tubig; i-stretch ang binti bago matulog.',
+  'Stretch marks': 'Stretch marks',
+  'Moisturize daily with oil or lotion.':
+      'Maglagay araw-araw ng langis o lotion sa balat.',
+  'Back pain begins as posture shifts':
+      'Nagsisimula ang pananakit ng likod habang nagbabago ang postura',
   'Get blood type and Rh factor confirmed':
       'Kumpirmahin ang blood type at Rh factor',
   'Discuss genetic screening options':
@@ -689,9 +706,6 @@ String _translateContent(String text, AppLanguage language) {
     }
   }
 
-  // Log untranslated strings for debugging (remove in production)
-  debugPrint('⚠️ Untranslated content: "$text"');
-
   return text;
 }
 
@@ -737,8 +751,6 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   late final _TrimesterData _data;
-  final ScrollController _scrollController = ScrollController();
-  bool _headerCollapsed = false;
 
   // Personalized data from database
   List<String> _personalizedSymptoms = [];
@@ -751,15 +763,7 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
     _data = _trimesterForWeek(widget.week);
-    _scrollController.addListener(_onScroll);
     _loadPersonalizedData();
-  }
-
-  void _onScroll() {
-    final collapsed = _scrollController.offset > 140;
-    if (collapsed != _headerCollapsed) {
-      setState(() => _headerCollapsed = collapsed);
-    }
   }
 
   Future<void> _loadPersonalizedData() async {
@@ -874,8 +878,6 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
   @override
   void dispose() {
     _tabController.dispose();
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -887,7 +889,6 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
         return Scaffold(
           backgroundColor: AppColors.bgPrimary,
           body: NestedScrollView(
-            controller: _scrollController,
             headerSliverBuilder: (context, innerScrolled) => [
               _buildSliverHeader(language),
             ],
@@ -918,7 +919,7 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
   Widget _buildSliverHeader(AppLanguage language) {
     final trimesterIndex = _trimesterIndexForWeek(widget.week);
     return SliverAppBar(
-      expandedHeight: 180,
+      expandedHeight: 210,
       collapsedHeight: 70,
       pinned: true,
       backgroundColor: AppColors.brandPrimary,
@@ -928,81 +929,97 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
         icon: const Icon(Icons.arrow_back),
         onPressed: () => Navigator.pop(context),
       ),
-      flexibleSpace: FlexibleSpaceBar(
-        titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
-        title: AnimatedOpacity(
-          duration: const Duration(milliseconds: 200),
-          opacity: _headerCollapsed ? 1 : 0,
-          child: Text(
-            '${_translate('Week', 'Linggo', language)} ${widget.week} • ${_localizedTrimesterName(trimesterIndex, language)}',
-            style: const TextStyle(
-              color: AppColors.textOnColor,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+      flexibleSpace: LayoutBuilder(
+        builder: (context, constraints) {
+          final topPadding = MediaQuery.paddingOf(context).top;
+          final isCollapsed =
+              constraints.maxHeight <= topPadding + kToolbarHeight + 16;
+
+          return FlexibleSpaceBar(
+            titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+            title: AnimatedOpacity(
+              duration: const Duration(milliseconds: 200),
+              opacity: isCollapsed ? 1 : 0,
+              child: Text(
+                '${_translate('Week', 'Linggo', language)} ${widget.week} • ${_localizedTrimesterName(trimesterIndex, language)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textOnColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-        ),
-        background: Container(
-          color: AppColors.brandPrimary,
-          padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+            background: Container(
+              color: AppColors.brandPrimary,
+              padding: const EdgeInsets.fromLTRB(20, 36, 20, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: AppColors.bgPrimary,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(_data.icon,
-                        color: AppColors.brandPrimary, size: 26),
+                  Row(
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: AppColors.bgPrimary,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(_data.icon,
+                            color: AppColors.brandPrimary, size: 26),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${_translate('Week', 'Linggo', language)} ${widget.week}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textOnColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.firstName.isNotEmpty
+                                  ? '${_localizedTrimesterName(trimesterIndex, language)}, ${widget.firstName}'
+                                  : _localizedTrimesterName(
+                                      trimesterIndex, language),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textOnColor,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _data.weeks,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textOnColor,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${_translate('Week', 'Linggo', language)} ${widget.week}',
-                          style: const TextStyle(
-                            color: AppColors.textOnColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          widget.firstName.isNotEmpty
-                              ? '${_localizedTrimesterName(trimesterIndex, language)}, ${widget.firstName}'
-                              : _localizedTrimesterName(
-                                  trimesterIndex, language),
-                          style: const TextStyle(
-                            color: AppColors.textOnColor,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _data.weeks,
-                          style: const TextStyle(
-                            color: AppColors.textOnColor,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 18),
+                  _buildProgressBar(language),
                 ],
               ),
-              const SizedBox(height: 18),
-              _buildProgressBar(language),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1016,19 +1033,29 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              _translate(
-                  'Pregnancy Progress', 'Progreso ng Pagbubuntis', language),
-              style: const TextStyle(
-                color: AppColors.textOnColor,
-                fontSize: 11,
+            Flexible(
+              child: Text(
+                _translate(
+                    'Pregnancy Progress', 'Progreso ng Pagbubuntis', language),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textOnColor,
+                  fontSize: 11,
+                ),
               ),
             ),
-            Text(
-              '${(progress * 100).round()}% • ${widget.weeksLeft} $weeksLeftLabel',
-              style: const TextStyle(
-                color: AppColors.textOnColor,
-                fontSize: 11,
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                '${(progress * 100).round()}% • ${widget.weeksLeft} $weeksLeftLabel',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: const TextStyle(
+                  color: AppColors.textOnColor,
+                  fontSize: 11,
+                ),
               ),
             ),
           ],
@@ -1063,10 +1090,12 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: TabBar(
         controller: _tabController,
-        isScrollable: false,
+        isScrollable: true,
         indicatorColor: AppColors.brandPrimary,
+        dividerColor: AppColors.borderPrimary.withValues(alpha: 0.6),
         indicatorSize: TabBarIndicatorSize.tab,
         indicatorWeight: 3,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 18),
         labelColor: AppColors.brandPrimary,
         unselectedLabelColor: AppColors.textSecondary,
         labelStyle: const TextStyle(
@@ -1270,61 +1299,78 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
       children: [
         Row(
           children: [
-            SmallInfoBox(
-              icon: Icons.straighten,
-              title: _translate('Baby Size', 'Sukat ng Sanggol', language),
-              value: widget.babySize,
-              borderColor: AppColors.borderPrimary,
-              iconColor: AppColors.brandPrimary,
+            Expanded(
+              child: SmallInfoBox(
+                icon: Icons.straighten,
+                title: _translate('Baby Size', 'Sukat ng Sanggol', language),
+                value: widget.babySize,
+                borderColor: AppColors.borderPrimary,
+                iconColor: AppColors.brandPrimary,
+              ),
             ),
             const SizedBox(width: 10),
-            SmallInfoBox(
-              icon: Icons.monitor_weight_outlined,
-              title: _translate('Baby Weight', 'Timbang ng Sanggol', language),
-              value: widget.babyWeight,
-              borderColor: AppColors.borderPrimary,
-              iconColor: AppColors.brandPrimary,
+            Expanded(
+              child: SmallInfoBox(
+                icon: Icons.monitor_weight_outlined,
+                title:
+                    _translate('Baby Weight', 'Timbang ng Sanggol', language),
+                value: widget.babyWeight,
+                borderColor: AppColors.borderPrimary,
+                iconColor: AppColors.brandPrimary,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 10),
         Row(
           children: [
-            SmallInfoBox(
-              icon: Icons.calendar_month_outlined,
-              title: _translate('Due Date', 'Araw ng Pagbubuntis', language),
-              value: widget.dueDate,
-              borderColor: AppColors.borderPrimary,
-              iconColor: AppColors.brandPrimary,
+            Expanded(
+              child: SmallInfoBox(
+                icon: Icons.calendar_month_outlined,
+                title:
+                    _translate('Due Date', 'Araw ng Pagbubuntis', language),
+                value: widget.dueDate,
+                borderColor: AppColors.borderPrimary,
+                iconColor: AppColors.brandPrimary,
+              ),
             ),
             const SizedBox(width: 10),
-            SmallInfoBox(
-              icon: Icons.timer_outlined,
-              title: _translate('Weeks Left', 'Natitirang Linggo', language),
-              value:
-                  '${widget.weeksLeft} ${_translate('weeks', 'linggo', language)}',
-              borderColor: AppColors.borderPrimary,
-              iconColor: AppColors.brandPrimary,
+            Expanded(
+              child: SmallInfoBox(
+                icon: Icons.timer_outlined,
+                title:
+                    _translate('Weeks Left', 'Natitirang Linggo', language),
+                value:
+                    '${widget.weeksLeft} ${_translate('weeks', 'linggo', language)}',
+                borderColor: AppColors.borderPrimary,
+                iconColor: AppColors.brandPrimary,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 10),
         Row(
           children: [
-            SmallInfoBox(
-              icon: Icons.health_and_safety_outlined,
-              title: _translate('Risk Level', 'Antas ng Panganib', language),
-              value: widget.riskLevel.toUpperCase(),
-              borderColor: _riskColor(widget.riskLevel),
-              iconColor: _riskColor(widget.riskLevel),
+            Expanded(
+              child: SmallInfoBox(
+                icon: Icons.health_and_safety_outlined,
+                title:
+                    _translate('Risk Level', 'Antas ng Panganib', language),
+                value: widget.riskLevel.toUpperCase(),
+                borderColor: _riskColor(widget.riskLevel),
+                iconColor: _riskColor(widget.riskLevel),
+              ),
             ),
             const SizedBox(width: 10),
-            SmallInfoBox(
-              icon: Icons.child_care,
-              title: _translate('Fetal Count', 'Bilang ng Sanggol', language),
-              value: _localizedFetalCount(widget.fetalCount, language),
-              borderColor: AppColors.borderPrimary,
-              iconColor: AppColors.brandPrimary,
+            Expanded(
+              child: SmallInfoBox(
+                icon: Icons.child_care,
+                title:
+                    _translate('Fetal Count', 'Bilang ng Sanggol', language),
+                value: _localizedFetalCount(widget.fetalCount, language),
+                borderColor: AppColors.borderPrimary,
+                iconColor: AppColors.brandPrimary,
+              ),
             ),
           ],
         ),
@@ -1468,15 +1514,17 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             const SizedBox(width: 12),
-            Text(
-              _translate(
-                'Loading personalized recommendations...',
-                'Naglo-load ng personalisadong rekomendasyon...',
-                language,
-              ),
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
+            Expanded(
+              child: Text(
+                _translate(
+                  'Loading personalized recommendations...',
+                  'Naglo-load ng personalisadong rekomendasyon...',
+                  language,
+                ),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
           ],
@@ -1496,16 +1544,20 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
               const Icon(Icons.auto_awesome,
                   color: AppColors.brandPrimary, size: 20),
               const SizedBox(width: 10),
-              Text(
-                _translate(
-                  'Personalized Recommendations',
-                  'Personalisadong Rekomendasyon',
-                  language,
-                ),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+              Expanded(
+                child: Text(
+                  _translate(
+                    'Personalized Recommendations',
+                    'Personalisadong Rekomendasyon',
+                    language,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
             ],
@@ -1675,16 +1727,20 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _BabyStatChip(
-                    label: _translate('Size', 'Sukat', language),
-                    value: widget.babySize,
-                    icon: Icons.straighten,
+                  Expanded(
+                    child: _BabyStatChip(
+                      label: _translate('Size', 'Sukat', language),
+                      value: widget.babySize,
+                      icon: Icons.straighten,
+                    ),
                   ),
                   const SizedBox(width: 12),
-                  _BabyStatChip(
-                    label: _translate('Weight', 'Timbang', language),
-                    value: widget.babyWeight,
-                    icon: Icons.monitor_weight_outlined,
+                  Expanded(
+                    child: _BabyStatChip(
+                      label: _translate('Weight', 'Timbang', language),
+                      value: widget.babyWeight,
+                      icon: Icons.monitor_weight_outlined,
+                    ),
                   ),
                 ],
               ),
@@ -1723,6 +1779,9 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
             runSpacing: 10,
             children: _data.motherChanges.map((change) {
               return Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width - 64,
+                ),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
@@ -1736,12 +1795,15 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
                     const Icon(Icons.circle,
                         size: 8, color: AppColors.brandPrimary),
                     const SizedBox(width: 8),
-                    Text(
-                      change,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
+                    Flexible(
+                      child: Text(
+                        _translateContent(change, language),
+                        softWrap: true,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -2274,12 +2336,16 @@ class _SectionHeader extends StatelessWidget {
           child: Icon(icon, size: 16, color: AppColors.brandPrimary),
         ),
         const SizedBox(width: 10),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
           ),
         ),
       ],
@@ -2366,6 +2432,9 @@ class _RiskFactorChip extends StatelessWidget {
         factor.toLowerCase().contains('emergency');
 
     return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width - 64,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: isHigh
@@ -2380,6 +2449,7 @@ class _RiskFactorChip extends StatelessWidget {
       ),
       child: Text(
         factor,
+        softWrap: true,
         style: TextStyle(
           fontSize: 12,
           color: isHigh ? AppColors.error : AppColors.textPrimary,
@@ -2414,26 +2484,32 @@ class _BabyStatChip extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: AppColors.brandPrimary),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textSecondary,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

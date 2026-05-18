@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../services/language_service.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 
 class RecordDetailScreen extends StatefulWidget {
@@ -42,6 +43,38 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   static const _accentRecord = Color(0xFFE6398D); // deep rose
   static const _accentWorker = Color(0xFFD44B8A); // medium pink
   static const _accentNotes = Color(0xFFC7607E); // warm coral-pink
+
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
+
+  String _localizedSectionTitle(String title) {
+    switch (title) {
+      case 'Vitals':
+        return _t('Vitals', 'Vital Signs');
+      case 'Fetal Assessment':
+        return _t('Fetal Assessment', 'Pagsusuri sa Sanggol');
+      case 'Symptoms':
+        return _t('Symptoms', 'Mga Sintomas');
+      case 'Medications & Supplements':
+        return _t('Medications & Supplements', 'Mga Gamot at Supplements');
+      case 'Schedule & Remarks':
+        return _t('Schedule & Remarks', 'Schedule at Mga Tala');
+      case 'Ultrasound Information':
+        return _t('Ultrasound Information', 'Impormasyon ng Ultrasound');
+      case 'Checkup Information':
+        return _t('Checkup Information', 'Impormasyon ng Checkup');
+      case 'Lab Test Information':
+        return _t('Lab Test Information', 'Impormasyon ng Lab Test');
+      case 'Health Worker Information':
+        return _t('Health Worker Information',
+            'Impormasyon ng Health Worker');
+      case 'Notes':
+        return _t('Notes', 'Mga Tala');
+      default:
+        return title;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -171,9 +204,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                     size: 16, color: AppColors.brandAccent),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Attached Images',
-                style: TextStyle(
+              Text(
+                _t('Attached Images', 'Mga Kalakip na Larawan'),
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
@@ -181,7 +214,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               ),
               const Spacer(),
               Text(
-                '${imageUrls.length} file${imageUrls.length > 1 ? 's' : ''}',
+                LanguageService.isFilipino
+                    ? '${imageUrls.length} file'
+                    : '${imageUrls.length} file${imageUrls.length > 1 ? 's' : ''}',
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
@@ -316,9 +351,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                 ),
               ],
             ),
-            child: const Text(
-              'No additional details available.',
-              style: TextStyle(color: AppColors.textSecondary),
+            child: Text(
+              _t('No additional details available.',
+                  'Walang karagdagang detalye.'),
+              style: const TextStyle(color: AppColors.textSecondary),
             ),
           )
         else
@@ -338,7 +374,32 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   String _labelKey(String label) {
-    return _normalizeForCompare(label);
+    final normalized = _normalizeForCompare(label);
+    const aliases = {
+      'petsa': 'date',
+      'bilangngsanggol': 'fetalcount',
+      'edadngpagbubuntis': 'ageofgestation',
+      'timbangkg': 'weight(kg)',
+      'posisyonngsanggol': 'fetalposition',
+      'tonongtibokngsanggol': 'fetalhearttone',
+      'tibokngpusongsanggol': 'fetalheartbeat',
+      'mgasintomas': 'symptoms',
+      'planosagamot': 'medicationplans',
+      'mgagamotnaibinigay': 'givenmedications',
+      'bakunangtd': 'tdvaccine',
+      'pamamaga': 'edema',
+      'mgatala': 'remarks',
+      'susunodnaschedule': 'nextschedule',
+      'lokasyon': 'location',
+      'buongpangalan': 'fullname',
+      'institusyon': 'institution',
+      'propesyon': 'profession',
+      'ur nglabtest': 'labtesttype',
+      'uringlabtest': 'labtesttype',
+      'petsanglabtest': 'labtestdate',
+      'petsangultrasound': 'ultrasounddate',
+    };
+    return aliases[normalized] ?? normalized;
   }
 
   Map<String, List<MapEntry<String, String>>> _groupRows(
@@ -487,7 +548,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      title,
+                      _localizedSectionTitle(title),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -543,7 +604,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       }
 
       final displayValue =
-          value == '-' || value == '—' ? 'Not provided' : value;
+          value == '-' || value == '—' ? _t('Not provided', 'Hindi nailagay') : value;
       filtered.add(MapEntry(label, displayValue));
     }
 
@@ -551,7 +612,8 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Widget _buildDetailRow(String label, String value) {
-    final isNotProvided = value.toLowerCase() == 'not provided';
+    final isNotProvided = value.toLowerCase() == 'not provided' ||
+        value.toLowerCase() == 'hindi nailagay';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Column(
@@ -617,9 +679,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                     size: 16, color: AppColors.brandPrimary),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'AI Insights',
-                style: TextStyle(
+              Text(
+                _t('AI Insights', 'AI na Pagsusuri'),
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
@@ -643,9 +705,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
   Widget _buildPrenatalAiInsights(String aiText) {
     if (aiText.isEmpty) {
-      return const Text(
-        'No AI insights available.',
-        style: TextStyle(color: AppColors.textSecondary),
+      return Text(
+        _t('No AI insights available.', 'Walang available na AI analysis.'),
+        style: const TextStyle(color: AppColors.textSecondary),
       );
     }
 
@@ -745,9 +807,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
   Widget _buildFormattedAiText(String text) {
     if (text.isEmpty) {
-      return const Text(
-        'No AI insights available.',
-        style: TextStyle(color: AppColors.textSecondary),
+      return Text(
+        _t('No AI insights available.', 'Walang available na AI analysis.'),
+        style: const TextStyle(color: AppColors.textSecondary),
       );
     }
 
@@ -1733,10 +1795,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                     size: 16, color: AppColors.brandText),
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Prenatal Risk Summary',
-                  style: TextStyle(
+                  _t('Prenatal Risk Summary', 'Buod ng Prenatal Risk'),
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
@@ -1750,7 +1812,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           // Risk Level Section
           if (riskLevel.isNotEmpty) ...[
             _buildRiskSubSection(
-              title: 'Risk Level',
+              title: _t('Risk Level', 'Antas ng Panganib'),
               icon: Icons.flag_outlined,
               child: Row(
                 children: [
@@ -1767,7 +1829,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           // Risk Factors Section
           if (riskFactors.isNotEmpty) ...[
             _buildRiskSubSection(
-              title: 'Risk Factors',
+              title: _t('Risk Factors', 'Mga Salik ng Panganib'),
               icon: Icons.warning_amber_rounded,
               child: Wrap(
                 spacing: 8,
@@ -1811,7 +1873,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           // Suggested Actions Section
           if (suggestedActions.isNotEmpty) ...[
             _buildRiskSubSection(
-              title: 'Suggested Actions',
+              title: _t('Suggested Actions', 'Mga Iminumungkahing Aksyon'),
               icon: Icons.lightbulb_outline,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
