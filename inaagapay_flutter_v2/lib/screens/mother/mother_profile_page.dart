@@ -127,7 +127,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     try {
       final pregnanciesResponse = await SupabaseService.client
           .from('pregnancies')
-          .select('pregnancy_id')
+          .select('pregnancy_id, pre_pregnancy_weight')
           .eq('mother_id', widget.motherId)
           .eq('status', 'ongoing')
           .maybeSingle();
@@ -143,6 +143,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       }
 
       final pregnancyId = pregnanciesResponse['pregnancy_id'] as int;
+      final prePregnancyWeight = pregnanciesResponse['pre_pregnancy_weight'] != null
+          ? (pregnanciesResponse['pre_pregnancy_weight'] as num).toDouble()
+          : null;
 
       final checkupResponse = await SupabaseService.client
           .from('prenatal_checkups')
@@ -168,13 +171,19 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         final height = await _getMotherHeight();
         if (!mounted) return;
 
+        // Use pre-pregnancy weight for BMI when available (IOM 2009)
+        final bmiWeight = prePregnancyWeight ?? weight?.toDouble();
         double? bmi;
         String? bmiStatus;
+        String bmiSource = 'BMI Unavailable';
 
-        if (weight != null && height != null && height > 0) {
+        if (bmiWeight != null && height != null && height > 0) {
           final heightM = height / 100;
-          bmi = weight / (heightM * heightM);
+          bmi = bmiWeight / (heightM * heightM);
           bmiStatus = getBMIStatus(bmi);
+          bmiSource = prePregnancyWeight != null
+              ? 'Pre-Pregnancy BMI'
+              : 'Estimated BMI (current weight)';
         }
 
         setState(() {
@@ -185,6 +194,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             'height': height ?? 0,
             'bmi': bmi,
             'bmi_status': bmiStatus,
+            'bmi_source': bmiSource,
+            'pre_pregnancy_weight': prePregnancyWeight,
           };
           _loadingGrowth = false;
         });
@@ -221,7 +232,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       return null;
     }
   }
-
 
   Future<void> _refresh() async {
     // FIX #1 continued: reset the guard so controllers re-init from fresh data
@@ -1162,6 +1172,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     String? riskLevel,
     String? riskFactors,
     List<String>? suggestedActions,
+    Map<String, dynamic>? weightGainEval,
   }) {
     Navigator.push(
       context,
@@ -1181,6 +1192,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               ? riskFactors.split(';').map((s) => s.trim()).toList()
               : null,
           suggestedActions: suggestedActions,
+          weightGainEval: weightGainEval,
         ),
       ),
     );
@@ -1442,9 +1454,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               MapEntry('Next Schedule', _formatDate(checkup['next_schedule'])),
             ],
             aiAnalysis: aiAnalysis,
-            useStructuredAiInsights: false,
             riskLevel: riskLevel,
             riskFactors: riskFactors,
+            weightGainEval: (checkup['weight_gain'] as List?)?.isNotEmpty == true
+                ? (checkup['weight_gain'] as List).first as Map<String, dynamic>
+                : null,
           );
         },
     );

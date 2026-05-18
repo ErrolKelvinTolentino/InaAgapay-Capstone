@@ -69,6 +69,29 @@ String getBMIStatus(double bmi) {
   return 'Obese';
 }
 
+/// For pregnant mothers: BMI should use pre-pregnancy weight when available.
+/// Falls back to current weight if pre-pregnancy weight is unavailable.
+double? computePregnancyBMI({
+  double? prePregnancyWeight,
+  double? currentWeight,
+  double? heightCm,
+}) {
+  final weight = prePregnancyWeight ?? currentWeight;
+  if (weight == null || heightCm == null || heightCm <= 0) return null;
+  final heightM = heightCm / 100;
+  return weight / (heightM * heightM);
+}
+
+/// Returns a human-readable label indicating which weight was used for BMI.
+String bmiSourceLabel({
+  double? prePregnancyWeight,
+  double? currentWeight,
+}) {
+  if (prePregnancyWeight != null) return 'Pre-Pregnancy BMI';
+  if (currentWeight != null) return 'Estimated BMI (current weight)';
+  return 'BMI Unavailable';
+}
+
 Color getBMIStatusColor(String status) {
   switch (status) {
     case 'Underweight':

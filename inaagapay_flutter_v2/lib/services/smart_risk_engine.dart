@@ -124,11 +124,36 @@ class SmartRiskEngine {
       items.add('Edema present with borderline BP — check for other signs next visit');
     }
 
+    // Weight gain trend analysis
+    if (sortedCheckups.length >= 2) {
+      final latest = sortedCheckups.last;
+      final previous = sortedCheckups[sortedCheckups.length - 2];
+      final curWeight = _num(latest['checkup_weight']);
+      final prevWeight = _num(previous['checkup_weight']);
+      final curWeek = _num(latest['age_of_gestation']);
+      final prevWeek = _num(previous['age_of_gestation']);
+
+      if (curWeight != null && prevWeight != null &&
+          curWeek != null && prevWeek != null && curWeek > prevWeek) {
+        final weekDiff = curWeek - prevWeek;
+        final weightDiff = curWeight - prevWeight;
+        final weeklyGain = weightDiff / weekDiff;
+
+        if (weightDiff < -0.1) {
+          items.add('⚠️ Weight loss detected (${weightDiff.toStringAsFixed(1)} kg) — requires clinical attention');
+        } else if (weeklyGain > 1.0 && curWeek > 13) {
+          items.add('Rapid weight gain (${weeklyGain.toStringAsFixed(2)} kg/week) — rule out fluid retention');
+        } else if (weeklyGain < 0.15 && curWeek > 13 && weekDiff >= 2) {
+          items.add('Low weight gain rate (${weeklyGain.toStringAsFixed(2)} kg/week) — monitor nutrition');
+        }
+      }
+    }
+
     if (items.isEmpty) {
       items.add('No specific concerns based on current data');
     }
 
-    return items.take(4).toList();
+    return items.take(5).toList();
   }
 
   static double? _num(dynamic v) {

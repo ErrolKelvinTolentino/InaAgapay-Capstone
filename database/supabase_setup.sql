@@ -128,6 +128,7 @@ CREATE TABLE pregnancies (
     ),
     last_menstrual_period DATE,
     expected_date_of_delivery DATE,
+    pre_pregnancy_weight DECIMAL(5, 2),
     fetal_count INT DEFAULT 1,
     status VARCHAR(10) NOT NULL CHECK (status IN ('ongoing', 'ended')),
     gestational_age_at_end DECIMAL(4, 1),
@@ -595,6 +596,32 @@ ALTER TABLE ai_responses DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_edit_history DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancy_risk_assessments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancy_risk_factors DISABLE ROW LEVEL SECURITY;
+-- =========================
+-- WEIGHT GAIN EVALUATIONS
+-- Stores per-checkup maternal weight gain analysis results
+-- =========================
+CREATE TABLE weight_gain_evaluations (
+    evaluation_id BIGSERIAL PRIMARY KEY,
+    pregnancy_id BIGINT NOT NULL REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
+    prenatal_checkup_id BIGINT REFERENCES prenatal_checkups(prenatal_checkup_id) ON DELETE CASCADE,
+    mode VARCHAR(10) NOT NULL CHECK (mode IN ('FULL', 'TREND')),
+    bmi_category VARCHAR(20),
+    baseline_weight DECIMAL(5, 2),
+    baseline_week DECIMAL(4, 1),
+    current_weight DECIMAL(5, 2),
+    current_week DECIMAL(4, 1),
+    expected_gain DECIMAL(5, 2),
+    actual_gain DECIMAL(5, 2),
+    weekly_gain DECIMAL(5, 3),
+    status VARCHAR(20) NOT NULL CHECK (status IN ('NORMAL', 'LOW', 'HIGH', 'INSUFFICIENT DATA')),
+    confidence VARCHAR(10) NOT NULL CHECK (confidence IN ('HIGH', 'MEDIUM', 'LOW')),
+    message TEXT,
+    flags TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_wge_pregnancy ON weight_gain_evaluations(pregnancy_id);
+CREATE INDEX idx_wge_checkup ON weight_gain_evaluations(prenatal_checkup_id);
+ALTER TABLE weight_gain_evaluations DISABLE ROW LEVEL SECURITY;
 
 -- TO DO: 
 -- 1. Separate outcomes from pregnancies table, 
@@ -649,6 +676,33 @@ ALTER TABLE deliveries ADD COLUMN fetus_number INT DEFAULT 1;
 -- 4. Create indexes and disable RLS for the new tables
 CREATE INDEX idx_pregnancy_outcomes_pregnancy ON pregnancy_outcomes(pregnancy_id);
 ALTER TABLE pregnancy_outcomes DISABLE ROW LEVEL SECURITY;
+
+-- 5. Add pre_pregnancy_weight to pregnancies table (per-pregnancy baseline)
+ALTER TABLE pregnancies ADD COLUMN IF NOT EXISTS pre_pregnancy_weight DECIMAL(5, 2);
+
+-- 6. Create weight_gain_evaluations table
+CREATE TABLE IF NOT EXISTS weight_gain_evaluations (
+    evaluation_id BIGSERIAL PRIMARY KEY,
+    pregnancy_id BIGINT NOT NULL REFERENCES pregnancies(pregnancy_id) ON DELETE CASCADE,
+    prenatal_checkup_id BIGINT REFERENCES prenatal_checkups(prenatal_checkup_id) ON DELETE CASCADE,
+    mode VARCHAR(10) NOT NULL CHECK (mode IN ('FULL', 'TREND')),
+    bmi_category VARCHAR(20),
+    baseline_weight DECIMAL(5, 2),
+    baseline_week DECIMAL(4, 1),
+    current_weight DECIMAL(5, 2),
+    current_week DECIMAL(4, 1),
+    expected_gain DECIMAL(5, 2),
+    actual_gain DECIMAL(5, 2),
+    weekly_gain DECIMAL(5, 3),
+    status VARCHAR(20) NOT NULL CHECK (status IN ('NORMAL', 'LOW', 'HIGH', 'INSUFFICIENT DATA')),
+    confidence VARCHAR(10) NOT NULL CHECK (confidence IN ('HIGH', 'MEDIUM', 'LOW')),
+    message TEXT,
+    flags TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_wge_pregnancy ON weight_gain_evaluations(pregnancy_id);
+CREATE INDEX IF NOT EXISTS idx_wge_checkup ON weight_gain_evaluations(prenatal_checkup_id);
+ALTER TABLE weight_gain_evaluations DISABLE ROW LEVEL SECURITY;
 */
 
 -- =====================================================

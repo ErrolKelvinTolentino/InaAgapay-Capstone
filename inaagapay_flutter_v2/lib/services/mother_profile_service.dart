@@ -57,6 +57,16 @@ class MotherProfileService {
                   symptom_name,
                   risk_category
                 )
+              ),
+              weight_gain:weight_gain_evaluations (
+                evaluation_id,
+                mode,
+                status,
+                confidence,
+                message,
+                flags,
+                actual_gain,
+                weekly_gain
               )
             ),
             ultrasounds (

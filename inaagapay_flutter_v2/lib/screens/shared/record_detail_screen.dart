@@ -19,6 +19,7 @@ class RecordDetailScreen extends StatefulWidget {
     this.riskLevel,
     this.riskFactors,
     this.suggestedActions,
+    this.weightGainEval,
   });
 
   final String title;
@@ -31,6 +32,7 @@ class RecordDetailScreen extends StatefulWidget {
   final String? riskLevel;
   final List<String>? riskFactors;
   final List<String>? suggestedActions;
+  final Map<String, dynamic>? weightGainEval;
 
   @override
   State<RecordDetailScreen> createState() => _RecordDetailScreenState();
@@ -158,6 +160,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                 const SizedBox(height: 14),
               ],
               _buildDetailsCard(),
+              if (widget.weightGainEval != null) ...[
+                const SizedBox(height: 14),
+                _buildWeightGainCard(widget.weightGainEval!),
+              ],
               if (isPrenatal && _shouldShowPrenatalRiskSummary()) ...[
                 const SizedBox(height: 14),
                 _buildPrenatalRiskSummaryCard(),
@@ -169,6 +175,117 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWeightGainCard(Map<String, dynamic> eval) {
+    final status = eval['status']?.toString() ?? 'UNKNOWN';
+    final mode = eval['mode']?.toString() ?? 'TREND';
+    final message = eval['message']?.toString() ?? '';
+    final bmiCat = eval['bmi_category']?.toString() ?? '';
+    
+    final isHigh = status == 'HIGH';
+    final isLow = status == 'LOW';
+    final isInsufficient = status == 'INSUFFICIENT';
+    
+    final color = isHigh ? AppColors.error : (isLow ? AppColors.warning : AppColors.success);
+    final icon = isHigh ? Icons.trending_up : (isLow ? Icons.trending_down : (isInsufficient ? Icons.hourglass_empty : Icons.check_circle));
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 16, color: color),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _t('Weight Gain Monitor', 'Pagsubaybay sa Timbang'),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.bgSecondary,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderPrimary),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Analysis Mode:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    Text(mode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('BMI Category:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    Text(bmiCat, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const Divider(height: 16),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -54,6 +54,15 @@ class RiskEngine {
 
     // Additional simple thresholds can be added here (e.g., Hb, proteinuria, fever)
 
+    // Weight loss detection — flag if current weight is below previous
+    // (requires previous checkup data to be passed in latestCheckup as
+    // 'previous_weight'; callers may optionally include this field)
+    final prevWeight = _num(latestCheckup['previous_weight']);
+    final curWeight = _num(latestCheckup['checkup_weight']);
+    if (prevWeight != null && curWeight != null && curWeight < prevWeight - 0.1) {
+      findings.add('Weight loss: ${(prevWeight - curWeight).toStringAsFixed(1)} kg since previous checkup');
+    }
+
     final isHigh = findings.isNotEmpty;
     return RiskAssessment(
       level: isHigh ? 'high' : 'low',

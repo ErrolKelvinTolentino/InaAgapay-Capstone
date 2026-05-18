@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_storage.dart';
 import '../../services/groq_service.dart';
+import '../../services/weight_gain_engine.dart';
+import '../../models/weight_gain_models.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
@@ -2244,6 +2246,104 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             'pregnancy_id', widget.pregnancyId);
   }
 
+  /// Evaluates and persists maternal weight gain analysis for this checkup.
+  Future<void> _persistWeightGainEvaluation(
+      int prenatalCheckupId, double currentWeight) async {
+    try {
+      // Guard: skip if gestational age is unknown
+      final aog = _aogWeeks;
+      if (aog == null || aog <= 0) {
+        debugPrint('Weight gain evaluation skipped: gestational age unavailable.');
+        return;
+      }
+
+      final client = Supabase.instance.client;
+
+      // Fetch mother's height from mothers table
+      final motherData = await client
+          .from('mothers')
+          .select('height')
+          .eq('mother_id', widget.motherId)
+          .maybeSingle();
+
+      // Fetch pre-pregnancy weight and fetal count from pregnancies table
+      final pregnancyData = await client
+          .from('pregnancies')
+          .select('pre_pregnancy_weight, fetal_count')
+          .eq('pregnancy_id', widget.pregnancyId)
+          .maybeSingle();
+
+      final heightCm = _wgeToDouble(motherData?['height']);
+      final prePregnancyWeight =
+          _wgeToDouble(pregnancyData?['pre_pregnancy_weight']);
+      final fetalCount = (pregnancyData?['fetal_count'] as num?)?.toInt() ?? 1;
+
+      // Fetch all checkups for this pregnancy (ascending order)
+      final rawCheckups = await client
+          .from('prenatal_checkups')
+          .select('checkup_weight, age_of_gestation, checkup_datetime')
+          .eq('pregnancy_id', widget.pregnancyId)
+          .order('checkup_datetime', ascending: true);
+
+      final checkupList = (rawCheckups as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
+      // Run the weight gain engine
+      final result = WeightGainEngine.evaluate(
+        currentWeight: currentWeight,
+        aogWeeks: aog,
+        allCheckups: checkupList,
+        prePregnancyWeight: prePregnancyWeight,
+        heightCm: heightCm,
+        fetalCount: fetalCount,
+      );
+
+      // Persist evaluation result
+      await client.from('weight_gain_evaluations').insert({
+        'pregnancy_id': widget.pregnancyId,
+        'prenatal_checkup_id': prenatalCheckupId,
+        'mode': result.mode == WeightGainMode.full ? 'FULL' : 'TREND',
+        'bmi_category': result.bmiCategory,
+        'baseline_weight': result.baselineWeight,
+        'baseline_week': result.baselineWeek,
+        'current_weight': result.currentWeight,
+        'current_week': result.currentWeek,
+        'expected_gain': result.expectedGain,
+        'actual_gain': result.actualGain,
+        'weekly_gain': result.weeklyGain,
+        'status': result.statusLabel,
+        'confidence': result.confidenceLabel,
+        'message': result.message,
+        'flags': result.flags,
+      });
+
+      // Store in ai_responses for AI explanation layer
+      await client.from('ai_responses').insert({
+        'response_type': 'weight_gain_analysis',
+        'reference_table': 'prenatal_checkups',
+        'reference_id': prenatalCheckupId,
+        'ai_model': 'Weight Gain Engine (IOM 2009)',
+        'confidence_score': null,
+        'response': result.message,
+        'response_category': 'analysis',
+        'status': 'generated',
+        'generated_by_ai': false,
+        'approved_by': null,
+      });
+    } catch (e) {
+      // Non-critical: log but don't block checkup save
+      debugPrint('Weight gain evaluation error (non-critical): $e');
+    }
+  }
+
+  static double? _wgeToDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
   Future<void> _submit() async {
     if (!_validateCurrentStep()) return;
 
@@ -2329,6 +2429,9 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       await _insertMedicationRecords();
 
       await _persistRiskAssessment(prenatalCheckupId);
+
+      // Weight Gain Monitoring — evaluate and persist
+      await _persistWeightGainEvaluation(prenatalCheckupId, weight);
 
       if (!mounted) return;
       _showMessage('Prenatal checkup saved.', type: AppSnackType.success);

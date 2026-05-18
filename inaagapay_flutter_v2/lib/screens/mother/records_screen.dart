@@ -131,7 +131,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     if (pregnancyIds.isNotEmpty) {
       final checkupsResponse = await SupabaseService.client
           .from('prenatal_checkups')
-          .select('*')
+          .select('*, weight_gain:weight_gain_evaluations (evaluation_id, mode, status, confidence, message, flags, actual_gain, weekly_gain)')
           .inFilter('pregnancy_id', pregnancyIds)
           .order('checkup_datetime', ascending: false);
 
@@ -306,6 +306,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     String? riskLevel,
     String? riskFactors,
     List<String>? suggestedActions,
+    Map<String, dynamic>? weightGainEval,
   }) {
     Navigator.push(
       context,
@@ -325,6 +326,7 @@ class _RecordsScreenState extends State<RecordsScreen>
               ? riskFactors.split(';').map((s) => s.trim()).toList()
               : null,
           suggestedActions: suggestedActions,
+          weightGainEval: weightGainEval,
         ),
       ),
     );
@@ -1504,6 +1506,9 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 useStructuredAiInsights: false,
                                 riskLevel: riskLevel,
                                 riskFactors: riskFactors,
+                                weightGainEval: (record['weight_gain'] as List?)?.isNotEmpty == true
+                                    ? (record['weight_gain'] as List).first as Map<String, dynamic>
+                                    : null,
                               );
                             } else if (isUltrasound) {
                               final imageUrls =

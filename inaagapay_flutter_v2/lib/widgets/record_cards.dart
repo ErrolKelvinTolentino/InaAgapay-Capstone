@@ -25,6 +25,10 @@ class CheckupRecordCard extends StatelessWidget {
     final bpDia = formatValue(checkup['blood_pressure_diastolic']);
     final aog = formatValue(checkup['age_of_gestation']);
 
+    final wgeList = checkup['weight_gain'] as List?;
+    final wge = (wgeList != null && wgeList.isNotEmpty) ? wgeList.first as Map<String, dynamic> : null;
+    final wgeStatus = wge?['status']?.toString();
+
     return _RecordCardShell(
       accentColor: AppColors.brandPrimary,
       icon: Icons.medical_services_outlined,
@@ -34,6 +38,8 @@ class CheckupRecordCard extends StatelessWidget {
         if (aog != '-') _Badge(label: '$aog wks', color: AppColors.brandPrimary),
         if (bpSys != '-' && bpDia != '-')
           _Badge(label: 'BP $bpSys/$bpDia', color: AppColors.textSecondary),
+        if (wgeStatus == 'HIGH' || wgeStatus == 'LOW')
+          _Badge(label: 'Weight Gain: $wgeStatus', color: AppColors.warning),
       ],
       onTap: onTap,
     );

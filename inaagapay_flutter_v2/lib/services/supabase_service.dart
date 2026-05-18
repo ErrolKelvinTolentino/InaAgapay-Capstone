@@ -908,6 +908,7 @@ class SupabaseService {
     List<Map<String, dynamic>> allergies = const [],
     List<Map<String, dynamic>> pastPregnancies = const [],
     int fetalCount = 1,
+    double? prePregnancyWeight,
   }) async {
     try {
       final motherResponse = await client
@@ -973,6 +974,7 @@ class SupabaseService {
               'fetal_count': fetalCount,
               'last_menstrual_period': lmp.toIso8601String().split('T')[0],
               'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
+              'pre_pregnancy_weight': prePregnancyWeight,
               'status': 'ongoing',
             })
             .select('pregnancy_id')
@@ -1068,6 +1070,7 @@ class SupabaseService {
     List<Map<String, dynamic>> allergies = const [],
     List<Map<String, dynamic>> pastPregnancies = const [],
     int fetalCount = 1,
+    double? prePregnancyWeight,
   }) async {
     try {
       final emailFree = await isEmailAvailable(email);
@@ -1160,6 +1163,7 @@ class SupabaseService {
               'fetal_count': fetalCount,
               'last_menstrual_period': lmp.toIso8601String().split('T')[0],
               'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
+              'pre_pregnancy_weight': prePregnancyWeight,
               'status': 'ongoing',
             })
             .select('pregnancy_id')
