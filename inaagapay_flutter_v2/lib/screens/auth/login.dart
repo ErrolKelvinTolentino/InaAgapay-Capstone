@@ -115,6 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
           
           final needsPasswordChange = response['user']['needs_password_change'] == true;
           final createdBy = response['user']['created_by'] as String? ?? 'self';
+          await AuthStorage.saveTemporaryPasswordChanged(!needsPasswordChange);
           
           if (createdBy == 'midwife') {
             await AuthStorage.saveProfileComplete(true);

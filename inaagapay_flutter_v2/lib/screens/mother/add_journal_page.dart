@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../services/journal_service.dart';
+import '../../services/language_service.dart';
 import '../../widgets/main_button.dart';
 import '../../models/journal_model.dart';
 
@@ -21,6 +22,10 @@ class _AddJournalPageState extends State<AddJournalPage> {
   bool _hasError = false;
   String _errorMessage = '';
 
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -32,7 +37,8 @@ class _AddJournalPageState extends State<AddJournalPage> {
     if (_contentController.text.trim().isEmpty) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Please write something before saving.';
+        _errorMessage = _t('Please write something before saving.',
+            'Pakisulat muna ang iyong tala bago i-save.');
       });
       return;
     }
@@ -57,8 +63,9 @@ class _AddJournalPageState extends State<AddJournalPage> {
     if (success) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Journal entry saved successfully!'),
+          SnackBar(
+            content: Text(_t('Journal entry saved successfully!',
+                'Matagumpay na na-save ang tala sa journal!')),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
           ),
@@ -68,19 +75,23 @@ class _AddJournalPageState extends State<AddJournalPage> {
     } else {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Failed to save journal. Please try again.';
+        _errorMessage = _t('Failed to save journal. Please try again.',
+            'Hindi na-save ang journal. Pakisubukan muli.');
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        title: const Text(
-          'New Journal',
-          style: TextStyle(
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, _, __) {
+        return Scaffold(
+          backgroundColor: AppColors.bgPrimary,
+          appBar: AppBar(
+        title: Text(
+          _t('New Journal', 'Bagong Journal'),
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
@@ -95,24 +106,26 @@ class _AddJournalPageState extends State<AddJournalPage> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SafeArea(
+          body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Write freely 🌷',
-                style: TextStyle(
+              Text(
+                _t('Write freely 🌷', 'Malayang magsulat 🌷'),
+                style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
-                'This is your personal space. Write anything you feel or experience today.',
-                style: TextStyle(
+              Text(
+                _t(
+                    'This is your personal space. Write anything you feel or experience today.',
+                    'Ito ang iyong sariling espasyo. Isulat ang anumang nararamdaman o naranasan mo ngayong araw.'),
+                style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
                 ),
@@ -135,10 +148,11 @@ class _AddJournalPageState extends State<AddJournalPage> {
                 ),
                 child: TextField(
                   controller: _titleController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: InputBorder.none,
-                    hintText: 'Title (optional)',
-                    hintStyle: TextStyle(color: AppColors.textSecondary),
+                    hintText: _t('Title (optional)', 'Pamagat (opsyonal)'),
+                    hintStyle:
+                        const TextStyle(color: AppColors.textSecondary),
                   ),
                 ),
               ),
@@ -165,10 +179,12 @@ class _AddJournalPageState extends State<AddJournalPage> {
                     maxLines: null,
                     expands: true,
                     textAlignVertical: TextAlignVertical.top,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       border: InputBorder.none,
-                      hintText: 'How are you feeling today?',
-                      hintStyle: TextStyle(color: AppColors.textSecondary),
+                      hintText: _t('How are you feeling today?',
+                          'Ano ang nararamdaman mo ngayon?'),
+                      hintStyle:
+                          const TextStyle(color: AppColors.textSecondary),
                     ),
                     onChanged: (_) {
                       if (_hasError) {
@@ -197,7 +213,9 @@ class _AddJournalPageState extends State<AddJournalPage> {
 
               // 💾 SAVE BUTTON
               MainButton(
-                label: _saving ? 'Saving...' : 'Save Journal',
+                label: _saving
+                    ? _t('Saving...', 'Sine-save...')
+                    : _t('Save Journal', 'I-save ang Journal'),
                 showIcons: true,
                 leftIcon: Icons.save,
                 onPressed: _saving ? null : _saveJournal,
@@ -208,6 +226,8 @@ class _AddJournalPageState extends State<AddJournalPage> {
           ),
         ),
       ),
+        );
+      },
     );
   }
 }

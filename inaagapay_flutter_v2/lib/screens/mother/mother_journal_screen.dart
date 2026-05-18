@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/journal_service.dart';
+import '../../services/language_service.dart';
 import '../../models/journal_model.dart';
 import 'add_journal_page.dart';
 import 'journal_details_page.dart';
@@ -28,6 +29,10 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
     _journalsFuture = JournalService.fetchJournals();
   }
 
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
+
   Future<void> _openAddJournal() async {
     final result = await Navigator.push(
       context,
@@ -43,9 +48,12 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      body: SafeArea(
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, _, __) {
+        return Scaffold(
+          backgroundColor: AppColors.bgPrimary,
+          body: SafeArea(
         top: false,
         bottom: false,
         child: Padding(
@@ -54,18 +62,20 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 16),
-              const Text(
-                'Your personal space 🌷',
-                style: TextStyle(
+              Text(
+                _t('Your personal space 🌷', 'Iyong sariling espasyo 🌷'),
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
-                'Write your thoughts, feelings, and pregnancy moments.',
-                style: TextStyle(
+              Text(
+                _t(
+                    'Write your thoughts, feelings, and pregnancy moments.',
+                    'Isulat ang iyong mga iniisip, nararamdaman, at mahahalagang sandali sa pagbubuntis.'),
+                style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
                 ),
@@ -94,9 +104,10 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                               color: AppColors.error,
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'Failed to load journal entries',
-                              style: TextStyle(
+                            Text(
+                              _t('Failed to load journal entries',
+                                  'Hindi na-load ang mga tala sa journal'),
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.textPrimary,
@@ -121,7 +132,7 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.brandPrimary,
                               ),
-                              child: const Text('Retry'),
+                              child: Text(_t('Retry', 'Subukan Muli')),
                             ),
                           ],
                         ),
@@ -182,7 +193,8 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
                                   Text(
                                     entry.title.isNotEmpty
                                         ? entry.title
-                                        : 'Untitled Entry',
+                                        : _t('Untitled Entry',
+                                            'Walang Pamagat na Tala'),
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
@@ -233,12 +245,14 @@ class _MotherJournalScreenState extends State<MotherJournalScreen> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
+          floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.brandPrimary,
         onPressed: _openAddJournal,
         elevation: 2,
         child: const Icon(Icons.add, color: Colors.white),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -248,6 +262,10 @@ class _EmptyJournalState extends StatelessWidget {
   final VoidCallback onAdd;
 
   const _EmptyJournalState({required this.onAdd});
+
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -263,19 +281,20 @@ class _EmptyJournalState extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
             const SizedBox(height: 16),
-            const Text(
-              'No journal entries yet',
-              style: TextStyle(
+            Text(
+              _t('No journal entries yet', 'Wala pang tala sa journal'),
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Start writing about your pregnancy journey.',
+            Text(
+              _t('Start writing about your pregnancy journey.',
+                  'Simulan ang pagsusulat tungkol sa iyong pagbubuntis.'),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 14,
                 color: AppColors.textSecondary,
               ),
@@ -284,7 +303,8 @@ class _EmptyJournalState extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: onAdd,
               icon: const Icon(Icons.add),
-              label: const Text('Write your first entry'),
+              label: Text(_t('Write your first entry',
+                  'Isulat ang iyong unang tala')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandPrimary,
                 foregroundColor: Colors.white,

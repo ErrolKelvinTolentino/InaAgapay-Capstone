@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../services/auth_storage.dart';
+import '../../services/language_service.dart';
 import '../../models/child_model.dart';
 import 'mother_child_stack.dart';
 
@@ -134,6 +135,44 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
     }
   }
 
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
+
+  String _localizedAge(ChildModel child) {
+    final birthdate = child.birthdate;
+    if (birthdate == null) {
+      return _t('Age unknown', 'Hindi alam ang edad');
+    }
+
+    final now = DateTime.now();
+    int years = now.year - birthdate.year;
+    int months = now.month - birthdate.month;
+
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+
+    if (LanguageService.isFilipino) {
+      if (years <= 0) {
+        return '$months ${months == 1 ? 'buwan' : 'buwan'} gulang';
+      }
+      final monthPart = months > 0 ? ' $months buwan' : '';
+      return '$years ${years == 1 ? 'taon' : 'taon'}$monthPart gulang';
+    }
+
+    return child.ageText;
+  }
+
+  String _childrenCountLabel() {
+    final count = _filteredChildren.length;
+    if (LanguageService.isFilipino) {
+      return '$count ${count == 1 ? 'Anak' : 'Mga Anak'}!';
+    }
+    return '$count Beautiful ${count == 1 ? 'Child' : 'Children'}!';
+  }
+
   void _openChildProfile(ChildModel child) {
     Navigator.push(
       context,
@@ -141,7 +180,7 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
         builder: (_) => MotherChildStack(
           childId: child.childId,
           childName: child.fullName,
-          childAge: child.ageText,
+          childAge: _localizedAge(child),
           childGender: child.sex,
         ),
       ),
@@ -150,9 +189,12 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      body: SafeArea(
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, _, __) {
+        return Scaffold(
+          backgroundColor: AppColors.bgPrimary,
+          body: SafeArea(
         top: false,
         bottom: false,
         child: Column(
@@ -193,16 +235,16 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'You have',
-                          style: TextStyle(
+                        Text(
+                          _t('You have', 'Mayroon kang'),
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                             color: AppColors.textSecondary,
                           ),
                         ),
                         Text(
-                          '${_filteredChildren.length} Beautiful ${_filteredChildren.length == 1 ? 'Child' : 'Children'}!',
+                          _childrenCountLabel(),
                           style: const TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
@@ -222,7 +264,8 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: AppInputField(
-                hintText: 'Search child by name',
+                hintText: _t('Search child by name',
+                    'Hanapin ang pangalan ng anak'),
                 controller: _searchController,
                 leadingIcon: Icons.search,
               ),
@@ -231,12 +274,13 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
             const SizedBox(height: 16),
 
             // Helper Text
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
               child: Text(
-                'Tap a child to view health records',
+                _t('Tap a child to view health records',
+                    'Pindutin ang anak para makita ang health records'),
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -281,7 +325,7 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.brandPrimary,
                                   ),
-                                  child: const Text('Retry'),
+                                  child: Text(_t('Retry', 'Subukan Muli')),
                                 ),
                               ],
                             ),
@@ -297,19 +341,23 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                                       color: AppColors.textSecondary,
                                     ),
                                     const SizedBox(height: 16),
-                                    const Text(
-                                      'No children found',
-                                      style: TextStyle(
+                                    Text(
+                                      _t('No children found',
+                                          'Walang anak na nahanap'),
+                                      style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.textPrimary,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
-                                    const Text(
-                                      'Children will appear here once registered by your midwife',
+                                    Text(
+                                      _t(
+                                        'Children will appear here once registered by your midwife',
+                                        'Lalabas dito ang mga anak kapag nairehistro na ng iyong midwife',
+                                      ),
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         color: AppColors.textSecondary,
                                       ),
                                     ),
@@ -324,7 +372,7 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                                     const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final child = _filteredChildren[index];
-                                  final age = child.ageText;
+                                  final age = _localizedAge(child);
 
                                   return _ChildCard(
                                     firstName: child.firstName,
@@ -339,6 +387,8 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
           ],
         ),
       ),
+        );
+      },
     );
   }
 }

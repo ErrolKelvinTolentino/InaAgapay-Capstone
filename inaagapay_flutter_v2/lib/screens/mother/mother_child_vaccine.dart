@@ -9,6 +9,7 @@ import '../../widgets/hero_card.dart';
 import '../../widgets/records_display_card.dart';
 import '../../widgets/status_indicator.dart';
 import '../../services/child_service.dart';
+import '../../services/language_service.dart';
 import '../../models/child_model.dart';
 
 class MotherChildVaccinePage extends StatefulWidget {
@@ -68,15 +69,24 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
     return DateFormat('MMM d, yyyy').format(date);
   }
 
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
+
   String _formatRecommendedAge(double months) {
-    if (months == 0) return 'At birth';
+    if (months == 0) return _t('At birth', 'Sa kapanganakan');
     if (months < 1) {
       final weeks = (months * 4).round();
+      if (LanguageService.isFilipino) return '$weeks linggo';
       return '$weeks week${weeks != 1 ? 's' : ''}';
     }
-    if (months == 1) return '1 month';
+    if (months == 1) return _t('1 month', '1 buwan');
+    if (LanguageService.isFilipino && months < 12) {
+      return '${months.toInt()} buwan';
+    }
     if (months < 12) return '${months.toInt()} months';
     final years = (months / 12).floor();
+    if (LanguageService.isFilipino) return '$years taon';
     return '$years year${years != 1 ? 's' : ''}';
   }
 
@@ -87,16 +97,19 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: PreferredSize(
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, _, __) {
+        return Scaffold(
+          backgroundColor: AppColors.bgPrimary,
+          appBar: PreferredSize(
         preferredSize: const Size.fromHeight(72),
         child: SecondaryHeader(
-          title: 'Vaccination Details',
+          title: _t('Vaccination Details', 'Detalye ng Bakuna'),
           onBack: widget.onBack,
         ),
       ),
-      body: RefreshIndicator(
+          body: RefreshIndicator(
         onRefresh: _fetchVaccines,
         color: AppColors.brandPrimary,
         child: _loading
@@ -129,7 +142,7 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.brandPrimary,
                           ),
-                          child: const Text('Retry'),
+                          child: Text(_t('Retry', 'Subukan Muli')),
                         ),
                       ],
                     ),
@@ -147,8 +160,10 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
                           showHeartRow: false,
                         ),
                         const SizedBox(height: 16),
-                        const SmallDescription(
-                          text: 'Vaccines administered based on immunization schedule',
+                        SmallDescription(
+                          text: _t(
+                              'Vaccines administered based on immunization schedule',
+                              'Mga bakunang ibinigay batay sa immunization schedule'),
                         ),
                         const SizedBox(height: 16),
                         if (_immunizations.isEmpty)
@@ -158,17 +173,18 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Column(
+                            child: Column(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.vaccines_outlined,
                                   size: 48,
                                   color: AppColors.textSecondary,
                                 ),
-                                SizedBox(height: 12),
+                                const SizedBox(height: 12),
                                 Text(
-                                  'No immunizations recorded yet',
-                                  style: TextStyle(
+                                  _t('No immunizations recorded yet',
+                                      'Wala pang naitalang bakuna'),
+                                  style: const TextStyle(
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
@@ -180,23 +196,24 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: RecordsDisplayCard(
-                                title: '${v.vaccineName} (Dose ${v.doseNumber})',
+                                title:
+                                    '${v.vaccineName} (${_t('Dose', 'Dose')} ${v.doseNumber})',
                                 headerIcon: Icons.vaccines_outlined,
                                 items: [
                                   RecordItem(
                                     leadingIcon: Icons.schedule,
-                                    label: 'Recommended',
+                                    label: _t('Recommended', 'Inirerekomenda'),
                                     value: _formatRecommendedAge(v.recommendedAgeMonths),
                                   ),
                                   RecordItem(
                                     leadingIcon: Icons.calendar_month_rounded,
-                                    label: 'Date Given',
+                                    label: _t('Date Given', 'Petsa ng Pagbigay'),
                                     value: _formatDate(v.vaccinationDate),
                                   ),
                                   RecordItem(
                                     leadingIcon: Icons.verified,
-                                    label: 'Status',
-                                    value: 'COMPLETED',
+                                    label: _t('Status', 'Status'),
+                                    value: _t('COMPLETED', 'KUMPLETO'),
                                     trailingWidget: StatusIndicator(
                                       status: _getStatusIcon(v),
                                     ),
@@ -204,7 +221,7 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
                                   if (v.remarks != null && v.remarks!.isNotEmpty)
                                     RecordItem(
                                       leadingIcon: Icons.notes_outlined,
-                                      label: 'Remarks',
+                                      label: _t('Remarks', 'Mga Tala'),
                                       value: v.remarks!,
                                     ),
                                 ],
@@ -216,6 +233,8 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
                     ),
                   ),
       ),
+        );
+      },
     );
   }
 }

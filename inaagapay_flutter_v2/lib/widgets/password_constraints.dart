@@ -52,12 +52,15 @@ class _ConstraintItem extends StatelessWidget {
             color: color,
           ),
           const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: color,
-              fontWeight: FontWeight.w400,
+          Expanded(
+            child: Text(
+              label,
+              softWrap: true,
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: FontWeight.w400,
+              ),
             ),
           ),
         ],

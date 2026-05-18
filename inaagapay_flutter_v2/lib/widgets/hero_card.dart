@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../services/language_service.dart';
 
 class HeroCard extends StatelessWidget {
   final ImageProvider? image;
@@ -90,12 +91,16 @@ class HeroCard extends StatelessWidget {
             const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.favorite, size: 16, color: AppColors.brandPrimary),
-                SizedBox(width: 6),
+              children: [
+                const Icon(Icons.favorite,
+                    size: 16, color: AppColors.brandPrimary),
+                const SizedBox(width: 6),
                 Text(
-                  'Your baby is growing beautifully!',
-                  style: TextStyle(
+                  LanguageService.translate(
+                    'Your baby is growing beautifully!',
+                    'Maganda ang paglaki ng iyong sanggol!',
+                  ),
+                  style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
                   ),
@@ -123,7 +128,7 @@ class _WeekBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        'Week $week',
+        '${LanguageService.translate('Week', 'Linggo')} $week',
         style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,

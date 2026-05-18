@@ -8,6 +8,7 @@ import '../../widgets/hero_card.dart';
 import '../../widgets/chart_card.dart';
 import '../../widgets/ai_analytics_card.dart';
 import '../../services/child_service.dart';
+import '../../services/language_service.dart';
 
 class MotherChildGrowthPage extends StatefulWidget {
   final VoidCallback onBack;
@@ -65,18 +66,29 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
     }
   }
 
+  String _t(String english, String filipino) {
+    return LanguageService.translate(english, filipino);
+  }
+
+  String _genderLabel() {
+    return widget.childGender == 'female' ? _t('Girl', 'Babae') : _t('Boy', 'Lalaki');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: PreferredSize(
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, _, __) {
+        return Scaffold(
+          backgroundColor: AppColors.bgPrimary,
+          appBar: PreferredSize(
         preferredSize: const Size.fromHeight(64),
         child: SecondaryHeader(
-          title: 'Growth Statistics',
+          title: _t('Growth Statistics', 'Growth Statistics'),
           onBack: widget.onBack,
         ),
       ),
-      body: RefreshIndicator(
+          body: RefreshIndicator(
         onRefresh: _fetchGrowthData,
         color: AppColors.brandPrimary,
         child: _loading
@@ -109,7 +121,7 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.brandPrimary,
                           ),
-                          child: const Text('Retry'),
+                          child: Text(_t('Retry', 'Subukan Muli')),
                         ),
                       ],
                     ),
@@ -125,9 +137,9 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
                               color: AppColors.textSecondary,
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'Not Enough Data',
-                              style: TextStyle(
+                            Text(
+                              _t('Not Enough Data', 'Kulang ang Datos'),
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.textPrimary,
@@ -135,7 +147,10 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Need at least 2 growth records to display charts.\nCurrent records: ${_growthData?['records_count'] ?? 0}',
+                              _t(
+                                'Need at least 2 growth records to display charts.\nCurrent records: ${_growthData?['records_count'] ?? 0}',
+                                'Kailangan ng hindi bababa sa 2 growth records para maipakita ang charts.\nKasalukuyang records: ${_growthData?['records_count'] ?? 0}',
+                              ),
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 color: AppColors.textSecondary,
@@ -151,13 +166,13 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               TabButton(
-                                label: 'Height Chart',
+                                label: _t('Height Chart', 'Chart ng Taas'),
                                 isActive: _currentIndex == 0,
                                 onTap: () => setState(() => _currentIndex = 0),
                               ),
                               const SizedBox(width: 12),
                               TabButton(
-                                label: 'Weight Chart',
+                                label: _t('Weight Chart', 'Chart ng Timbang'),
                                 isActive: _currentIndex == 1,
                                 onTap: () => setState(() => _currentIndex = 1),
                               ),
@@ -194,6 +209,8 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
                         ],
                       ),
       ),
+        );
+      },
     );
   }
 
@@ -214,25 +231,28 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
           HeroCard(
             image: null,
             title: widget.childName,
-            subtitle: '${widget.childAge} • ${widget.childGender == 'female' ? 'Girl' : 'Boy'}',
+            subtitle: '${widget.childAge} • ${_genderLabel()}',
             showWeekBadge: false,
             showHeartRow: false,
           ),
           const SizedBox(height: 16),
           ChartCard(
-            title: title,
+            title: title == 'Height Chart'
+                ? _t('Height Chart', 'Chart ng Taas')
+                : _t('Weight Chart', 'Chart ng Timbang'),
             headerIcon: icon,
             values: values,
             labels: labels,
             unit: unit,
             lineColor: AppColors.brandPrimary,
-            startingLabel: 'Starting',
+            startingLabel: _t('Starting', 'Simula'),
             startingValue: start != null ? '$start $unit' : '--',
-            latestLabel: 'Latest',
+            latestLabel: _t('Latest', 'Pinakabago'),
             latestValue: latest != null ? '$latest $unit' : '--',
             insightText: gain != null
-                ? '${widget.childName} ${title.contains('Height') ? 'grew' : 'gained'} $gain $unit!'
-                : 'Add more records for trend analysis',
+                ? '${widget.childName} ${title.contains('Height') ? _t('grew', 'tumaas ng') : _t('gained', 'nadagdagan ng')} $gain $unit!'
+                : _t('Add more records for trend analysis',
+                    'Magdagdag pa ng records para sa trend analysis'),
           ),
           const SizedBox(height: 16),
           AiAnalyticsCard(
@@ -245,11 +265,15 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
 
   String _generateAIAnalysis(List<double> values, String unit, String? gain, String childName) {
     if (values.isEmpty) {
-      return 'No growth data available yet. Add growth records to see AI analysis.';
+      return _t(
+          'No growth data available yet. Add growth records to see AI analysis.',
+          'Wala pang growth data. Magdagdag ng growth records para makita ang AI analysis.');
     }
     
     if (values.length < 2) {
-      return 'Need at least 2 measurements for trend analysis. Current: ${values.length} record(s).';
+      return _t(
+          'Need at least 2 measurements for trend analysis. Current: ${values.length} record(s).',
+          'Kailangan ng hindi bababa sa 2 sukat para sa trend analysis. Kasalukuyan: ${values.length} record(s).');
     }
     
     final first = values.first;
@@ -259,19 +283,31 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
     
     if (unit == 'cm') {
       if (change > 5) {
-        return '$childName has shown excellent height growth of ${change.toStringAsFixed(1)} cm (${percentChange.toStringAsFixed(0)}% increase). This indicates healthy physical development.';
+        return _t(
+            '$childName has shown excellent height growth of ${change.toStringAsFixed(1)} cm (${percentChange.toStringAsFixed(0)}% increase). This indicates healthy physical development.',
+            'Nagpakita si $childName ng mahusay na paglaki sa taas na ${change.toStringAsFixed(1)} cm (${percentChange.toStringAsFixed(0)}% pagtaas). Ipinapakita nito ang malusog na pisikal na pag-unlad.');
       } else if (change > 2) {
-        return '$childName is showing steady height growth of ${change.toStringAsFixed(1)} cm. Growth is progressing within expected ranges.';
+        return _t(
+            '$childName is showing steady height growth of ${change.toStringAsFixed(1)} cm. Growth is progressing within expected ranges.',
+            'Patuloy ang paglaki ng taas ni $childName ng ${change.toStringAsFixed(1)} cm. Nasa inaasahang saklaw ang paglaki.');
       } else {
-        return '$childName\'s height growth has been minimal (${change.toStringAsFixed(1)} cm). Continue monitoring and ensure proper nutrition.';
+        return _t(
+            '$childName\'s height growth has been minimal (${change.toStringAsFixed(1)} cm). Continue monitoring and ensure proper nutrition.',
+            'Kaunti lang ang paglaki ng taas ni $childName (${change.toStringAsFixed(1)} cm). Ipagpatuloy ang pagsubaybay at siguraduhin ang tamang nutrisyon.');
       }
     } else {
       if (change > 2) {
-        return '$childName has gained ${change.toStringAsFixed(1)} kg (${percentChange.toStringAsFixed(0)}% increase). Weight gain is appropriate for age.';
+        return _t(
+            '$childName has gained ${change.toStringAsFixed(1)} kg (${percentChange.toStringAsFixed(0)}% increase). Weight gain is appropriate for age.',
+            'Nadagdagan ang timbang ni $childName ng ${change.toStringAsFixed(1)} kg (${percentChange.toStringAsFixed(0)}% pagtaas). Ang pagdagdag ng timbang ay angkop sa edad.');
       } else if (change > 0.5) {
-        return '$childName is maintaining steady weight gain of ${change.toStringAsFixed(1)} kg. Continue regular monitoring.';
+        return _t(
+            '$childName is maintaining steady weight gain of ${change.toStringAsFixed(1)} kg. Continue regular monitoring.',
+            'Patuloy ang pagdagdag ng timbang ni $childName ng ${change.toStringAsFixed(1)} kg. Ipagpatuloy ang regular na pagsubaybay.');
       } else {
-        return '$childName\'s weight gain has been minimal (${change.toStringAsFixed(1)} kg). Consult healthcare provider if concerned.';
+        return _t(
+            '$childName\'s weight gain has been minimal (${change.toStringAsFixed(1)} kg). Consult healthcare provider if concerned.',
+            'Kaunti lang ang pagdagdag ng timbang ni $childName (${change.toStringAsFixed(1)} kg). Kumonsulta sa healthcare provider kung may alalahanin.');
       }
     }
   }
