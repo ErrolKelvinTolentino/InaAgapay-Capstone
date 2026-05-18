@@ -82,7 +82,7 @@ class InaagapayApp extends StatelessWidget {
 
     if (role == 'mother') {
       final profileComplete = await AuthStorage.isProfileComplete();
-      final needsPasswordChange =
+      final temporaryPasswordAlreadyChanged =
           await AuthStorage.isTemporaryPasswordChanged();
       final motherId = await AuthStorage.getMotherId();
       final accountId = await AuthStorage.getUserId();
@@ -91,7 +91,8 @@ class InaagapayApp extends StatelessWidget {
         debugPrint('=== STARTUP SCREEN DETERMINATION ===');
         debugPrint('Role: $role');
         debugPrint('profileComplete flag: $profileComplete');
-        debugPrint('needsPasswordChange flag: $needsPasswordChange');
+        debugPrint(
+            'temporaryPasswordAlreadyChanged flag: $temporaryPasswordAlreadyChanged');
         debugPrint('motherId: $motherId');
         debugPrint('accountId: $accountId');
       }
@@ -100,11 +101,15 @@ class InaagapayApp extends StatelessWidget {
         try {
           final accountResponse = await SupabaseService.client
               .from('accounts')
-              .select('created_by, first_name, last_name, phone_number')
+              .select(
+                  'created_by, first_name, last_name, phone_number, is_temporary_password')
               .eq('account_id', accountId)
               .maybeSingle();
 
           final createdBy = accountResponse?['created_by'] as String? ?? 'self';
+          final needsPasswordChange =
+              accountResponse?['is_temporary_password'] == true &&
+                  !temporaryPasswordAlreadyChanged;
 
           if (createdBy == 'midwife') {
             if (!profileComplete) {

@@ -79,17 +79,24 @@ class _ChangeTemporaryPasswordScreenState
       if (!mounted) return;
 
       if (success) {
+        final flagCleared =
+            await SupabaseService.clearTemporaryPasswordFlag(userId);
+        if (!flagCleared) {
+          throw Exception(
+              'Password changed, but temporary password flag was not cleared');
+        }
+
         await AuthStorage.saveTemporaryPasswordChanged(true);
-        
+
         if (!mounted) return;
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Password changed successfully!'),
             backgroundColor: AppColors.success,
           ),
         );
-        
+
         Navigator.pushNamedAndRemoveUntil(
           context,
           '/mother-dashboard',
@@ -132,22 +139,25 @@ class _ChangeTemporaryPasswordScreenState
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 40),
               
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.lock_reset,
-                  size: 48,
-                  color: AppColors.brandPrimary,
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.lock_reset,
+                    size: 48,
+                    color: AppColors.brandPrimary,
+                  ),
                 ),
               ),
               

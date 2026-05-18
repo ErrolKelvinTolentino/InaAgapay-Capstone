@@ -888,27 +888,32 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
       builder: (context, language, _) {
         return Scaffold(
           backgroundColor: AppColors.bgPrimary,
-          body: NestedScrollView(
-            headerSliverBuilder: (context, innerScrolled) => [
-              _buildSliverHeader(language),
-            ],
-            body: Column(
-              children: [
-                _buildTabBar(language),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildOverviewTab(language),
-                      _buildBabyTab(language),
-                      _buildSymptomsTab(language),
-                      _buildNutritionTab(language),
-                      _buildChecklistTab(language),
-                      _buildWarningsTab(language),
-                    ],
-                  ),
-                ),
+          body: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              scrollbars: false,
+            ),
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerScrolled) => [
+                _buildSliverHeader(language),
               ],
+              body: Column(
+                children: [
+                  _buildTabBar(language),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildOverviewTab(language),
+                        _buildBabyTab(language),
+                        _buildSymptomsTab(language),
+                        _buildNutritionTab(language),
+                        _buildChecklistTab(language),
+                        _buildWarningsTab(language),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );

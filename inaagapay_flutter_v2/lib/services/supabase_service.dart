@@ -58,6 +58,7 @@ class SupabaseService {
 
       await client.from('accounts').update({
         'password_hash': hashedPassword,
+        'is_temporary_password': false,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('account_id', accountId);
 

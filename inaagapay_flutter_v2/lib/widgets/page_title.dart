@@ -21,7 +21,7 @@ class PageTitle extends StatelessWidget {
     final Color textColor = color ?? AppColors.brandText;
 
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (leadingIcon != null) ...[
           Icon(
@@ -31,13 +31,18 @@ class PageTitle extends StatelessWidget {
           ),
           const SizedBox(width: 8),
         ],
-        Text(
-          title.toUpperCase(),
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: textColor,
-            letterSpacing: 0.5,
+        Flexible(
+          child: Text(
+            title.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+              letterSpacing: 0.5,
+            ),
           ),
         ),
         if (trailingIcon != null) ...[

@@ -76,6 +76,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       if (success) {
         // Clear the temporary password flag
         await SupabaseService.clearTemporaryPasswordFlag(userId);
+        await AuthStorage.saveTemporaryPasswordChanged(true);
         
         if (!mounted) return;
         
