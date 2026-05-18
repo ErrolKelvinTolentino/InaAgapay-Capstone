@@ -566,6 +566,11 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     return DateTime.tryParse(value.toString());
   }
 
+  DateTime? get _pregnancyLmp {
+    final pregnancy = _motherRiskContext?['pregnancy'] as Map<String, dynamic>?;
+    return _tryDate(pregnancy?['last_menstrual_period']) ?? widget.lmp;
+  }
+
   int? _ageFromBirthdate(DateTime? birthdate) {
     if (birthdate == null) return null;
     return (DateTime.now().difference(birthdate).inDays / 365.25).floor();
@@ -1009,6 +1014,8 @@ Just write 4-8 simple sentences or plain bullet points (using -) with your analy
 End with one sentence starting with "Priority next step:".
 
 Use ONLY the data provided below. State uncertainty clearly when data is missing.
+If maternal height is unknown, note that height data is missing and that weight-based risk assessment may be limited.
+If expected date of delivery is unknown, use available LMP and/or age of gestation to infer due date timing and mention that this is an inferred estimate.
 Never invent data.
 
 PATIENT CONTEXT
@@ -1019,6 +1026,7 @@ PATIENT CONTEXT
 - Maternal weight baseline: ${mother?['weight'] ?? 'unknown'} kg
 - Blood type: ${mother?['blood_type'] ?? 'unknown'}
 - Current pregnancy fetal count: $_fetalCount
+- Current pregnancy risk level: ${pregnancy?['pregnancy_risk_level'] ?? 'unknown'}
 - Active medical conditions:
 ${activeConditionLines.isEmpty ? '- none recorded' : activeConditionLines.join('\n')}
 - Active allergies:
@@ -1164,9 +1172,10 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   }
 
   double? get _aogWeeks {
-    if (widget.lmp == null) return null;
+    final lmp = _pregnancyLmp;
+    if (lmp == null) return null;
     final days = _normalizedDate(_checkupDateTime)
-        .difference(_normalizedDate(widget.lmp!))
+        .difference(_normalizedDate(lmp))
         .inDays;
     if (days < 0) return null;
     return double.parse((days / 7).toStringAsFixed(1));
@@ -3117,7 +3126,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                 child: FilledButton.tonal(
                   onPressed: _openAddMedicationPlanDialog,
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.12),
+                    backgroundColor:
+                        AppColors.brandPrimary.withValues(alpha: 0.12),
                     foregroundColor: AppColors.brandPrimary,
                   ),
                   child: const Text('+ Add Plan'),
@@ -3172,7 +3182,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                 child: FilledButton.tonal(
                   onPressed: _openAddGivenMedicationDialog,
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.12),
+                    backgroundColor:
+                        AppColors.brandPrimary.withValues(alpha: 0.12),
                     foregroundColor: AppColors.brandPrimary,
                   ),
                   child: const Text('+ Dispense'),
@@ -3353,7 +3364,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
           decoration: BoxDecoration(
             color: AppColors.brandPrimary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.3)),
+            border: Border.all(
+                color: AppColors.brandPrimary.withValues(alpha: 0.3)),
           ),
           child: const Row(
             children: [
@@ -3715,7 +3727,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                         ChoiceChip(
                           label: const Text('Low'),
                           selected: _editableRiskLevel == 'low',
-                          selectedColor: AppColors.success.withValues(alpha: 0.14),
+                          selectedColor:
+                              AppColors.success.withValues(alpha: 0.14),
                           labelStyle:
                               const TextStyle(color: AppColors.textPrimary),
                           onSelected: _isEditingAiAssessment
@@ -3728,7 +3741,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                         ChoiceChip(
                           label: const Text('High'),
                           selected: _editableRiskLevel == 'high',
-                          selectedColor: AppColors.error.withValues(alpha: 0.14),
+                          selectedColor:
+                              AppColors.error.withValues(alpha: 0.14),
                           labelStyle:
                               const TextStyle(color: AppColors.textPrimary),
                           onSelected: _isEditingAiAssessment
