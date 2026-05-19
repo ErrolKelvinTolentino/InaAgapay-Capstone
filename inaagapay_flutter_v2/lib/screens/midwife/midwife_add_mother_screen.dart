@@ -995,24 +995,24 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 TextField(
                     controller: firstNameCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'First Name *',
+                        labelText: 'First Name',
                         border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 TextField(
                     controller: lastNameCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'Last Name *',
+                        labelText: 'Last Name',
                         border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 TextField(
                     controller: phoneCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'Phone Number *',
+                        labelText: 'Phone Number',
                         border: OutlineInputBorder()),
                     keyboardType: TextInputType.phone),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  hint: const Text('Relationship *'),
+                  hint: const Text('Relationship'),
                   items: _relationshipOptions
                       .map((rel) =>
                           DropdownMenuItem(value: rel, child: Text(rel)))
@@ -1093,7 +1093,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 TextField(
                     controller: nameCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'Condition Name *',
+                        labelText: 'Condition Name',
                         border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 GestureDetector(
@@ -1214,7 +1214,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 TextField(
                     controller: allergenCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'Allergen *', border: OutlineInputBorder())),
+                        labelText: 'Allergen', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () async {
@@ -2521,7 +2521,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             Expanded(
                 flex: 3,
                 child: AppInputField(
-                    hintText: 'First Name *',
+                    hintText: 'First Name',
                     controller: _firstNameCtrl,
                     isRequired: true,
                     errorText: _firstNameError,
@@ -2550,7 +2550,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             Expanded(
                 flex: 3,
                 child: AppInputField(
-                    hintText: 'Last Name *',
+                    hintText: 'Last Name',
                     controller: _lastNameCtrl,
                     isRequired: true,
                     errorText: _lastNameError,
@@ -2616,7 +2616,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         const SizedBox(height: 24),
         _sectionLabel('Contact'),
         AppInputField(
-            hintText: 'Phone Number *',
+            hintText: 'Phone Number',
             controller: _phoneCtrl,
             isRequired: true,
             leadingIcon: Icons.phone_outlined,
@@ -2744,7 +2744,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         const SizedBox(height: 20),
         _sectionLabel('Address Details'),
         AppInputField(
-            hintText: 'House No. *',
+            hintText: 'House No.',
             controller: _houseCtrl,
             isRequired: true,
             leadingIcon: Icons.home_outlined,
@@ -2752,7 +2752,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             onChanged: (_) => _validateStepInline(1)),
         const SizedBox(height: 12),
         AppInputField(
-            hintText: 'Street *',
+            hintText: 'Street',
             controller: _streetCtrl,
             isRequired: true,
             leadingIcon: Icons.streetview_outlined,
