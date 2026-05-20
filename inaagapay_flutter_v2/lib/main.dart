@@ -260,7 +260,9 @@ class _InaagapayAppState extends State<InaagapayApp> {
               backgroundColor: AppColors.darkBgSecondary,
             ),
           ),
-          themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          themeMode: _themeLoaded
+              ? (_isDarkMode ? ThemeMode.dark : ThemeMode.light)
+              : ThemeMode.light,
           home: snapshot.data ?? const LoginScreen(),
           routes: {
             '/login': (context) => const LoginScreen(),
