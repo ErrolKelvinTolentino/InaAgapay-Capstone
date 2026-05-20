@@ -7,6 +7,7 @@ import '../../widgets/clickable_text.dart';
 import '../../services/supabase_service.dart';
 import '../../services/auth_storage.dart';
 import '../../widgets/validation_message.dart';
+import '../../services/push_notification_service.dart';
 import '../../widgets/dialog_box.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -107,6 +108,9 @@ class _LoginScreenState extends State<LoginScreen> {
         await AuthStorage.saveUserRole(response['user']['role']);
         await AuthStorage.saveUserId(response['user']['id']);
 
+
+      try {        await PushNotificationService.initialize();
+      } catch (_) {}
         if (response['user']['role'] == 'mother') {
           final motherId = response['user']['mother_id'];
           if (motherId != null) {

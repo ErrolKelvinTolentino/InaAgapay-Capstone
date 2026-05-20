@@ -32,10 +32,14 @@
 //   const signingInput = `${encodedHeader}.${encodedPayload}`
 
 //   // Import the private key for signing
-//   const pemContents = SERVICE_ACCOUNT.private_key
+//   // Handle both real newlines and escaped \n from env secrets
+//   const rawKey = SERVICE_ACCOUNT.private_key.replace(/\\n/g, '\n')
+//   const pemContents = rawKey
 //     .replace(/-----BEGIN PRIVATE KEY-----/, '')
 //     .replace(/-----END PRIVATE KEY-----/, '')
 //     .replace(/\n/g, '')
+//     .replace(/\r/g, '')
+//     .trim()
 
 //   const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0))
 
@@ -190,7 +194,7 @@
 //     )
 //   } catch (error) {
 //     console.error(`Error: ${error.message}`)
-//     return new Response(
+//     // return new Response(
 //       JSON.stringify({ success: false, error: error.message }),
 //       { status: 500, headers: { 'Content-Type': 'application/json' } }
 //     )
