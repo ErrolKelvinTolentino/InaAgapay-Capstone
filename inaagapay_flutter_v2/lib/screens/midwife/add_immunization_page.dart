@@ -37,6 +37,7 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
   bool _vaccinesLoading = true;
   Set<int> _takenVaccineIds = {};
   String? _errorMessage;
+  DateTime? _childBirthdate;
 
   @override
   void initState() {
@@ -49,16 +50,43 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
       _vaccinesLoading = true;
       _errorMessage = null;
     });
-    
-    await _loadVaccines();
-    await _loadTakenVaccines();
-    
+
+    await Future.wait([
+      _loadVaccines(),
+      _loadTakenVaccines(),
+      _loadChildBirthdate(),
+    ]);
+
     setState(() => _vaccinesLoading = false);
-    
-    // Debug output
+
     debugPrint('Vaccines loaded: ${_vaccines.length}');
     debugPrint('Taken vaccines: ${_takenVaccineIds.length}');
     debugPrint('Available vaccines: ${_getAvailableVaccines().length}');
+    debugPrint('Child birthdate: $_childBirthdate');
+  }
+
+  Future<void> _loadChildBirthdate() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('birth_details')
+          .select('birthdate')
+          .eq('child_id', widget.childId)
+          .maybeSingle();
+
+      if (response != null && response['birthdate'] != null) {
+        _childBirthdate = DateTime.parse(response['birthdate']);
+      }
+    } catch (e) {
+      debugPrint('Error loading child birthdate: $e');
+    }
+  }
+
+  /// Returns the child's age in months (fractional).
+  double _getChildAgeMonths() {
+    if (_childBirthdate == null) return 0;
+    final now = DateTime.now();
+    final diff = now.difference(_childBirthdate!);
+    return diff.inDays / 30.44; // average days per month
   }
 
   Future<void> _loadVaccines() async {
@@ -71,13 +99,13 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
           .order('vaccine_name');
 
       _vaccines = List<Map<String, dynamic>>.from(response);
-      
+
       if (_vaccines.isEmpty) {
         setState(() {
           _errorMessage = 'No vaccines found in the database. Please add vaccines first.';
         });
       }
-      
+
       if (mounted) {
         setState(() {});
       }
@@ -105,11 +133,62 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
     }
   }
 
+  /// Checks whether the prerequisite dose for a given vaccine has been taken.
+  /// For multi-dose vaccines (e.g. Pentavalent 1->2->3), dose N requires dose N-1.
+  bool _isPrerequisiteMet(Map<String, dynamic> vaccine) {
+    final doseNumber = (vaccine['dose_number'] as num?)?.toInt() ?? 1;
+    if (doseNumber <= 1) return true; // first dose has no prerequisite
+
+    final vaccineName = vaccine['vaccine_name']?.toString() ?? '';
+
+    // Find the previous dose for the same vaccine_name
+    final previousDose = _vaccines.where((v) {
+      final vName = v['vaccine_name']?.toString() ?? '';
+      final vDose = (v['dose_number'] as num?)?.toInt() ?? 1;
+      return vName == vaccineName && vDose == doseNumber - 1;
+    }).toList();
+
+    if (previousDose.isEmpty) return true; // no previous dose found in DB, allow
+
+    // Check if the previous dose vaccine_id is in takenVaccineIds
+    final prevId = previousDose.first['vaccine_id'] as int;
+    return _takenVaccineIds.contains(prevId);
+  }
+
+  /// Returns vaccines available for selection:
+  /// - Not already taken
+  /// - Age-appropriate (child age >= recommended_age_months)
+  /// - Prerequisite doses met
   List<Map<String, dynamic>> _getAvailableVaccines() {
+    final childAgeMonths = _getChildAgeMonths();
     return _vaccines.where((v) {
       final vaccineId = v['vaccine_id'] as int;
-      return !_takenVaccineIds.contains(vaccineId);
+      final recommendedAge = (v['recommended_age_months'] as num?)?.toDouble() ?? 0;
+
+      // Must not already be taken
+      if (_takenVaccineIds.contains(vaccineId)) return false;
+
+      // Must be age-appropriate
+      if (childAgeMonths < recommendedAge) return false;
+
+      // Must have prerequisite dose taken
+      if (!_isPrerequisiteMet(v)) return false;
+
+      return true;
     }).toList();
+  }
+
+  /// Determines the status of a vaccine for the roadmap display.
+  /// Returns 'given', 'recommended', or 'not_due'.
+  String _getVaccineStatus(Map<String, dynamic> vaccine) {
+    final vaccineId = vaccine['vaccine_id'] as int;
+    if (_takenVaccineIds.contains(vaccineId)) return 'given';
+
+    final recommendedAge = (vaccine['recommended_age_months'] as num?)?.toDouble() ?? 0;
+    final childAgeMonths = _getChildAgeMonths();
+    if (childAgeMonths >= recommendedAge) return 'recommended';
+
+    return 'not_due';
   }
 
   bool get _isFormValid =>
@@ -141,6 +220,23 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
     return '${months.toStringAsFixed(0)} months';
   }
 
+  /// Returns a milestone label for grouping vaccines by recommended age.
+  String _getMilestoneLabel(double months) {
+    if (months == 0) return 'At Birth';
+    if (months < 1) {
+      final weeks = (months * 4).round();
+      return '$weeks Weeks';
+    }
+    if (months < 12) {
+      return '${months.toStringAsFixed(0)} Months';
+    }
+    final years = months / 12;
+    if (years == years.roundToDouble()) {
+      return '${years.toStringAsFixed(0)} Year${years > 1 ? 's' : ''}';
+    }
+    return '${months.toStringAsFixed(0)} Months';
+  }
+
   void _openVaccineDropdown() {
     if (_vaccinesLoading) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -148,14 +244,14 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
       );
       return;
     }
-    
+
     if (_vaccines.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No vaccines available in the system.')),
       );
       return;
     }
-    
+
     final availableVaccines = _getAvailableVaccines();
 
     if (availableVaccines.isEmpty) {
@@ -164,7 +260,8 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
         builder: (_) => DialogBox(
           type: DialogType.info,
           title: 'No Vaccines Available',
-          content: 'All recommended vaccines have already been administered to this child.',
+          content: 'All age-appropriate vaccines have already been administered, '
+              'or the child has not yet reached the recommended age for remaining vaccines.',
           buttonText: 'OK',
           onPressed: () => Navigator.pop(context),
         ),
@@ -194,6 +291,17 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
                   ),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Showing ${availableVaccines.length} age-appropriate, untaken vaccines',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               const Divider(),
               Expanded(
                 child: ListView.builder(
@@ -205,7 +313,17 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
                     final notes = vaccine['notes']?.toString() ?? '';
                     final recommendedAge = (vaccine['recommended_age_months'] as num?)?.toDouble() ?? 0;
                     final ageText = _formatRecommendedAge(recommendedAge);
-                    final displayName = '$vaccineName (Dose $doseNumber) - $ageText - $notes';
+                    // Build display name, avoiding duplicate info when notes
+                    // already matches the age label (e.g. "At birth" / "At birth").
+                    final parts = <String>['$vaccineName (Dose $doseNumber)'];
+                    if (ageText.isNotEmpty) {
+                      parts.add(ageText);
+                    }
+                    if (notes.isNotEmpty &&
+                        notes.toLowerCase() != ageText.toLowerCase()) {
+                      parts.add(notes);
+                    }
+                    final displayName = parts.join(' - ');
 
                     return ListTile(
                       leading: const Icon(Icons.vaccines, color: AppColors.brandPrimary),
@@ -233,10 +351,20 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
 
   Future<bool> _submitImmunization() async {
     if (_selectedVaccineId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a vaccine.')),
+        );
+      }
       return false;
     }
-    
+
     if (_selectedDate == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a vaccination date.')),
+        );
+      }
       return false;
     }
 
@@ -253,6 +381,18 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
         throw Exception('This vaccine has already been administered to this child.');
       }
 
+      // Enforce prerequisite check at submission time as well
+      final selectedVaccine = _vaccines.firstWhere(
+        (v) => v['vaccine_id'] == _selectedVaccineId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (selectedVaccine.isNotEmpty && !_isPrerequisiteMet(selectedVaccine)) {
+        throw Exception(
+          'The previous dose has not been administered yet. '
+          'Please administer doses in sequential order.',
+        );
+      }
+
       await Supabase.instance.client
           .from('immunization_record')
           .insert({
@@ -266,6 +406,18 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
       return true;
     } catch (e) {
       debugPrint('Error saving immunization: $e');
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => DialogBox(
+            type: DialogType.error,
+            title: 'Cannot Save',
+            content: e.toString().replaceAll('Exception: ', ''),
+            buttonText: 'OK',
+            onPressed: () => Navigator.pop(context),
+          ),
+        );
+      }
       return false;
     }
   }
@@ -282,13 +434,13 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
         onCancel: () => Navigator.pop(context),
         onConfirm: () async {
           Navigator.pop(context);
-          
+
           setState(() => _isLoading = true);
-          
+
           final success = await _submitImmunization();
-          
+
           setState(() => _isLoading = false);
-          
+
           if (success && mounted) {
             showDialog(
               context: context,
@@ -304,22 +456,247 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
                 },
               ),
             );
-          } else if (mounted) {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (_) => DialogBox(
-                type: DialogType.error,
-                title: 'Failed to Add',
-                content: 'There was an error saving the immunization record. Please try again.',
-                buttonText: 'OK',
-                onPressed: () => Navigator.pop(context),
-              ),
-            );
           }
         },
       ),
     );
+  }
+
+  /// Groups vaccines by recommended_age_months for the roadmap display.
+  /// Returns a list of (milestoneLabel, vaccines) pairs sorted by age.
+  List<MapEntry<String, List<Map<String, dynamic>>>> _getGroupedVaccines() {
+    final Map<double, List<Map<String, dynamic>>> grouped = {};
+
+    for (final v in _vaccines) {
+      final age = (v['recommended_age_months'] as num?)?.toDouble() ?? 0;
+      grouped.putIfAbsent(age, () => []);
+      grouped[age]!.add(v);
+    }
+
+    final sortedKeys = grouped.keys.toList()..sort();
+    return sortedKeys.map((age) {
+      return MapEntry(_getMilestoneLabel(age), grouped[age]!);
+    }).toList();
+  }
+
+  /// Builds the immunization roadmap widget.
+  Widget _buildRoadmap() {
+    final groups = _getGroupedVaccines();
+    if (groups.isEmpty) return const SizedBox.shrink();
+
+    final givenCount = _vaccines.where((v) =>
+        _takenVaccineIds.contains(v['vaccine_id'] as int)).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Row(
+          children: [
+            const Icon(Icons.map_outlined, color: AppColors.brandPrimary, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Immunization Roadmap',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '$givenCount / ${_vaccines.length}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        // Progress bar
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: _vaccines.isEmpty ? 0 : givenCount / _vaccines.length,
+            backgroundColor: AppColors.borderPrimary,
+            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+            minHeight: 6,
+          ),
+        ),
+        const SizedBox(height: 4),
+        // Legend
+        Row(
+          children: [
+            _legendDot(AppColors.success, 'Given'),
+            const SizedBox(width: 12),
+            _legendDot(AppColors.warning, 'Recommended'),
+            const SizedBox(width: 12),
+            _legendDot(AppColors.textSecondary, 'Not due yet'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Milestone groups
+        ...groups.map((entry) => _buildMilestoneGroup(entry.key, entry.value)),
+      ],
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMilestoneGroup(String label, List<Map<String, dynamic>> vaccines) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borderPrimary),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.brandAccent,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...vaccines.map((v) => _buildVaccineStatusRow(v)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVaccineStatusRow(Map<String, dynamic> vaccine) {
+    final status = _getVaccineStatus(vaccine);
+    final vaccineName = vaccine['vaccine_name']?.toString() ?? '';
+    final doseNumber = vaccine['dose_number']?.toString() ?? '';
+    final notes = vaccine['notes']?.toString() ?? '';
+
+    Color statusColor;
+    IconData statusIcon;
+    String statusLabel;
+
+    switch (status) {
+      case 'given':
+        statusColor = AppColors.success;
+        statusIcon = Icons.check_circle;
+        statusLabel = 'Already given';
+        break;
+      case 'recommended':
+        statusColor = AppColors.warning;
+        statusIcon = Icons.schedule;
+        statusLabel = 'Recommended';
+        break;
+      default: // not_due
+        statusColor = AppColors.textSecondary;
+        statusIcon = Icons.lock_outline;
+        statusLabel = 'Not due yet';
+    }
+
+    final displayText = notes.isNotEmpty
+        ? '$vaccineName (Dose $doseNumber) - $notes'
+        : '$vaccineName (Dose $doseNumber)';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Icon(statusIcon, color: statusColor, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              displayText,
+              style: TextStyle(
+                fontSize: 12,
+                color: status == 'not_due'
+                    ? AppColors.textSecondary
+                    : AppColors.textPrimary,
+                decoration: status == 'given'
+                    ? TextDecoration.lineThrough
+                    : TextDecoration.none,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              statusLabel,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool get _hasEnteredData =>
+      _selectedVaccineId != null ||
+      _selectedDate != null ||
+      _remarksController.text.trim().isNotEmpty;
+
+  Future<void> _confirmDiscardAndPop() async {
+    if (!_hasEnteredData) {
+      Navigator.pop(context);
+      return;
+    }
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text(
+            'You have unsaved immunization data. Are you sure you want to go back?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -333,7 +710,7 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
         preferredSize: const Size.fromHeight(56),
         child: SecondaryHeader(
           title: 'Add Immunization',
-          onBack: () => Navigator.pop(context),
+          onBack: _confirmDiscardAndPop,
         ),
       ),
       body: SafeArea(
@@ -386,18 +763,7 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
                   ),
                 ),
 
-              // Debug info - shows counts (can be removed after testing)
-              if (!_vaccinesLoading)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Vaccines: ${_vaccines.length} total, ${_takenVaccineIds.length} taken, ${availableVaccines.length} available',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
+              // Roadmap has been moved to child_immunization_list_page.dart
 
               // Select Vaccine
               GestureDetector(
@@ -417,7 +783,8 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0, left: 8.0),
                   child: Text(
-                    'All recommended vaccines have already been administered.',
+                    'All age-appropriate vaccines have been administered, '
+                    'or the child has not reached the recommended age for remaining vaccines.',
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,

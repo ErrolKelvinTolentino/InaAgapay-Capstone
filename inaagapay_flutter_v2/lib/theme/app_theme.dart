@@ -41,6 +41,10 @@ class AppTheme {
         fontWeight: FontWeight.w700,
       ),
     ),
+    cardTheme: CardThemeData(
+      color: AppColors.darkBgSecondary,
+      elevation: 1,
+    ),
     dividerColor: AppColors.darkBorderPrimary,
     appBarTheme: AppBarTheme(
       backgroundColor: AppColors.darkBgPrimary,

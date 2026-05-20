@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../services/language_service.dart';
 import 'profile_helpers.dart';
 
 class AiAnalyticsCard extends StatefulWidget {
@@ -20,7 +21,14 @@ class AiAnalyticsCard extends StatefulWidget {
 
 class _AiAnalyticsCardState extends State<AiAnalyticsCard> {
   bool _isExpanded = false;
-  bool _showFilipino = false;
+  late bool _showFilipino;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default to the app's current language setting
+    _showFilipino = LanguageService.isFilipino;
+  }
 
   @override
   void didUpdateWidget(covariant AiAnalyticsCard oldWidget) {

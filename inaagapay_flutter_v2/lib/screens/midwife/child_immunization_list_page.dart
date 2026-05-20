@@ -26,6 +26,10 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
   Map<String, dynamic>? childData;
   DateTime? birthdate;
 
+  // Roadmap data
+  List<Map<String, dynamic>> _allVaccines = [];
+  Set<int> _takenVaccineIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -78,7 +82,21 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
           .order('vaccination_date', ascending: false);
 
       records = List<Map<String, dynamic>>.from(immunizationResponse);
-      
+
+      // Load all vaccines for the roadmap
+      final vaccinesResponse = await Supabase.instance.client
+          .from('vaccines')
+          .select('*')
+          .eq('target_recipients', 'child')
+          .order('recommended_age_months')
+          .order('vaccine_name');
+
+      _allVaccines = List<Map<String, dynamic>>.from(vaccinesResponse);
+      _takenVaccineIds = records
+          .map((r) => r['vaccine_id'] as int?)
+          .whereType<int>()
+          .toSet();
+
       debugPrint('Loaded ${records.length} immunization records');
 
       if (mounted) {
@@ -168,6 +186,34 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
                     ),
                     const SizedBox(height: 16),
 
+                    // ── Immunization Roadmap ──
+                    if (_allVaccines.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: _buildRoadmap(),
+                      ),
+
+                    if (_allVaccines.isNotEmpty)
+                      const SizedBox(height: 8),
+
+                    if (_allVaccines.isNotEmpty)
+                      const Divider(indent: 20, endIndent: 20),
+
+                    const SizedBox(height: 8),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        'Vaccination History',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
                     Expanded(
                       child: records.isEmpty
                           ? Center(
@@ -235,6 +281,235 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
                   ],
                 ),
         ),
+      ),
+    );
+  }
+
+  // ── Roadmap helpers ──
+
+  double _getChildAgeMonths() {
+    if (birthdate == null) return 0;
+    final now = DateTime.now();
+    final diff = now.difference(birthdate!);
+    return diff.inDays / 30.44;
+  }
+
+  String _getVaccineStatus(Map<String, dynamic> vaccine) {
+    final vaccineId = vaccine['vaccine_id'] as int;
+    if (_takenVaccineIds.contains(vaccineId)) return 'given';
+    final recommendedAge =
+        (vaccine['recommended_age_months'] as num?)?.toDouble() ?? 0;
+    if (_getChildAgeMonths() >= recommendedAge) return 'recommended';
+    return 'not_due';
+  }
+
+  String _getMilestoneLabel(double months) {
+    if (months == 0) return 'At Birth';
+    if (months < 1) {
+      final weeks = (months * 4).round();
+      return '$weeks Weeks';
+    }
+    if (months < 12) return '${months.toStringAsFixed(0)} Months';
+    final years = months / 12;
+    if (years == years.roundToDouble()) {
+      return '${years.toStringAsFixed(0)} Year${years > 1 ? 's' : ''}';
+    }
+    return '${months.toStringAsFixed(0)} Months';
+  }
+
+  List<MapEntry<String, List<Map<String, dynamic>>>> _getGroupedVaccines() {
+    final Map<double, List<Map<String, dynamic>>> grouped = {};
+    for (final v in _allVaccines) {
+      final age = (v['recommended_age_months'] as num?)?.toDouble() ?? 0;
+      grouped.putIfAbsent(age, () => []);
+      grouped[age]!.add(v);
+    }
+    final sortedKeys = grouped.keys.toList()..sort();
+    return sortedKeys
+        .map((age) => MapEntry(_getMilestoneLabel(age), grouped[age]!))
+        .toList();
+  }
+
+  Widget _buildRoadmap() {
+    final groups = _getGroupedVaccines();
+    if (groups.isEmpty) return const SizedBox.shrink();
+
+    final givenCount = _allVaccines
+        .where((v) => _takenVaccineIds.contains(v['vaccine_id'] as int))
+        .length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.map_outlined,
+                color: AppColors.brandPrimary, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Immunization Roadmap',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '$givenCount / ${_allVaccines.length}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value:
+                _allVaccines.isEmpty ? 0 : givenCount / _allVaccines.length,
+            backgroundColor: AppColors.borderPrimary,
+            valueColor:
+                const AlwaysStoppedAnimation<Color>(AppColors.success),
+            minHeight: 6,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            _legendDot(AppColors.success, 'Given'),
+            const SizedBox(width: 12),
+            _legendDot(AppColors.warning, 'Recommended'),
+            const SizedBox(width: 12),
+            _legendDot(AppColors.textSecondary, 'Not due yet'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...groups.map(
+            (entry) => _buildMilestoneGroup(entry.key, entry.value)),
+      ],
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 10, color: AppColors.textSecondary)),
+      ],
+    );
+  }
+
+  Widget _buildMilestoneGroup(
+      String label, List<Map<String, dynamic>> vaccines) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borderPrimary),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.brandAccent,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...vaccines.map((v) => _buildVaccineStatusRow(v)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVaccineStatusRow(Map<String, dynamic> vaccine) {
+    final status = _getVaccineStatus(vaccine);
+    final vaccineName = vaccine['vaccine_name']?.toString() ?? '';
+    final doseNumber = vaccine['dose_number']?.toString() ?? '';
+    final notes = vaccine['notes']?.toString() ?? '';
+
+    Color statusColor;
+    IconData statusIcon;
+    String statusLabel;
+
+    switch (status) {
+      case 'given':
+        statusColor = AppColors.success;
+        statusIcon = Icons.check_circle;
+        statusLabel = 'Already given';
+        break;
+      case 'recommended':
+        statusColor = AppColors.warning;
+        statusIcon = Icons.schedule;
+        statusLabel = 'Recommended';
+        break;
+      default:
+        statusColor = AppColors.textSecondary;
+        statusIcon = Icons.lock_outline;
+        statusLabel = 'Not due yet';
+    }
+
+    final displayText = notes.isNotEmpty
+        ? '$vaccineName (Dose $doseNumber) - $notes'
+        : '$vaccineName (Dose $doseNumber)';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Icon(statusIcon, color: statusColor, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              displayText,
+              style: TextStyle(
+                fontSize: 12,
+                color: status == 'not_due'
+                    ? AppColors.textSecondary
+                    : AppColors.textPrimary,
+                decoration: status == 'given'
+                    ? TextDecoration.lineThrough
+                    : TextDecoration.none,
+              ),
+            ),
+          ),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              statusLabel,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -430,8 +430,9 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
     if (widget.mode == ChildParentMode.registeredMother) {
       return _selectedMother != null;
     } else {
-      return guardianFirstNameCtrl.text.trim().isNotEmpty && 
-             guardianLastNameCtrl.text.trim().isNotEmpty;
+      return guardianFirstNameCtrl.text.trim().isNotEmpty &&
+             guardianLastNameCtrl.text.trim().isNotEmpty &&
+             guardianPhoneCtrl.text.trim().isNotEmpty;
     }
   }
 
@@ -440,17 +441,55 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
     return _selectedMother!['display_name'] ?? '';
   }
 
+  bool get _hasEnteredData =>
+      firstNameCtrl.text.trim().isNotEmpty ||
+      lastNameCtrl.text.trim().isNotEmpty ||
+      middleNameCtrl.text.trim().isNotEmpty ||
+      _selectedMother != null ||
+      guardianFirstNameCtrl.text.trim().isNotEmpty ||
+      guardianLastNameCtrl.text.trim().isNotEmpty ||
+      guardianPhoneCtrl.text.trim().isNotEmpty;
+
+  Future<void> _confirmDiscardAndPop() async {
+    if (!_hasEnteredData) {
+      Navigator.pop(context);
+      return;
+    }
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text(
+            'You have unsaved child registration data. Are you sure you want to go back?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isRegisteredMode = widget.mode == ChildParentMode.registeredMother;
-    
+
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: SecondaryHeader(
           title: isRegisteredMode ? 'Link to Mother' : 'Add Guardian',
-          onBack: () => Navigator.pop(context),
+          onBack: _confirmDiscardAndPop,
         ),
       ),
       body: SafeArea(
@@ -1014,9 +1053,11 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
           const SizedBox(height: 12),
           
           AppInputField(
-            hintText: 'Phone Number',
+            hintText: 'Phone Number *',
             controller: guardianPhoneCtrl,
+            isRequired: true,
             keyboardType: TextInputType.phone,
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
           
@@ -1042,7 +1083,7 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'This guardian will be saved in the guardians table and can be linked to multiple children.',
+                    'The guardian\'s information will be kept on file and can be used for future child registrations.',
                     style: TextStyle(fontSize: 12, color: AppColors.info),
                   ),
                 ),

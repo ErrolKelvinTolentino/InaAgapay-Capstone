@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 class SmsService {
   static String get apiKey => dotenv.env['SEMAPHORE_API_KEY'] ?? '';
   static String get baseUrl => dotenv.env['SEMAPHORE_BASE_URL'] ?? 'https://api.semaphore.co/api/v4';
+  static String get senderName => dotenv.env['SEMAPHORE_SENDER_NAME'] ?? 'SEMAPHORE';
 
   // Send OTP via SMS
   static Future<bool> sendOtp(String phoneNumber, String code) async {
@@ -31,7 +32,7 @@ class SmsService {
           'apikey': apiKey,
           'number': formattedNumber,
           'message': message,
-          'sendername': 'INAAGAPAY',  // Your approved sender name
+          'sendername': senderName,  // Your approved sender name
         },
       ).timeout(const Duration(seconds: 30));
 
@@ -80,7 +81,7 @@ class SmsService {
           'number': formattedNumber,
           'message': 'Your INAAGAPAY verification code is: {otp}. This code expires in 10 minutes.',
           'code': code, // Pass our own OTP code
-          'sendername': 'INAAGAPAY',
+          'sendername': senderName,
         },
       ).timeout(const Duration(seconds: 30));
 

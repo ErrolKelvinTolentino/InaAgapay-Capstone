@@ -604,7 +604,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardColorOf(context),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -649,7 +649,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
+      backgroundColor: AppColors.bgPrimaryOf(context),
       body: SafeArea(
         top: false,
         bottom: false,
@@ -731,7 +731,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                             padding: const EdgeInsets.symmetric(
                                 vertical: 24, horizontal: 16),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: AppColors.cardColorOf(context),
                               borderRadius: BorderRadius.circular(24),
                               boxShadow: [
                                 BoxShadow(
@@ -822,7 +822,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                             const SizedBox(height: 16),
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: AppColors.cardColorOf(context),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Column(
@@ -873,15 +873,15 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                             Container(
                               padding: const EdgeInsets.all(24),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: AppColors.cardColorOf(context),
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: const Center(
+                              child: Center(
                                 child: Column(
                                   children: [
                                     Icon(Icons.search_off,
                                         size: 48,
-                                        color: AppColors.textSecondary),
+                                        color: AppColors.textSecondaryOf(context)),
                                     SizedBox(height: 12),
                                     Text(
                                       'No results found',
@@ -995,10 +995,10 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                             Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: AppColors.cardColorOf(context),
                                 borderRadius: BorderRadius.circular(20),
                                 border:
-                                    Border.all(color: AppColors.borderPrimary),
+                                    Border.all(color: AppColors.borderOf(context)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1064,17 +1064,17 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                             Container(
                               padding: const EdgeInsets.all(24),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: AppColors.cardColorOf(context),
                                 borderRadius: BorderRadius.circular(20),
                                 border:
-                                    Border.all(color: AppColors.borderPrimary),
+                                    Border.all(color: AppColors.borderOf(context)),
                               ),
-                              child: const Column(
+                              child: Column(
                                 children: [
                                   Icon(
                                     Icons.access_time,
                                     size: 48,
-                                    color: AppColors.textSecondary,
+                                    color: AppColors.textSecondaryOf(context),
                                   ),
                                   SizedBox(height: 12),
                                   Text(
@@ -1082,7 +1082,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
+                                      color: AppColors.textPrimaryOf(context),
                                     ),
                                   ),
                                   SizedBox(height: 4),
@@ -1120,17 +1120,17 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                             Container(
                               padding: const EdgeInsets.all(24),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: AppColors.cardColorOf(context),
                                 borderRadius: BorderRadius.circular(20),
                                 border:
-                                    Border.all(color: AppColors.borderPrimary),
+                                    Border.all(color: AppColors.borderOf(context)),
                               ),
-                              child: const Column(
+                              child: Column(
                                 children: [
                                   Icon(
                                     Icons.show_chart,
                                     size: 48,
-                                    color: AppColors.textSecondary,
+                                    color: AppColors.textSecondaryOf(context),
                                   ),
                                   SizedBox(height: 12),
                                   Text(
@@ -1138,7 +1138,7 @@ class _MidwifeDashboardState extends State<MidwifeDashboard> {
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
+                                      color: AppColors.textPrimaryOf(context),
                                     ),
                                   ),
                                   SizedBox(height: 4),

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
+import '../../services/push_notification_service.dart';
 import 'midwife_dashboard.dart';
 import 'midwife_mothers_screen.dart';
 import 'midwife_children_screen.dart';
@@ -34,6 +35,7 @@ class _MidwifeShellState extends State<MidwifeShell> {
   ];
 
   Future<void> _logout() async {
+    await PushNotificationService.removeToken();
     await AuthStorage.clearAll();
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
@@ -42,7 +44,7 @@ class _MidwifeShellState extends State<MidwifeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
+      backgroundColor: AppColors.bgPrimaryOf(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -67,7 +69,7 @@ class _MidwifeShellState extends State<MidwifeShell> {
       bottomNavigationBar: Container(
         height: 70,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.cardColorOf(context),
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
@@ -136,7 +138,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color color =
-        isActive ? AppColors.brandPrimary : AppColors.textSecondary;
+        isActive ? AppColors.brandPrimaryOf(context) : AppColors.textSecondaryOf(context);
 
     return GestureDetector(
       onTap: onTap,
@@ -164,7 +166,7 @@ class _NavItem extends StatelessWidget {
               width: 5,
               height: 5,
               decoration: BoxDecoration(
-                color: AppColors.brandPrimary,
+                color: AppColors.brandPrimaryOf(context),
                 shape: BoxShape.circle,
               ),
             ),

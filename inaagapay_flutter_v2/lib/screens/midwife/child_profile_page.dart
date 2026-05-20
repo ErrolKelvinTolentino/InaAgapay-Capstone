@@ -481,6 +481,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_child_profile',
         onPressed: _showAddOptionsModal,
         backgroundColor: AppColors.brandPrimary,
         child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),

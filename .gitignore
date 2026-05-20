@@ -1,4 +1,4 @@
-# Miscellaneous
+d# Miscellaneous
 *.class
 *.lock
 *.log
@@ -69,3 +69,4 @@ coverage/
 # Keep safe example file
 !.env.example
 inaagapay-1728f4916cfb.json
+inaagapay_flutter_v2/supabase/functions/send-push/service-account.json

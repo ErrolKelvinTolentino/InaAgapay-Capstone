@@ -21,6 +21,11 @@ class GroqResponse {
   final List<String>? normalRanges;
   final List<String>? recommendations;
 
+  // Fields for extracted admin/patient info
+  final String? extractedPatientName;
+  final String? extractedClinicLocation;
+  final String? extractedProfessional;
+
   GroqResponse({
     required this.description,
     this.measurements,
@@ -37,6 +42,9 @@ class GroqResponse {
     this.abnormalFindings,
     this.normalRanges,
     this.recommendations,
+    this.extractedPatientName,
+    this.extractedClinicLocation,
+    this.extractedProfessional,
   });
 
   factory GroqResponse.fromJson(Map<String, dynamic> json) {
@@ -124,6 +132,7 @@ class GroqResponse {
     final normalRanges = _toStringList(json['normal_ranges']);
     final recommendations = _toStringList(json['recommendations']);
     final keyObservations = _toStringList(json['key_observations']);
+    final aiSummary = _safeText(json['summary']);
 
     String? fetalWeight;
     String? heartRate;
@@ -199,9 +208,15 @@ class GroqResponse {
     final gestationalAge = _safeText(json['gestational_age_assessment']);
     final overallAssessment = _safeText(json['overall_assessment']);
 
+    final patientInfo = json['patient_info_visible'] as Map<String, dynamic>?;
+    final extractedPatientName = _safeText(patientInfo?['patient_name'] ?? patientInfo?['name']);
+    final extractedClinicLocation = _safeText(patientInfo?['clinic_location'] ?? patientInfo?['lab_name']);
+    final extractedProfessional = _safeText(patientInfo?['attending_professional']);
+
     final description = _buildStructuredDescription(
       relevance: relevance,
       relevanceReason: relevanceReason,
+      aiSummary: aiSummary,
       healthStatus: healthStatus,
       measurements: measurements,
       gestationalAge: gestationalAge,
@@ -233,6 +248,9 @@ class GroqResponse {
       normalRanges: normalRanges.isEmpty ? null : normalRanges.toList(),
       recommendations:
           recommendations.isEmpty ? null : recommendations.toList(),
+      extractedPatientName: extractedPatientName.isEmpty ? null : extractedPatientName,
+      extractedClinicLocation: extractedClinicLocation.isEmpty ? null : extractedClinicLocation,
+      extractedProfessional: extractedProfessional.isEmpty ? null : extractedProfessional,
     );
   }
 
@@ -359,6 +377,7 @@ class GroqResponse {
   static String _buildStructuredDescription({
     required String relevance,
     required String relevanceReason,
+    String aiSummary = '',
     required String healthStatus,
     required List<String> measurements,
     required String gestationalAge,
@@ -394,29 +413,37 @@ class GroqResponse {
       return lines.join('\n');
     }
 
+    if (aiSummary.isNotEmpty) {
+      lines.add('SUMMARY: $aiSummary');
+    }
+
     if (healthStatus.isNotEmpty) {
       lines.add('OVERALL HEALTH STATUS: $healthStatus');
     }
 
-    if (dedupedMeasurements.isNotEmpty) {
+    // Ultrasound-only sections: only show when there are no lab results
+    // (i.e. this is an ultrasound, not a lab test).
+    final isUltrasound = labResults.isEmpty;
+
+    if (isUltrasound && dedupedMeasurements.isNotEmpty) {
       lines.add('DETAILED MEASUREMENTS ASSESSMENT:');
       for (final item in dedupedMeasurements) {
         lines.add('• $item');
       }
     }
 
-    if (gestationalAge.isNotEmpty) {
+    if (isUltrasound && gestationalAge.isNotEmpty) {
       lines.add('GESTATIONAL AGE ASSESSMENT: $gestationalAge');
     }
 
-    if (dedupedNormalFindings.isNotEmpty) {
+    if (isUltrasound && dedupedNormalFindings.isNotEmpty) {
       lines.add('ANATOMICAL ASSESSMENT:');
       for (final item in dedupedNormalFindings) {
         lines.add('• $item');
       }
     }
 
-    if (dedupedObservations.isNotEmpty) {
+    if (isUltrasound && dedupedObservations.isNotEmpty) {
       lines.add('KEY OBSERVATIONS:');
       for (final item in dedupedObservations) {
         lines.add('• $item');

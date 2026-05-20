@@ -243,7 +243,7 @@ class _LoginScreenState extends State<LoginScreen> {
         : null;
 
     return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
+      backgroundColor: AppColors.bgPrimaryOf(context),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -267,12 +267,12 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 8),
 
               // Tagline
-              const Text(
+              Text(
                 'Supporting you through every step',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  color: AppColors.textSecondary,
+                  color: AppColors.textSecondaryOf(context),
                   fontWeight: FontWeight.w400,
                 ),
               ),
@@ -353,11 +353,11 @@ class _LoginScreenState extends State<LoginScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text(
+                  Text(
                     'No account yet? ',
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textPrimary,
+                      color: AppColors.textPrimaryOf(context),
                     ),
                   ),
                   ClickableText(

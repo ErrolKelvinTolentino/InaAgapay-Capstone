@@ -8,6 +8,7 @@ import '../../widgets/progressive_step_indicator.dart';
 import '../../widgets/page_title.dart';
 import '../../services/supabase_service.dart';
 import '../../services/auth_storage.dart';
+import '../../services/push_notification_service.dart';
 import '../../models/due_date_basis.dart';
 import 'welcome_screen.dart';
 
@@ -232,6 +233,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
 
     if (shouldExit == true) {
+      await PushNotificationService.removeToken();
       await AuthStorage.clearAll();
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(

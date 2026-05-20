@@ -477,6 +477,42 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     return null;
   }
 
+  String? _validateLmp(DateTime lmp) {
+    final now = DateTime.now();
+    // LMP cannot be in the future
+    if (lmp.isAfter(now)) {
+      return 'LMP cannot be in the future.';
+    }
+    // LMP cannot be more than 43 weeks (301 days) in the past
+    final daysSinceLmp = now.difference(lmp).inDays;
+    if (daysSinceLmp > 301) {
+      return 'LMP is more than 43 weeks ago. Please verify the date.';
+    }
+    // Also run existing pregnancy interval check
+    return _validatePregnancyInterval(lmp);
+  }
+
+  void _showEarlyPregnancyWarning() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Early Pregnancy Notice'),
+        content: const Text(
+          'The LMP is less than 4 weeks ago. At this early stage, '
+          'pregnancy confirmation via serum hCG test is recommended '
+          'before proceeding with registration.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Understood'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadContext() async {
     try {
       final accountId = await AuthStorage.getUserId();
@@ -704,8 +740,14 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       _lmpCtrl.text = _dateFmt.format(lmp);
       _eddCtrl.text = _dateFmt.format(_edd!);
       _gestationMethod = _GestationMethod.lmp;
-      _gestationError = _validatePregnancyInterval(lmp);
+      _gestationError = _validateLmp(lmp);
     });
+
+    // Warn if LMP is less than 4 weeks ago
+    final daysSinceLmp = DateTime.now().difference(lmp).inDays;
+    if (daysSinceLmp < 28 && _gestationError == null) {
+      _showEarlyPregnancyWarning();
+    }
   }
 
   void _updateFromEdd(DateTime edd) {
@@ -715,7 +757,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       _eddCtrl.text = _dateFmt.format(edd);
       _lmpCtrl.text = _dateFmt.format(_lmp!);
       _gestationMethod = _GestationMethod.edd;
-      _gestationError = _validatePregnancyInterval(_lmp!);
+      _gestationError = _validateLmp(_lmp!);
     });
   }
 
@@ -735,13 +777,24 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     return '${days ~/ 7}w ${days % 7}d';
   }
 
+  String _resolveEmail() {
+    final provided = _emailCtrl.text.trim();
+    if (provided.isNotEmpty) return provided;
+    final first = _firstNameCtrl.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    final last = _lastNameCtrl.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    final phone = _phoneCtrl.text.trim().replaceAll(RegExp(r'[^0-9]'), '');
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final safeName = (first.isEmpty ? 'mother' : first);
+    final safeLast = (last.isEmpty ? 'unknown' : last);
+    return '$safeName.$safeLast.$phone.$ts@inaagapay.internal';
+  }
+
   bool _validateStepInline(int step) {
     switch (step) {
       case 0:
         final firstNameEmpty = _firstNameCtrl.text.trim().isEmpty;
         final lastNameEmpty = _lastNameCtrl.text.trim().isEmpty;
         final phoneEmpty = _phoneCtrl.text.trim().isEmpty;
-        final emailEmpty = _emailCtrl.text.trim().isEmpty;
         final birthdateEmpty = _birthdate == null;
 
         setState(() {
@@ -751,9 +804,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         return !firstNameEmpty &&
             !lastNameEmpty &&
             !phoneEmpty &&
-            !emailEmpty &&
             !birthdateEmpty &&
             _birthdateError == null;
+
 
       case 1:
         final houseEmpty = _houseCtrl.text.trim().isEmpty;
@@ -866,7 +919,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         result = await SupabaseService.addMotherFullByMidwifeWithAutoPassword(
           midwifeId: _midwifeId!,
           assignedBhcId: _assignedBhcId!,
-          email: _emailCtrl.text.trim(),
+          email: _resolveEmail(),
           firstName: _firstNameCtrl.text.trim(),
           middleName: _middleNameCtrl.text.trim().isEmpty
               ? null
@@ -903,11 +956,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         final motherId = result['mother_id'] as int?;
         final pregnancyId = result['pregnancy_id'] as int?;
 
+        final hasRealEmail = _emailCtrl.text.trim().isNotEmpty;
         final successMessage = _isUpdatingExisting
             ? 'Mother account updated successfully!'
-            : (result['email_sent'] == true
+            : (hasRealEmail && result['email_sent'] == true
                 ? 'Mother account created successfully!\n\nA temporary password has been sent to ${_emailCtrl.text.trim()}.'
-                : 'Mother account created but email failed to send.\n\nPassword: ${result['generated_password']}');
+                : 'Mother account created successfully!\n\nTemporary password: ${result['generated_password']}\n\nPlease provide this password to the mother.');
 
         await showDialog(
           context: context,
@@ -933,6 +987,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   pregnancyId: pregnancyId,
                   lmp: _lmp,
                   motherWeight: double.tryParse(_weightCtrl.text.trim()),
+                  isInitialRegistration: true,
                 ),
               ),
             );
@@ -2626,7 +2681,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         const SizedBox(height: 24),
         _sectionLabel('Account Credentials'),
         AppInputField(
-            hintText: 'Email Address',
+            hintText: 'Email Address (optional)',
             controller: _emailCtrl,
             leadingIcon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
@@ -2687,7 +2742,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                             color: AppColors.info)),
                     SizedBox(height: 4),
                     Text(
-                        'A secure temporary password will be sent to the mother\'s email address.',
+                        'If email is provided, credentials will be sent. Otherwise, the password will be shown after registration.',
                         style: TextStyle(
                             fontSize: 11, color: AppColors.textSecondary))
                   ])),

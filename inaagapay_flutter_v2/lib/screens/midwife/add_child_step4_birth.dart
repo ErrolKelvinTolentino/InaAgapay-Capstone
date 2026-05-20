@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/page_title.dart';
@@ -10,6 +9,7 @@ import '../../widgets/small_description.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/app_input_field.dart';
 import 'add_child_step3_child.dart';
+import 'child_profile_page.dart';
 import 'midwife_children_screen.dart';
 
 class AddChildStep4Birth extends StatefulWidget {
@@ -73,6 +73,24 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
   DateTime? selectedBirthdate;
   bool _isEstimatedBirthdate = false;
+
+  String? get _birthWeightWarning {
+    final weight = double.tryParse(birthWeightCtrl.text);
+    if (weight == null) return null;
+    if (weight < 0.5 || weight > 6.0) {
+      return 'Typical birth weight is 0.5 - 6.0 kg. Please verify.';
+    }
+    return null;
+  }
+
+  String? get _birthLengthWarning {
+    final length = double.tryParse(birthLengthCtrl.text);
+    if (length == null) return null;
+    if (length < 30 || length > 60) {
+      return 'Typical birth length is 30 - 60 cm. Please verify.';
+    }
+    return null;
+  }
 
   bool get isFormValid {
     final birthdateValid = birthdateCtrl.text.isNotEmpty;
@@ -230,10 +248,15 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
         },
       );
 
-      // After dialog closes, pop back to the children screen (preserves bottom nav)
+      // After dialog closes, navigate to the child profile page
       if (mounted) {
-        // Pop twice to go back to the children screen (once for birth details, once for child info)
-        Navigator.pop(context, true);
+        // Pop all add-child screens and push the child profile
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => ChildProfilePage(childId: childId),
+          ),
+          (route) => route.isFirst,
+        );
       }
     } catch (e) {
       debugPrint('Error saving child: $e');
@@ -264,6 +287,43 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
     super.dispose();
   }
 
+  bool get _hasEnteredData =>
+      birthdateCtrl.text.trim().isNotEmpty ||
+      birthWeightCtrl.text.trim().isNotEmpty ||
+      birthLengthCtrl.text.trim().isNotEmpty ||
+      birthplaceCtrl.text.trim().isNotEmpty ||
+      headCtrl.text.trim().isNotEmpty ||
+      complicationsCtrl.text.trim().isNotEmpty;
+
+  Future<void> _confirmDiscardAndPop() async {
+    if (!_hasEnteredData) {
+      Navigator.pop(context);
+      return;
+    }
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text(
+            'You have unsaved birth details. Are you sure you want to go back?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     String parentDisplayName;
@@ -284,7 +344,7 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
         preferredSize: const Size.fromHeight(56),
         child: SecondaryHeader(
           title: 'Add Child',
-          onBack: () => Navigator.pop(context),
+          onBack: _confirmDiscardAndPop,
         ),
       ),
       body: SafeArea(
@@ -389,6 +449,22 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                               keyboardType: TextInputType.number,
                               onChanged: (_) => setState(() {}),
                             ),
+                            if (_birthWeightWarning != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6, left: 12, bottom: 4),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        _birthWeightWarning!,
+                                        style: const TextStyle(fontSize: 12, color: AppColors.warning),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             const SizedBox(height: 16),
                             AppInputField(
                               hintText: 'Birth Length (cm) *',
@@ -397,6 +473,22 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                               keyboardType: TextInputType.number,
                               onChanged: (_) => setState(() {}),
                             ),
+                            if (_birthLengthWarning != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6, left: 12, bottom: 4),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        _birthLengthWarning!,
+                                        style: const TextStyle(fontSize: 12, color: AppColors.warning),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             const SizedBox(height: 16),
                             AppInputField(
                               hintText: 'Head Circumference (cm)',
@@ -455,7 +547,7 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => Navigator.pop(context),
+                              onPressed: _confirmDiscardAndPop,
                               style: OutlinedButton.styleFrom(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 16),

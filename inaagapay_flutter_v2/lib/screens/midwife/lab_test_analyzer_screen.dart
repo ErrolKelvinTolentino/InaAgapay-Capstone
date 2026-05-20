@@ -3,6 +3,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -257,20 +258,12 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   }
 
   bool _validateStep2() {
-    if (_healthWorkerNameController.text.trim().isEmpty) {
-      _showMessage('Please enter the health worker\'s full name.',
-          type: AppSnackType.warning);
-      return false;
-    }
+    // Health worker metadata is optional (Task 3.1).
+    // Only validate "Other (specify)" consistency when a profession is chosen.
     final selected = _effectiveSelectedProfession();
-    if (selected == null || selected.trim().isEmpty) {
-      _showMessage('Please select the health worker\'s profession.',
-          type: AppSnackType.warning);
-      return false;
-    }
     if (selected == _otherProfessionOption &&
         _healthWorkerProfessionController.text.trim().isEmpty) {
-      _showMessage('Please specify the profession.',
+      _showMessage('You selected "Other" — please specify the profession or clear the selection.',
           type: AppSnackType.warning);
       return false;
     }
@@ -313,27 +306,8 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       return 'Please specify details in notes when lab test type is Other.';
     }
 
-    if (notes.length > 1200) {
-      return 'Notes are too long. Please keep notes within 1200 characters.';
-    }
-
-    if (notes.isNotEmpty) {
-      if (notes.length < 4) {
-        return 'Notes are too short. Please enter meaningful details.';
-      }
-
-      final compact = notes.replaceAll(RegExp(r'\s+'), '');
-      if (RegExp(r'(.)\1{7,}').hasMatch(compact)) {
-        return 'Notes appear repetitive or noisy. Please enter only relevant details.';
-      }
-
-      final unrelatedPattern = RegExp(
-        r'lorem ipsum|asdf|qwerty|movie|lyrics|tiktok|facebook|instagram|shopping|gaming',
-        caseSensitive: false,
-      );
-      if (unrelatedPattern.hasMatch(notes)) {
-        return 'Notes appear unrelated to a lab record. Please remove unrelated text.';
-      }
+    if (notes.length > 2000) {
+      return 'Notes are too long. Please keep notes within 2000 characters.';
     }
 
     return null;
@@ -457,6 +431,42 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     );
   }
 
+  bool get _hasEnteredData =>
+      _selectedLabType != null ||
+      _selectedImages.isNotEmpty ||
+      _notesController.text.trim().isNotEmpty ||
+      _healthWorkerNameController.text.trim().isNotEmpty ||
+      _healthWorkerInstitutionController.text.trim().isNotEmpty;
+
+  Future<void> _confirmDiscardAndPop() async {
+    if (!_hasEnteredData) {
+      Navigator.pop(context);
+      return;
+    }
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text(
+            'You have unsaved lab test data. Are you sure you want to go back?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   void _nextStep() {
     if (_step == 0 && !_validateStep1()) return;
     if (_step == 1 && !_validateStep2()) return;
@@ -472,7 +482,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   }
 
   Future<void> _analyzeImages() async {
-    if (!_validateStep1() || !_validateStep2() || !_validateStep3()) return;
+    if (!_validateStep1() || !_validateStep3()) return;
 
     _setLoadingState(
       'Checking image quality',
@@ -543,6 +553,14 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         } else {
           _healthSummaryController.text = "No analysis available";
         }
+
+        // Populate extracted admin fields if available
+        if (result.extractedProfessional != null && result.extractedProfessional!.isNotEmpty && _healthWorkerNameController.text.trim().isEmpty) {
+          _healthWorkerNameController.text = result.extractedProfessional!;
+        }
+        if (result.extractedClinicLocation != null && result.extractedClinicLocation!.isNotEmpty && _healthWorkerInstitutionController.text.trim().isEmpty) {
+          _healthWorkerInstitutionController.text = result.extractedClinicLocation!;
+        }
       });
 
       await _showInsightsModal();
@@ -560,8 +578,14 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   }
 
   Future<void> _saveToDatabase() async {
-    if (!_validateForm()) return;
+    // Only images + AI analysis result are strictly required (Task 3.4).
+    if (!_validateStep1() || !_validateStep3()) return;
     final aiGenerated = _combinedResponse != null;
+    if (!aiGenerated) {
+      _showMessage('Please run AI analysis before saving.',
+          type: AppSnackType.warning);
+      return;
+    }
     if (aiGenerated && !_analysisApproved) {
       _showMessage('Please approve the AI analysis before saving.',
           type: AppSnackType.warning);
@@ -1466,9 +1490,16 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isRecommendation
+            ? accent.withValues(alpha: 0.06)
+            : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderPrimary),
+        border: Border.all(
+          color: isRecommendation
+              ? accent.withValues(alpha: 0.35)
+              : AppColors.borderPrimary,
+          width: isRecommendation ? 1.5 : 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1481,7 +1512,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                 child: Text(
                   _friendlySectionTitle(safeTitle),
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: isRecommendation ? 14 : 13,
                     fontWeight: FontWeight.w700,
                     color: accent,
                   ),
@@ -2459,7 +2490,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         _stepHeader(
           title: 'Step 2: Health Worker Information',
           subtitle:
-              'Enter the responsible health worker details before analysis.',
+              'Optional \u2014 AI analysis is the primary output.',
         ),
         const SizedBox(height: 10),
         Container(
@@ -2484,14 +2515,15 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Required: Full name and profession',
+                'Optional \u2014 AI analysis is the primary output',
                 style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _healthWorkerNameController,
                 decoration: const InputDecoration(
-                  labelText: 'Full Name *',
+                  labelText: 'Full Name',
+                  hintText: 'Optional',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -2500,6 +2532,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                 controller: _healthWorkerInstitutionController,
                 decoration: const InputDecoration(
                   labelText: 'Institution/Clinic',
+                  hintText: 'Optional',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -2521,7 +2554,8 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                   return DropdownButtonFormField<String>(
                     initialValue: dropdownValue,
                     decoration: const InputDecoration(
-                      labelText: 'Profession *',
+                      labelText: 'Profession',
+                      hintText: 'Optional',
                       border: OutlineInputBorder(),
                     ),
                     items: dropdownItems
@@ -2546,7 +2580,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                 TextField(
                   controller: _healthWorkerProfessionController,
                   decoration: const InputDecoration(
-                    labelText: 'Specify Profession *',
+                    labelText: 'Specify Profession',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -2556,6 +2590,48 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         ),
       ],
     );
+  }
+
+  String _buildReportText() {
+    final buffer = StringBuffer();
+    buffer.writeln('=== LAB TEST ANALYSIS REPORT ===');
+    buffer.writeln('Date: ${_dateController.text}');
+    if (_selectedLabType != null && _selectedLabType!.isNotEmpty) {
+      buffer.writeln('Lab Test Type: $_selectedLabType');
+    }
+    buffer.writeln();
+    if (_healthWorkerNameController.text.trim().isNotEmpty) {
+      buffer.writeln('Health Worker: ${_healthWorkerNameController.text.trim()}');
+    }
+    if (_healthWorkerInstitutionController.text.trim().isNotEmpty) {
+      buffer.writeln('Institution: ${_healthWorkerInstitutionController.text.trim()}');
+    }
+    final profession = _effectiveSelectedProfession();
+    if (profession != null && profession.isNotEmpty && profession != _otherProfessionOption) {
+      buffer.writeln('Profession: $profession');
+    } else if (_healthWorkerProfessionController.text.trim().isNotEmpty) {
+      buffer.writeln('Profession: ${_healthWorkerProfessionController.text.trim()}');
+    }
+    buffer.writeln();
+    buffer.writeln('--- AI ANALYSIS ---');
+    buffer.writeln(_healthSummaryController.text.trim());
+    buffer.writeln();
+    if (_combinedResponse?.recommendations != null &&
+        _combinedResponse!.recommendations!.isNotEmpty) {
+      buffer.writeln('--- RECOMMENDATIONS ---');
+      for (final rec in _combinedResponse!.recommendations!) {
+        buffer.writeln('- $rec');
+      }
+      buffer.writeln();
+    }
+    buffer.writeln('Generated by InaAgapay AI Analyzer');
+    return buffer.toString();
+  }
+
+  void _copyReportToClipboard() {
+    final report = _buildReportText();
+    Clipboard.setData(ClipboardData(text: report));
+    _showMessage('Report copied to clipboard!', type: AppSnackType.success);
   }
 
   Widget _buildStep3() {
@@ -2649,6 +2725,15 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                                 color: AppColors.success, size: 18),
                           ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _copyReportToClipboard,
+                        icon: const Icon(Icons.copy, size: 18),
+                        label: const Text('Copy Report to Clipboard'),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Container(
@@ -2760,7 +2845,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                     child: IconButton(
                       icon: const Icon(Icons.arrow_back,
                           color: AppColors.textPrimary),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _confirmDiscardAndPop,
                       constraints: const BoxConstraints(
                         minWidth: 40,
                         minHeight: 40,
@@ -2864,8 +2949,8 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                               _step == 0
                                   ? 'Complete test details first, then continue.'
                                   : _step == 1
-                                      ? 'Enter health worker details before proceeding.'
-                                      : 'Attach images, optionally run AI analysis, and approve AI only if you generated one before saving.',
+                                      ? 'Health worker details are optional. You may skip ahead.'
+                                      : 'Attach images, run AI analysis, and approve before saving.',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,

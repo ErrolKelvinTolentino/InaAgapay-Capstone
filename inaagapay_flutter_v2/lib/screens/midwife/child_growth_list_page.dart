@@ -1,18 +1,38 @@
 // lib/screens/midwife/child_growth_list_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/growth_calculator.dart';
+import '../../services/growth_reference_data.dart';
 import '../../services/groq_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ai_analytics_card.dart';
 import '../../widgets/chart_card.dart';
+import '../../widgets/growth_line_chart.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/hero_card.dart';
 import 'growth_history_screen.dart';
 import '../../widgets/growth_record_card.dart';
+
+/// Data class representing a reference curve for growth charts
+class ReferenceCurve {
+  final String label;
+  final List<FlSpot> spots;
+  final Color color;
+  final double strokeWidth;
+  final List<int>? dashArray;
+
+  ReferenceCurve({
+    required this.label,
+    required this.spots,
+    required this.color,
+    required this.strokeWidth,
+    this.dashArray,
+  });
+}
 
 class ChildGrowthListPage extends StatefulWidget {
   final int childId;
@@ -234,8 +254,21 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
     }).join('\n');
 
     return '''
-You are a warm, caring assistant writing a short growth update for a parent and midwife.
-Do not use the phrase "your baby". Use "the child" or "the baby" instead.
+You are a caring ate (trusted older sister) who is also a knowledgeable midwife in the Philippines. You are writing a gentle growth update for a mother about her child.
+
+Your tone should be warm and personal — like you're chatting with the mother at the barangay health center, celebrating her child's milestones. When growth is on track, be genuinely happy. When something needs attention, be gentle and offer practical advice (local foods like malunggay, dilis, squash, eggs).
+
+Use "your little one" or the child's name, not "the child" or "the baby" — make it personal.
+
+WEIGHT/GROWTH INTERPRETATION RULES:
+- You do NOT compute Z-scores or growth formulas — the system provides those. You only explain them.
+- NEVER use "ideal weight", "perfect weight", or "normal weight". Use "commonly expected range" or "appears within range".
+- NEVER present exact target weights or rigid expectations for children.
+- Be weight-sensitive — never shame parents. Guide positively.
+- When growth is on track: celebrate warmly.
+- When below/above range: be gentle, offer practical local food advice, and encourage continued monitoring.
+- End growth interpretation with: "This is for monitoring support only and does not replace your pediatrician's advice."
+
 Provide the response in both English and Filipino. Only one language will be shown at a time.
 Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
 
@@ -253,34 +286,35 @@ $recordsSummary
 Output format:
 
 ## English
-## Baby Growth Summary
-- A short, gentle explanation of how the child is growing.
+## How Your Little One is Growing
+- A warm, personal summary celebrating the child's growth or gently noting concerns with practical advice.
 
 ### Current Measurements
 - Length: ${height.toStringAsFixed(1)} cm
 - Weight: ${weight.toStringAsFixed(1)} kg
 
-### What This Means
-- ...
-- ...
+### What This Means for You
+- Explain in simple terms what these numbers mean. Compare to healthy ranges in a friendly way.
+- If on track: celebrate! If not: be gentle, explain why it matters, and give food/care tips.
 
-### Helpful Note
-- ...
+### Tips from Your Ate
+- Practical, culturally relevant advice (local foods, feeding tips, play activities)
+- End with encouragement
 
 ## Filipino
-## Buod ng Paglaki ng Bata
-- Maikling, banayad na paliwanag kung paano lumalago ang bata.
+## Kamusta ang Paglaki ng Iyong Munting Anak
+- Mainit at personal na buod — ipagdiwang ang paglaki o banayad na payo kung may concern.
 
 ### Kasalukuyang Sukat
 - Haba: ${height.toStringAsFixed(1)} cm
 - Timbang: ${weight.toStringAsFixed(1)} kg
 
-### Ano ang Kahulugan Nito
-- ...
-- ...
+### Ano ang Ibig Sabihin Nito Para Sa Iyo
+- Ipaliwanag sa simpleng salita. Kung maayos: magdiwang! Kung hindi: maging banayad at magbigay ng payo.
 
-### Paalala
-- ...
+### Payo mula sa Iyong Ate
+- Praktikal na payo (pagkain, pag-aalaga, laro)
+- Tapusin ng pagpapalakas ng loob
 
 Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for daily care and follow-up.
 ''';
@@ -496,6 +530,142 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
     return labels;
   }
 
+  /// Builds WHO reference curves for the given [metric] ('weight' or 'height')
+  /// aligned to the same index-based x-coordinates as the child data points.
+  List<ReferenceCurve> _buildWhoCurves(
+    String metric,
+    String sex,
+    List<Map<String, dynamic>> validRecords,
+  ) {
+    final isBoy = sex.toLowerCase() == 'male';
+
+    // Select the correct weekly dataset
+    List<Map<String, dynamic>> weeklyData;
+    List<Map<String, dynamic>>? monthlyData;
+
+    if (metric == 'weight') {
+      weeklyData =
+          isBoy ? GrowthReferenceData.weightBoysData : GrowthReferenceData.weightGirlsData;
+      monthlyData =
+          isBoy ? GrowthReferenceData.weightBoysMonthlyData : GrowthReferenceData.weightGirlsMonthlyData;
+    } else {
+      // height
+      weeklyData =
+          isBoy ? GrowthReferenceData.heightBoysData : GrowthReferenceData.heightGirlsData;
+      monthlyData = null; // no monthly height data available
+    }
+
+    // For each SD line, collect spots at matching x-indices
+    final medianSpots = <FlSpot>[];
+    final sd2negSpots = <FlSpot>[];
+    final sd2posSpots = <FlSpot>[];
+    final sd3negSpots = <FlSpot>[];
+    final sd3posSpots = <FlSpot>[];
+
+    for (int i = 0; i < validRecords.length; i++) {
+      final record = validRecords[i];
+      final recordDate = DateTime.parse(record['created_at']);
+      final ageWeeks = _ageInWeeks(recordDate);
+
+      Map<String, dynamic>? refEntry;
+
+      if (ageWeeks <= 13) {
+        // Use weekly data
+        refEntry = weeklyData.cast<Map<String, dynamic>?>().firstWhere(
+          (e) => e!['week'] == ageWeeks,
+          orElse: () => null,
+        );
+      } else if (monthlyData != null) {
+        // Convert weeks to months and look up monthly data
+        final ageMonths = (ageWeeks / 4.345).round();
+        refEntry = monthlyData.cast<Map<String, dynamic>?>().firstWhere(
+          (e) => e!['month'] == ageMonths,
+          orElse: () => null,
+        );
+      }
+
+      if (refEntry == null) continue;
+
+      final x = i.toDouble();
+      medianSpots.add(FlSpot(x, (refEntry['sd0'] as num).toDouble()));
+      sd2negSpots.add(FlSpot(x, (refEntry['sd2neg'] as num).toDouble()));
+      sd2posSpots.add(FlSpot(x, (refEntry['sd2'] as num).toDouble()));
+      sd3negSpots.add(FlSpot(x, (refEntry['sd3neg'] as num).toDouble()));
+      sd3posSpots.add(FlSpot(x, (refEntry['sd3'] as num).toDouble()));
+    }
+
+    // Only return curves that have at least 2 points (needed to draw a line)
+    final curves = <ReferenceCurve>[];
+
+    if (medianSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: 'Median',
+        spots: medianSpots,
+        color: Colors.green.withValues(alpha: 0.4),
+        strokeWidth: 1.2,
+      ));
+    }
+    if (sd2negSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: '-2 SD',
+        spots: sd2negSpots,
+        color: Colors.orange.withValues(alpha: 0.4),
+        strokeWidth: 1.0,
+        dashArray: [6, 4],
+      ));
+    }
+    if (sd2posSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: '+2 SD',
+        spots: sd2posSpots,
+        color: Colors.orange.withValues(alpha: 0.4),
+        strokeWidth: 1.0,
+        dashArray: [6, 4],
+      ));
+    }
+    if (sd3negSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: '-3 SD',
+        spots: sd3negSpots,
+        color: Colors.red.withValues(alpha: 0.3),
+        strokeWidth: 1.0,
+        dashArray: [4, 4],
+      ));
+    }
+    if (sd3posSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: '+3 SD',
+        spots: sd3posSpots,
+        color: Colors.red.withValues(alpha: 0.3),
+        strokeWidth: 1.0,
+        dashArray: [4, 4],
+      ));
+    }
+
+    return curves;
+  }
+
+  /// Returns the subset of records that have valid values for the given metric,
+  /// in the same order as _getChartValues / _getChartLabels would produce.
+  List<Map<String, dynamic>> _getValidRecords(String metric) {
+    final valid = <Map<String, dynamic>>[];
+    for (final record in records) {
+      switch (metric) {
+        case 'height':
+          final v = (record['child_height'] as num?)?.toDouble() ?? 0;
+          if (v > 0) valid.add(record);
+          break;
+        case 'weight':
+          final v = (record['child_weight'] as num?)?.toDouble() ?? 0;
+          if (v > 0) valid.add(record);
+          break;
+        default:
+          break;
+      }
+    }
+    return valid;
+  }
+
   @override
   Widget build(BuildContext context) {
     final heightZ = GrowthCalculator.calculateHeightZScore(
@@ -595,6 +765,14 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
     final bmiValues = _getChartValues('bmi');
     final bmiLabels = _getChartLabels('bmi');
 
+    // Build WHO reference curves for weight and height
+    final weightWhoCurves = weightValues.length >= 2
+        ? _buildWhoCurves('weight', childSex, _getValidRecords('weight'))
+        : <ReferenceCurve>[];
+    final heightWhoCurves = heightValues.length >= 2
+        ? _buildWhoCurves('height', childSex, _getValidRecords('height'))
+        : <ReferenceCurve>[];
+
     // Debug output to verify data
     debugPrint('BMI Values: $bmiValues');
     debugPrint('BMI Labels: $bmiLabels');
@@ -643,10 +821,10 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
           color: AppColors.brandPrimary,
           show: activeTab == 2,
         ),
-        // FIXED: BMI Chart - Added check for both values and labels length match
+        // BMI Chart
         if (activeTab == 0 &&
-            bmiValues.isNotEmpty &&
-            bmiLabels.isNotEmpty &&
+            bmiValues.length >= 2 &&
+            bmiLabels.length >= 2 &&
             bmiValues.length == bmiLabels.length)
           ChartCard(
             title: 'BMI History',
@@ -660,9 +838,13 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
             latestValue: latestBMI > 0 ? latestBMI.toStringAsFixed(1) : 'n/a',
             insightText: 'BMI trend indicates body composition changes.',
           ),
+        if (activeTab == 0 && bmiValues.length < 2)
+          _buildInsufficientDataMessage('BMI'),
+
+        // Weight Chart
         if (activeTab == 1 &&
-            weightValues.isNotEmpty &&
-            weightLabels.isNotEmpty &&
+            weightValues.length >= 2 &&
+            weightLabels.length >= 2 &&
             weightValues.length == weightLabels.length)
           ChartCard(
             title: 'Weight History',
@@ -670,6 +852,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
             values: weightValues,
             labels: weightLabels,
             unit: 'kg',
+            referenceCurves: weightWhoCurves,
             startingLabel: 'First',
             startingValue: '${weightValues.first.toStringAsFixed(1)} kg',
             latestLabel: 'Latest',
@@ -677,9 +860,13 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
             insightText:
                 'Weight tracking provides insight into nutritional status.',
           ),
+        if (activeTab == 1 && weightValues.length < 2)
+          _buildInsufficientDataMessage('Weight'),
+
+        // Height Chart
         if (activeTab == 2 &&
-            heightValues.isNotEmpty &&
-            heightLabels.isNotEmpty &&
+            heightValues.length >= 2 &&
+            heightLabels.length >= 2 &&
             heightValues.length == heightLabels.length)
           ChartCard(
             title: 'Height History',
@@ -687,6 +874,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
             values: heightValues,
             labels: heightLabels,
             unit: 'cm',
+            referenceCurves: heightWhoCurves,
             startingLabel: 'First',
             startingValue: '${heightValues.first.toStringAsFixed(1)} cm',
             latestLabel: 'Latest',
@@ -694,6 +882,8 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
             insightText:
                 'Weekly height measurements showing growth pattern over time.',
           ),
+        if (activeTab == 2 && heightValues.length < 2)
+          _buildInsufficientDataMessage('Height'),
         const SizedBox(height: 20),
         AiAnalyticsCard(
           isLoading: aiLoading,
@@ -876,6 +1066,35 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildInsufficientDataMessage(String metric) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline,
+              color: AppColors.textSecondary.withValues(alpha: 0.6), size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Not enough data for $metric chart (need at least 2 measurements)',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

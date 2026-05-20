@@ -1,3 +1,4 @@
+
 -- Seed data for symptom types
 INSERT INTO symptom_types (symptom_name, risk_category, description)
 VALUES -- ======================
@@ -135,3 +136,25 @@ VALUES -- ======================
         'normal',
         'Hormonal skin reactions during pregnancy'
     );
+
+-- Seed data for vaccines (DOH Expanded Program on Immunization)
+-- Only insert if not already present
+INSERT INTO vaccines (vaccine_name, dose_number, recommended_age_months, target_recipients, notes)
+VALUES
+    -- PCV (Pneumococcal Conjugate Vaccine)
+    ('PCV', 1, 1.5, 'child', 'Pneumococcal Conjugate Vaccine - 1st dose'),
+    ('PCV', 2, 2.5, 'child', 'Pneumococcal Conjugate Vaccine - 2nd dose'),
+    ('PCV', 3, 3.5, 'child', 'Pneumococcal Conjugate Vaccine - 3rd dose'),
+    -- Rotavirus
+    ('Rotavirus', 1, 1.5, 'child', 'Rotavirus Vaccine - 1st dose'),
+    ('Rotavirus', 2, 2.5, 'child', 'Rotavirus Vaccine - 2nd dose'),
+    -- IPV (Inactivated Polio Vaccine)
+    ('IPV', 1, 3.5, 'child', 'Inactivated Polio Vaccine'),
+    -- Vitamin A
+    ('Vitamin A', 1, 6.0, 'child', 'Vitamin A Supplementation - 1st dose'),
+    ('Vitamin A', 2, 12.0, 'child', 'Vitamin A Supplementation - 2nd dose'),
+    -- MCV2 (Measles-Containing Vaccine 2nd dose)
+    ('Measles', 2, 12.0, 'child', 'Measles-Containing Vaccine - 2nd dose'),
+    -- MMR
+    ('MMR', 1, 12.0, 'child', 'Measles, Mumps, Rubella Vaccine')
+ON CONFLICT (vaccine_name, dose_number) DO NOTHING;

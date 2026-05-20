@@ -1,10 +1,12 @@
 // lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/auth_storage.dart';
+import '../../services/push_notification_service.dart';
 import '../../services/supabase_service.dart';
 import '../midwife/ultrasound_analyzer_screen.dart';
 import '../midwife/lab_test_analyzer_screen.dart';
@@ -15,6 +17,10 @@ import '../../widgets/main_button.dart';
 import '../../widgets/secondary_button.dart';
 import '../shared/record_detail_screen.dart';
 import '../../widgets/profile_widgets.dart';
+import '../../services/weight_gain_engine.dart';
+import '../../models/weight_gain_models.dart';
+import 'package:fl_chart/fl_chart.dart';
+import '../../widgets/mother_qr_code.dart';
 
 // Blood type options
 const List<String> _bloodTypeOptions = [
@@ -42,8 +48,9 @@ const List<String> _extensionOptions = [
 
 class MotherProfilePage extends StatefulWidget {
   final int motherId;
+  final bool readOnly;
 
-  const MotherProfilePage({super.key, required this.motherId});
+  const MotherProfilePage({super.key, required this.motherId, this.readOnly = false});
 
   @override
   State<MotherProfilePage> createState() => _MotherProfilePageState();
@@ -86,12 +93,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   String _editingBloodType = '';
   String _editingExtension = '';
 
+  // Editable medical conditions & allergies
+  bool _isEditingConditions = false;
+  bool _isEditingAllergies = false;
+
   // Profile picture
   String? _profilePictureUrl;
 
   // Latest growth data
   Map<String, dynamic>? _latestGrowthData;
   bool _loadingGrowth = true;
+
+  // Weight gain dashboard data
+  WeightGainResult? _weightGainResult;
+  List<Map<String, dynamic>> _weightCheckups = [];
+  bool _loadingWeightGain = true;
 
   @override
   void initState() {
@@ -100,6 +116,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     _profileFuture = MotherProfileService.fetchMotherProfile(widget.motherId);
     _loadProfilePicture();
     _loadLatestGrowthData();
+    _loadWeightGainData();
   }
 
   @override
@@ -216,6 +233,636 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // WEIGHT GAIN DASHBOARD — load, display, chart, log
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _loadWeightGainData() async {
+    setState(() => _loadingWeightGain = true);
+
+    try {
+      // 1. Get the ongoing pregnancy
+      final pregnancyRow = await SupabaseService.client
+          .from('pregnancies')
+          .select('pregnancy_id, pre_pregnancy_weight, last_menstrual_period')
+          .eq('mother_id', widget.motherId)
+          .eq('status', 'ongoing')
+          .maybeSingle();
+
+      if (pregnancyRow == null) {
+        if (mounted) setState(() => _loadingWeightGain = false);
+        return;
+      }
+
+      final pregnancyId = pregnancyRow['pregnancy_id'] as int;
+      final prePregnancyWeight = pregnancyRow['pre_pregnancy_weight'] != null
+          ? (pregnancyRow['pre_pregnancy_weight'] as num).toDouble()
+          : null;
+
+      // 2. Get all checkups for this pregnancy (ascending)
+      final checkupsRaw = await SupabaseService.client
+          .from('prenatal_checkups')
+          .select('prenatal_checkup_id, checkup_datetime, age_of_gestation, checkup_weight')
+          .eq('pregnancy_id', pregnancyId)
+          .order('checkup_datetime', ascending: true);
+
+      final checkups = (checkupsRaw as List).cast<Map<String, dynamic>>();
+
+      if (checkups.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _weightCheckups = [];
+            _weightGainResult = null;
+            _loadingWeightGain = false;
+          });
+        }
+        return;
+      }
+
+      // 3. Get mother height
+      final heightCm = await _getMotherHeight();
+
+      // 4. Current weight & AOG from latest checkup
+      final latest = checkups.last;
+      final currentWeight = (latest['checkup_weight'] as num?)?.toDouble();
+      final aogWeeks = (latest['age_of_gestation'] as num?)?.toDouble();
+
+      // Fallback: compute AOG from LMP if not stored
+      double effectiveAog = aogWeeks ?? 0;
+      if (effectiveAog == 0 && pregnancyRow['last_menstrual_period'] != null) {
+        final lmp = DateTime.tryParse(pregnancyRow['last_menstrual_period']);
+        if (lmp != null) {
+          effectiveAog = DateTime.now().difference(lmp).inDays / 7.0;
+        }
+      }
+
+      if (currentWeight == null || currentWeight <= 0) {
+        if (mounted) {
+          setState(() {
+            _weightCheckups = checkups;
+            _weightGainResult = null;
+            _loadingWeightGain = false;
+          });
+        }
+        return;
+      }
+
+      // 5. Evaluate
+      final result = WeightGainEngine.evaluate(
+        currentWeight: currentWeight,
+        aogWeeks: effectiveAog,
+        allCheckups: checkups,
+        prePregnancyWeight: prePregnancyWeight,
+        heightCm: heightCm,
+      );
+
+      if (mounted) {
+        setState(() {
+          _weightCheckups = checkups;
+          _weightGainResult = result;
+          _loadingWeightGain = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading weight gain data: $e');
+      if (mounted) {
+        setState(() {
+          _weightGainResult = null;
+          _loadingWeightGain = false;
+        });
+      }
+    }
+  }
+
+  /// Weight gain dashboard card.
+  Widget _buildWeightGainDashboard(WeightGainResult result) {
+    // Status color
+    Color statusColor;
+    switch (result.status) {
+      case WeightGainStatus.normal:
+        statusColor = AppColors.success;
+        break;
+      case WeightGainStatus.low:
+        statusColor = AppColors.warning;
+        break;
+      case WeightGainStatus.high:
+        statusColor = AppColors.error;
+        break;
+      case WeightGainStatus.insufficient:
+        statusColor = AppColors.textSecondary;
+        break;
+    }
+
+    // BMI badge color
+    Color bmiColor;
+    switch (result.bmiCategory) {
+      case 'Underweight':
+        bmiColor = Colors.blue;
+        break;
+      case 'Normal':
+        bmiColor = AppColors.success;
+        break;
+      case 'Overweight':
+        bmiColor = AppColors.warning;
+        break;
+      case 'Obese':
+        bmiColor = AppColors.error;
+        break;
+      default:
+        bmiColor = AppColors.textSecondary;
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.cardColorOf(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.08),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.monitor_weight_outlined, color: statusColor, size: 22),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Weight Gain Analysis',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                // Mode badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    result.modeLabel,
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Row: BMI badge + Status badge
+                Row(
+                  children: [
+                    // BMI category badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: bmiColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: bmiColor.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(
+                        result.bmiCategory,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: bmiColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Status badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(
+                        result.statusLabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: statusColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Weight info rows
+                _weightInfoRow(
+                  'Current Weight',
+                  '${result.currentWeight.toStringAsFixed(1)} kg',
+                ),
+                if (result.baselineWeight != null)
+                  _weightInfoRow(
+                    result.mode == WeightGainMode.full
+                        ? 'Pre-Pregnancy Weight'
+                        : 'Baseline Weight',
+                    '${result.baselineWeight!.toStringAsFixed(1)} kg',
+                  ),
+                if (result.actualGain != null)
+                  _weightInfoRow(
+                    'Actual Gain',
+                    '${result.actualGain! >= 0 ? '+' : ''}${result.actualGain!.toStringAsFixed(1)} kg',
+                  ),
+                if (result.expectedGain != null)
+                  _weightInfoRow(
+                    'Expected Gain',
+                    '${result.expectedGain!.toStringAsFixed(1)} kg',
+                  ),
+                if (result.weeklyGain != null)
+                  _weightInfoRow(
+                    'Weekly Gain Rate',
+                    '${result.weeklyGain!.toStringAsFixed(3)} kg/wk',
+                  ),
+
+                const SizedBox(height: 12),
+                // Flags
+                if (result.hasFlags) ...[
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: result.flags.map((flag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          flag.replaceAll('_', ' ').toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.error,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                // Engine message
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Text(
+                    result.message,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _weightInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.textSecondary)),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  /// Weight trend chart — plots checkup weights over gestational weeks.
+  Widget _buildWeightTrendChart(List<Map<String, dynamic>> checkups) {
+    // Filter checkups that have both weight and AOG
+    final validCheckups = checkups.where((c) {
+      final w = c['checkup_weight'];
+      final a = c['age_of_gestation'];
+      return w != null && a != null && (w as num) > 0 && (a as num) > 0;
+    }).toList();
+
+    if (validCheckups.length < 2) return const SizedBox.shrink();
+
+    // Sort by AOG ascending
+    validCheckups.sort((a, b) =>
+        (a['age_of_gestation'] as num).compareTo(b['age_of_gestation'] as num));
+
+    final spots = validCheckups
+        .map((c) => FlSpot(
+              (c['age_of_gestation'] as num).toDouble(),
+              (c['checkup_weight'] as num).toDouble(),
+            ))
+        .toList();
+
+    final minY = spots.map((s) => s.y).reduce((a, b) => a < b ? a : b) - 2;
+    final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) + 2;
+    final minX = spots.first.x;
+    final maxX = spots.last.x;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardColorOf(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.show_chart, size: 20, color: AppColors.brandPrimary),
+              const SizedBox(width: 8),
+              const Text(
+                'Weight Trend',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Weight (kg) over gestational weeks',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 200,
+            child: LineChart(
+              LineChartData(
+                minX: minX,
+                maxX: maxX,
+                minY: minY,
+                maxY: maxY,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: ((maxY - minY) / 4).clamp(1.0, 10.0),
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
+                    strokeWidth: 1,
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      interval: ((maxX - minX) / 4).ceilToDouble().clamp(1, 10),
+                      getTitlesWidget: (value, meta) => Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'W${value.toInt()}',
+                          style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      interval: ((maxY - minY) / 4).clamp(1.0, 10.0),
+                      getTitlesWidget: (value, meta) => Text(
+                        '${value.toInt()}',
+                        style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: AppColors.brandPrimary,
+                    barWidth: 3,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) =>
+                          FlDotCirclePainter(
+                        radius: 4,
+                        color: Colors.white,
+                        strokeWidth: 2,
+                        strokeColor: AppColors.brandPrimary,
+                      ),
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                    ),
+                  ),
+                ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        return LineTooltipItem(
+                          'Week ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)} kg',
+                          const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shows a dialog for mothers to log their current weight.
+  Future<void> _showLogWeightDialog() async {
+    final weightController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.monitor_weight_outlined, color: AppColors.brandPrimary),
+            const SizedBox(width: 8),
+            const Text('Log Weight', style: TextStyle(fontSize: 18)),
+          ],
+        ),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Enter your current weight in kilograms.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: weightController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,1}')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Weight (kg)',
+                  hintText: 'e.g. 58.5',
+                  suffixText: 'kg',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Please enter your weight';
+                  final parsed = double.tryParse(v);
+                  if (parsed == null || parsed < 20 || parsed > 200) {
+                    return 'Enter a valid weight (20-200 kg)';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(ctx, double.parse(weightController.text));
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return;
+
+    try {
+      // Get ongoing pregnancy
+      final pregnancyRow = await SupabaseService.client
+          .from('pregnancies')
+          .select('pregnancy_id, last_menstrual_period')
+          .eq('mother_id', widget.motherId)
+          .eq('status', 'ongoing')
+          .maybeSingle();
+
+      if (pregnancyRow == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No active pregnancy found.')),
+          );
+        }
+        return;
+      }
+
+      final pregnancyId = pregnancyRow['pregnancy_id'] as int;
+
+      // Compute AOG from LMP
+      double? aogWeeks;
+      if (pregnancyRow['last_menstrual_period'] != null) {
+        final lmp = DateTime.tryParse(pregnancyRow['last_menstrual_period']);
+        if (lmp != null) {
+          aogWeeks = DateTime.now().difference(lmp).inDays / 7.0;
+        }
+      }
+
+      // Insert minimal prenatal checkup record
+      await SupabaseService.client.from('prenatal_checkups').insert({
+        'pregnancy_id': pregnancyId,
+        'checkup_weight': result,
+        'age_of_gestation': aogWeeks?.round(),
+        'checkup_datetime': DateTime.now().toIso8601String(),
+        'remarks': 'Self-reported weight log by mother',
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Weight logged: ${result.toStringAsFixed(1)} kg'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        // Refresh data
+        await _loadWeightGainData();
+        await _loadLatestGrowthData();
+      }
+    } catch (e) {
+      debugPrint('Error logging weight: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to log weight: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   Future<double?> _getMotherHeight() async {
     try {
       final response = await SupabaseService.client
@@ -239,6 +886,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       _controllersInitialized = false;
       _isEditingPersonal = false;
       _isEditingAddress = false;
+      _isEditingConditions = false;
+      _isEditingAllergies = false;
       _profileFuture = MotherProfileService.fetchMotherProfile(widget.motherId);
       // Reset pagination counts
       _checkupDisplayCount = _pageSize;
@@ -250,9 +899,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     });
     await _loadProfilePicture();
     await _loadLatestGrowthData();
+    await _loadWeightGainData();
   }
 
   Future<void> _logout() async {
+    await PushNotificationService.removeToken();
     await AuthStorage.clearAll();
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
@@ -2256,17 +2907,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final accountId = await AuthStorage.getUserId();
     if (accountId == null) return;
 
+    // Capture the values before any async gaps
+    final heightText = _personalControllers['height']?.text.trim() ?? '';
+    final weightText = _personalControllers['weight']?.text.trim() ?? '';
+    final bloodType = _editingBloodType;
+    final extensionName = _editingExtension;
+
     try {
       await SupabaseService.client.from('accounts').update({
-        'extension_name': _editingExtension.isEmpty ? null : _editingExtension,
+        'extension_name': extensionName.isEmpty ? null : extensionName,
       }).eq('account_id', accountId);
 
       await SupabaseService.client.from('mothers').update({
-        'height':
-            double.tryParse(_personalControllers['height']?.text.trim() ?? ''),
-        'weight':
-            double.tryParse(_personalControllers['weight']?.text.trim() ?? ''),
-        'blood_type': _editingBloodType.isEmpty ? null : _editingBloodType,
+        'height': double.tryParse(heightText),
+        'weight': double.tryParse(weightText),
+        'blood_type': bloodType.isEmpty ? null : bloodType,
       }).eq('mother_id', widget.motherId);
 
       if (mounted) {
@@ -2275,7 +2930,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               content: Text('Medical information updated'),
               backgroundColor: AppColors.success),
         );
-        setState(() => _isEditingPersonal = false);
+        // FIX: Force controllers to re-initialize on next build with fresh data
+        setState(() {
+          _isEditingPersonal = false;
+          _controllersInitialized = false;
+        });
         _refresh();
       }
     } catch (e) {
@@ -2322,7 +2981,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               content: Text('Address updated'),
               backgroundColor: AppColors.success),
         );
-        setState(() => _isEditingAddress = false);
+        // FIX: Force controllers to re-initialize on next build with fresh data
+        setState(() {
+          _isEditingAddress = false;
+          _controllersInitialized = false;
+        });
         _refresh();
       }
     } catch (e) {
@@ -2331,6 +2994,182 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           SnackBar(
               content: Text('Error: $e'), backgroundColor: AppColors.error),
         );
+      }
+    }
+  }
+
+  // ── Add/Remove medical conditions ─────────────────────────────────────
+  Future<void> _addMedicalCondition() async {
+    final nameController = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Medical Condition'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Condition Name',
+            hintText: 'e.g. Gestational Diabetes',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, nameController.text.trim()),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    if (result != null && result.isNotEmpty) {
+      try {
+        await SupabaseService.client.from('medical_conditions').insert({
+          'mother_id': widget.motherId,
+          'condition_name': result,
+          'status': 'active',
+          'diagnosis_date': DateTime.now().toIso8601String().split('T')[0],
+        });
+        _refresh();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _removeMedicalCondition(Map<String, dynamic> condition) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Condition'),
+        content: Text(
+            'Remove "${condition['condition_name']}"? This will mark it as resolved.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        final conditionId = condition['medical_condition_id'];
+        if (conditionId != null) {
+          await SupabaseService.client
+              .from('medical_conditions')
+              .update({'status': 'resolved'})
+              .eq('medical_condition_id', conditionId);
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          );
+        }
+      }
+    }
+  }
+
+  // ── Add/Remove allergies ──────────────────────────────────────────────
+  Future<void> _addAllergy() async {
+    final nameController = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Allergy'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Allergen',
+            hintText: 'e.g. Penicillin',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, nameController.text.trim()),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    if (result != null && result.isNotEmpty) {
+      try {
+        await SupabaseService.client.from('allergies').insert({
+          'mother_id': widget.motherId,
+          'allergen': result,
+          'status': 'active',
+          'diagnosis_date': DateTime.now().toIso8601String().split('T')[0],
+        });
+        _refresh();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _removeAllergy(Map<String, dynamic> allergy) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Allergy'),
+        content:
+            Text('Remove "${allergy['allergen']}"? This will mark it as resolved.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        final allergyId = allergy['allergy_id'];
+        if (allergyId != null) {
+          await SupabaseService.client
+              .from('allergies')
+              .update({'status': 'resolved'})
+              .eq('allergy_id', allergyId);
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          );
+        }
       }
     }
   }
@@ -2405,39 +3244,41 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 const SizedBox(height: 8),
                 _buildInfoRow(
                     'Extension Name', profile['extension_name'] ?? 'None'),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    // FIX #6: close address edit if open
-                    onPressed: () => setState(() {
-                      _isEditingPersonal = true;
-                      _isEditingAddress = false;
-                    }),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit Medical Info'),
+                if (!widget.readOnly) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      // FIX #6: close address edit if open
+                      onPressed: () => setState(() {
+                        _isEditingPersonal = true;
+                        _isEditingAddress = false;
+                      }),
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Edit Medical Info'),
+                    ),
                   ),
-                ),
-                if (_isEditingPersonal) ...[
-                  const SizedBox(height: 12),
-                  _buildEditableMedicalForm(),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                          child: OutlinedButton(
-                              onPressed: () =>
-                                  setState(() => _isEditingPersonal = false),
-                              child: const Text('Cancel'))),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: ElevatedButton(
-                              onPressed: _savePersonalInfo,
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.brandPrimary),
-                              child: const Text('Save Changes'))),
-                    ],
-                  ),
+                  if (_isEditingPersonal) ...[
+                    const SizedBox(height: 12),
+                    _buildEditableMedicalForm(),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                            child: OutlinedButton(
+                                onPressed: () =>
+                                    setState(() => _isEditingPersonal = false),
+                                child: const Text('Cancel'))),
+                        const SizedBox(width: 12),
+                        Expanded(
+                            child: ElevatedButton(
+                                onPressed: _savePersonalInfo,
+                                style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.brandPrimary),
+                                child: const Text('Save Changes'))),
+                      ],
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -2535,6 +3376,134 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
+  // ── Prominent Pregnancy Stage Card (Task 5.1) ─────────────────────────
+  Widget _buildPregnancyStageCard(Map<String, dynamic> pregnancy) {
+    final lmp = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
+    final edd = DateTime.tryParse(pregnancy['expected_date_of_delivery'] ?? '');
+    final now = DateTime.now();
+
+    final gestWeeks = lmp != null ? (now.difference(lmp).inDays / 7).floor() : null;
+    final weeksToGo = edd != null ? (edd.difference(now).inDays / 7).ceil() : null;
+
+    String trimester = '--';
+    Color trimesterColor = AppColors.brandPrimary;
+    if (gestWeeks != null) {
+      if (gestWeeks <= 12) {
+        trimester = '1st Trimester';
+        trimesterColor = AppColors.success;
+      } else if (gestWeeks <= 27) {
+        trimester = '2nd Trimester';
+        trimesterColor = AppColors.warning;
+      } else {
+        trimester = '3rd Trimester';
+        trimesterColor = AppColors.brandPrimary;
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            trimesterColor.withValues(alpha: 0.15),
+            trimesterColor.withValues(alpha: 0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: trimesterColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          // Trimester badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: trimesterColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              trimester,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Weeks pregnant
+          Text(
+            gestWeeks != null ? 'Week $gestWeeks of 40' : 'Weeks unknown',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: trimesterColor,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // EDD countdown
+          if (weeksToGo != null && weeksToGo > 0)
+            Text(
+              '$weeksToGo weeks to go',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: trimesterColor.withValues(alpha: 0.8),
+              ),
+            )
+          else if (weeksToGo != null && weeksToGo <= 0)
+            Text(
+              'Due any day now!',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.error,
+              ),
+            ),
+          if (edd != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'EDD: ${DateFormat('MMMM d, yyyy').format(edd)}',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+          // Progress bar
+          if (gestWeeks != null) ...[
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: (gestWeeks / 40).clamp(0.0, 1.0),
+                minHeight: 8,
+                backgroundColor: Colors.white.withValues(alpha: 0.6),
+                valueColor: AlwaysStoppedAnimation<Color>(trimesterColor),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Week 1',
+                    style: TextStyle(
+                        fontSize: 10, color: AppColors.textSecondary)),
+                Text('Week 40',
+                    style: TextStyle(
+                        fontSize: 10, color: AppColors.textSecondary)),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // OVERVIEW TAB
   // ══════════════════════════════════════════════════════════════════════════
@@ -2572,6 +3541,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
+            // ── Task 5.1: Prominent pregnancy stage card ──────────────
+            if (currentPregnancy != null) ...[
+              _buildPregnancyStageCard(currentPregnancy),
+              const SizedBox(height: 16),
+            ],
+
             // Quick stats
             ProfileQuickStats(
               age: profile['birthdate'] != null
@@ -2585,15 +3560,67 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
+            // Task 5.2: Focus on what mothers need — next checkup, weight gain status
+            // (ProfileRiskCard and ProfileGrowthCard remain as they are useful)
             if (currentPregnancy != null)
               ProfileRiskCard(profile: profile, pregnancy: currentPregnancy),
-            const SizedBox(height: 16),
+            if (currentPregnancy != null)
+              const SizedBox(height: 16),
 
             ProfileGrowthCard(
               isLoading: _loadingGrowth,
               growthData: _latestGrowthData,
             ),
             const SizedBox(height: 16),
+
+            // ── Weight Gain Dashboard ──────────────────────────────────
+            if (currentPregnancy != null) ...[
+              if (_loadingWeightGain)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else if (_weightGainResult != null)
+                _buildWeightGainDashboard(_weightGainResult!),
+              const SizedBox(height: 12),
+
+              // Weight trend chart
+              if (!_loadingWeightGain && _weightCheckups.length >= 2)
+                _buildWeightTrendChart(_weightCheckups),
+              if (!_loadingWeightGain && _weightCheckups.length >= 2)
+                const SizedBox(height: 12),
+
+              // Log Weight button
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _showLogWeightDialog,
+                  icon: const Icon(Icons.add_circle_outline, size: 18),
+                  label: const Text('Log Weight'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.brandPrimary,
+                    side: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.4)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             _buildMedicalInfoSection(profile),
             const SizedBox(height: 12),
@@ -2609,19 +3636,20 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 _buildInfoRow('City', profile['city_municipality'] ?? '-'),
                 _buildInfoRow('Province', profile['province'] ?? '-'),
                 const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    // FIX #6: close personal edit if open
-                    onPressed: () => setState(() {
-                      _isEditingAddress = true;
-                      _isEditingPersonal = false;
-                    }),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit Address'),
+                if (!widget.readOnly)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      // FIX #6: close personal edit if open
+                      onPressed: () => setState(() {
+                        _isEditingAddress = true;
+                        _isEditingPersonal = false;
+                      }),
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Edit Address'),
+                    ),
                   ),
-                ),
-                if (_isEditingAddress) ...[
+                if (!widget.readOnly && _isEditingAddress) ...[
                   const SizedBox(height: 12),
                   _buildEditableAddressForm(),
                   const SizedBox(height: 12),
@@ -2646,18 +3674,18 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 12),
 
-            // Medical Conditions
+            // Medical Conditions (Task 5.5: add/remove)
             _buildExpandableSection(
               'Medical Conditions',
               Icons.medical_services_outlined,
-              medicalConditions.isEmpty
-                  ? [
-                      const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Text('No medical conditions recorded',
-                              style: TextStyle(color: AppColors.textSecondary)))
-                    ]
-                  : medicalConditions
+              [
+                if (medicalConditions.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text('No medical conditions recorded',
+                          style: TextStyle(color: AppColors.textSecondary)))
+                else
+                  ...medicalConditions
                       .map<Widget>((c) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Row(
@@ -2687,25 +3715,60 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     ],
                                   ),
                                 ),
+                                if (!widget.readOnly && _isEditingConditions && c['status'] == 'active')
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline,
+                                        color: AppColors.error, size: 20),
+                                    onPressed: () =>
+                                        _removeMedicalCondition(c as Map<String, dynamic>),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
                               ],
                             ),
                           ))
                       .toList(),
+                if (!widget.readOnly) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => setState(
+                            () => _isEditingConditions = !_isEditingConditions),
+                        icon: Icon(
+                            _isEditingConditions
+                                ? Icons.check
+                                : Icons.edit_outlined,
+                            size: 16),
+                        label: Text(
+                            _isEditingConditions ? 'Done' : 'Edit'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: _addMedicalCondition,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 12),
 
-            // Allergies
+            // Allergies (Task 5.5: add/remove)
             _buildExpandableSection(
               'Allergies',
               Icons.warning_amber_outlined,
-              allergies.isEmpty
-                  ? [
-                      const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Text('No allergies recorded',
-                              style: TextStyle(color: AppColors.textSecondary)))
-                    ]
-                  : allergies
+              [
+                if (allergies.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text('No allergies recorded',
+                          style: TextStyle(color: AppColors.textSecondary)))
+                else
+                  ...allergies
                       .map<Widget>((a) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Row(
@@ -2735,10 +3798,45 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     ],
                                   ),
                                 ),
+                                if (!widget.readOnly && _isEditingAllergies && a['status'] == 'active')
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline,
+                                        color: AppColors.error, size: 20),
+                                    onPressed: () =>
+                                        _removeAllergy(a as Map<String, dynamic>),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
                               ],
                             ),
                           ))
                       .toList(),
+                if (!widget.readOnly) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => setState(
+                            () => _isEditingAllergies = !_isEditingAllergies),
+                        icon: Icon(
+                            _isEditingAllergies
+                                ? Icons.check
+                                : Icons.edit_outlined,
+                            size: 16),
+                        label: Text(
+                            _isEditingAllergies ? 'Done' : 'Edit'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: _addAllergy,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 12),
 
@@ -2888,10 +3986,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               const SizedBox(height: 8),
               const Text('Start a new pregnancy to begin tracking',
                   style: TextStyle(color: AppColors.textSecondary)),
-              const SizedBox(height: 24),
-              MainButton(
-                  label: 'Start New Pregnancy',
-                  onPressed: _startNewPregnancyDialog),
+              if (!widget.readOnly) ...[
+                const SizedBox(height: 24),
+                MainButton(
+                    label: 'Start New Pregnancy',
+                    onPressed: _startNewPregnancyDialog),
+              ],
             ],
           ),
         ),
@@ -2940,30 +4040,32 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
-            // Quick actions
-            PregnancyActionsCard(
-              onAddCheckup: () async {
-                final pregnancyId = pregnancy['pregnancy_id'];
-                if (pregnancyId == null) return;
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AddPrenatalCheckupScreen(
-                      motherId: widget.motherId,
-                      pregnancyId: pregnancyId as int,
-                      lmp: DateTime.tryParse(
-                          pregnancy['last_menstrual_period'] ?? ''),
-                      motherWeight: _toDouble(profile['weight']),
+            // Quick actions (hidden in read-only / mother self-view mode)
+            if (!widget.readOnly) ...[
+              PregnancyActionsCard(
+                onAddCheckup: () async {
+                  final pregnancyId = pregnancy['pregnancy_id'];
+                  if (pregnancyId == null) return;
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AddPrenatalCheckupScreen(
+                        motherId: widget.motherId,
+                        pregnancyId: pregnancyId as int,
+                        lmp: DateTime.tryParse(
+                            pregnancy['last_menstrual_period'] ?? ''),
+                        motherWeight: _toDouble(profile['weight']),
+                      ),
                     ),
-                  ),
-                );
-                _refresh();
-              },
-              onUltrasound: () => _goToUltrasoundAnalyzer(pregnancy),
-              onLabTest: () => _goToLabTestAnalyzer(pregnancy),
-              onConclude: () => _showConcludePregnancyDialog(pregnancy),
-            ),
-            const SizedBox(height: 16),
+                  );
+                  _refresh();
+                },
+                onUltrasound: () => _goToUltrasoundAnalyzer(pregnancy),
+                onLabTest: () => _goToLabTestAnalyzer(pregnancy),
+                onConclude: () => _showConcludePregnancyDialog(pregnancy),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             _buildExpandableSection(
               'Pregnancy Details',
@@ -3390,7 +4492,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   Widget _buildHeader() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardColorOf(context),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -3438,6 +4540,15 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ),
               ),
               const Spacer(),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => showMotherQrCodeDialog(context, widget.motherId),
+                icon: const Icon(Icons.qr_code_rounded,
+                    size: 24, color: AppColors.textPrimary),
+                tooltip: 'Show QR Code',
+              ),
+              const SizedBox(width: 14),
               IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -3573,7 +4684,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
+      backgroundColor: AppColors.bgPrimaryOf(context),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _profileFuture,
         builder: (context, snapshot) {
@@ -3652,10 +4763,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   children: [
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppColors.cardColorOf(context),
                         border: Border(
                           bottom: BorderSide(
-                            color: AppColors.borderPrimary.withValues(alpha: 0.5),
+                            color: AppColors.borderOf(context).withValues(alpha: 0.5),
                             width: 1,
                           ),
                         ),
@@ -3663,15 +4774,15 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       child: TabBar(
                         controller: _tabController,
                         dividerColor: Colors.transparent,
-                        indicatorColor: AppColors.brandPrimary,
+                        indicatorColor: AppColors.brandPrimaryOf(context),
                         indicatorWeight: 3,
-                        labelColor: AppColors.brandPrimary,
+                        labelColor: AppColors.brandPrimaryOf(context),
                         labelStyle: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.3,
                         ),
-                        unselectedLabelColor: AppColors.textSecondary,
+                        unselectedLabelColor: AppColors.textSecondaryOf(context),
                         unselectedLabelStyle: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,

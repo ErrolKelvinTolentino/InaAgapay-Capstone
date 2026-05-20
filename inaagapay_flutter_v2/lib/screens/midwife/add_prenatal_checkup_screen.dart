@@ -24,6 +24,7 @@ class AddPrenatalCheckupScreen extends StatefulWidget {
     this.motherEmail,
     this.generatedPassword,
     this.takenTdDoses = const [],
+    this.isInitialRegistration = false,
   });
 
   final int motherId;
@@ -33,38 +34,11 @@ class AddPrenatalCheckupScreen extends StatefulWidget {
   final String? motherEmail;
   final String? generatedPassword;
   final List<String> takenTdDoses;
+  final bool isInitialRegistration;
 
   @override
   State<AddPrenatalCheckupScreen> createState() =>
       _AddPrenatalCheckupScreenState();
-}
-
-class _MedicationPlanEntry {
-  _MedicationPlanEntry({
-    required this.name,
-    this.quantity,
-    this.frequency,
-    this.startDate,
-    this.endDate,
-  });
-
-  final String name;
-  final int? quantity;
-  final String? frequency;
-  final DateTime? startDate;
-  final DateTime? endDate;
-}
-
-class _GivenMedicationEntry {
-  _GivenMedicationEntry({
-    required this.name,
-    required this.quantity,
-    required this.dateGiven,
-  });
-
-  final String name;
-  final int quantity;
-  final DateTime dateGiven;
 }
 
 class SymptomType {
@@ -227,23 +201,21 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   final _ferrousQtyCtrl = TextEditingController();
   final _calciumQtyCtrl = TextEditingController();
 
-  int _fetalCount = 1;
-  int _originalFetalCount = 1;
-  final _fetalCountReasonCtrl = TextEditingController();
+  int? _fetalCount;
+  int? _originalFetalCount;
   bool _loadingFetalCount = true;
-  String? _fetalCountError;
 
-  final List<_MedicationPlanEntry> _medicationPlans = [];
-  final List<_GivenMedicationEntry> _givenMedications = [];
+  String _edema = 'none';
+
   final List<_SymptomEntry> _symptoms = [];
   List<SymptomType> _symptomTypes = [];
+
+  bool _aiAnalysisSkipped = false;
 
   DateTime _checkupDateTime = DateTime.now();
   DateTime? _nextSchedule;
 
-  String? _fetalPosition;
   String? _fetalTone;
-  String _edema = 'none';
   String? _tdDose;
 
   // inline error texts
@@ -275,14 +247,6 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   List<_RiskFactorItem> _editableRiskFactors = [];
   List<String> _editableSuggestedActions = [];
 
-  static const List<String> _fetalPositions = [
-    'unknown',
-    'cephalic',
-    'vertex',
-    'breech',
-    'transverse',
-  ];
-
   static const List<String> _fetalTones = [
     'Normal',
     'Tachycardia',
@@ -291,13 +255,6 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     'Muffled',
     'Absent',
     'Other',
-  ];
-
-  static const List<String> _edemaLevels = [
-    'none',
-    'mild',
-    'moderate',
-    'severe',
   ];
 
   static const List<String> _tdOptions = [
@@ -318,6 +275,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     _loadSymptomTypes();
     _loadMotherRiskContext();
     _loadFetalCount();
+    _loadLatestCheckupWeight();
     _weightCtrl.addListener(_validateWeightInline);
     _sysCtrl.addListener(_validateBpInline);
     _diaCtrl.addListener(_validateBpInline);
@@ -401,9 +359,10 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           .maybeSingle(); // ← FIXED: Changed from .single()
 
       if (res != null && mounted) {
+        final dbFetalCount = res['fetal_count'] as int?;
         setState(() {
-          _originalFetalCount = res['fetal_count'] as int;
-          _fetalCount = _originalFetalCount;
+          _originalFetalCount = dbFetalCount;
+          _fetalCount = dbFetalCount;
           _loadingFetalCount = false;
         });
       } else {
@@ -411,6 +370,29 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _loadingFetalCount = false);
+    }
+  }
+
+  Future<void> _loadLatestCheckupWeight() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('prenatal_checkups')
+          .select('checkup_weight')
+          .eq('pregnancy_id', widget.pregnancyId)
+          .order('checkup_datetime', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (res != null && res['checkup_weight'] != null && mounted) {
+        final latestWeight = double.tryParse(res['checkup_weight'].toString());
+        if (latestWeight != null) {
+          setState(() {
+            _weightCtrl.text = latestWeight.toStringAsFixed(1);
+          });
+        }
+      }
+    } catch (_) {
+      // Non-critical: fall back to widget.motherWeight which is already set
     }
   }
 
@@ -497,7 +479,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       final pastPregnancies = await client
           .from('pregnancies')
           .select(
-              'pregnancy_id, fetal_count, gestational_age_at_end, status, created_at')
+              'pregnancy_id, fetal_count, status, created_at')
           .eq('mother_id', widget.motherId)
           .neq('pregnancy_id', widget.pregnancyId)
           .order('created_at', ascending: false);
@@ -516,8 +498,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
                 pregnancy_id,
                 outcome,
                 outcome_date,
-                is_outcome_date_estimated,
-                gestational_age_at_end
+                is_outcome_date_estimated
               ''')
               .inFilter('pregnancy_id', pastPregnancyIds)
               .order('outcome_date', ascending: false);
@@ -536,7 +517,6 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
             blood_pressure_systolic,
             blood_pressure_diastolic,
             fetal_heart_beat,
-            edema,
             remarks
           ''')
           .eq('pregnancy_id', widget.pregnancyId)
@@ -593,16 +573,13 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   String _currentRiskSignature() {
     return [
       _checkupDateTime.toIso8601String(),
-      _fetalCount.toString(),
-      _originalFetalCount.toString(),
-      _fetalCountReasonCtrl.text.trim(),
+      (_fetalCount?.toString() ?? 'null'),
+      _edema,
       _weightCtrl.text.trim(),
       _sysCtrl.text.trim(),
       _diaCtrl.text.trim(),
       _fetalBeatCtrl.text.trim(),
-      _fetalPosition ?? '-',
       _fetalTone ?? '-',
-      _edema,
       _tdDose ?? '-',
       _ferrousQtyCtrl.text.trim(),
       _calciumQtyCtrl.text.trim(),
@@ -814,16 +791,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       }
     }
 
-    // 3. Edema
-    if (_edema == 'moderate' || _edema == 'severe') {
-      isHigh = true;
-      factors.add(_RiskFactorItem(
-        factor: 'Significant edema ($_edema)',
-        influence: 'high',
-      ));
-    }
-
-    // 4. Danger Symptoms
+    // 3. Danger Symptoms
     final dangerSymptomsFiltered =
         _symptoms.where((s) => s.riskCategory == 'danger').toList();
     if (dangerSymptomsFiltered.isNotEmpty) {
@@ -849,7 +817,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       }
     }
 
-    if (_fetalCount > 1) {
+    if (_fetalCount != null && _fetalCount! > 1) {
       factors.add(_RiskFactorItem(
         factor: 'Multifetal gestation ($_fetalCount)',
         influence: 'low',
@@ -867,6 +835,8 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
         ));
       }
     }
+
+    // 6. IOM Weight Gain — handled by WeightGainEngine (see AI prompt builder)
 
     final level = isHigh ? 'high' : 'low';
 
@@ -897,6 +867,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       aiModel: null,
     );
   }
+
 
   String _buildAiPrompt(_RiskSnapshot draft) {
     final mother = _motherRiskContext?['mother'] as Map<String, dynamic>?;
@@ -954,18 +925,15 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           final o = e.value;
           final outcome = (o['outcome'] ?? 'unknown').toString();
           final date = (o['outcome_date'] ?? 'unknown').toString();
-          final ga = o['gestational_age_at_end']?.toString() ??
-              p['gestational_age_at_end']?.toString();
           final method = (o['delivery_method'] ?? '').toString();
-          return 'F${e.key + 1}: $outcome on $date${ga == null ? '' : ', GA end: $ga weeks'}${method.isEmpty ? '' : ', method: $method'}';
+          return 'F${e.key + 1}: $outcome on $date${method.isEmpty ? '' : ', method: $method'}';
         }).join(' | ');
         return '- pregnancy ${pid ?? 'unknown'} (fetal_count: $fetalCount): $details';
       }
 
       final outcome = (p['outcome'] ?? 'unknown').toString();
       final date = (p['outcome_date'] ?? 'unknown').toString();
-      final ga = p['gestational_age_at_end']?.toString();
-      return '- pregnancy ${pid ?? 'unknown'} (fetal_count: $fetalCount): $outcome on $date${ga == null ? '' : ', GA end: $ga weeks'}';
+      return '- pregnancy ${pid ?? 'unknown'} (fetal_count: $fetalCount): $outcome on $date';
     }).toList();
 
     final previousCheckupLines = previousCheckups.map((c) {
@@ -974,25 +942,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       final sys = (c['blood_pressure_systolic'] ?? 'n/a').toString();
       final dia = (c['blood_pressure_diastolic'] ?? 'n/a').toString();
       final fhr = (c['fetal_heart_beat'] ?? 'n/a').toString();
-      final edema = (c['edema'] ?? 'none').toString();
-      return '- $date | wt: $weight kg | BP: $sys/$dia | FHR: $fhr | edema: $edema';
-    }).toList();
-
-    final medicationPlanLines = _medicationPlans.map((entry) {
-      final quantity = entry.quantity?.toString() ?? 'unknown qty';
-      final frequency = entry.frequency ?? 'unspecified frequency';
-      final start = entry.startDate != null
-          ? DateFormat('yyyy-MM-dd').format(entry.startDate!)
-          : 'start date unknown';
-      final end = entry.endDate != null
-          ? DateFormat('yyyy-MM-dd').format(entry.endDate!)
-          : 'end date not set';
-      return '- ${entry.name}: $quantity tablets, $frequency, $start to $end';
-    }).toList();
-
-    final givenMedicationLines = _givenMedications.map((entry) {
-      final givenDate = DateFormat('yyyy-MM-dd').format(entry.dateGiven);
-      return '- ${entry.name}: ${entry.quantity} given on $givenDate';
+      return '- $date | wt: $weight kg | BP: $sys/$dia | FHR: $fhr';
     }).toList();
 
     final symptomLines = _symptoms
@@ -1029,21 +979,71 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           allCheckups: checkupList,
           prePregnancyWeight: baselineWeight,
           heightCm: heightCm,
-          fetalCount: _fetalCount,
+          fetalCount: _fetalCount ?? 1,
         );
       }
     } catch (_) {
       // ignore
     }
 
-    return '''You are assisting a barangay midwife in the Philippines with prenatal care.
+    // Compute trimester from gestational age
+    final String trimester;
+    if (_aogWeeks != null) {
+      if (_aogWeeks! <= 12) {
+        trimester = '1st trimester';
+      } else if (_aogWeeks! <= 27) {
+        trimester = '2nd trimester';
+      } else {
+        trimester = '3rd trimester';
+      }
+    } else {
+      trimester = 'unknown';
+    }
 
-CRITICAL INSTRUCTION: Write a concise prenatal risk analysis as PLAIN TEXT ONLY.
-DO NOT use any section headers like "OVERALL ASSESSMENT:", "KEY OBSERVATIONS:", "RECOMMENDATIONS:" or similar.
-DO NOT use markdown formatting like **bold** or ## headers.
-DO NOT return any form of structured data.
-Just write 4-8 simple sentences or plain bullet points (using -) with your analysis.
-End with one sentence starting with "Priority next step:".
+    // Compute weight gain trend from previous checkups
+    final weightTrendLines = <String>[];
+    if (previousCheckups.length >= 2) {
+      for (int i = 1; i < previousCheckups.length; i++) {
+        final prev = previousCheckups[i - 1];
+        final curr = previousCheckups[i];
+        final prevW = double.tryParse((prev['checkup_weight'] ?? '').toString());
+        final currW = double.tryParse((curr['checkup_weight'] ?? '').toString());
+        if (prevW != null && currW != null) {
+          final diff = currW - prevW;
+          final prevDate = (prev['checkup_datetime'] ?? '').toString();
+          final currDate = (curr['checkup_datetime'] ?? '').toString();
+          weightTrendLines.add('- $prevDate to $currDate: ${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(1)} kg');
+        }
+      }
+    }
+
+    return '''You are a caring, knowledgeable midwife assistant in the Philippines. You genuinely care about this mother and her baby.
+
+Write as if you are sitting beside the mother, gently explaining what her checkup results mean. Your tone should feel like a trusted ate (older sister) who also happens to be medically trained — warm, personal, but informative.
+
+STYLE GUIDE:
+- Start by acknowledging the mother: "Based on your checkup today..."
+- When results are normal, celebrate it: "Great news — your blood pressure is looking healthy at 120/80."
+- When something needs attention, be honest but gentle: "Your blood pressure is a bit elevated today. This doesn't mean something is wrong, but it's something your midwife will want to keep an eye on."
+- Explain WHY things matter, not just WHAT they are: "Your baby's heartbeat at 140 bpm is right in the healthy range — this tells us your little one is active and doing well."
+- Include practical advice a Filipino mother can act on: "Try to rest more, eat malunggay and green leafy vegetables, and drink plenty of water."
+- End with encouragement and a clear next step.
+
+MATERNAL WEIGHT INTERPRETATION RULES:
+- You do NOT compute BMI or weight gain — the system provides those values. You only explain them.
+- NEVER use "ideal weight", "perfect weight", "required weight", or "normal pregnancy weight".
+- Use softer wording: "commonly expected range", "appears within range", "appears slightly lower/higher than expected".
+- NEVER present exact target weights or rigid expectations.
+- If pre-pregnancy weight is unavailable (shown as 'unknown'), do NOT mention BMI categories or overweight/obese labels. Add: "Since pre-pregnancy weight was not recorded, these insights are partially estimated."
+- For FIRST TRIMESTER (weeks 1-13): note that small weight changes are common. Do NOT judge weight gain/loss harshly.
+- For SECOND/THIRD TRIMESTER: you may reference the Weight Gain Engine Assessment if provided, but explain it gently.
+- Be weight-sensitive — never shame. Guide positively: "Your weight appears slightly lower than the commonly expected range. Adding an extra nutritious snack each day can help."
+- End every weight-related observation with: "This interpretation is for monitoring support only and does not replace professional medical advice."
+
+Always mention the actual measured values (e.g., 'your blood pressure reading of 120/80', 'your weight of 58 kg', 'your baby's heart rate of 142 bpm') and explain what they mean in simple terms.
+
+FORMAT: Write 5-8 sentences as flowing text (not bullet points). End with one sentence starting with "Priority next step:".
+DO NOT use section headers, markdown, or structured data. Just write naturally.
 
 Use ONLY the data provided below. State uncertainty clearly when data is missing.
 Never invent data.
@@ -1056,37 +1056,33 @@ PATIENT CONTEXT
 - Maternal height: ${mother?['height'] ?? 'unknown'} cm
 - Pre-pregnancy weight (or baseline): ${pregnancy?['pre_pregnancy_weight'] ?? mother?['weight'] ?? 'unknown'} kg
 - Blood type: ${mother?['blood_type'] ?? 'unknown'}
-- Current pregnancy fetal count: $_fetalCount
+- Current pregnancy fetal count: ${_fetalCount ?? 'unconfirmed'}
 - Active medical conditions:
 ${activeConditionLines.isEmpty ? '- none recorded' : activeConditionLines.join('\n')}
 - Active allergies:
 ${activeAllergyLines.isEmpty ? '- none recorded' : activeAllergyLines.join('\n')}
-- Past pregnancy records:
+- Past pregnancy records (including outcomes):
 ${pastPregnancyLines.isEmpty ? '- none recorded' : pastPregnancyLines.join('\n')}
-- Previous prenatal checkups:
+- Previous prenatal checkups (${previousCheckups.length} total):
 ${previousCheckupLines.isEmpty ? '- none recorded' : previousCheckupLines.join('\n')}
+- Weight gain trend between checkups:
+${weightTrendLines.isEmpty ? '- not enough data' : weightTrendLines.join('\n')}
 - LMP: ${_formatDate(_effectiveLmp(pregnancy))}
 - EDD: ${_formatDate(_effectiveEdd(pregnancy))}
-- Age of gestation: ${_aogWeeks?.toStringAsFixed(1) ?? 'unknown'} weeks
+- Age of gestation: ${_aogWeeks?.toStringAsFixed(1) ?? 'unknown'} weeks ($trimester)
 - Planned follow-up date: ${_nextSchedule != null ? DateFormat('yyyy-MM-dd').format(_nextSchedule!) : 'none'}
 
 CURRENT CHECKUP DRAFT
 - Checkup datetime: ${_checkupDateTime.toIso8601String()}
-- Current pregnancy fetal count: $_fetalCount
+- Current pregnancy fetal count: ${_fetalCount ?? 'unconfirmed'}
 - Weight: ${_weightCtrl.text.trim()} kg
 - Weight Gain Engine Assessment: ${wgResult != null ? '${wgResult.status.name.toUpperCase()} - ${wgResult.message}' : 'Not evaluated'}
 - Blood pressure: ${_sysCtrl.text.trim()}/${_diaCtrl.text.trim()} mmHg
 - Fetal heart beat: ${_fetalBeatCtrl.text.trim().isEmpty ? 'not recorded' : '${_fetalBeatCtrl.text.trim()} bpm'}
-- Fetal position: ${_fetalPosition ?? 'not recorded'}
 - Fetal heart tone: ${_fetalTone ?? 'not recorded'}
-- Edema: $_edema
 - TD dose today: ${_tdDose ?? 'none'}
 - Symptoms:
 ${symptomLines.isEmpty ? '- none recorded' : symptomLines.join('\n')}
-- Medication plans:
-${medicationPlanLines.isEmpty ? '- none recorded' : medicationPlanLines.join('\n')}
-- Dispensed medications:
-${givenMedicationLines.isEmpty ? '- none recorded' : givenMedicationLines.join('\n')}
 - Remarks: ${_remarksCtrl.text.trim().isEmpty ? 'none' : _remarksCtrl.text.trim()}
 
 RULE BASED PRE-ASSESSMENT
@@ -1379,19 +1375,6 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     );
   }
 
-  Color _edemaColor(String level) {
-    switch (level) {
-      case 'mild':
-        return AppColors.warning.withValues(alpha: 0.6);
-      case 'moderate':
-        return AppColors.warning;
-      case 'severe':
-        return AppColors.error;
-      default:
-        return AppColors.success;
-    }
-  }
-
   Color _riskColor(String riskCategory) {
     switch (riskCategory) {
       case 'danger':
@@ -1443,19 +1426,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   }
 
   bool _validateCurrentStep() {
-    final now = DateTime.now();
-
     if (_step == 0) {
-      if (_checkupDateTime.isAfter(now)) {
-        _showMessage('Checkup date and time cannot be in the future.');
-        return false;
-      }
-      if (widget.lmp != null &&
-          _normalizedDate(_checkupDateTime)
-              .isBefore(_normalizedDate(widget.lmp!))) {
-        _showMessage('Checkup date cannot be earlier than LMP.');
-        return false;
-      }
+      // Date is auto-locked to now, no date validation needed.
 
       final weight = double.tryParse(_weightCtrl.text.trim());
       if (weight == null) {
@@ -1487,16 +1459,16 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         _showMessage('Systolic pressure must be higher than diastolic.');
         return false;
       }
+      // Hypertension warning (non-blocking)
+      if (systolic >= 140 || diastolic >= 90) {
+        _showMessage(
+          'Warning: BP $systolic/$diastolic suggests hypertension. Proceed with caution.',
+          type: AppSnackType.warning,
+        );
+      }
     }
 
     if (_step == 1) {
-      if (_fetalCount != _originalFetalCount &&
-          _fetalCountReasonCtrl.text.trim().isEmpty) {
-        setState(
-            () => _fetalCountError = 'Required because fetal count changed');
-        _showMessage('Please provide a reason for the fetal count change.');
-        return false;
-      }
       final fetalBeatText = _fetalBeatCtrl.text.trim();
       if (fetalBeatText.isNotEmpty) {
         final fetalBeat = int.tryParse(fetalBeatText);
@@ -1544,43 +1516,6 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     }
 
     return true;
-  }
-
-  Future<void> _pickDateTime() async {
-    final now = DateTime.now();
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: _checkupDateTime.isAfter(now) ? now : _checkupDateTime,
-      firstDate:
-          widget.lmp != null ? _normalizedDate(widget.lmp!) : DateTime(2000),
-      lastDate: DateTime(now.year, now.month, now.day),
-      helpText: widget.lmp != null
-          ? 'Checkup date (LMP: ${_prettyDate(widget.lmp!)})'
-          : 'Select checkup date',
-    );
-    if (pickedDate == null || !mounted) return;
-
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_checkupDateTime),
-      helpText: 'Select checkup time',
-    );
-    if (pickedTime == null) return;
-
-    final selected = DateTime(
-      pickedDate.year,
-      pickedDate.month,
-      pickedDate.day,
-      pickedTime.hour,
-      pickedTime.minute,
-    );
-
-    if (selected.isAfter(now)) {
-      _showMessage('Checkup date and time cannot be in the future.');
-      return;
-    }
-
-    setState(() => _checkupDateTime = selected);
   }
 
   Future<void> _openSymptomNotesDialog(SymptomType symptomType) async {
@@ -1832,293 +1767,40 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     final baseDate =
         _normalizedDate(_checkupDateTime).add(const Duration(days: 1));
     final now = DateTime.now();
+
+    // Ensure initialDate is not on a blocked weekend day
+    var initialDate =
+        (_nextSchedule != null && _nextSchedule!.isAfter(baseDate))
+            ? _nextSchedule!
+            : baseDate;
+    // Advance past weekends so the picker opens on a valid day
+    while (initialDate.weekday == DateTime.saturday ||
+        initialDate.weekday == DateTime.sunday) {
+      initialDate = initialDate.add(const Duration(days: 1));
+    }
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: (_nextSchedule != null && _nextSchedule!.isAfter(baseDate))
-          ? _nextSchedule!
-          : baseDate,
+      initialDate: initialDate,
       firstDate: baseDate,
       lastDate: DateTime(now.year + 2, now.month, now.day),
       helpText: 'Must be after ${_prettyDate(_checkupDateTime)}',
+      selectableDayPredicate: (date) {
+        // Block weekends — BHCs are typically closed on Sat/Sun
+        return date.weekday != DateTime.saturday &&
+            date.weekday != DateTime.sunday;
+      },
     );
     if (picked == null) return;
     setState(() => _nextSchedule = picked);
   }
 
-  Future<void> _openAddMedicationPlanDialog() async {
-    final nameCtrl = TextEditingController();
-    final qtyCtrl = TextEditingController();
-    final freqCtrl = TextEditingController();
 
-    DateTime? startDate;
-    DateTime? endDate;
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              title: const Text('Add Medication Plan'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Medication name *',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: qtyCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: const InputDecoration(
-                        labelText: 'Quantity (optional)',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: freqCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Frequency (optional)',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        startDate == null
-                            ? 'Start date (optional)'
-                            : 'Start: ${_prettyDate(startDate!)}',
-                      ),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate:
-                              startDate ?? _normalizedDate(_checkupDateTime),
-                          firstDate: DateTime(2000),
-                          lastDate:
-                              DateTime.now().add(const Duration(days: 365)),
-                        );
-                        if (picked == null) return;
-                        setModalState(() => startDate = picked);
-                      },
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        endDate == null
-                            ? 'End date (optional)'
-                            : 'End: ${_prettyDate(endDate!)}',
-                      ),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: endDate ??
-                              (startDate ?? _normalizedDate(_checkupDateTime)),
-                          firstDate: startDate ?? DateTime(2000),
-                          lastDate:
-                              DateTime.now().add(const Duration(days: 365)),
-                        );
-                        if (picked == null) return;
-                        setModalState(() => endDate = picked);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    final medName = nameCtrl.text.trim();
-                    if (medName.isEmpty) {
-                      _showMessage('Medication name is required.');
-                      return;
-                    }
-                    final qtyText = qtyCtrl.text.trim();
-                    final qty = qtyText.isEmpty ? null : int.tryParse(qtyText);
-                    if (qty != null && (qty < 1 || qty > 365)) {
-                      _showMessage(
-                          'Medication quantity must be between 1 and 365.');
-                      return;
-                    }
-                    if (startDate != null &&
-                        endDate != null &&
-                        endDate!.isBefore(startDate!)) {
-                      _showMessage(
-                          'End date cannot be earlier than start date.');
-                      return;
-                    }
-                    Navigator.pop(context, true);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (saved == true) {
-      setState(() {
-        _medicationPlans.add(
-          _MedicationPlanEntry(
-            name: nameCtrl.text.trim(),
-            quantity: qtyCtrl.text.trim().isEmpty
-                ? null
-                : int.tryParse(qtyCtrl.text.trim()),
-            frequency:
-                freqCtrl.text.trim().isEmpty ? null : freqCtrl.text.trim(),
-            startDate: startDate,
-            endDate: endDate,
-          ),
-        );
-      });
-    }
-
-    nameCtrl.dispose();
-    qtyCtrl.dispose();
-    freqCtrl.dispose();
-  }
-
-  Future<void> _openAddGivenMedicationDialog() async {
-    final nameCtrl = TextEditingController();
-    final qtyCtrl = TextEditingController();
-    DateTime givenDate = _normalizedDate(_checkupDateTime);
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              title: const Text('Add Given Medication'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Medication name *',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: qtyCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: const InputDecoration(
-                        labelText: 'Quantity *',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Date: ${_prettyDate(givenDate)}'),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: givenDate,
-                          firstDate: widget.lmp != null
-                              ? _normalizedDate(widget.lmp!)
-                              : DateTime(2000),
-                          lastDate: _normalizedDate(DateTime.now()),
-                        );
-                        if (picked == null) return;
-                        setModalState(() => givenDate = picked);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    final medName = nameCtrl.text.trim();
-                    final qty = int.tryParse(qtyCtrl.text.trim());
-                    if (medName.isEmpty || qty == null) {
-                      _showMessage(
-                          'Medication name and quantity are required.');
-                      return;
-                    }
-                    if (qty < 1 || qty > 365) {
-                      _showMessage(
-                          'Medication quantity must be between 1 and 365.');
-                      return;
-                    }
-                    Navigator.pop(context, true);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (saved == true) {
-      setState(() {
-        _givenMedications.add(
-          _GivenMedicationEntry(
-            name: nameCtrl.text.trim(),
-            quantity: int.parse(qtyCtrl.text.trim()),
-            dateGiven: givenDate,
-          ),
-        );
-      });
-    }
-
-    nameCtrl.dispose();
-    qtyCtrl.dispose();
-  }
-
-  Future<void> _insertMedicationRecords() async {
+  Future<void> _insertSupplementRecords() async {
     final client = Supabase.instance.client;
     final checkupDate = _normalizedDate(_checkupDateTime);
 
-    if (_medicationPlans.isNotEmpty) {
-      final payload = _medicationPlans
-          .map(
-            (entry) => {
-              'mother_id': widget.motherId,
-              'mother_medication_name': entry.name,
-              'frequency': entry.frequency,
-              'quantity': entry.quantity,
-              'start_date': entry.startDate?.toIso8601String().split('T')[0],
-              'end_date': entry.endDate?.toIso8601String().split('T')[0],
-              'status': 'active',
-            },
-          )
-          .toList();
-      await client.from('mother_medications').insert(payload);
-    }
-
     final givenRows = <Map<String, dynamic>>[];
-    for (final entry in _givenMedications) {
-      givenRows.add({
-        'mother_id': widget.motherId,
-        'given_medication_name': entry.name,
-        'quantity': entry.quantity,
-        'date_given': entry.dateGiven.toIso8601String().split('T')[0],
-      });
-    }
 
     final ferrousQty = int.tryParse(_ferrousQtyCtrl.text.trim());
     if (ferrousQty != null && ferrousQty > 0) {
@@ -2410,8 +2092,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       return;
     }
 
-    if (!_aiResponseApproved) {
-      _showMessage('Approve the AI response first before saving this checkup.');
+    if (!_aiResponseApproved && !_aiAnalysisSkipped) {
+      _showMessage('Approve the AI response or skip AI analysis before saving.');
       return;
     }
 
@@ -2431,7 +2113,11 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       return;
     }
 
-    setState(() => _submitting = true);
+    // Lock checkup datetime to now at submission
+    setState(() {
+      _submitting = true;
+      _checkupDateTime = DateTime.now();
+    });
     try {
       await _refreshRiskPreview();
 
@@ -2444,11 +2130,10 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             'checkup_weight': weight,
             'blood_pressure_systolic': systolic,
             'blood_pressure_diastolic': diastolic,
-            'fetal_position': _fetalPosition,
             'fetal_heart_beat': fetalBeat,
             'fetal_heart_tone': _fetalTone,
             'td_vaccine_dose': _tdDose,
-            'edema': _edema,
+            'edema': _edema == 'none' ? null : _edema,
             'remarks': _remarksCtrl.text.trim().isEmpty
                 ? null
                 : _remarksCtrl.text.trim(),
@@ -2464,27 +2149,9 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
 
       final prenatalCheckupId = checkup['prenatal_checkup_id'] as int;
 
-      if (_fetalCount != _originalFetalCount) {
-        await Supabase.instance.client
-            .from('pregnancies')
-            .update({'fetal_count': _fetalCount}).eq(
-                'pregnancy_id', widget.pregnancyId);
-
-        await Supabase.instance.client.from('audit_trail').insert({
-          'action': 'UPDATE',
-          'table_name': 'pregnancies',
-          'row_id': widget.pregnancyId,
-          'old_data': {'fetal_count': _originalFetalCount},
-          'new_data': {'fetal_count': _fetalCount},
-          'account_id': _accountId,
-          'description':
-              'Midwife modified fetal count during checkup. Reason: ${_fetalCountReasonCtrl.text.trim()}',
-        });
-      }
-
       await _insertSymptomRecords(prenatalCheckupId);
 
-      await _insertMedicationRecords();
+      await _insertSupplementRecords();
 
       await _persistRiskAssessment(prenatalCheckupId);
 
@@ -2525,16 +2192,16 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       'Vitals',
       'Fetal Assessment',
       'Pregnancy Symptoms',
-      'Medications & TD',
+      'Supplements & TD',
       'Schedule & Remarks',
       'Summary',
       'Risk Assessment',
     ];
     const subtitles = [
       'Date, weight, and blood pressure',
-      'Fetal position, heart rate, and edema',
+      'Fetal heart rate and tone',
       'Record symptoms and identify serious warning signs',
-      'Medication plans, supplements, and TD vaccine',
+      'Supplements and TD vaccine',
       'Next visit and remarks',
       'Review before saving',
       'Review and edit AI risk analysis before final save',
@@ -2593,56 +2260,52 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionCard(
-          title: 'Date & Time',
-          child: InkWell(
-            onTap: _pickDateTime,
-            borderRadius: BorderRadius.circular(10),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_today,
-                    size: 20, color: AppColors.brandPrimary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        DateFormat('MMMM d, yyyy').format(_checkupDateTime),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
+          title: 'Date & Time (auto-locked to now)',
+          child: Row(
+            children: [
+              const Icon(Icons.lock_clock,
+                  size: 20, color: AppColors.textSecondary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DateFormat('MMMM d, yyyy').format(_checkupDateTime),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
                       ),
-                      Text(
-                        DateFormat('h:mm a').format(_checkupDateTime),
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
+                    ),
+                    Text(
+                      DateFormat('h:mm a').format(_checkupDateTime),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+              if (_aogWeeks != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSecondary,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.brandPrimary),
+                  ),
+                  child: Text(
+                    '${_aogWeeks!.toStringAsFixed(1)} wks AOG',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brandText,
+                    ),
                   ),
                 ),
-                if (_aogWeeks != null)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.brandPrimary),
-                    ),
-                    child: Text(
-                      '${_aogWeeks!.toStringAsFixed(1)} wks AOG',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.brandText,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -2707,116 +2370,35 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionCard(
-          title: 'Fetal Count',
-          child: _loadingFetalCount
-              ? const SizedBox(
-                  height: 48,
-                  child:
-                      Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.remove_circle_outline,
-                              color: AppColors.brandPrimary),
-                          onPressed: () {
-                            if (_fetalCount > 1) {
-                              setState(() {
-                                _fetalCount--;
-                                _fetalCountError = null;
-                              });
-                            }
-                          },
-                        ),
-                        Expanded(
-                          child: Text(
-                            '$_fetalCount Fetus${_fetalCount > 1 ? 'es' : ''}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                        ),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.add_circle_outline,
-                              color: AppColors.brandPrimary),
-                          onPressed: () {
-                            if (_fetalCount < 5) {
-                              setState(() {
-                                _fetalCount++;
-                                _fetalCountError = null;
-                              });
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    if (_fetalCount != _originalFetalCount) ...[
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Reason for change *',
-                        style: TextStyle(
-                            fontSize: 13, color: AppColors.textSecondary),
-                      ),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: _fetalCountReasonCtrl,
-                        maxLines: 2,
-                        decoration: InputDecoration(
-                          hintText: 'E.g., Vanishing twin, Demise',
-                          errorText: _fetalCountError,
-                          border: OutlineInputBorder(
-                            borderSide: const BorderSide(
-                                color: AppColors.borderPrimary),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: const BorderSide(
-                                color: AppColors.borderPrimary),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide:
-                                const BorderSide(color: AppColors.brandPrimary),
-                          ),
-                          contentPadding: const EdgeInsets.all(12),
-                        ),
-                        onChanged: (_) {
-                          if (_fetalCountError != null) {
-                            setState(() => _fetalCountError = null);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'This change will be logged in the audit trail.',
-                        style:
-                            TextStyle(fontSize: 11, color: AppColors.warning),
-                      ),
-                    ],
-                  ],
+        if (_fetalCount != null)
+          _sectionCard(
+            title: 'Fetal Count (from ultrasound records)',
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline,
+                    size: 16, color: AppColors.textSecondary),
+                const SizedBox(width: 8),
+                Text(
+                  '$_fetalCount Fetus${_fetalCount! > 1 ? 'es' : ''}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-        ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'Fetal Position',
-          child: DropdownButtonFormField<String>(
-            initialValue: _fetalPosition,
-            decoration: const InputDecoration(
-              hintText: 'Select position',
-              border: InputBorder.none,
-              isDense: true,
+                const SizedBox(width: 8),
+                const Text(
+                  '(edit via ultrasound records)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ),
-            items: _fetalPositions
-                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                .toList(),
-            onChanged: (value) => setState(() => _fetalPosition = value),
           ),
-        ),
-        const SizedBox(height: 12),
+        if (_fetalCount != null) const SizedBox(height: 12),
         _sectionCard(
           title: 'Fetal Heart Rate',
           child: Column(
@@ -2868,38 +2450,6 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             onChanged: (value) => setState(() => _fetalTone = value),
           ),
         ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'Edema',
-          child: DropdownButtonFormField<String>(
-            initialValue: _edema,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              isDense: true,
-            ),
-            items: _edemaLevels.map((e) {
-              final color = _edemaColor(e);
-              return DropdownMenuItem(
-                value: e,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    Text(e[0].toUpperCase() + e.substring(1)),
-                  ],
-                ),
-              );
-            }).toList(),
-            onChanged: (value) => setState(() => _edema = value ?? 'none'),
-          ),
-        ),
       ],
     );
   }
@@ -2932,6 +2482,25 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             ],
           ),
         ),
+        _sectionCard(
+          title: 'Edema Level',
+          child: DropdownButtonFormField<String>(
+            value: _edema,
+            decoration: const InputDecoration(
+              hintText: 'Select edema level',
+              border: InputBorder.none,
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(value: 'none', child: Text('None')),
+              DropdownMenuItem(value: 'mild', child: Text('Mild (+)')),
+              DropdownMenuItem(value: 'moderate', child: Text('Moderate (++)')),
+              DropdownMenuItem(value: 'severe', child: Text('Severe (+++)')),
+            ],
+            onChanged: (value) => setState(() => _edema = value ?? 'none'),
+          ),
+        ),
+        const SizedBox(height: 12),
         _sectionCard(
           title: 'Symptom Picker',
           child: _loadingSymptomTypes
@@ -3100,7 +2669,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '⚠️ $_dangerSymptomCount danger symptom(s) detected. Consider urgent follow-up.',
+                          '⚠️ $_dangerSymptomCount danger ${_dangerSymptomCount == 1 ? 'symptom' : 'symptoms'} detected. Consider urgent follow-up.',
                           style: const TextStyle(
                             color: AppColors.error,
                             fontWeight: FontWeight.w700,
@@ -3226,125 +2795,6 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionCard(
-          title: 'Medication Plans',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_medicationPlans.isEmpty)
-                Row(
-                  children: const [
-                    Icon(Icons.medication_outlined,
-                        size: 18, color: AppColors.textSecondary),
-                    SizedBox(width: 8),
-                    Text(
-                      'No medication plans added yet.',
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
-                  ],
-                )
-              else
-                ..._medicationPlans.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  final subtitle = [
-                    if (item.quantity != null) 'Qty ${item.quantity}',
-                    if (item.frequency != null) item.frequency!,
-                    if (item.startDate != null)
-                      'Start ${_prettyDate(item.startDate!)}',
-                    if (item.endDate != null)
-                      'End ${_prettyDate(item.endDate!)}',
-                  ].join(' · ');
-                  return ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.medication_outlined,
-                        color: AppColors.brandPrimary, size: 20),
-                    title: Text(item.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
-                    trailing: IconButton(
-                      onPressed: () =>
-                          setState(() => _medicationPlans.removeAt(index)),
-                      icon: const Icon(Icons.delete_outline,
-                          color: AppColors.error, size: 20),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  );
-                }),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.tonal(
-                  onPressed: _openAddMedicationPlanDialog,
-                  style: FilledButton.styleFrom(
-                    backgroundColor:
-                        AppColors.brandPrimary.withValues(alpha: 0.12),
-                    foregroundColor: AppColors.brandPrimary,
-                  ),
-                  child: const Text('+ Add Plan'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'Given Medications',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_givenMedications.isEmpty)
-                Row(
-                  children: const [
-                    Icon(Icons.vaccines_outlined,
-                        size: 18, color: AppColors.textSecondary),
-                    SizedBox(width: 8),
-                    Text(
-                      'No medications dispensed yet.',
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
-                  ],
-                )
-              else
-                ..._givenMedications.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  return ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.vaccines_outlined,
-                        color: AppColors.brandPrimary, size: 20),
-                    title: Text(item.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text(
-                        'Qty ${item.quantity} · ${_prettyDate(item.dateGiven)}'),
-                    trailing: IconButton(
-                      onPressed: () =>
-                          setState(() => _givenMedications.removeAt(index)),
-                      icon: const Icon(Icons.delete_outline,
-                          color: AppColors.error, size: 20),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  );
-                }),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.tonal(
-                  onPressed: _openAddGivenMedicationDialog,
-                  style: FilledButton.styleFrom(
-                    backgroundColor:
-                        AppColors.brandPrimary.withValues(alpha: 0.12),
-                    foregroundColor: AppColors.brandPrimary,
-                  ),
-                  child: const Text('+ Dispense'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
         _sectionCard(
           title: 'Supplements',
           child: Column(
@@ -3525,7 +2975,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Review the details below before saving.',
+                  'Review all entered values below before proceeding.',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.brandText,
@@ -3537,10 +2987,10 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
           ),
         ),
         _sectionCard(
-          title: 'Vitals',
+          title: 'VITALS',
           child: Column(
             children: [
-              _summaryRow('Date',
+              _summaryRow('Checkup Date',
                   DateFormat('MMM d, yyyy h:mm a').format(_checkupDateTime)),
               if (_aogWeeks != null)
                 _summaryRow(
@@ -3548,22 +2998,11 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   '${_aogWeeks!.toStringAsFixed(1)} weeks',
                   valueColor: AppColors.brandPrimary,
                 ),
-              _summaryRow('Weight', '${_weightCtrl.text.trim()} kg'),
+              _summaryRow('Weight',
+                  _weightCtrl.text.trim().isEmpty ? 'Not recorded' : '${_weightCtrl.text.trim()} kg'),
               _summaryRow('Blood Pressure', bpText),
-              const SizedBox(height: 6),
-              _bpBadge(),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'Fetal Assessment',
-          child: Column(
-            children: [
-              _summaryRow('Fetal Count', '${_fetalCount ?? "-"}'),
-              _summaryRow('Position', _fetalPosition ?? '-'),
               _summaryRow(
-                'Heart Rate',
+                'Fetal Heart Rate',
                 _fetalBeatCtrl.text.trim().isEmpty
                     ? 'Not recorded'
                     : '${_fetalBeatCtrl.text.trim()} bpm',
@@ -3575,54 +3014,92 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                       : AppColors.error;
                 }(),
               ),
-              _summaryRow('Heart Tone', _fetalTone ?? '-'),
-              _summaryRow(
-                'Edema',
-                _edema[0].toUpperCase() + _edema.substring(1),
-                valueColor: _edemaColor(_edema),
-              ),
+              _summaryRow('Heart Tone', _fetalTone ?? 'Not recorded'),
+              const SizedBox(height: 6),
+              _bpBadge(),
             ],
           ),
         ),
         const SizedBox(height: 12),
         _sectionCard(
-          title: 'Pregnancy Symptoms',
+          title: 'SYMPTOMS & EDEMA',
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _summaryRow('Recorded', '${_symptoms.length} symptom(s)'),
-              _summaryRow(
-                'Danger Flagged',
-                '$_dangerSymptomCount symptom(s)',
-                valueColor: _dangerSymptomCount > 0
-                    ? AppColors.error
-                    : AppColors.success,
-              ),
+              _summaryRow('Edema Level', _edema == 'none'
+                  ? 'None'
+                  : '${_edema[0].toUpperCase()}${_edema.substring(1)}'),
+              const SizedBox(height: 4),
+              if (_symptoms.isEmpty)
+                _summaryRow('Symptoms', 'None recorded')
+              else ...[
+                const Text(
+                  'Symptoms:',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ..._symptoms.map((s) => Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: _riskColor(s.riskCategory),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          '${s.name} -- ${_riskLabel(s.riskCategory)}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: _riskColor(s.riskCategory),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+              ],
+              if (_dangerSymptomCount > 0) ...[
+                const SizedBox(height: 6),
+                _summaryRow(
+                  'Danger Flagged',
+                  '$_dangerSymptomCount: ${_dangerSymptomNames.join(", ")}',
+                  valueColor: AppColors.error,
+                ),
+              ],
             ],
           ),
         ),
         const SizedBox(height: 12),
         _sectionCard(
-          title: 'Medications & Supplements',
+          title: 'SUPPLEMENTS & TD VACCINE',
           child: Column(
             children: [
-              _summaryRow('Plans', '${_medicationPlans.length} item(s)'),
-              _summaryRow('Dispensed', '${_givenMedications.length} item(s)'),
               _summaryRow(
                 'Ferrous + FA',
                 _ferrousQtyCtrl.text.trim().isEmpty
                     ? 'Not given'
-                    : 'Qty ${_ferrousQtyCtrl.text.trim()}',
+                    : '${_ferrousQtyCtrl.text.trim()} tablet${(int.tryParse(_ferrousQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
               ),
               _summaryRow(
                 'Calcium',
                 _calciumQtyCtrl.text.trim().isEmpty
                     ? 'Not given'
-                    : 'Qty ${_calciumQtyCtrl.text.trim()}',
+                    : '${_calciumQtyCtrl.text.trim()} tablet${(int.tryParse(_calciumQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
               ),
               _summaryRow(
-                'TD Vaccine',
+                'TD Vaccine Dose',
                 _tdDose ??
-                    (_availableTdDoses.isEmpty ? 'Complete' : 'None given'),
+                    (_availableTdDoses.isEmpty ? 'Complete (all doses given)' : 'None given today'),
                 valueColor:
                     _availableTdDoses.isEmpty ? AppColors.success : null,
               ),
@@ -3631,19 +3108,24 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         ),
         const SizedBox(height: 12),
         _sectionCard(
-          title: 'Schedule & Remarks',
+          title: 'SCHEDULE & REMARKS',
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _summaryRow(
-                'Next Visit',
+                'Next Appointment',
                 _nextSchedule == null
                     ? 'Not set'
-                    : DateFormat('MMM d, yyyy').format(_nextSchedule!),
+                    : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
                 valueColor:
                     _nextSchedule != null ? AppColors.brandPrimary : null,
               ),
-              if (_remarksCtrl.text.trim().isNotEmpty)
-                _summaryRow('Remarks', _remarksCtrl.text.trim()),
+              _summaryRow(
+                'Remarks',
+                _remarksCtrl.text.trim().isEmpty
+                    ? 'None'
+                    : _remarksCtrl.text.trim(),
+              ),
             ],
           ),
         ),
@@ -3714,9 +3196,6 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         : _aiAssessmentCtrl.text.trim();
     final lineCount = '\n'.allMatches(content).length + 1;
     final editorLines = (lineCount + 2).clamp(4, 22);
-    final displayedActions = _isEditingAiAssessment
-        ? _editableSuggestedActions
-        : _riskSnapshot?.suggestedActions ?? [];
 
     Widget statPill({
       required IconData icon,
@@ -3996,96 +3475,6 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                         label: const Text('Add Risk Factor'),
                       ),
                     ],
-                    const SizedBox(height: 18),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        const Text(
-                          'Suggested Actions',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        if (_isEditingAiAssessment)
-                          TextButton.icon(
-                            onPressed: () => _openAddSuggestedActionDialog(),
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Add Action'),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    if (displayedActions.isEmpty)
-                      Text(
-                        _isEditingAiAssessment
-                            ? 'No suggested actions have been added yet. Add action items to guide follow-up care.'
-                            : 'No suggested actions are available. Confirm follow-up priorities with the mother and document the care plan.',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textPrimary,
-                          height: 1.6,
-                        ),
-                      )
-                    else
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: displayedActions
-                            .asMap()
-                            .entries
-                            .map(
-                              (entry) => Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${entry.key + 1}.',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.brandPrimary,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        entry.value,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textPrimary,
-                                          height: 1.6,
-                                        ),
-                                      ),
-                                    ),
-                                    if (_isEditingAiAssessment)
-                                      IconButton(
-                                        onPressed: () => setState(() {
-                                          _editableSuggestedActions
-                                              .removeAt(entry.key);
-                                          _riskSnapshot =
-                                              _riskSnapshot?.copyWith(
-                                            suggestedActions: List<String>.from(
-                                                _editableSuggestedActions),
-                                          );
-                                          _aiResponseApproved = false;
-                                        }),
-                                        icon: const Icon(
-                                          Icons.close,
-                                          size: 18,
-                                          color: AppColors.textSecondary,
-                                        ),
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
                   ],
                 ),
               ),
@@ -4222,30 +3611,91 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              // Chip: AI Generated / Reviewed by Midwife
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: (_aiAssessmentEdited || _aiResponseApproved)
+                          ? AppColors.brandPrimary.withValues(alpha: 0.12)
+                          : (_riskSnapshot?.aiGenerated == true
+                              ? AppColors.info.withValues(alpha: 0.12)
+                              : AppColors.textSecondary.withValues(alpha: 0.12)),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: (_aiAssessmentEdited || _aiResponseApproved)
+                            ? AppColors.brandPrimary.withValues(alpha: 0.4)
+                            : (_riskSnapshot?.aiGenerated == true
+                                ? AppColors.info.withValues(alpha: 0.4)
+                                : AppColors.textSecondary.withValues(alpha: 0.4)),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          (_aiAssessmentEdited || _aiResponseApproved)
+                              ? Icons.verified_user_rounded
+                              : Icons.smart_toy_outlined,
+                          size: 14,
+                          color: (_aiAssessmentEdited || _aiResponseApproved)
+                              ? AppColors.brandPrimary
+                              : (_riskSnapshot?.aiGenerated == true
+                                  ? AppColors.info
+                                  : AppColors.textSecondary),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          (_aiAssessmentEdited || _aiResponseApproved)
+                              ? 'Reviewed by Midwife'
+                              : 'AI Generated',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: (_aiAssessmentEdited || _aiResponseApproved)
+                                ? AppColors.brandPrimary
+                                : (_riskSnapshot?.aiGenerated == true
+                                    ? AppColors.info
+                                    : AppColors.textSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Icon(
                     _aiResponseApproved
                         ? Icons.verified_rounded
-                        : (_aiAssessmentEdited
-                            ? Icons.edit_note_rounded
-                            : Icons.smart_toy_outlined),
+                        : (_aiAnalysisSkipped
+                            ? Icons.skip_next_rounded
+                            : (_aiAssessmentEdited
+                                ? Icons.edit_note_rounded
+                                : Icons.smart_toy_outlined)),
                     size: 14,
                     color: _aiResponseApproved
                         ? AppColors.success
-                        : (_aiAssessmentEdited
-                            ? AppColors.brandAccent
-                            : AppColors.textSecondary),
+                        : (_aiAnalysisSkipped
+                            ? AppColors.warning
+                            : (_aiAssessmentEdited
+                                ? AppColors.brandAccent
+                                : AppColors.textSecondary)),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       _aiResponseApproved
                           ? 'AI response approved for final save.'
-                          : (_aiAssessmentEdited
-                              ? 'Edited by midwife. Press Approve to enable saving. Changes are logged in AI edit history.'
-                              : 'Review then press Approve AI Response before saving.'),
+                          : (_aiAnalysisSkipped
+                              ? 'AI analysis skipped. Rule-based assessment will be saved.'
+                              : (_aiAssessmentEdited
+                                  ? 'Edited by midwife. Press Approve to enable saving. Changes are logged in AI edit history.'
+                                  : 'Review then press Approve AI Response, or skip AI analysis to save with rule-based assessment only.')),
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,
@@ -4254,6 +3704,34 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   ),
                 ],
               ),
+              if (!_aiResponseApproved && !_aiAnalysisSkipped) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _isEditingAiAssessment
+                        ? null
+                        : () {
+                            setState(() {
+                              _aiAnalysisSkipped = true;
+                              // Use rule-based snapshot if no AI was generated
+                              final ruleSnapshot = _buildRuleBasedRiskSnapshot();
+                              _syncEditableRiskState(ruleSnapshot, ruleSnapshot.aiAssessment);
+                              _riskSnapshot = ruleSnapshot;
+                            });
+                            _showMessage(
+                                'AI analysis skipped. You can now save with rule-based assessment.',
+                                type: AppSnackType.warning);
+                          },
+                    icon: const Icon(Icons.skip_next_rounded, size: 18),
+                    label: const Text('Skip AI Analysis'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.warning,
+                      side: BorderSide(color: AppColors.warning.withValues(alpha: 0.5)),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -4368,14 +3846,93 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     actionCtrl.dispose();
   }
 
+  bool get _hasEnteredData =>
+      _weightCtrl.text.trim().isNotEmpty ||
+      _sysCtrl.text.trim().isNotEmpty ||
+      _diaCtrl.text.trim().isNotEmpty ||
+      _fetalBeatCtrl.text.trim().isNotEmpty ||
+      _symptoms.isNotEmpty ||
+      _remarksCtrl.text.trim().isNotEmpty ||
+      _ferrousQtyCtrl.text.trim().isNotEmpty ||
+      _calciumQtyCtrl.text.trim().isNotEmpty;
+
+  Future<bool> _showSkipCheckupDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('Skip Initial Checkup?'),
+        content: const Text(
+          'The initial prenatal checkup is required to complete the '
+          'mother\'s registration. Skipping will leave her record '
+          'incomplete.\n\nAre you sure you want to skip?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Continue Checkup'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Skip'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<bool> _showDiscardCheckupDialog() async {
+    if (!_hasEnteredData) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text(
+          'You have unsaved prenatal checkup data. Are you sure you want to go back?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (widget.isInitialRegistration) {
+          final shouldSkip = await _showSkipCheckupDialog();
+          if (shouldSkip && mounted) {
+            Navigator.pop(context);
+          }
+        } else {
+          final shouldDiscard = await _showDiscardCheckupDialog();
+          if (shouldDiscard && mounted) {
+            Navigator.pop(context);
+          }
+        }
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: AppBar(
         title: const Text('Add Prenatal Checkup'),
         backgroundColor: AppColors.bgPrimary,
         elevation: 0,
+        automaticallyImplyLeading: !widget.isInitialRegistration,
       ),
       body: SafeArea(
         child: Padding(
@@ -4409,7 +3966,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                       onPressed: _submitting
                           ? null
                           : (_step == _totalSteps - 1
-                              ? (_aiResponseApproved ? _submit : null)
+                              ? ((_aiResponseApproved || _aiAnalysisSkipped) ? _submit : null)
                               : _next),
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.brandPrimary,
@@ -4425,7 +3982,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                               ),
                             )
                           : Text(_step == _totalSteps - 1
-                              ? (_aiResponseApproved
+                              ? ((_aiResponseApproved || _aiAnalysisSkipped)
                                   ? 'Save Checkup'
                                   : 'Approve AI to Save')
                               : 'Next'),
@@ -4436,6 +3993,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             ],
           ),
         ),
+      ),
       ),
     );
   }

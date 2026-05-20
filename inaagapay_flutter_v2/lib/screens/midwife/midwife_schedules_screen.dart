@@ -71,7 +71,7 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
       final formattedDate = DateFormat('yyyy-MM-dd').format(date);
       final midwifeIdValue = _midwifeId!;
 
-      // Fetch prenatal checkups for this date
+      // Fetch prenatal checkups whose NEXT scheduled date falls on this day
       final checkupsResponse = await Supabase.instance.client
           .from('prenatal_checkups')
           .select('''
@@ -89,11 +89,10 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
             )
           ''')
           .eq('midwife_id', midwifeIdValue)
-          .gte('checkup_datetime', '$formattedDate 00:00:00')
-          .lte('checkup_datetime', '$formattedDate 23:59:59')
-          .order('checkup_datetime');
+          .eq('next_schedule', formattedDate)
+          .order('next_schedule');
 
-      // Also fetch checkup_schedule table if it has data
+      // Also fetch from checkup_schedule table (only scheduled/upcoming entries)
       final scheduleResponse =
           await Supabase.instance.client.from('checkup_schedule').select('''
             schedule_id,
@@ -106,7 +105,7 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                 last_name
               )
             )
-          ''').eq('scheduled_date', formattedDate).order('scheduled_date');
+          ''').eq('scheduled_date', formattedDate).eq('status', 'scheduled').order('scheduled_date');
 
       final List<Map<String, dynamic>> schedules = [];
 
@@ -119,11 +118,8 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
         final lastName = account?['last_name']?.toString() ?? '';
         final motherName = '$firstName $lastName'.trim();
 
-        final dateTime = DateTime.parse(checkup['checkup_datetime']);
-        final time = DateFormat('h:mm a').format(dateTime);
-
         schedules.add({
-          'time': time,
+          'time': 'All Day',
           'mother_name': motherName.isNotEmpty ? motherName : 'Unknown Mother',
           'type': 'Prenatal Checkup',
           'status': 'upcoming',

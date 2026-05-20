@@ -1165,6 +1165,7 @@ class SupabaseService {
               'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
               'pre_pregnancy_weight': prePregnancyWeight,
               'status': 'ongoing',
+              if (prePregnancyWeight != null) 'pre_pregnancy_weight': prePregnancyWeight,
             })
             .select('pregnancy_id')
             .maybeSingle();
@@ -1219,12 +1220,15 @@ class SupabaseService {
         }
       }
 
-      final emailSent = await EmailService.sendAccountCredentials(
-        email: email,
-        password: generatedPassword,
-        firstName: firstName,
-        lastName: lastName,
-      );
+      final isInternalEmail = email.endsWith('@inaagapay.internal');
+      final emailSent = isInternalEmail
+          ? false
+          : await EmailService.sendAccountCredentials(
+              email: email,
+              password: generatedPassword,
+              firstName: firstName,
+              lastName: lastName,
+            );
 
       return {
         'success': true,

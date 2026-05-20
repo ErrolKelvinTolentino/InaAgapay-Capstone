@@ -756,12 +756,13 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
   List<String> _personalizedSymptoms = [];
   List<String> _personalizedWarnings = [];
   List<String> _personalizedActions = [];
+  List<String> _activeAllergies = [];
   bool _isLoadingPersonalized = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _data = _trimesterForWeek(widget.week);
     _loadPersonalizedData();
   }
@@ -828,6 +829,28 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
             .where((line) => line.trim().isNotEmpty)
             .map((line) =>
                 line.replaceAll(RegExp(r'^[\d\-\.\*]+\s*'), '').trim())
+            .toList();
+      }
+
+      // Fetch active allergies for the mother (to filter nutrition tips)
+      final motherRow = await supabase
+          .from('pregnancies')
+          .select('mother_id')
+          .eq('pregnancy_id', widget.pregnancyId)
+          .maybeSingle();
+
+      if (motherRow != null) {
+        final motherId = motherRow['mother_id'] as int;
+        final allergyRows = await supabase
+            .from('allergies')
+            .select('allergen')
+            .eq('mother_id', motherId)
+            .eq('status', 'active');
+
+        _activeAllergies = (allergyRows as List)
+            .cast<Map<String, dynamic>>()
+            .map((a) => (a['allergen'] as String? ?? '').toLowerCase())
+            .where((a) => a.isNotEmpty)
             .toList();
       }
     } catch (e) {
@@ -907,7 +930,6 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
                         _buildBabyTab(language),
                         _buildSymptomsTab(language),
                         _buildNutritionTab(language),
-                        _buildChecklistTab(language),
                         _buildWarningsTab(language),
                       ],
                     ),
@@ -1086,7 +1108,6 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
       _translate('Baby', 'Sanggol', language),
       _translate('Symptoms', 'Sintomas', language),
       _translate('Nutrition', 'Nutrisyon', language),
-      _translate('Checklist', 'Checklist', language),
       _translate('Warnings', 'Babala', language),
     ];
 
@@ -1952,10 +1973,49 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
           icon: Icons.food_bank_outlined,
         ),
         const SizedBox(height: 10),
-        ..._data.nutritionTips.map((tip) => _NutritionCard(
+        ..._data.nutritionTips
+            .where((tip) {
+              // Filter out tips that mention active allergies
+              if (_activeAllergies.isEmpty) return true;
+              final foodLower = tip.food.toLowerCase();
+              for (final allergen in _activeAllergies) {
+                if (foodLower.contains(allergen) || allergen.contains(foodLower.split('(').first.trim())) {
+                  return false;
+                }
+              }
+              return true;
+            })
+            .map((tip) => _NutritionCard(
               tip: tip,
               language: language,
             )),
+        if (_activeAllergies.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _Card(
+            color: AppColors.warning.withValues(alpha: 0.08),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _translate(
+                      'Some food recommendations have been filtered out based on your recorded allergies: ${_activeAllergies.join(", ")}.',
+                      'Ang ilang rekomendasyon sa pagkain ay na-filter dahil sa iyong mga naitala na allergy: ${_activeAllergies.join(", ")}.',
+                      language,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         _SectionHeader(
           title: _translate('Foods to Avoid', 'Mga Pagkaing Iwasan', language),
@@ -2108,28 +2168,106 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Reassuring intro
+        _Card(
+          color: AppColors.bgSecondary,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.favorite_border, color: AppColors.brandPrimary, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _translate(
+                    'Most pregnancies progress smoothly. These signs are shared so you feel prepared — not to worry you. Trust your instincts, and reach out to your midwife whenever you feel something is off.',
+                    'Karamihan ng pagbubuntis ay maayos ang takbo. Ibinahagi ang mga palatandaang ito para maging handa ka — hindi para mag-alala. Magtiwala sa iyong pakiramdam, at tawagan ang iyong midwife kapag may naramdaman kang kakaiba.',
+                    language,
+                  ),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    height: 1.6,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Personalized warnings from risk assessment
+        if (_personalizedWarnings.isNotEmpty) ...[
+          _Card(
+            color: AppColors.warning.withValues(alpha: 0.08),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.person_outline, color: AppColors.warning, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _translate(
+                          'Based on your checkups',
+                          'Batay sa iyong mga checkup',
+                          language,
+                        ),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: AppColors.warning,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ..._personalizedWarnings.map((w) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 6, height: 6,
+                        margin: const EdgeInsets.only(top: 6),
+                        decoration: const BoxDecoration(color: AppColors.warning, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(w, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4))),
+                    ],
+                  ),
+                )),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.error.withValues(alpha: 0.12),
+            color: AppColors.error.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(Icons.emergency, color: AppColors.error, size: 22),
+                  const Icon(Icons.local_hospital_outlined, color: AppColors.error, size: 22),
                   const SizedBox(width: 10),
-                  Text(
-                    _translate('Go to the hospital immediately',
-                        'Agad na pumunta sa ospital', language),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                      color: AppColors.error,
-                      letterSpacing: 0.5,
+                  Expanded(
+                    child: Text(
+                      _translate(
+                        'When to seek immediate care',
+                        'Kailan dapat magpatingin agad',
+                        language,
+                      ),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.error,
+                      ),
                     ),
                   ),
                 ],
@@ -2148,10 +2286,10 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: 0.12),
+              color: AppColors.warning.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(16),
               border:
-                  Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                  Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2161,14 +2299,18 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
                     const Icon(Icons.visibility_outlined,
                         color: AppColors.warning, size: 22),
                     const SizedBox(width: 10),
-                    Text(
-                      _translate('Watch and monitor', 'Bantayan at subaybayan',
-                          language),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        color: AppColors.warning,
-                        letterSpacing: 0.5,
+                    Expanded(
+                      child: Text(
+                        _translate(
+                          'Things to keep an eye on',
+                          'Mga bagay na dapat bantayan',
+                          language,
+                        ),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: AppColors.warning,
+                        ),
                       ),
                     ),
                   ],

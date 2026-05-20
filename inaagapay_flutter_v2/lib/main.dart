@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_colors.dart';
 import 'services/auth_storage.dart';
@@ -35,6 +37,15 @@ import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp();
+      if (kDebugMode) print('✅ Firebase initialized successfully');
+    } catch (e) {
+      if (kDebugMode) print('⚠️ Firebase init error: $e');
+    }
+  }
 
   const fallbackSupabaseUrl = 'https://buvseyqcdacctlupznya.supabase.co';
   const fallbackSupabaseAnonKey =
@@ -68,11 +79,52 @@ void main() async {
     if (kDebugMode) print('❌ Supabase init error: $e');
   }
 
+  try {
+    await PushNotificationService.initialize();
+    if (kDebugMode) print('✅ Push notifications initialized');
+  } catch (e) {
+    if (kDebugMode) print('⚠️ Push notification init error: $e');
+  }
+
   runApp(const InaagapayApp());
 }
 
-class InaagapayApp extends StatelessWidget {
+class InaagapayApp extends StatefulWidget {
   const InaagapayApp({super.key});
+
+  @override
+  State<InaagapayApp> createState() => _InaagapayAppState();
+}
+
+/// Call from anywhere to refresh the app theme after dark mode toggle.
+void refreshAppTheme() {
+  _InaagapayAppState._instance?._loadThemePreference();
+}
+
+class _InaagapayAppState extends State<InaagapayApp> {
+  static _InaagapayAppState? _instance;
+
+  bool _isDarkMode = false;
+  bool _themeLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _instance = this;
+    _loadThemePreference();
+  }
+
+  @override
+  void dispose() {
+    if (_instance == this) _instance = null;
+    super.dispose();
+  }
+
+  Future<void> _loadThemePreference() async {
+    final dark = await AuthStorage.isDarkMode();
+    if (kDebugMode) debugPrint('🎨 Theme preference loaded: isDark=$dark');
+    if (mounted) setState(() { _isDarkMode = dark; _themeLoaded = true; });
+  }
 
   Future<Widget> _determineStartScreen() async {
     final isLoggedIn = await AuthStorage.isLoggedIn();
@@ -199,6 +251,16 @@ class InaagapayApp extends StatelessWidget {
               backgroundColor: Colors.white,
             ),
           ),
+          darkTheme: AppTheme.darkTheme.copyWith(
+            appBarTheme: const AppBarTheme(elevation: 0, centerTitle: true),
+            bottomNavigationBarTheme: BottomNavigationBarThemeData(
+              selectedItemColor: AppColors.darkBrandPrimary,
+              unselectedItemColor: Colors.grey.shade400,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: AppColors.darkBgSecondary,
+            ),
+          ),
+          themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
           home: snapshot.data ?? const LoginScreen(),
           routes: {
             '/login': (context) => const LoginScreen(),

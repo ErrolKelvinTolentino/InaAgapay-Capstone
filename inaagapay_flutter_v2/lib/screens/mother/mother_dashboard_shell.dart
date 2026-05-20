@@ -1,16 +1,23 @@
 // lib/screens/mother/mother_dashboard_shell.dart
 
+import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
 import '../../services/language_service.dart';
 import '../../services/supabase_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/push_notification_service.dart';
 import 'mother_dashboard.dart';
 import 'mother_journal_screen.dart';
 import 'mother_children_screen.dart';
 import 'records_screen.dart';
 import 'mother_profile_page.dart';
+import 'notifications_screen.dart';
 
 class MotherDashboardShell extends StatefulWidget {
   const MotherDashboardShell({super.key});
@@ -24,20 +31,59 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
   String? _profilePictureUrl;
   int? _motherId;
   final ImagePicker _picker = ImagePicker();
+  int _unreadCount = 0;
+  RealtimeChannel? _notifChannel;
 
   bool _showBHCRequiredDialog = false;
+  bool _isOffline = false;
+  Timer? _connectivityTimer;
 
   final List<Widget> _screens = const [
     MotherDashboard(),
     MotherJournalScreen(),
     MotherChildrenScreen(),
     RecordsScreen(),
+    _HotlinesScreen(),
   ];
 
   @override
   void initState() {
     super.initState();
     _loadMotherData();
+    _setupNotifications();
+    _checkConnectivity();
+    // Re-check connectivity every 30 seconds
+    _connectivityTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _checkConnectivity(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _notifChannel?.unsubscribe();
+    _connectivityTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkConnectivity() async {
+    // Skip connectivity check on web (dart:io not available)
+    // On mobile, this would use InternetAddress.lookup
+    // For now, assume online — Supabase client handles errors gracefully
+    if (mounted && _isOffline) setState(() => _isOffline = false);
+  }
+
+  Future<void> _setupNotifications() async {
+    _notifChannel?.unsubscribe();
+    final accountId = await AuthStorage.getUserId();
+    if (accountId == null || !mounted) return;
+
+    final count = await NotificationService.getUnreadCount(accountId);
+    if (mounted) setState(() => _unreadCount = count);
+
+    _notifChannel = NotificationService.subscribeToNotifications(accountId, (payload) {
+      if (mounted) setState(() => _unreadCount++);
+    });
   }
 
   Future<void> _loadMotherData() async {
@@ -220,6 +266,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
   }
 
   Future<void> _logout() async {
+    await PushNotificationService.removeToken();
     await AuthStorage.clearAll();
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
@@ -313,7 +360,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 width: 220, // ← FIXED: Increased width slightly
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.cardColorOf(context),
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
@@ -346,7 +393,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                             context,
                             MaterialPageRoute(
                               builder: (context) =>
-                                  MotherProfilePage(motherId: _motherId!),
+                                  MotherProfilePage(motherId: _motherId!, readOnly: true),
                             ),
                           );
                         } else {
@@ -540,10 +587,11 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
           LanguageService.translate('JOURNAL', 'Journal'),
           LanguageService.translate('CHILDREN', 'Mga Anak'),
           LanguageService.translate('RECORDS', 'Mga Tala'),
+          LanguageService.translate('HOTLINES', 'Hotlines'),
         ];
 
         return Scaffold(
-          backgroundColor: AppColors.bgPrimary,
+          backgroundColor: AppColors.bgPrimaryOf(context),
           body: SafeArea(
             child: Column(
               children: [
@@ -552,7 +600,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.cardColorOf(context),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.05),
@@ -586,11 +634,42 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                       IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        onPressed: () {},
-                        icon: const Icon(
-                          Icons.notifications_none_rounded,
-                          size: 24,
-                          color: AppColors.textPrimary,
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                          );
+                          _setupNotifications();
+                        },
+                        icon: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            const Icon(
+                              Icons.notifications_none_rounded,
+                              size: 24,
+                              color: AppColors.textPrimary,
+                            ),
+                            if (_unreadCount > 0)
+                              Positioned(
+                                right: -4,
+                                top: -4,
+                                child: Container(
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.error,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    _unreadCount > 9 ? '9+' : '$_unreadCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -622,6 +701,30 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                   ),
                 ),
 
+                // Offline banner
+                if (_isOffline)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    color: AppColors.error,
+                    child: Row(
+                      children: const [
+                        Icon(Icons.wifi_off, size: 16, color: Colors.white),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'No internet connection — some features may not work.',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Content
                 Expanded(
                   child: IndexedStack(
@@ -635,7 +738,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
           bottomNavigationBar: Container(
             height: 70,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.cardColorOf(context),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(20),
                 topRight: Radius.circular(20),
@@ -679,6 +782,13 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                   isActive: _currentIndex == 3,
                   onTap: () => setState(() => _currentIndex = 3),
                 ),
+                _NavItem(
+                  icon: Icons.phone_outlined,
+                  activeIcon: Icons.phone,
+                  label: LanguageService.translate('Hotlines', 'Hotlines'),
+                  isActive: _currentIndex == 4,
+                  onTap: () => setState(() => _currentIndex = 4),
+                ),
               ],
             ),
           ),
@@ -706,7 +816,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color color =
-        isActive ? AppColors.brandPrimary : AppColors.textSecondary;
+        isActive ? AppColors.brandPrimaryOf(context) : AppColors.textSecondaryOf(context);
 
     return GestureDetector(
       onTap: onTap,
@@ -734,7 +844,7 @@ class _NavItem extends StatelessWidget {
               width: 5,
               height: 5,
               decoration: BoxDecoration(
-                color: AppColors.brandPrimary,
+                color: AppColors.brandPrimaryOf(context),
                 shape: BoxShape.circle,
               ),
             ),
@@ -759,7 +869,7 @@ class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isDanger ? AppColors.error : AppColors.textPrimary;
+    final color = isDanger ? AppColors.error : AppColors.textPrimaryOf(context);
 
     return InkWell(
       onTap: onTap,
@@ -781,6 +891,144 @@ class _MenuItem extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HotlinesScreen extends StatelessWidget {
+  const _HotlinesScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            LanguageService.translate(
+              'Emergency Hotlines',
+              'Mga Emergency Hotline',
+            ),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimaryOf(context),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            LanguageService.translate(
+              'Tap to copy the number to your clipboard.',
+              'I-tap para kopyahin ang numero sa clipboard.',
+            ),
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondaryOf(context),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _HotlineButton(
+            label: LanguageService.translate('National Emergency Hotline', 'Pambansang Emergency Hotline'),
+            number: '911',
+            icon: Icons.local_hospital,
+            color: AppColors.error,
+          ),
+          const SizedBox(height: 12),
+          _HotlineButton(
+            label: LanguageService.translate('DOH Health Hotline', 'DOH Health Hotline'),
+            number: '1555',
+            icon: Icons.phone,
+            color: AppColors.brandPrimary,
+          ),
+          const SizedBox(height: 12),
+          _HotlineButton(
+            label: LanguageService.translate('Philippine Red Cross', 'Philippine Red Cross'),
+            number: '143',
+            icon: Icons.health_and_safety,
+            color: const Color(0xFFD32F2F),
+          ),
+          const SizedBox(height: 12),
+          _HotlineButton(
+            label: LanguageService.translate('PNP Emergency', 'PNP Emergency'),
+            number: '117',
+            icon: Icons.shield,
+            color: const Color(0xFF1565C0),
+          ),
+          const SizedBox(height: 12),
+          _HotlineButton(
+            label: LanguageService.translate('Bureau of Fire Protection', 'Bureau of Fire Protection'),
+            number: '160',
+            icon: Icons.local_fire_department,
+            color: const Color(0xFFE65100),
+          ),
+          const SizedBox(height: 12),
+          _HotlineButton(
+            label: LanguageService.translate('Mental Health Crisis Line', 'Mental Health Crisis Line'),
+            number: '1553',
+            icon: Icons.psychology,
+            color: const Color(0xFF7B1FA2),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HotlineButton extends StatelessWidget {
+  final String label;
+  final String number;
+  final IconData icon;
+  final Color color;
+
+  const _HotlineButton({
+    required this.label,
+    required this.number,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Clipboard.setData(ClipboardData(text: number));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                LanguageService.translate(
+                  '$number copied to clipboard',
+                  '$number kinopya sa clipboard',
+                ),
+              ),
+              duration: const Duration(seconds: 2),
+              backgroundColor: color,
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

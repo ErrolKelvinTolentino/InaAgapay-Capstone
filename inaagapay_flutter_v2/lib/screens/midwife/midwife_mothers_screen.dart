@@ -9,6 +9,7 @@ import '../../services/supabase_service.dart';
 import '../../services/auth_storage.dart';
 import '../mother/mother_profile_page.dart';
 import 'midwife_add_mother_screen.dart';
+import 'quick_vitals_screen.dart';
 
 class MidwifeMothersScreen extends StatefulWidget {
   const MidwifeMothersScreen({super.key});
@@ -271,7 +272,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         final pregnanciesResponse = await SupabaseService.client
             .from('pregnancies')
             .select(
-                'mother_id, last_menstrual_period, pregnancy_risk_level, expected_date_of_delivery')
+                'pregnancy_id, mother_id, last_menstrual_period, pregnancy_risk_level, expected_date_of_delivery')
             .eq('status', 'ongoing')
             .inFilter('mother_id', motherIds);
 
@@ -335,6 +336,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           profilePictureUrl = await _loadProfilePicture(motherId);
         }
 
+        final pregnancy = motherId != null ? pregnancyMap[motherId] : null;
         newMothers.add({
           'account_id': accountId,
           'first_name': firstName,
@@ -351,6 +353,9 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
               motherId != null && pregnancyMap.containsKey(motherId),
           'barangay': motherInfo?['barangay']?.toString() ?? '',
           'profile_picture': profilePictureUrl,
+          'pregnancy_id': pregnancy?['pregnancy_id'] as int?,
+          'last_menstrual_period':
+              pregnancy?['last_menstrual_period'] as String?,
         });
       }
 
@@ -446,7 +451,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
             return Dialog(
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24)),
-              backgroundColor: Colors.white,
+              backgroundColor: AppColors.cardColorOf(context),
               insetPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
               child: SingleChildScrollView(
@@ -639,7 +644,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
+      backgroundColor: AppColors.bgPrimaryOf(context),
       body: SafeArea(
         top: false,
         bottom: false,
@@ -903,6 +908,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                               color: AppColors.brandPrimary,
                               child: ListView.builder(
                                 controller: _scrollController,
+                                physics: const AlwaysScrollableScrollPhysics(),
                                 padding:
                                     const EdgeInsets.fromLTRB(16, 8, 16, 100),
                                 itemCount: _filteredMothers.length +
@@ -1009,6 +1015,34 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                               });
                                             }
                                           : null,
+                                      onQuickVitals: (motherId != null &&
+                                              mother['pregnancy_id'] != null)
+                                          ? () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      QuickVitalsScreen(
+                                                    motherId: motherId,
+                                                    pregnancyId:
+                                                        mother['pregnancy_id']
+                                                            as int,
+                                                    motherName:
+                                                        mother['full_name']
+                                                                ?.toString() ??
+                                                            'Unknown Mother',
+                                                    lastMenstrualPeriod: mother[
+                                                            'last_menstrual_period']
+                                                        as String?,
+                                                  ),
+                                                ),
+                                              ).then((saved) {
+                                                if (saved == true && mounted) {
+                                                  _refreshMothers();
+                                                }
+                                              });
+                                            }
+                                          : null,
                                     ),
                                   );
                                 },
@@ -1019,6 +1053,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_mothers',
         onPressed: () async {
           final bool? added = await Navigator.push(
             context,
@@ -1057,6 +1092,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 class _MotherCard extends StatelessWidget {
   final Map<String, dynamic> mother;
   final VoidCallback? onTap;
+  final VoidCallback? onQuickVitals;
   final Color riskColor;
   final String riskLabel;
   final String? dueDateText;
@@ -1071,6 +1107,7 @@ class _MotherCard extends StatelessWidget {
     this.profilePictureUrl,
     required this.barangay,
     this.onTap,
+    this.onQuickVitals,
   });
 
   String _getInitials(String fullName) {
@@ -1123,7 +1160,7 @@ class _MotherCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardColorOf(context),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -1275,6 +1312,16 @@ class _MotherCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onQuickVitals != null)
+                  IconButton(
+                    icon: const Icon(Icons.speed_rounded, size: 22),
+                    color: AppColors.brandAccent,
+                    tooltip: 'Quick Vitals',
+                    onPressed: onQuickVitals,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
                 const Icon(
                   Icons.chevron_right,
                   color: AppColors.brandPrimary,

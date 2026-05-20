@@ -97,6 +97,16 @@ class AuthStorage {
     return token != null && token.isNotEmpty;
   }
 
+  // Dark Mode
+  static Future<void> saveDarkMode(bool enabled) async {
+    await _storage.write(key: 'dark_mode', value: enabled.toString());
+  }
+
+  static Future<bool> isDarkMode() async {
+    final value = await _storage.read(key: 'dark_mode');
+    return value == 'true';
+  }
+
   // Clear All
   static Future<void> clearAll() async {
     await _storage.deleteAll();

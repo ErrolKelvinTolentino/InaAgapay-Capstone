@@ -12,6 +12,7 @@ class ChartCard extends StatelessWidget {
   final String unit;
   final Color lineColor;
   final Color? titleColor;
+  final List<dynamic> referenceCurves;
 
   // Records (optional)
   final String? startingLabel;
@@ -31,6 +32,7 @@ class ChartCard extends StatelessWidget {
     required this.labels,
     required this.unit,
     required this.lineColor,
+    this.referenceCurves = const [],
     this.startingLabel,
     this.startingValue,
     this.latestLabel,

@@ -65,8 +65,8 @@ class AddChildChoicePage extends StatelessWidget {
               _buildChoiceCard(
                 context: context,
                 icon: Icons.pregnant_woman,
-                title: 'Registered Mother',
-                description: 'The mother already has an account in the system',
+                title: 'Existing Mother',
+                description: 'Register child for an existing mother in the system',
                 color: AppColors.brandPrimary,
                 onTap: () {
                   Navigator.push(
@@ -87,7 +87,7 @@ class AddChildChoicePage extends StatelessWidget {
                 context: context,
                 icon: Icons.person_add,
                 title: 'New Guardian',
-                description: 'Create a guardian record (not a mother account)',
+                description: 'Register child with a new guardian (not linked to existing mother)',
                 color: AppColors.success,
                 onTap: () {
                   Navigator.push(
@@ -121,6 +121,31 @@ class AddChildChoicePage extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Cancel button
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
                 ),
               ),
             ],

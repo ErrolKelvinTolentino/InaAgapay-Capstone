@@ -452,6 +452,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_children',
         onPressed: _addChild,
         backgroundColor: AppColors.brandPrimary,
         foregroundColor: Colors.white,

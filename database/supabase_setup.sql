@@ -517,6 +517,34 @@ CREATE TABLE pregnancy_symptoms (
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- =========================
+-- NOTIFICATIONS
+-- =========================
+CREATE TABLE notifications (
+    notification_id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) DEFAULT 'general' CHECK (
+        type IN ('checkup_reminder', 'vaccine_reminder', 'general')
+    ),
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE device_tokens (
+    device_token_id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+    fcm_token TEXT NOT NULL,
+    platform VARCHAR(10) DEFAULT 'android' CHECK (platform IN ('android', 'ios')),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_device_tokens_unique ON device_tokens(account_id, fcm_token);
+
 -- =========================
 -- CREATE INDEXES FOR PERFORMANCE
 -- =========================
@@ -538,6 +566,9 @@ CREATE INDEX idx_ocr_file ON ocr_results(file_id);
 CREATE INDEX idx_ai_reference ON ai_responses(reference_table, reference_id);
 CREATE INDEX idx_symptoms_pregnancy ON pregnancy_symptoms(pregnancy_id);
 CREATE INDEX idx_symptoms_checkup ON pregnancy_symptoms(prenatal_checkup_id);
+CREATE INDEX idx_notifications_account ON notifications(account_id);
+CREATE INDEX idx_notifications_unread ON notifications(account_id, is_read) WHERE is_read = FALSE;
+CREATE INDEX idx_device_tokens_account ON device_tokens(account_id);
 -- =========================
 -- UPDATED_AT TRIGGERS
 -- =========================
@@ -569,6 +600,273 @@ UPDATE ON ai_responses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS update_pregnancy_risk_assessments_updated_at ON pregnancy_risk_assessments;
 CREATE TRIGGER update_pregnancy_risk_assessments_updated_at BEFORE
 UPDATE ON pregnancy_risk_assessments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_device_tokens_updated_at ON device_tokens;
+CREATE TRIGGER update_device_tokens_updated_at BEFORE
+UPDATE ON device_tokens FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- =========================
+-- NOTIFICATION TRIGGERS
+-- =========================
+
+-- Trigger: When a checkup is scheduled, notify the mother
+CREATE OR REPLACE FUNCTION notify_checkup_scheduled() RETURNS TRIGGER AS $$
+DECLARE
+  v_account_id BIGINT;
+  v_scheduled TEXT;
+BEGIN
+  SELECT account_id INTO v_account_id
+    FROM mothers WHERE mother_id = NEW.mother_id;
+  IF v_account_id IS NULL THEN RETURN NEW; END IF;
+
+  v_scheduled := TO_CHAR(NEW.scheduled_date, 'Mon DD, YYYY');
+
+  INSERT INTO notifications (account_id, title, message, type)
+  VALUES (
+    v_account_id,
+    'Upcoming Prenatal Checkup',
+    'You have a prenatal checkup scheduled on ' || v_scheduled || '. Please prepare and arrive on time.',
+    'checkup_reminder'
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_checkup_scheduled ON checkup_schedule;
+CREATE TRIGGER trg_notify_checkup_scheduled
+  AFTER INSERT ON checkup_schedule
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_checkup_scheduled();
+
+-- Trigger: When a child immunization is recorded, check for next due vaccine and notify
+CREATE OR REPLACE FUNCTION notify_next_vaccine_due() RETURNS TRIGGER AS $$
+DECLARE
+  v_mother_id BIGINT;
+  v_account_id BIGINT;
+  v_child_name TEXT;
+  v_birthdate DATE;
+  v_age_weeks INT;
+  v_next_vaccine RECORD;
+BEGIN
+  -- Get child info (birthdate is in birth_details, not children)
+  SELECT c.mother_id, c.first_name || ' ' || c.last_name, bd.birthdate
+    INTO v_mother_id, v_child_name, v_birthdate
+    FROM children c
+    LEFT JOIN birth_details bd ON bd.child_id = c.child_id
+    WHERE c.child_id = NEW.child_id;
+  IF v_mother_id IS NULL THEN RETURN NEW; END IF;
+
+  -- Get mother's account
+  SELECT account_id INTO v_account_id
+    FROM mothers WHERE mother_id = v_mother_id;
+  IF v_account_id IS NULL OR v_birthdate IS NULL THEN RETURN NEW; END IF;
+
+  -- Calculate child age in weeks
+  v_age_weeks := (CURRENT_DATE - v_birthdate) / 7;
+
+  -- Find next unvaccinated vaccine that is age-appropriate
+  SELECT v.vaccine_name, v.recommended_age_months INTO v_next_vaccine
+    FROM vaccines v
+    WHERE v.target_recipients = 'child'
+      AND v.recommended_age_months <= (v_age_weeks / 4.0) + 2
+      AND NOT EXISTS (
+        SELECT 1 FROM immunization_record ir
+        WHERE ir.child_id = NEW.child_id AND ir.vaccine_id = v.vaccine_id
+      )
+    ORDER BY v.recommended_age_months ASC
+    LIMIT 1;
+
+  IF v_next_vaccine IS NOT NULL THEN
+    INSERT INTO notifications (account_id, title, message, type)
+    VALUES (
+      v_account_id,
+      'Vaccine Reminder for ' || v_child_name,
+      v_next_vaccine.vaccine_name || ' is due (recommended at ' || v_next_vaccine.recommended_age_months || ' months). Please visit your BHC.',
+      'vaccine_reminder'
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_next_vaccine ON immunization_record;
+CREATE TRIGGER trg_notify_next_vaccine
+  AFTER INSERT ON immunization_record
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_next_vaccine_due();
+
+-- Trigger: When a prenatal checkup is saved with next_schedule, auto-create checkup_schedule row
+CREATE OR REPLACE FUNCTION auto_schedule_next_checkup() RETURNS TRIGGER AS $$
+DECLARE
+  v_mother_id BIGINT;
+BEGIN
+  IF NEW.next_schedule IS NULL THEN RETURN NEW; END IF;
+
+  SELECT mother_id INTO v_mother_id
+    FROM pregnancies WHERE pregnancy_id = NEW.pregnancy_id;
+  IF v_mother_id IS NULL THEN RETURN NEW; END IF;
+
+  -- Insert schedule (which will fire notify_checkup_scheduled trigger)
+  INSERT INTO checkup_schedule (mother_id, scheduled_date, notes)
+  VALUES (v_mother_id, NEW.next_schedule, 'Auto-scheduled from prenatal checkup')
+  ON CONFLICT DO NOTHING;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_auto_schedule_checkup ON prenatal_checkups;
+CREATE TRIGGER trg_auto_schedule_checkup
+  AFTER INSERT ON prenatal_checkups
+  FOR EACH ROW
+  EXECUTE FUNCTION auto_schedule_next_checkup();
+
+-- Trigger: Call Edge Function to send push notification
+-- Uses pg_net extension (available on Supabase free tier)
+CREATE OR REPLACE FUNCTION send_push_on_notification() RETURNS TRIGGER AS $$
+DECLARE
+  v_supabase_url TEXT := 'https://buvseyqcdacctlupznya.supabase.co';
+  v_anon_key TEXT := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw';
+BEGIN
+  PERFORM net.http_post(
+    url := v_supabase_url || '/functions/v1/send-push',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || v_anon_key
+    ),
+    body := jsonb_build_object(
+      'notification_id', NEW.notification_id,
+      'account_id', NEW.account_id,
+      'title', NEW.title,
+      'message', NEW.message,
+      'type', NEW.type
+    )
+  );
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Don't fail the insert if push fails
+  RAISE WARNING 'Push notification failed: %', SQLERRM;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_send_push_notification ON notifications;
+CREATE TRIGGER trg_send_push_notification
+  AFTER INSERT ON notifications
+  FOR EACH ROW
+  EXECUTE FUNCTION send_push_on_notification();
+
+-- =========================
+-- PG_CRON DAILY REMINDER JOBS
+-- Requires the pg_cron extension (enabled by default on Supabase).
+-- Run: CREATE EXTENSION IF NOT EXISTS pg_cron; in the SQL editor first.
+-- =========================
+
+-- Function: Send reminders for checkups scheduled in the next 3 days
+CREATE OR REPLACE FUNCTION send_upcoming_checkup_reminders() RETURNS void AS $$
+DECLARE
+  rec RECORD;
+BEGIN
+  FOR rec IN
+    SELECT cs.schedule_id,
+           cs.mother_id,
+           cs.scheduled_date,
+           m.account_id,
+           a.first_name
+      FROM checkup_schedule cs
+      JOIN mothers m ON m.mother_id = cs.mother_id
+      JOIN accounts a ON a.account_id = m.account_id
+     WHERE cs.status = 'scheduled'
+       AND cs.scheduled_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days'
+       -- Avoid duplicate reminders: check no reminder exists for this schedule in the last 24 hours
+       AND NOT EXISTS (
+         SELECT 1 FROM notifications n
+          WHERE n.account_id = m.account_id
+            AND n.type = 'checkup_reminder'
+            AND n.title = 'Checkup Reminder'
+            AND n.created_at > NOW() - INTERVAL '24 hours'
+            AND n.message LIKE '%' || TO_CHAR(cs.scheduled_date, 'Mon DD, YYYY') || '%'
+       )
+  LOOP
+    INSERT INTO notifications (account_id, title, message, type)
+    VALUES (
+      rec.account_id,
+      'Checkup Reminder',
+      'Hi ' || rec.first_name || ', your prenatal checkup is on ' ||
+        TO_CHAR(rec.scheduled_date, 'Mon DD, YYYY') || '. Please prepare and arrive on time.',
+      'checkup_reminder'
+    );
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Send reminders for overdue/upcoming vaccines based on child age
+CREATE OR REPLACE FUNCTION send_vaccine_due_reminders() RETURNS void AS $$
+DECLARE
+  rec RECORD;
+BEGIN
+  FOR rec IN
+    SELECT DISTINCT ON (c.child_id, v.vaccine_id)
+           c.child_id,
+           c.first_name || ' ' || c.last_name AS child_name,
+           c.mother_id,
+           m.account_id,
+           v.vaccine_id,
+           v.vaccine_name,
+           v.recommended_age_months,
+           bd.birthdate,
+           ((CURRENT_DATE - bd.birthdate) / 30.0) AS age_months
+      FROM children c
+      JOIN birth_details bd ON bd.child_id = c.child_id
+      JOIN mothers m ON m.mother_id = c.mother_id
+      JOIN vaccines v ON v.target_recipients = 'child'
+     WHERE bd.birthdate IS NOT NULL
+       -- Child has reached the recommended age (within 2-week grace window)
+       AND ((CURRENT_DATE - bd.birthdate) / 30.0) >= (v.recommended_age_months - 0.5)
+       -- Vaccine not yet given
+       AND NOT EXISTS (
+         SELECT 1 FROM immunization_record ir
+          WHERE ir.child_id = c.child_id AND ir.vaccine_id = v.vaccine_id
+       )
+       -- No reminder sent for this vaccine in the last 7 days
+       AND NOT EXISTS (
+         SELECT 1 FROM notifications n
+          WHERE n.account_id = m.account_id
+            AND n.type = 'vaccine_reminder'
+            AND n.created_at > NOW() - INTERVAL '7 days'
+            AND n.message LIKE '%' || v.vaccine_name || '%'
+            AND n.message LIKE '%' || c.first_name || '%'
+       )
+     ORDER BY c.child_id, v.vaccine_id, v.recommended_age_months ASC
+  LOOP
+    INSERT INTO notifications (account_id, title, message, type)
+    VALUES (
+      rec.account_id,
+      'Vaccine Due: ' || rec.child_name,
+      rec.vaccine_name || ' is due for ' || rec.child_name ||
+        ' (recommended at ' || rec.recommended_age_months || ' months, child is now ' ||
+        ROUND(rec.age_months::numeric, 1) || ' months). Please visit your BHC.',
+      'vaccine_reminder'
+    );
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Mark missed checkups (scheduled date has passed without completion)
+CREATE OR REPLACE FUNCTION mark_missed_checkups() RETURNS void AS $$
+BEGIN
+  UPDATE checkup_schedule
+     SET status = 'missed'
+   WHERE status = 'scheduled'
+     AND scheduled_date < CURRENT_DATE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Schedule the cron jobs (runs daily at 8:00 AM Philippine Time = 00:00 UTC)
+-- NOTE: Run these in the Supabase SQL editor after enabling pg_cron.
+-- SELECT cron.schedule('daily-checkup-reminders',  '0 0 * * *', 'SELECT send_upcoming_checkup_reminders()');
+-- SELECT cron.schedule('daily-vaccine-reminders',   '0 0 * * *', 'SELECT send_vaccine_due_reminders()');
+-- SELECT cron.schedule('daily-mark-missed-checkups','5 0 * * *', 'SELECT mark_missed_checkups()');
+
 -- =========================
 -- RLS FIX
 -- The app uses the anon key with custom authentication (not Supabase Auth).
@@ -596,6 +894,10 @@ ALTER TABLE ai_responses DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_edit_history DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancy_risk_assessments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pregnancy_risk_factors DISABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
+ALTER TABLE device_tokens DISABLE ROW LEVEL SECURITY;
+ALTER TABLE checkup_schedule DISABLE ROW LEVEL SECURITY;
+
 -- =========================
 -- WEIGHT GAIN EVALUATIONS
 -- Stores per-checkup maternal weight gain analysis results
@@ -733,3 +1035,44 @@ ALTER TABLE pregnancies DROP COLUMN IF EXISTS fetal_count;
 -- 3. Drop the new pregnancy_outcomes table (this automatically drops its index and RLS rule)
 DROP TABLE IF EXISTS pregnancy_outcomes CASCADE;
 */
+
+-- ============================================================
+-- DAY-BEFORE CHECKUP SMS REMINDER (pg_cron)
+-- Inserts a notification 1 day before a scheduled checkup.
+-- Future: can also call an SMS Edge Function (Semaphore).
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION send_day_before_checkup_sms() RETURNS void AS $$
+DECLARE
+  rec RECORD;
+BEGIN
+  FOR rec IN
+    SELECT cs.schedule_id, cs.mother_id, cs.scheduled_date,
+           m.account_id, a.first_name, a.phone_number
+      FROM checkup_schedule cs
+      JOIN mothers m ON m.mother_id = cs.mother_id
+      JOIN accounts a ON a.account_id = m.account_id
+     WHERE cs.status = 'scheduled'
+       AND cs.scheduled_date = CURRENT_DATE + INTERVAL '1 day'
+       AND NOT EXISTS (
+         SELECT 1 FROM notifications n
+          WHERE n.account_id = m.account_id
+            AND n.type = 'checkup_reminder'
+            AND n.title = 'Checkup Tomorrow'
+            AND n.created_at > NOW() - INTERVAL '24 hours'
+       )
+  LOOP
+    INSERT INTO notifications (account_id, title, message, type)
+    VALUES (
+      rec.account_id,
+      'Checkup Tomorrow',
+      'Hi ' || rec.first_name || ', just a reminder that you have a prenatal checkup scheduled tomorrow, ' ||
+        TO_CHAR(rec.scheduled_date, 'Mon DD, YYYY') || '. Please prepare and arrive on time. Take care, mama!',
+      'checkup_reminder'
+    );
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+-- SELECT cron.schedule('day-before-checkup-sms', '0 22 * * *', 'SELECT send_day_before_checkup_sms()');
+-- Runs at 6 AM PHT (22:00 UTC previous day)

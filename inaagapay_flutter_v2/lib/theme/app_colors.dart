@@ -3,6 +3,29 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
+  // ===== CONTEXT-AWARE HELPERS =====
+  // Use these in widgets where BuildContext is available.
+  static Color bgPrimaryOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkBgPrimary : bgPrimary;
+
+  static Color bgSecondaryOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkBgSecondary : bgSecondary;
+
+  static Color textPrimaryOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkTextPrimary : textPrimary;
+
+  static Color textSecondaryOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkTextSecondary : textSecondary;
+
+  static Color brandPrimaryOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkBrandPrimary : brandPrimary;
+
+  static Color cardColorOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkBgSecondary : Colors.white;
+
+  static Color borderOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? darkBorderPrimary : borderPrimary;
+
   // ===== LIGHT =====
   static const bgPrimary = Color(0xFFFAFAFA);
   static const bgSecondary = Color(0xFFFFF5F8);

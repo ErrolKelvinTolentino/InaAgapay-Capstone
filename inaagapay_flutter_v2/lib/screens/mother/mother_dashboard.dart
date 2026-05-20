@@ -42,8 +42,89 @@ class _MotherDashboardState extends State<MotherDashboard> {
   String _riskLevel = 'low';
   int _fetalCount = 1;
   DateTime? _lmpDate;
+  DateTime? _eddDate;
   List<String>? _riskFactors;
   List<String>? _suggestedActions;
+
+  static const Map<int, Map<String, String>> _babySizeByWeek = {
+    4: {'fruit': 'Poppy seed', 'image': 'pea.png'},
+    5: {'fruit': 'Sesame seed', 'image': 'pea.png'},
+    6: {'fruit': 'Pea', 'image': 'pea.png'},
+    7: {'fruit': 'Blueberry', 'image': 'blueberry.png'},
+    8: {'fruit': 'Raspberry', 'image': 'raspberry.png'},
+    9: {'fruit': 'Cherry', 'image': 'cherry.png'},
+    10: {'fruit': 'Strawberry', 'image': 'strawberry.png'},
+    11: {'fruit': 'Lime', 'image': 'lime.png'},
+    12: {'fruit': 'Plum', 'image': 'plum.png'},
+    13: {'fruit': 'Lemon', 'image': 'lemon.png'},
+    14: {'fruit': 'Peach', 'image': 'peach.png'},
+    15: {'fruit': 'Orange', 'image': 'orange.png'},
+    16: {'fruit': 'Avocado', 'image': 'avocado.png'},
+    17: {'fruit': 'Pear', 'image': 'pear.png'},
+    18: {'fruit': 'Pepper', 'image': 'pepper.png'},
+    19: {'fruit': 'Mango', 'image': 'mango.png'},
+    20: {'fruit': 'Banana', 'image': 'banana.png'},
+    21: {'fruit': 'Carrot', 'image': 'carrot.png'},
+    22: {'fruit': 'Corn', 'image': 'corn.png'},
+    23: {'fruit': 'Eggplant', 'image': 'eggplant.png'},
+    24: {'fruit': 'Cucumber', 'image': 'cucumber.png'},
+    25: {'fruit': 'Cauliflower', 'image': 'cauliflower.png'},
+    26: {'fruit': 'Lettuce', 'image': 'lettuce.png'},
+    27: {'fruit': 'Cabbage', 'image': 'cabbage.png'},
+    28: {'fruit': 'Coconut', 'image': 'coconut.png'},
+    29: {'fruit': 'Kabocha', 'image': 'kabocha.png'},
+    30: {'fruit': 'Cabbage', 'image': 'cabbage.png'},
+    31: {'fruit': 'Coconut', 'image': 'coconut.png'},
+    32: {'fruit': 'Squash', 'image': 'kabocha.png'},
+    33: {'fruit': 'Pineapple', 'image': 'pineapple.png'},
+    34: {'fruit': 'Melon', 'image': 'melon.png'},
+    35: {'fruit': 'Honeydew melon', 'image': 'melon.png'},
+    36: {'fruit': 'Pomelo', 'image': 'pomelo.png'},
+    37: {'fruit': 'Romaine lettuce', 'image': 'lettuce.png'},
+    38: {'fruit': 'Pumpkin', 'image': 'pumpkin.png'},
+    39: {'fruit': 'Watermelon', 'image': 'watermelon.png'},
+    40: {'fruit': 'Watermelon', 'image': 'watermelon.png'},
+  };
+
+  static const Map<int, String> _weeklyTips = {
+    4: 'Start taking folic acid if you haven\'t already — it helps your baby\'s brain and spine develop.',
+    5: 'Morning sickness may start. Eat small, frequent meals and keep crackers by your bed.',
+    6: 'Stay hydrated, mama! Aim for at least 8 glasses of water a day.',
+    7: 'Your baby\'s heart is beating now. Rest when you need to — your body is working hard.',
+    8: 'Avoid raw or undercooked food. Your immune system is more sensitive during pregnancy.',
+    9: 'Start a pregnancy journal! Writing down how you feel can help you process this beautiful journey.',
+    10: 'Book your first prenatal checkup if you haven\'t yet. Early care means a healthier pregnancy.',
+    11: 'Gentle walks can ease nausea and boost your mood. Even 15 minutes helps.',
+    12: 'You\'re almost done with the first trimester! The risk of miscarriage drops significantly after this week.',
+    13: 'Your energy may start returning soon. Enjoy the second trimester — many mamas feel their best!',
+    14: 'Your baby can now make facial expressions. Talk to your little one — they can hear you.',
+    15: 'Eat iron-rich foods like leafy greens and lean meat to support your growing blood supply.',
+    16: 'You might start feeling tiny flutters — those are your baby\'s first movements!',
+    17: 'Stretch gently before bed to help with leg cramps. Magnesium-rich foods like bananas can help too.',
+    18: 'Your baby is the size of a pepper now. Consider starting a baby registry!',
+    19: 'Sleep on your left side when you can — it improves blood flow to your baby.',
+    20: 'Halfway there! Celebrate this milestone. You\'re doing amazing, mama.',
+    21: 'Your baby can now taste what you eat through the amniotic fluid. Eat a variety of healthy foods!',
+    22: 'Practice deep breathing exercises. They\'ll help you during labor and reduce stress now.',
+    23: 'Your baby can hear sounds outside the womb. Play music or read stories to them.',
+    24: 'Stay active with low-impact exercises like swimming or prenatal yoga.',
+    25: 'Start thinking about your birth plan. Talk to your midwife about your preferences.',
+    26: 'Your baby\'s eyes are opening! Keep up with your prenatal vitamins.',
+    27: 'Third trimester is coming! Make sure you\'re getting enough calcium for baby\'s bones.',
+    28: 'Welcome to the third trimester! Your baby is practicing breathing movements.',
+    29: 'Pack a hospital bag soon — it\'s never too early to be prepared.',
+    30: 'Kegel exercises can strengthen your pelvic floor for labor. Try doing them daily.',
+    31: 'Rest with your feet elevated if you notice swelling. It\'s normal but tell your midwife if it\'s sudden.',
+    32: 'Your baby is gaining weight fast now. Eat protein-rich meals to support their growth.',
+    33: 'Practice relaxation techniques. A calm mama helps baby feel safe.',
+    34: 'Count your baby\'s kicks — you should feel at least 10 movements in 2 hours.',
+    35: 'Prepare your home for the baby. Nesting instincts are natural and healthy!',
+    36: 'Your baby is almost full-term. Keep attending your prenatal checkups.',
+    37: 'Baby is head-down by now in most cases. Talk to your midwife about your delivery plan.',
+    38: 'Stay close to home and keep your phone charged — baby could come soon!',
+    39: 'You\'re almost there, mama! Try to rest as much as possible. Your body knows what to do.',
+    40: 'Your due date is here! Remember — babies come on their own time. Trust the process, mama.',
+  };
 
   int _parseInt(dynamic value, [int fallback = 0]) {
     if (value == null) return fallback;
@@ -82,6 +163,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
     _riskLevel = 'low';
     _fetalCount = 1;
     _lmpDate = null;
+    _eddDate = null;
     _riskFactors = null;
     _suggestedActions = null;
   }
@@ -187,6 +269,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
             edd = lmp.add(const Duration(days: 280));
           }
 
+          _eddDate = edd;
           _dueDate = DateFormat('MMMM d, yyyy').format(edd);
 
           final int daysLeft = edd.difference(now).inDays;
@@ -380,9 +463,9 @@ class _MotherDashboardState extends State<MotherDashboard> {
 
             return Container(
               height: MediaQuery.of(context).size.height * 0.85,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              decoration: BoxDecoration(
+                color: AppColors.cardColorOf(context),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
                 children: [
@@ -840,13 +923,324 @@ class _MotherDashboardState extends State<MotherDashboard> {
     }
   }
 
+  Widget _buildBabySizeCard() {
+    final sizeData = _babySizeByWeek[_week];
+    final fruitName = sizeData?['fruit'] ?? '';
+    final imageName = sizeData?['image'] ?? '';
+    final hasMapping = sizeData != null;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardColorOf(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.15),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPrimary.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: hasMapping
+                ? ClipOval(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Image.asset(
+                        'assets/images/$imageName',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.child_care,
+                          size: 40,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ),
+                    ),
+                  )
+                : const Icon(
+                    Icons.child_care,
+                    size: 40,
+                    color: AppColors.brandPrimary,
+                  ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _t('Baby Size This Week', 'Sukat ng Sanggol Ngayong Linggo'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandPrimary.withValues(alpha: 0.7),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  hasMapping
+                      ? '${_t('Your baby is about the size of a', 'Ang iyong sanggol ay kasinlaki ng isang')} $fruitName!'
+                      : _t('Your baby is growing!',
+                          'Lumalaki ang iyong sanggol!'),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_t('Week', 'Linggo')} $_week',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountdownCard() {
+    final now = DateTime.now();
+    final edd = _eddDate!;
+    final totalDaysLeft = edd.difference(now).inDays;
+    final daysLeft = totalDaysLeft < 0 ? 0 : totalDaysLeft;
+    final weeksRemaining = daysLeft ~/ 7;
+    final extraDays = daysLeft % 7;
+    final progress = (_week / 40).clamp(0.0, 1.0);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardColorOf(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.15),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPrimary.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.timer_outlined,
+                  color: AppColors.brandPrimary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                _t('Pregnancy Countdown', 'Countdown ng Pagbubuntis'),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.brandPrimary.withValues(alpha: 0.7),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              daysLeft > 0
+                  ? '$daysLeft ${_t('days to go!', 'araw na lang!')}'
+                  : _t('Any day now!', 'Anumang araw na!'),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              daysLeft > 0
+                  ? '$weeksRemaining ${_t('weeks', 'linggo')} ${_t('and', 'at')} $extraDays ${_t('days', 'araw')}'
+                  : _t('Your due date has arrived!',
+                      'Dumating na ang iyong takdang araw!'),
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 10,
+              backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.brandPrimary),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_t('Week', 'Linggo')} $_week ${_t('of', 'sa')} 40',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              Text(
+                '${(progress * 100).toStringAsFixed(0)}%',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.brandPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.event,
+                  size: 16,
+                  color: AppColors.brandPrimary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_t('EDD', 'Takdang Araw')}: $_dueDate',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeeklyTipCard() {
+    final tip = _weeklyTips[_week];
+    if (tip == null) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.brandPrimary.withValues(alpha: 0.08),
+            AppColors.brandAccent.withValues(alpha: 0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.lightbulb_outline,
+                color: AppColors.brandPrimary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _t('Tip of the Week', 'Tip ng Linggo'),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.brandPrimary,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_t('Week', 'Linggo')} $_week',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            tip,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textPrimary,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<AppLanguage>(
       valueListenable: LanguageService.selectedLanguage,
       builder: (context, _, __) {
         return Scaffold(
-          backgroundColor: AppColors.bgPrimary,
+          backgroundColor: AppColors.bgPrimaryOf(context),
           body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(
@@ -897,6 +1291,24 @@ class _MotherDashboardState extends State<MotherDashboard> {
                           showWeekBadge: _hasPregnancy && _week > 0,
                           showHeartRow: _hasPregnancy && _week > 0,
                         ),
+
+                        // Baby Size Comparison Card
+                        if (_hasPregnancy && _week > 0) ...[
+                          const SizedBox(height: 16),
+                          _buildBabySizeCard(),
+                        ],
+
+                        // Tip of the Week
+                        if (_hasPregnancy && _week > 0) ...[
+                          const SizedBox(height: 16),
+                          _buildWeeklyTipCard(),
+                        ],
+
+                        // Pregnancy Countdown Card
+                        if (_hasPregnancy && _week > 0 && _eddDate != null) ...[
+                          const SizedBox(height: 16),
+                          _buildCountdownCard(),
+                        ],
 
                         const SizedBox(height: 20),
 

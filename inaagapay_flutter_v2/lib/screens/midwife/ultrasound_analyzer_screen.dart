@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -232,20 +233,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   bool _validateStep2() {
-    if (_healthWorkerNameController.text.trim().isEmpty) {
-      _showMessage('Please enter the health worker\'s full name.',
-          type: AppSnackType.warning);
-      return false;
-    }
+    // Health worker metadata is optional (Task 3.1).
+    // Only validate "Other (specify)" consistency when a profession is chosen.
     final selected = _effectiveSelectedProfession();
-    if (selected == null || selected.trim().isEmpty) {
-      _showMessage('Please select the health worker\'s profession.',
-          type: AppSnackType.warning);
-      return false;
-    }
     if (selected == _otherProfessionOption &&
         _healthWorkerProfessionController.text.trim().isEmpty) {
-      _showMessage('Please specify the profession.',
+      _showMessage('You selected "Other" \u2014 please specify the profession or clear the selection.',
           type: AppSnackType.warning);
       return false;
     }
@@ -393,6 +386,40 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     );
   }
 
+  bool get _hasEnteredData =>
+      _selectedImages.isNotEmpty ||
+      _notesController.text.trim().isNotEmpty ||
+      _healthWorkerNameController.text.trim().isNotEmpty;
+
+  Future<void> _confirmDiscardAndPop() async {
+    if (!_hasEnteredData) {
+      Navigator.pop(context);
+      return;
+    }
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text(
+            'You have unsaved ultrasound data. Are you sure you want to go back?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   void _nextStep() {
     if (_step == 0 && !_validateStep1()) return;
     if (_step == 1 && !_validateStep2()) return;
@@ -408,7 +435,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   Future<void> _analyzeImages() async {
-    if (!_validateStep1() || !_validateStep2() || !_validateStep3()) return;
+    if (!_validateStep1() || !_validateStep3()) return;
 
     _setLoadingState(
       'Checking image quality',
@@ -480,6 +507,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         } else {
           _healthSummaryController.text = "No analysis available";
         }
+
+        // Populate extracted admin fields if available
+        if (result.extractedProfessional != null && result.extractedProfessional!.isNotEmpty && _healthWorkerNameController.text.trim().isEmpty) {
+          _healthWorkerNameController.text = result.extractedProfessional!;
+        }
+        if (result.extractedClinicLocation != null && result.extractedClinicLocation!.isNotEmpty && _healthWorkerInstitutionController.text.trim().isEmpty) {
+          _healthWorkerInstitutionController.text = result.extractedClinicLocation!;
+        }
       });
 
       await _showInsightsModal();
@@ -497,8 +532,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   Future<void> _saveToDatabase() async {
-    if (!_validateStep1() || !_validateStep2() || !_validateStep3()) return;
+    // Only images + AI analysis result are strictly required (Task 3.4).
+    if (!_validateStep1() || !_validateStep3()) return;
     final aiGenerated = _combinedResponse != null;
+    if (!aiGenerated) {
+      _showMessage('Please run AI analysis before saving.',
+          type: AppSnackType.warning);
+      return;
+    }
     if (aiGenerated && !_analysisApproved) {
       _showMessage('Please approve the AI analysis before saving.',
           type: AppSnackType.warning);
@@ -891,7 +932,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     sections[currentSection] = [];
 
     final headingPattern = RegExp(
-      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|OVERALL HEALTH STATUS|OVERALL ASSESSMENT|GESTATIONAL AGE ASSESSMENT|DETAILED MEASUREMENTS ASSESSMENT|ANATOMICAL ASSESSMENT|ABNORMAL FINDINGS|RECOMMENDED NEXT ACTIONS|KEY OBSERVATIONS)\s*:?\s*(.*)$',
+      r'^(?:\d+\.\s*)?(RELEVANCE CHECK|RELEVANCE REASON|OVERALL HEALTH STATUS|OVERALL ASSESSMENT|GESTATIONAL AGE ASSESSMENT|DETAILED MEASUREMENTS ASSESSMENT|ANATOMICAL ASSESSMENT|ABNORMAL FINDINGS|RECOMMENDED NEXT ACTIONS|RECOMMENDATIONS|KEY OBSERVATIONS)\s*:?\s*(.*)$',
       caseSensitive: false,
     );
 
@@ -1158,6 +1199,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       'ANATOMICAL ASSESSMENT',
       'ABNORMAL FINDINGS',
       'RECOMMENDED NEXT ACTIONS',
+      'RECOMMENDATIONS',
       'KEY OBSERVATIONS',
       'SUMMARY',
     ];
@@ -1183,6 +1225,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       final isMeasurements = entry.key == 'DETAILED MEASUREMENTS ASSESSMENT';
       final isAnatomical = entry.key == 'ANATOMICAL ASSESSMENT';
       final isAbnormal = entry.key == 'ABNORMAL FINDINGS';
+      final isRecommendation = entry.key.contains('RECOMMENDED') || entry.key.contains('RECOMMENDATION');
 
       Color accentColor;
       IconData icon;
@@ -1200,7 +1243,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       } else if (isAbnormal) {
         accentColor = AppColors.error;
         icon = Icons.warning_amber_rounded;
-      } else if (entry.key.contains('RECOMMENDED')) {
+      } else if (isRecommendation) {
         accentColor = Colors.blue;
         icon = Icons.lightbulb_outline;
       } else {
@@ -1213,9 +1256,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: 0.08),
+            color: accentColor.withValues(alpha: isRecommendation ? 0.10 : 0.08),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+            border: Border.all(
+              color: accentColor.withValues(alpha: isRecommendation ? 0.45 : 0.3),
+              width: isRecommendation ? 1.5 : 1.0,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1288,6 +1334,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         return 'Abnormal Findings / Concerns';
       case 'RECOMMENDED NEXT ACTIONS':
         return 'Recommended Actions';
+      case 'RECOMMENDATIONS':
+        return 'Recommendations';
       default:
         return title
             .split(' ')
@@ -1783,7 +1831,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         _stepHeader(
           title: 'Step 2: Health Worker Information',
           subtitle:
-              'Enter the responsible health worker details before analysis.',
+              'Optional \u2014 AI analysis is the primary output.',
         ),
         const SizedBox(height: 10),
         Container(
@@ -1808,14 +1856,15 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Required: Full name and profession',
+                'Optional \u2014 AI analysis is the primary output',
                 style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _healthWorkerNameController,
                 decoration: const InputDecoration(
-                  labelText: 'Full Name *',
+                  labelText: 'Full Name',
+                  hintText: 'Optional',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -1824,6 +1873,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 controller: _healthWorkerInstitutionController,
                 decoration: const InputDecoration(
                   labelText: 'Institution/Clinic',
+                  hintText: 'Optional',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -1844,7 +1894,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   return DropdownButtonFormField<String>(
                     initialValue: dropdownValue,
                     decoration: const InputDecoration(
-                      labelText: 'Profession *',
+                      labelText: 'Profession',
+                      hintText: 'Optional',
                       border: OutlineInputBorder(),
                     ),
                     items: dropdownItems
@@ -1869,7 +1920,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 TextField(
                   controller: _healthWorkerProfessionController,
                   decoration: const InputDecoration(
-                    labelText: 'Specify Profession *',
+                    labelText: 'Specify Profession',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -1879,6 +1930,45 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         ),
       ],
     );
+  }
+
+  String _buildReportText() {
+    final buffer = StringBuffer();
+    buffer.writeln('=== ULTRASOUND ANALYSIS REPORT ===');
+    buffer.writeln('Date: ${_dateController.text}');
+    buffer.writeln();
+    if (_healthWorkerNameController.text.trim().isNotEmpty) {
+      buffer.writeln('Health Worker: ${_healthWorkerNameController.text.trim()}');
+    }
+    if (_healthWorkerInstitutionController.text.trim().isNotEmpty) {
+      buffer.writeln('Institution: ${_healthWorkerInstitutionController.text.trim()}');
+    }
+    final profession = _effectiveSelectedProfession();
+    if (profession != null && profession.isNotEmpty && profession != _otherProfessionOption) {
+      buffer.writeln('Profession: $profession');
+    } else if (_healthWorkerProfessionController.text.trim().isNotEmpty) {
+      buffer.writeln('Profession: ${_healthWorkerProfessionController.text.trim()}');
+    }
+    buffer.writeln();
+    buffer.writeln('--- AI ANALYSIS ---');
+    buffer.writeln(_healthSummaryController.text.trim());
+    buffer.writeln();
+    if (_combinedResponse?.recommendations != null &&
+        _combinedResponse!.recommendations!.isNotEmpty) {
+      buffer.writeln('--- RECOMMENDATIONS ---');
+      for (final rec in _combinedResponse!.recommendations!) {
+        buffer.writeln('- $rec');
+      }
+      buffer.writeln();
+    }
+    buffer.writeln('Generated by InaAgapay AI Analyzer');
+    return buffer.toString();
+  }
+
+  void _copyReportToClipboard() {
+    final report = _buildReportText();
+    Clipboard.setData(ClipboardData(text: report));
+    _showMessage('Report copied to clipboard!', type: AppSnackType.success);
   }
 
   Widget _buildStep3() {
@@ -1970,6 +2060,15 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                                 color: AppColors.success, size: 18),
                           ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _copyReportToClipboard,
+                        icon: const Icon(Icons.copy, size: 18),
+                        label: const Text('Copy Report to Clipboard'),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Container(
@@ -2182,7 +2281,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     child: IconButton(
                       icon: const Icon(Icons.arrow_back,
                           color: AppColors.textPrimary),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _confirmDiscardAndPop,
                       constraints:
                           const BoxConstraints(minWidth: 40, minHeight: 40),
                       padding: EdgeInsets.zero,
@@ -2279,8 +2378,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                               _step == 0
                                   ? 'Complete ultrasound details first, then continue.'
                                   : _step == 1
-                                      ? 'Enter health worker details before proceeding.'
-                                      : 'Attach images, optionally run AI analysis, and approve AI only if you generated one before saving.',
+                                      ? 'Health worker details are optional. You may skip ahead.'
+                                      : 'Attach images, run AI analysis, and approve before saving.',
                               style: const TextStyle(
                                   fontSize: 12,
                                   color: AppColors.textSecondary,
