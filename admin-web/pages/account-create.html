@@ -70,6 +70,15 @@
           </li>
         </ul>
         <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Patient Management</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="patient-records.html"
+              ><i class="fa-solid fa-folder-open"></i> Patient Records</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
         <span class="sidebar-section-label">System</span>
         <ul class="sidebar-nav">
           <li>
@@ -256,16 +265,16 @@
                   </div>
                 </div>
 
-                <!-- BHC — shown for midwife only -->
+                <!-- BHC — shown for midwife only, REQUIRED -->
                 <div class="form-group" id="bhc-group">
                   <label class="form-label" for="bhc_id"
                     >Assigned BHC <span class="req">*</span></label
                   >
-                  <select class="form-select" id="bhc_id">
+                  <select class="form-select" id="bhc_id" required>
                     <option value="">— Select Barangay Health Center —</option>
                   </select>
                   <p class="form-hint">
-                    Select the BHC this midwife will be assigned to.
+                    <strong>Important:</strong> Midwives can only be assigned to ONE Barangay Health Center. This assignment cannot be changed here - use the Midwife Assignment page to reassign.
                   </p>
                 </div>
 
@@ -463,7 +472,8 @@
                 <strong style="color: var(--pink-dark)">Note:</strong> New
                 accounts are automatically set to <strong>active</strong> and
                 <strong>verified</strong>. Midwife accounts require a BHC
-                assignment which can be updated later in Midwife Assignment.
+                assignment (one BHC only) which can be updated later in
+                <strong>Midwife Assignment</strong>.
               </div>
             </div>
           </div>
@@ -622,7 +632,7 @@
           const c = document.getElementById("toast-container");
           const t = document.createElement("div");
           t.className = `toast ${type}`;
-          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span>`;
+          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span><button class="toast-close" onclick="this.closest('.toast').remove()"><i class="fa-solid fa-xmark"></i></button>`;
           c.appendChild(t);
           setTimeout(() => {
             t.style.animation = "fadeOut .3s ease forwards";
@@ -656,6 +666,7 @@
             .select("bhc_id, bhc_name")
             .order("bhc_name");
           const sel = document.getElementById("bhc_id");
+          sel.innerHTML = '<option value="">— Select Barangay Health Center —</option>';
           (data || []).forEach((b) => {
             const o = document.createElement("option");
             o.value = b.bhc_id;
@@ -669,7 +680,13 @@
         const bhcGroup = document.getElementById("bhc-group");
         document.querySelectorAll('input[name="account_type"]').forEach((r) => {
           r.addEventListener("change", () => {
-            bhcGroup.style.display = r.value === "midwife" ? "" : "none";
+            if (r.value === "midwife") {
+              bhcGroup.style.display = "";
+              document.getElementById("bhc_id").required = true;
+            } else {
+              bhcGroup.style.display = "none";
+              document.getElementById("bhc_id").required = false;
+            }
             updatePreviewBadge(r.value);
           });
         });
@@ -804,7 +821,7 @@
             }
             if (type === "midwife" && !bhcId) {
               return showAlert(
-                "Please select a Barangay Health Center for the midwife.",
+                "Please select a Barangay Health Center for the midwife. Midwives can only be assigned to ONE BHC.",
               );
             }
 
@@ -846,13 +863,30 @@
                 .single();
               if (acctErr) throw acctErr;
 
-              /* If midwife, insert into midwives */
+              /* If midwife, insert into midwives (ensures ONE BHC assignment) */
               if (type === "midwife") {
-                const { error: mErr } = await db.from("midwives").insert({
-                  account_id: newAcct.account_id,
-                  assigned_bhc_id: parseInt(bhcId),
-                });
-                if (mErr) throw mErr;
+                // Check if account already has a midwife record (shouldn't happen for new account)
+                const { data: existingMidwife } = await db
+                  .from("midwives")
+                  .select("midwife_id")
+                  .eq("account_id", newAcct.account_id)
+                  .limit(1);
+                
+                if (existingMidwife && existingMidwife.length > 0) {
+                  // Update existing assignment
+                  const { error: mErr } = await db
+                    .from("midwives")
+                    .update({ assigned_bhc_id: parseInt(bhcId) })
+                    .eq("account_id", newAcct.account_id);
+                  if (mErr) throw mErr;
+                } else {
+                  // Create new midwife assignment (ONE BHC only)
+                  const { error: mErr } = await db.from("midwives").insert({
+                    account_id: newAcct.account_id,
+                    assigned_bhc_id: parseInt(bhcId),
+                  });
+                  if (mErr) throw mErr;
+                }
               }
 
               /* Audit log */
@@ -860,8 +894,8 @@
                 account_id: session.account_id,
                 action: "create_account",
                 table_name: "accounts",
-                description: `Created ${type} account for ${first} ${last} (${email})`,
-                new_data: { email, account_type: type },
+                description: `Created ${type} account for ${first} ${last} (${email})${type === "midwife" ? " assigned to BHC ID: " + bhcId : ""}`,
+                new_data: { email, account_type: type, bhc_id: type === "midwife" ? bhcId : null },
               });
 
               showToast(

@@ -1,0 +1,1563 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Patient Records — InaAgapay Admin</title>
+    <link rel="icon" type="image/png" href="../images/logo_icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../styles/main.css" />
+  </head>
+  <body>
+    <div class="app-layout">
+      <!-- ── Header ── -->
+      <header class="app-header">
+        <div class="header-brand">
+          <button class="header-sidebar-toggle" id="sidebar-toggle">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <img
+            src="../images/logo_icon.png"
+            alt="InaAgapay"
+            class="header-logo"
+          />
+          <img
+            src="../images/logo_with_label.png"
+            alt="InaAgapay"
+            class="header-logo-label"
+          />
+        </div>
+        <div class="header-right">
+          <span class="header-badge">Admin Portal</span>
+          <div class="header-user">
+            <div class="header-avatar" id="header-avatar">A</div>
+            <span class="header-user-name" id="header-user-name">Admin</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- ── Sidebar ── -->
+      <aside class="app-sidebar">
+        <span class="sidebar-section-label">Main Menu</span>
+        <ul class="sidebar-nav">
+          <li><a href="dashboard.html"><i class="fa-solid fa-gauge-high"></i> Dashboard</a></li>
+          <li><a href="accounts.html"><i class="fa-solid fa-users"></i> Account Management</a></li>
+          <li><a href="account-create.html"><i class="fa-solid fa-user-plus"></i> Account Creation</a></li>
+          <li><a href="midwife-assignment.html"><i class="fa-solid fa-user-nurse"></i> Midwife Assignment</a></li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Patient Management</span>
+        <ul class="sidebar-nav">
+          <li><a href="patient-records.html" class="active"><i class="fa-solid fa-folder-open"></i> Patient Records</a></li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">System</span>
+        <ul class="sidebar-nav">
+          <li><a href="audit-trail.html"><i class="fa-solid fa-clipboard-list"></i> Audit Trail</a></li>
+          <li><a href="backup.html"><i class="fa-solid fa-database"></i> Backup &amp; Restore</a></li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-footer-nav">
+          <button class="sidebar-logout" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+        </div>
+      </aside>
+
+      <!-- ── Main ── -->
+      <main class="app-main">
+        <div class="page-header">
+          <div class="page-title-block">
+            <h1 class="page-title">Patient Records</h1>
+            <p class="page-subtitle">View and manage all patient medical records</p>
+          </div>
+          <div class="page-actions">
+            <div class="stats-chip" id="total-badge">
+              <i class="fa-solid fa-chart-simple"></i>
+              <span>— records</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Enhanced Tabs -->
+        <div class="tabs-container">
+          <div class="tabs-wrapper">
+            <button class="tab-btn-modern active" data-tab="mothers">
+              <i class="fa-solid fa-female"></i>
+              <span>Mothers</span>
+              <span class="tab-count" id="mothers-count">0</span>
+            </button>
+            <button class="tab-btn-modern" data-tab="pregnancies">
+              <i class="fa-solid fa-person-pregnant"></i>
+              <span>Pregnancies</span>
+              <span class="tab-count" id="pregnancies-count">0</span>
+            </button>
+            <button class="tab-btn-modern" data-tab="checkups">
+              <i class="fa-solid fa-stethoscope"></i>
+              <span>Checkups</span>
+              <span class="tab-count" id="checkups-count">0</span>
+            </button>
+            <button class="tab-btn-modern" data-tab="ultrasounds">
+              <i class="fa-solid fa-waveform"></i>
+              <span>Ultrasounds</span>
+              <span class="tab-count" id="ultrasounds-count">0</span>
+            </button>
+            <button class="tab-btn-modern" data-tab="labtests">
+              <i class="fa-solid fa-flask"></i>
+              <span>Lab Tests</span>
+              <span class="tab-count" id="labtests-count">0</span>
+            </button>
+            <button class="tab-btn-modern" data-tab="children">
+              <i class="fa-solid fa-baby"></i>
+              <span>Children</span>
+              <span class="tab-count" id="children-count">0</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Mothers Tab -->
+        <div id="mothers-tab" class="tab-content-modern active">
+          <div class="card-glass">
+            <div class="toolbar-modern">
+              <div class="search-box-modern">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" id="search-mothers" placeholder="Search by name, email, or barangay..." />
+              </div>
+              <div class="filter-group-modern">
+                <select class="filter-select" id="filter-bhc-mothers">
+                  <option value="">All BHCs</option>
+                </select>
+              </div>
+              <button class="btn-refresh" onclick="location.reload()">
+                <i class="fa-solid fa-rotate-right"></i>
+              </button>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table-modern">
+                <thead>
+                  <tr>
+                    <th>Mother</th>
+                    <th>Email</th>
+                    <th>Barangay</th>
+                    <th>Assigned BHC</th>
+                    <th>Birthdate</th>
+                    <th>Status</th>
+                    <th style="text-align: center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="mothers-tbody">
+                  <tr><td colspan="7" class="loading-cell"><div class="spinner-modern"></div> Loading mothers...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pregnancies Tab -->
+        <div id="pregnancies-tab" class="tab-content-modern">
+          <div class="card-glass">
+            <div class="toolbar-modern">
+              <div class="search-box-modern">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" id="search-pregnancies" placeholder="Search by mother's name..." />
+              </div>
+              <div class="filter-group-modern">
+                <select class="filter-select" id="filter-risk">
+                  <option value="">All Risk Levels</option>
+                  <option value="low">🟢 Low Risk</option>
+                  <option value="medium">🟡 Medium Risk</option>
+                  <option value="high">🔴 High Risk</option>
+                </select>
+                <select class="filter-select" id="filter-pregnancy-status">
+                  <option value="">All Status</option>
+                  <option value="ongoing">🔄 Ongoing</option>
+                  <option value="ended">✅ Ended</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table-modern">
+                <thead>
+                  <tr>
+                    <th>Mother</th>
+                    <th>LMP</th>
+                    <th>EDD</th>
+                    <th>Risk Level</th>
+                    <th>Fetal Count</th>
+                    <th>Status</th>
+                    <th style="text-align: center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="pregnancies-tbody">
+                  <tr><td colspan="7" class="loading-cell"><div class="spinner-modern"></div> Loading pregnancies...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prenatal Checkups Tab -->
+        <div id="checkups-tab" class="tab-content-modern">
+          <div class="card-glass">
+            <div class="toolbar-modern">
+              <div class="search-box-modern">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" id="search-checkups" placeholder="Search by mother's name..." />
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table-modern">
+                <thead>
+                  <tr>
+                    <th>Mother</th>
+                    <th>Checkup Date</th>
+                    <th>Age of Gestation</th>
+                    <th>Weight (kg)</th>
+                    <th>Blood Pressure</th>
+                    <th>Fetal Heart Beat</th>
+                    <th>Edema</th>
+                    <th>Next Schedule</th>
+                  </tr>
+                </thead>
+                <tbody id="checkups-tbody">
+                  <tr><td colspan="8" class="loading-cell"><div class="spinner-modern"></div> Loading checkups...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ultrasounds Tab -->
+        <div id="ultrasounds-tab" class="tab-content-modern">
+          <div class="card-glass">
+            <div class="toolbar-modern">
+              <div class="search-box-modern">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" id="search-ultrasounds" placeholder="Search by mother's name..." />
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table-modern">
+                <thead>
+                  <tr>
+                    <th>Mother</th>
+                    <th>Ultrasound Date</th>
+                    <th>Location</th>
+                    <th>Health Worker</th>
+                    <th>Remarks</th>
+                    <th style="text-align: center">Image</th>
+                  </tr>
+                </thead>
+                <tbody id="ultrasounds-tbody">
+                  <tr><td colspan="6" class="loading-cell"><div class="spinner-modern"></div> Loading ultrasounds...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lab Tests Tab -->
+        <div id="labtests-tab" class="tab-content-modern">
+          <div class="card-glass">
+            <div class="toolbar-modern">
+              <div class="search-box-modern">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" id="search-labtests" placeholder="Search by mother's name..." />
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table-modern">
+                <thead>
+                  <tr>
+                    <th>Mother</th>
+                    <th>Test Type</th>
+                    <th>Test Date</th>
+                    <th>Location</th>
+                    <th>Health Worker</th>
+                    <th>Remarks</th>
+                    <th style="text-align: center">Result</th>
+                  </tr>
+                </thead>
+                <tbody id="labtests-tbody">
+                  <tr><td colspan="7" class="loading-cell"><div class="spinner-modern"></div> Loading lab tests...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Children Tab -->
+        <div id="children-tab" class="tab-content-modern">
+          <div class="card-glass">
+            <div class="toolbar-modern">
+              <div class="search-box-modern">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" id="search-children" placeholder="Search by name..." />
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table-modern">
+                <thead>
+                  <tr>
+                    <th>Child Name</th>
+                    <th>Mother</th>
+                    <th>Sex</th>
+                    <th>Birthdate</th>
+                    <th>Birth Weight (kg)</th>
+                    <th>Birth Place</th>
+                    <th style="text-align: center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="children-tbody">
+                  <tr><td colspan="7" class="loading-cell"><div class="spinner-modern"></div> Loading children...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer class="app-footer">
+        <span>&copy; 2026 InaAgapay — Maternal &amp; Child Health Information System</span>
+        <span style="color: var(--pink-light)">|</span>
+        <span>Admin Portal v2.0</span>
+      </footer>
+    </div>
+
+    <!-- Enhanced Modals -->
+    <div class="modal-overlay-modern" id="detail-modal">
+      <div class="modal-modern">
+        <div class="modal-header-modern">
+          <h2 class="modal-title-modern" id="detail-title">
+            <i class="fa-solid fa-file-medical"></i> Record Details
+          </h2>
+          <button class="modal-close-modern" id="detail-modal-close">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="modal-body-modern" id="detail-body"></div>
+        <div class="modal-footer-modern">
+          <button class="btn-secondary-modern" id="detail-close-btn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay-modern" id="image-modal">
+      <div class="modal-modern image-modal">
+        <div class="modal-header-modern">
+          <h2 class="modal-title-modern">
+            <i class="fa-solid fa-image"></i> Medical Image
+          </h2>
+          <button class="modal-close-modern" id="image-modal-close">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="modal-body-modern image-viewer">
+          <img id="modal-image" src="" alt="Medical Image" />
+        </div>
+        <div class="modal-footer-modern">
+          <button class="btn-secondary-modern" id="image-close-btn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay-modern" id="image-options-modal">
+      <div class="modal-modern image-options">
+        <div class="modal-header-modern">
+          <h2 class="modal-title-modern">
+            <i class="fa-solid fa-camera"></i> Image Options
+          </h2>
+          <button class="modal-close-modern" id="image-options-close">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="modal-body-modern">
+          <img id="options-modal-image" src="" alt="Preview" />
+          <div class="image-actions">
+            <button class="btn-primary-modern" id="view-full-image-btn">
+              <i class="fa-solid fa-expand"></i> View Full Size
+            </button>
+            <button class="btn-secondary-modern" id="download-image-btn">
+              <i class="fa-solid fa-download"></i> Download
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer-modern">
+          <button class="btn-secondary-modern" id="image-options-close-btn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <style>
+      /* Modern UI Styles */
+      .tabs-container {
+        background: white;
+        border-radius: 16px;
+        padding: 8px;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        border: 1px solid var(--gray-200);
+      }
+
+      .tabs-wrapper {
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+        padding: 4px;
+      }
+
+      .tab-btn-modern {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 20px;
+        background: transparent;
+        border: none;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--gray-600);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
+
+      .tab-btn-modern i {
+        font-size: 16px;
+      }
+
+      .tab-btn-modern:hover {
+        background: var(--pink-50);
+        color: var(--pink);
+      }
+
+      .tab-btn-modern.active {
+        background: linear-gradient(135deg, var(--pink) 0%, var(--pink-dark) 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(233, 30, 140, 0.3);
+      }
+
+      .tab-count {
+        background: rgba(0, 0, 0, 0.1);
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .tab-btn-modern.active .tab-count {
+        background: rgba(255, 255, 255, 0.25);
+      }
+
+      .tab-content-modern {
+        display: none;
+        animation: fadeInUp 0.3s ease;
+      }
+
+      .tab-content-modern.active {
+        display: block;
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .card-glass {
+        background: white;
+        border-radius: 20px;
+        border: 1px solid var(--gray-200);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+      }
+
+      .toolbar-modern {
+        display: flex;
+        gap: 12px;
+        padding: 20px 24px;
+        background: white;
+        border-bottom: 1px solid var(--gray-100);
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .search-box-modern {
+        flex: 1;
+        min-width: 240px;
+        position: relative;
+      }
+
+      .search-box-modern i {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--gray-400);
+        font-size: 14px;
+      }
+
+      .search-box-modern input {
+        width: 100%;
+        padding: 10px 14px 10px 40px;
+        border: 1.5px solid var(--gray-200);
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 13px;
+        transition: all 0.2s;
+        background: var(--gray-50);
+      }
+
+      .search-box-modern input:focus {
+        outline: none;
+        border-color: var(--pink);
+        background: white;
+        box-shadow: 0 0 0 3px rgba(233, 30, 140, 0.1);
+      }
+
+      .filter-group-modern {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .filter-select {
+        padding: 10px 14px;
+        border: 1.5px solid var(--gray-200);
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 13px;
+        background: var(--gray-50);
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .filter-select:focus {
+        outline: none;
+        border-color: var(--pink);
+      }
+
+      .btn-refresh {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        border: 1.5px solid var(--gray-200);
+        background: var(--gray-50);
+        cursor: pointer;
+        transition: all 0.2s;
+        color: var(--gray-600);
+      }
+
+      .btn-refresh:hover {
+        background: var(--pink-50);
+        border-color: var(--pink);
+        color: var(--pink);
+      }
+
+      .table-wrapper {
+        overflow-x: auto;
+      }
+
+      .data-table-modern {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .data-table-modern thead th {
+        padding: 16px 16px;
+        background: var(--gray-50);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--gray-600);
+        border-bottom: 1px solid var(--gray-200);
+        text-align: left;
+      }
+
+      .data-table-modern tbody td {
+        padding: 14px 16px;
+        font-size: 13px;
+        color: var(--gray-700);
+        border-bottom: 1px solid var(--gray-100);
+        vertical-align: middle;
+      }
+
+      .data-table-modern tbody tr:hover {
+        background: var(--pink-50);
+      }
+
+      .stats-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(135deg, var(--pink-pale) 0%, #fff0f7 100%);
+        padding: 8px 16px;
+        border-radius: 40px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--pink-dark);
+        border: 1px solid var(--pink-light);
+      }
+
+      .stats-chip i {
+        font-size: 14px;
+      }
+
+      .loading-cell {
+        text-align: center;
+        padding: 60px !important;
+        color: var(--gray-400);
+      }
+
+      .spinner-modern {
+        width: 32px;
+        height: 32px;
+        border: 3px solid var(--pink-light);
+        border-top-color: var(--pink);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 12px;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .avatar-modern {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--pink), var(--pink-dark));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      .mother-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .badge-modern {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .badge-active {
+        background: var(--success-bg);
+        color: #065f46;
+      }
+
+      .badge-inactive {
+        background: var(--gray-100);
+        color: var(--gray-600);
+      }
+
+      .badge-low {
+        background: var(--success-bg);
+        color: #065f46;
+      }
+
+      .badge-medium {
+        background: var(--warning-bg);
+        color: #92400e;
+      }
+
+      .badge-high {
+        background: var(--danger-bg);
+        color: #991b1b;
+      }
+
+      .badge-ongoing {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+      }
+
+      .badge-ended {
+        background: var(--gray-100);
+        color: var(--gray-600);
+      }
+
+      .view-btn-modern {
+        background: var(--info-bg);
+        color: var(--info);
+        border: none;
+        padding: 6px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+
+      .view-btn-modern:hover {
+        background: var(--info);
+        color: white;
+        transform: translateY(-1px);
+      }
+
+      .image-container {
+        position: relative;
+        display: inline-block;
+      }
+
+      .image-preview {
+        width: 48px;
+        height: 48px;
+        object-fit: cover;
+        border-radius: 10px;
+        cursor: pointer;
+        border: 2px solid var(--gray-200);
+        transition: all 0.2s;
+      }
+
+      .image-preview:hover {
+        transform: scale(1.05);
+        border-color: var(--pink);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      .image-count-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: var(--pink);
+        color: white;
+        border-radius: 20px;
+        padding: 2px 6px;
+        font-size: 10px;
+        font-weight: bold;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .no-image {
+        background: var(--gray-100);
+        color: var(--gray-400);
+        padding: 12px;
+        border-radius: 10px;
+        font-size: 11px;
+        text-align: center;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Modal Styles */
+      .modal-overlay-modern {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.25s ease;
+      }
+
+      .modal-overlay-modern.show {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .modal-modern {
+        background: white;
+        border-radius: 24px;
+        max-width: 700px;
+        width: 100%;
+        max-height: 85vh;
+        overflow: hidden;
+        transform: scale(0.95);
+        transition: transform 0.25s ease;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      .modal-overlay-modern.show .modal-modern {
+        transform: scale(1);
+      }
+
+      .image-modal {
+        max-width: 90%;
+        max-height: 90%;
+      }
+
+      .image-options {
+        max-width: 450px;
+      }
+
+      .modal-header-modern {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--gray-100);
+      }
+
+      .modal-title-modern {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--gray-800);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .modal-title-modern i {
+        color: var(--pink);
+        font-size: 20px;
+      }
+
+      .modal-close-modern {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: var(--gray-100);
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: var(--gray-600);
+      }
+
+      .modal-close-modern:hover {
+        background: var(--pink-pale);
+        color: var(--pink);
+      }
+
+      .modal-body-modern {
+        padding: 24px;
+        overflow-y: auto;
+        max-height: calc(85vh - 140px);
+      }
+
+      .image-viewer {
+        text-align: center;
+      }
+
+      .image-viewer img {
+        max-width: 100%;
+        max-height: 70vh;
+        border-radius: 12px;
+      }
+
+      .image-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 20px;
+      }
+
+      .modal-footer-modern {
+        padding: 16px 24px;
+        border-top: 1px solid var(--gray-100);
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .btn-primary-modern {
+        background: linear-gradient(135deg, var(--pink) 0%, var(--pink-dark) 100%);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-primary-modern:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(233, 30, 140, 0.4);
+      }
+
+      .btn-secondary-modern {
+        background: var(--gray-100);
+        color: var(--gray-700);
+        border: 1px solid var(--gray-200);
+        padding: 10px 20px;
+        border-radius: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-secondary-modern:hover {
+        background: var(--gray-200);
+      }
+
+      /* Detail rows styling */
+      .detail-grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .detail-row {
+        display: flex;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--gray-100);
+      }
+
+      .detail-label {
+        width: 140px;
+        font-weight: 600;
+        color: var(--gray-600);
+        font-size: 13px;
+      }
+
+      .detail-value {
+        flex: 1;
+        color: var(--gray-800);
+        font-size: 13px;
+      }
+
+      @media (max-width: 768px) {
+        .toolbar-modern {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .filter-group-modern {
+          justify-content: stretch;
+        }
+        .filter-select {
+          flex: 1;
+        }
+        .detail-row {
+          flex-direction: column;
+          gap: 4px;
+        }
+        .detail-label {
+          width: 100%;
+        }
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script>
+      (function () {
+        const SUPABASE_URL = "https://buvseyqcdacctlupznya.supabase.co";
+        const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1dnNleXFjZGFjY3RsdXB6bnlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzE2NTUsImV4cCI6MjA4ODIwNzY1NX0.VPh8ZZFqdeFyb8YuMxllbJJa-nWl4VXNq74o6-Itjjw";
+        const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+        const SESSION_KEY = "inaagapay_admin_session";
+        
+        const session = (() => {
+          try { return JSON.parse(localStorage.getItem(SESSION_KEY)); }
+          catch { return null; }
+        })();
+        
+        if (!session || session.account_type !== "admin") {
+          window.location.href = "../index.html";
+          return;
+        }
+
+        document.getElementById("header-user-name").textContent = 
+          [session.first_name, session.last_name].filter(Boolean).join(" ") || "Admin";
+        document.getElementById("header-avatar").textContent = 
+          ((session.first_name?.[0] ?? "") + (session.last_name?.[0] ?? "")).toUpperCase() || "A";
+        
+        document.getElementById("logout-btn").addEventListener("click", () => {
+          if (confirm("Logout?")) {
+            localStorage.removeItem(SESSION_KEY);
+            window.location.href = "../index.html";
+          }
+        });
+        
+        document.getElementById("sidebar-toggle").addEventListener("click", () =>
+          document.querySelector(".app-sidebar").classList.toggle("open")
+        );
+
+        function parseImageUrls(imageField) {
+          if (!imageField) return [];
+          const imageString = imageField.toString();
+          if (imageString.includes(',')) {
+            return imageString.split(',').map(url => url.trim()).filter(url => url.length > 0);
+          } else if (imageString.length > 0) {
+            return [imageString];
+          }
+          return [];
+        }
+
+        function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+        function fmtDate(date) { if (!date) return "—"; return new Date(date).toLocaleDateString('en-PH'); }
+        function fmtDateTime(date) { if (!date) return "—"; return new Date(date).toLocaleString('en-PH'); }
+        
+        function showToast(msg, type = "info") {
+          const icons = { success: "fa-circle-check", error: "fa-circle-xmark", warning: "fa-triangle-exclamation", info: "fa-circle-info" };
+          const c = document.getElementById("toast-container");
+          const t = document.createElement("div");
+          t.className = `toast ${type}`;
+          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span><button class="toast-close" onclick="this.closest('.toast').remove()"><i class="fa-solid fa-xmark"></i></button>`;
+          c.appendChild(t);
+          setTimeout(() => { t.style.animation = "fadeOut .3s ease forwards"; t.addEventListener("animationend", () => t.remove()); }, 4500);
+        }
+
+        // Tab switching with count updates
+        document.querySelectorAll('.tab-btn-modern').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const tabId = btn.dataset.tab;
+            document.querySelectorAll('.tab-btn-modern').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content-modern').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+            
+            if (tabId === 'mothers') loadMothers();
+            else if (tabId === 'pregnancies') loadPregnancies();
+            else if (tabId === 'checkups') loadCheckups();
+            else if (tabId === 'ultrasounds') loadUltrasounds();
+            else if (tabId === 'labtests') loadLabTests();
+            else if (tabId === 'children') loadChildren();
+          });
+        });
+
+        async function loadBhcOptions() {
+          const { data } = await db.from("bhc").select("bhc_id, bhc_name").order("bhc_name");
+          const sel = document.getElementById("filter-bhc-mothers");
+          if (sel && data) {
+            sel.innerHTML = '<option value="">All BHCs</option>' + data.map(b => `<option value="${b.bhc_id}">${esc(b.bhc_name)}</option>`).join('');
+          }
+        }
+        loadBhcOptions();
+
+        // LOAD MOTHERS
+        async function loadMothers() {
+          const tbody = document.getElementById("mothers-tbody");
+          const search = document.getElementById("search-mothers")?.value.toLowerCase() || "";
+          const bhcFilter = document.getElementById("filter-bhc-mothers")?.value || "";
+          
+          try {
+            const { data, error } = await db.from("mothers").select(`
+              *,
+              accounts!mothers_account_id_fkey (first_name, middle_name, last_name, email_address, phone_number),
+              bhc!mothers_assigned_bhc_id_fkey (bhc_name)
+            `);
+            if (error) throw error;
+            
+            let filtered = data || [];
+            if (search) {
+              filtered = filtered.filter(m => 
+                (m.accounts?.first_name?.toLowerCase().includes(search) ||
+                 m.accounts?.last_name?.toLowerCase().includes(search) ||
+                 m.accounts?.email_address?.toLowerCase().includes(search) ||
+                 m.barangay?.toLowerCase().includes(search))
+              );
+            }
+            if (bhcFilter) filtered = filtered.filter(m => m.assigned_bhc_id == bhcFilter);
+            
+            document.getElementById("total-badge").querySelector('span').textContent = `${filtered.length} mothers`;
+            document.getElementById("mothers-count").textContent = filtered.length;
+            
+            if (filtered.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="7" class="loading-cell"><i class="fa-solid fa-users-slash" style="font-size:32px;margin-bottom:12px;display:block;opacity:0.5;"></i>No mothers found. </div></tr>';
+              return;
+            }
+            
+            tbody.innerHTML = filtered.map(m => {
+              const name = [m.accounts?.first_name, m.accounts?.last_name].filter(Boolean).join(" ") || "—";
+              const initials = name.charAt(0) || "?";
+              return `
+                <tr>
+                  <td>
+                    <div class="mother-info">
+                      <div class="avatar-modern">${esc(initials)}</div>
+                      <span style="font-weight:600;">${esc(name)}</span>
+                    </div>
+                  </td>
+                  <td>${esc(m.accounts?.email_address || "—")}</td>
+                  <td>${esc(m.barangay || "—")}</td>
+                  <td><span class="badge-modern" style="background:#fce4ec;color:#c2185b;">${esc(m.bhc?.bhc_name || "—")}</span></td>
+                  <td>${fmtDate(m.birthdate)}</td>
+                  <td><span class="badge-modern ${m.status === 'active' ? 'badge-active' : 'badge-inactive'}">${m.status || "active"}</span></td>
+                  <td style="text-align:center;"><button class="view-btn-modern" onclick="viewMotherDetails(${m.mother_id})"><i class="fa-solid fa-eye"></i> View</button></td>
+                </div>
+              `;
+            }).join("");
+          } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="7" class="loading-cell" style="color:var(--danger);">Error: ${esc(err.message)}</div></tr>`;
+          }
+        }
+
+        // LOAD PREGNANCIES
+        async function loadPregnancies() {
+          const tbody = document.getElementById("pregnancies-tbody");
+          const search = document.getElementById("search-pregnancies")?.value.toLowerCase() || "";
+          const riskFilter = document.getElementById("filter-risk")?.value || "";
+          const statusFilter = document.getElementById("filter-pregnancy-status")?.value || "";
+          
+          try {
+            const { data, error } = await db.from("pregnancies").select(`
+              *,
+              mothers (mother_id, account_id, accounts!mothers_account_id_fkey (first_name, last_name, email_address))
+            `).order("created_at", { ascending: false });
+            if (error) throw error;
+            
+            let filtered = data || [];
+            if (search) {
+              filtered = filtered.filter(p => 
+                (p.mothers?.accounts?.first_name?.toLowerCase().includes(search) ||
+                 p.mothers?.accounts?.last_name?.toLowerCase().includes(search))
+              );
+            }
+            if (riskFilter) filtered = filtered.filter(p => p.pregnancy_risk_level === riskFilter);
+            if (statusFilter) filtered = filtered.filter(p => p.status === statusFilter);
+            
+            document.getElementById("pregnancies-count").textContent = filtered.length;
+            
+            if (filtered.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="7" class="loading-cell"><i class="fa-solid fa-person-pregnant" style="font-size:32px;margin-bottom:12px;display:block;opacity:0.5;"></i>No pregnancies found.</div></td>';
+              return;
+            }
+            
+            tbody.innerHTML = filtered.map(p => {
+              const name = [p.mothers?.accounts?.first_name, p.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—";
+              const riskClass = p.pregnancy_risk_level === 'low' ? 'badge-low' : (p.pregnancy_risk_level === 'medium' ? 'badge-medium' : 'badge-high');
+              const statusClass = p.status === 'ongoing' ? 'badge-ongoing' : 'badge-ended';
+              return `
+                <tr>
+                  <td><div class="mother-info"><div class="avatar-modern" style="background:linear-gradient(135deg,#f59e0b,#d97706);">${esc(name.charAt(0) || "?")}</div><span style="font-weight:600;">${esc(name)}</span></div></td>
+                  <td>${fmtDate(p.last_menstrual_period)}</td>
+                  <td>${fmtDate(p.expected_date_of_delivery)}</td>
+                  <td><span class="badge-modern ${riskClass}">${p.pregnancy_risk_level || "—"}</span></td>
+                  <td><span class="badge-modern" style="background:#e0e7ff;color:#4338ca;">👶 ${p.fetal_count || 1}</span></td>
+                  <td><span class="badge-modern ${statusClass}">${p.status}</span></td>
+                  <td style="text-align:center;"><button class="view-btn-modern" onclick="viewPregnancyDetails(${p.pregnancy_id})"><i class="fa-solid fa-eye"></i> View</button></td>
+                </tr>
+              `;
+            }).join("");
+          } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="7" class="loading-cell" style="color:var(--danger);">Error: ${esc(err.message)}</div></tr>`;
+          }
+        }
+
+        // LOAD PRENATAL CHECKUPS
+        async function loadCheckups() {
+          const tbody = document.getElementById("checkups-tbody");
+          const search = document.getElementById("search-checkups")?.value.toLowerCase() || "";
+          
+          try {
+            const { data, error } = await db.from("prenatal_checkups").select(`
+              *,
+              pregnancies (pregnancy_id, mother_id, mothers (mother_id, accounts!mothers_account_id_fkey (first_name, last_name)))
+            `).order("checkup_datetime", { ascending: false });
+            if (error) throw error;
+            
+            let filtered = data || [];
+            if (search) {
+              filtered = filtered.filter(c => 
+                (c.pregnancies?.mothers?.accounts?.first_name?.toLowerCase().includes(search) ||
+                 c.pregnancies?.mothers?.accounts?.last_name?.toLowerCase().includes(search))
+              );
+            }
+            
+            document.getElementById("checkups-count").textContent = filtered.length;
+            
+            if (filtered.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fa-solid fa-stethoscope" style="font-size:32px;margin-bottom:12px;display:block;opacity:0.5;"></i>No checkups found.</div></tr>';
+              return;
+            }
+            
+            tbody.innerHTML = filtered.map(c => {
+              const name = [c.pregnancies?.mothers?.accounts?.first_name, c.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—";
+              const bp = `${c.blood_pressure_systolic || "—"}/${c.blood_pressure_diastolic || "—"}`;
+              const isBpHigh = (c.blood_pressure_systolic >= 140 || c.blood_pressure_diastolic >= 90);
+              return `
+                <tr>
+                  <td><div class="mother-info"><div class="avatar-modern" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);">${esc(name.charAt(0) || "?")}</div><span style="font-weight:600;">${esc(name)}</span></div></td>
+                  <td>${fmtDateTime(c.checkup_datetime)}</td>
+                  <td>${c.age_of_gestation || "—"} wks</td>
+                  <td>${c.checkup_weight || "—"} kg</td>
+                  <td><span style="${isBpHigh ? 'color:var(--danger);font-weight:bold;' : ''}">${bp}</span></td>
+                  <td>${c.fetal_heart_beat || "—"} bpm</td>
+                  <td><span class="badge-modern" style="${c.edema === 'severe' ? 'background:#fee2e2;color:#991b1b;' : 'background:#fef3c7;color:#92400e;'}">${c.edema || "none"}</span></td>
+                  <td>${fmtDate(c.next_schedule)}</td>
+                </tr>
+              `;
+            }).join("");
+          } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="8" class="loading-cell" style="color:var(--danger);">Error: ${esc(err.message)}</div></tr>`;
+          }
+        }
+
+        // LOAD ULTRASOUNDS
+        async function loadUltrasounds() {
+          const tbody = document.getElementById("ultrasounds-tbody");
+          const search = document.getElementById("search-ultrasounds")?.value.toLowerCase() || "";
+          
+          try {
+            const { data, error } = await db.from("ultrasounds").select(`
+              *,
+              pregnancies (pregnancy_id, mother_id, mothers (mother_id, accounts!mothers_account_id_fkey (first_name, last_name)))
+            `).order("ultrasound_date", { ascending: false });
+            if (error) throw error;
+            
+            let filtered = data || [];
+            if (search) {
+              filtered = filtered.filter(u => 
+                (u.pregnancies?.mothers?.accounts?.first_name?.toLowerCase().includes(search) ||
+                 u.pregnancies?.mothers?.accounts?.last_name?.toLowerCase().includes(search))
+              );
+            }
+            
+            document.getElementById("ultrasounds-count").textContent = filtered.length;
+            
+            if (filtered.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="6" class="loading-cell"><i class="fa-solid fa-waveform" style="font-size:32px;margin-bottom:12px;display:block;opacity:0.5;"></i>No ultrasounds found.</div></tr>';
+              return;
+            }
+            
+            tbody.innerHTML = filtered.map(u => {
+              const name = [u.pregnancies?.mothers?.accounts?.first_name, u.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—";
+              const imageUrls = parseImageUrls(u.ultrasound_image);
+              const firstImageUrl = imageUrls.length > 0 ? imageUrls[0] : null;
+              const hasImage = firstImageUrl && imageUrls.length > 0;
+              const moreCount = imageUrls.length > 1 ? `+${imageUrls.length - 1}` : '';
+              const jsonUrls = JSON.stringify(imageUrls).replace(/"/g, '&quot;');
+              const imgId = `us_${u.ultrasound_id}_${Date.now()}`;
+              
+              return `
+                <tr>
+                  <td><div class="mother-info"><div class="avatar-modern" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);">${esc(name.charAt(0) || "?")}</div><span style="font-weight:600;">${esc(name)}</span></div></td>
+                  <td>${fmtDate(u.ultrasound_date)}</td>
+                  <td>${esc(u.ultrasound_location || "—")}</td>
+                  <td>${esc(u.health_worker_name || "—")}</td>
+                  <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(u.remarks || "—")}</td>
+                  <td style="text-align:center;">
+                    ${hasImage ? 
+                      `<div class="image-container" id="container_${imgId}">
+                         <img id="${imgId}" src="${firstImageUrl}" class="image-preview" onclick="showImageOptions('${firstImageUrl}', '${jsonUrls}')" />
+                         ${moreCount ? `<span class="image-count-badge">${moreCount}</span>` : ''}
+                       </div>` : 
+                      '<div class="no-image"><i class="fa-solid fa-image"></i></div>'}
+                  </td>
+                </tr>
+              `;
+            }).join("");
+            
+            setTimeout(() => {
+              filtered.forEach(u => {
+                const imageUrls = parseImageUrls(u.ultrasound_image);
+                if (imageUrls.length > 0) {
+                  const imgId = `us_${u.ultrasound_id}_${Date.now()}`;
+                  const img = document.getElementById(imgId);
+                  if (img) {
+                    img.onerror = function() {
+                      this.style.display = 'none';
+                      const container = document.getElementById(`container_${imgId}`);
+                      if (container && !container.querySelector('.error-fallback')) {
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'no-image error-fallback';
+                        errorDiv.innerHTML = '<i class="fa-solid fa-image-slash"></i>';
+                        container.appendChild(errorDiv);
+                      }
+                    };
+                  }
+                }
+              });
+            }, 100);
+          } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="6" class="loading-cell" style="color:var(--danger);">Error: ${esc(err.message)}</div></tr>`;
+          }
+        }
+
+        // LOAD LAB TESTS
+        async function loadLabTests() {
+          const tbody = document.getElementById("labtests-tbody");
+          const search = document.getElementById("search-labtests")?.value.toLowerCase() || "";
+          
+          try {
+            const { data, error } = await db.from("lab_tests").select(`
+              *,
+              pregnancies (pregnancy_id, mother_id, mothers (mother_id, accounts!mothers_account_id_fkey (first_name, last_name)))
+            `).order("lab_test_date", { ascending: false });
+            if (error) throw error;
+            
+            let filtered = data || [];
+            if (search) {
+              filtered = filtered.filter(l => 
+                (l.pregnancies?.mothers?.accounts?.first_name?.toLowerCase().includes(search) ||
+                 l.pregnancies?.mothers?.accounts?.last_name?.toLowerCase().includes(search))
+              );
+            }
+            
+            document.getElementById("labtests-count").textContent = filtered.length;
+            
+            if (filtered.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="7" class="loading-cell"><i class="fa-solid fa-flask" style="font-size:32px;margin-bottom:12px;display:block;opacity:0.5;"></i>No lab tests found.</div><tr>';
+              return;
+            }
+            
+            tbody.innerHTML = filtered.map(l => {
+              const name = [l.pregnancies?.mothers?.accounts?.first_name, l.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—";
+              const imageUrls = parseImageUrls(l.lab_test_image);
+              const firstImageUrl = imageUrls.length > 0 ? imageUrls[0] : null;
+              const hasImage = firstImageUrl && imageUrls.length > 0;
+              const moreCount = imageUrls.length > 1 ? `+${imageUrls.length - 1}` : '';
+              const jsonUrls = JSON.stringify(imageUrls).replace(/"/g, '&quot;');
+              const imgId = `lt_${l.lab_test_id}_${Date.now()}`;
+              
+              return `
+                <tr>
+                  <td><div class="mother-info"><div class="avatar-modern" style="background:linear-gradient(135deg,#f97316,#ea580c);">${esc(name.charAt(0) || "?")}</div><span style="font-weight:600;">${esc(name)}</span></div></td>
+                  <td><span class="badge-modern" style="background:#e0e7ff;color:#4338ca;">${esc(l.lab_test_type || "—")}</span></td>
+                  <td>${fmtDate(l.lab_test_date)}</td>
+                  <td>${esc(l.lab_test_location || "—")}</td>
+                  <td>${esc(l.health_worker_name || "—")}</td>
+                  <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(l.remarks || "—")}</td>
+                  <td style="text-align:center;">
+                    ${hasImage ? 
+                      `<div class="image-container" id="container_${imgId}">
+                         <img id="${imgId}" src="${firstImageUrl}" class="image-preview" onclick="showImageOptions('${firstImageUrl}', '${jsonUrls}')" />
+                         ${moreCount ? `<span class="image-count-badge">${moreCount}</span>` : ''}
+                       </div>` : 
+                      '<div class="no-image"><i class="fa-solid fa-file-alt"></i></div>'}
+                  </td>
+                </tr>
+              `;
+            }).join("");
+            
+            setTimeout(() => {
+              filtered.forEach(l => {
+                const imageUrls = parseImageUrls(l.lab_test_image);
+                if (imageUrls.length > 0) {
+                  const imgId = `lt_${l.lab_test_id}_${Date.now()}`;
+                  const img = document.getElementById(imgId);
+                  if (img) {
+                    img.onerror = function() {
+                      this.style.display = 'none';
+                      const container = document.getElementById(`container_${imgId}`);
+                      if (container && !container.querySelector('.error-fallback')) {
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'no-image error-fallback';
+                        errorDiv.innerHTML = '<i class="fa-solid fa-file-image"></i>';
+                        container.appendChild(errorDiv);
+                      }
+                    };
+                  }
+                }
+              });
+            }, 100);
+          } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="7" class="loading-cell" style="color:var(--danger);">Error: ${esc(err.message)}</div></tr>`;
+          }
+        }
+
+        // LOAD CHILDREN
+        async function loadChildren() {
+          const tbody = document.getElementById("children-tbody");
+          const search = document.getElementById("search-children")?.value.toLowerCase() || "";
+          
+          try {
+            const { data, error } = await db.from("children").select(`
+              *,
+              mothers (mother_id, accounts!mothers_account_id_fkey (first_name, last_name)),
+              birth_details (birthdate, birth_weight, birth, birthplace_city_municipality)
+            `).order("added_at", { ascending: false });
+            if (error) throw error;
+            
+            let filtered = data || [];
+            if (search) {
+              filtered = filtered.filter(c => 
+                (c.first_name?.toLowerCase().includes(search) ||
+                 c.last_name?.toLowerCase().includes(search) ||
+                 c.mothers?.accounts?.first_name?.toLowerCase().includes(search) ||
+                 c.mothers?.accounts?.last_name?.toLowerCase().includes(search))
+              );
+            }
+            
+            document.getElementById("children-count").textContent = filtered.length;
+            
+            if (filtered.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="7" class="loading-cell"><i class="fa-solid fa-baby" style="font-size:32px;margin-bottom:12px;display:block;opacity:0.5;"></i>No children found.</div></tr>';
+              return;
+            }
+            
+            tbody.innerHTML = filtered.map(c => {
+              const childName = [c.first_name, c.last_name].filter(Boolean).join(" ") || "—";
+              const motherName = [c.mothers?.accounts?.first_name, c.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—";
+              const genderIcon = c.sex === 'male' ? 'fa-mars' : (c.sex === 'female' ? 'fa-venus' : 'fa-genderless');
+              return `
+                <tr>
+                  <td><div class="mother-info"><div class="avatar-modern" style="background:linear-gradient(135deg,#10b981,#059669);"><i class="fa-solid ${genderIcon}"></i></div><span style="font-weight:600;">${esc(childName)}</span></div></td>
+                  <td><div class="mother-info"><div class="avatar-modern" style="background:linear-gradient(135deg,var(--pink),var(--pink-dark));">${esc(motherName.charAt(0) || "?")}</div><span>${esc(motherName)}</span></div></td>
+                  <td><span class="badge-modern" style="background:#e0e7ff;color:#4338ca;">${c.sex || "—"}</span></td>
+                  <td>${fmtDate(c.birth_details?.birthdate)}</td>
+                  <td>${c.birth_details?.birth_weight || "—"} kg</td>
+                  <td>${esc(c.birth_details?.birth || "—")}</td>
+                  <td style="text-align:center;"><button class="view-btn-modern" onclick="viewChildDetails(${c.child_id})"><i class="fa-solid fa-eye"></i> View</button></td>
+                </tr>
+              `;
+            }).join("");
+          } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="7" class="loading-cell" style="color:var(--danger);">Error: ${esc(err.message)}</div></tr>`;
+          }
+        }
+
+        // View Details Functions
+        window.viewMotherDetails = async (motherId) => {
+          const { data } = await db.from("mothers").select(`
+            *, accounts!mothers_account_id_fkey (*), bhc!mothers_assigned_bhc_fkey (*),
+            emergency_contacts (*), medical_conditions (*), allergies (*)
+          `).eq("mother_id", motherId).single();
+          
+          if (data) {
+            document.getElementById("detail-title").innerHTML = '<i class="fa-solid fa-female"></i> Mother Details';
+            document.getElementById("detail-body").innerHTML = `
+              <div class="detail-grid">
+                <div class="detail-row"><div class="detail-label">Name:</div><div class="detail-value">${esc(data.accounts?.first_name)} ${esc(data.accounts?.last_name)}</div></div>
+                <div class="detail-row"><div class="detail-label">Email:</div><div class="detail-value">${esc(data.accounts?.email_address)}</div></div>
+                <div class="detail-row"><div class="detail-label">Phone:</div><div class="detail-value">${esc(data.accounts?.phone_number || "—")}</div></div>
+                <div class="detail-row"><div class="detail-label">Birthdate:</div><div class="detail-value">${fmtDate(data.birthdate)}</div></div>
+                <div class="detail-row"><div class="detail-label">Address:</div><div class="detail-value">${esc(data.house_number || "")} ${esc(data.street || "")}, ${esc(data.barangay || "")}, ${esc(data.city_municipality || "")}, ${esc(data.province || "")}</div></div>
+                <div class="detail-row"><div class="detail-label">Assigned BHC:</div><div class="detail-value">${esc(data.bhc?.bhc_name || "—")}</div></div>
+                <div class="detail-row"><div class="detail-label">Blood Type:</div><div class="detail-value">${esc(data.blood_type || "—")}</div></div>
+                <div class="detail-row"><div class="detail-label">Height/Weight:</div><div class="detail-value">${data.height || "—"} cm / ${data.weight || "—"} kg</div></div>
+                <div class="detail-row"><div class="detail-label">Emergency Contacts:</div><div class="detail-value">${data.emergency_contacts?.length || 0}</div></div>
+                <div class="detail-row"><div class="detail-label">Medical Conditions:</div><div class="detail-value">${data.medical_conditions?.length || 0}</div></div>
+                <div class="detail-row"><div class="detail-label">Allergies:</div><div class="detail-value">${data.allergies?.length || 0}</div></div>
+              </div>
+            `;
+            document.getElementById("detail-modal").classList.add("show");
+          }
+        };
+        
+        window.viewPregnancyDetails = async (pregnancyId) => {
+          const { data } = await db.from("pregnancies").select(`
+            *, mothers (mother_id, accounts!mothers_account_id_fkey (first_name, last_name))
+          `).eq("pregnancy_id", pregnancyId).single();
+          
+          if (data) {
+            document.getElementById("detail-title").innerHTML = '<i class="fa-solid fa-person-pregnant"></i> Pregnancy Details';
+            document.getElementById("detail-body").innerHTML = `
+              <div class="detail-grid">
+                <div class="detail-row"><div class="detail-label">Mother:</div><div class="detail-value">${esc(data.mothers?.accounts?.first_name)} ${esc(data.mothers?.accounts?.last_name)}</div></div>
+                <div class="detail-row"><div class="detail-label">LMP:</div><div class="detail-value">${fmtDate(data.last_menstrual_period)}</div></div>
+                <div class="detail-row"><div class="detail-label">EDD:</div><div class="detail-value">${fmtDate(data.expected_date_of_delivery)}</div></div>
+                <div class="detail-row"><div class="detail-label">Risk Level:</div><div class="detail-value"><span class="badge-modern ${data.pregnancy_risk_level === 'low' ? 'badge-low' : (data.pregnancy_risk_level === 'medium' ? 'badge-medium' : 'badge-high')}">${data.pregnancy_risk_level || "—"}</span></div></div>
+                <div class="detail-row"><div class="detail-label">Fetal Count:</div><div class="detail-value">${data.fetal_count || 1}</div></div>
+                <div class="detail-row"><div class="detail-label">Status:</div><div class="detail-value">${data.status}</div></div>
+                <div class="detail-row"><div class="detail-label">Created:</div><div class="detail-value">${fmtDate(data.created_at)}</div></div>
+              </div>
+            `;
+            document.getElementById("detail-modal").classList.add("show");
+          }
+        };
+        
+        window.viewChildDetails = async (childId) => {
+          const { data } = await db.from("children").select(`
+            *, mothers (mother_id, accounts!mothers_account_id_fkey (first_name, last_name)),
+            birth_details (*), child_details (*), immunization_record (*, vaccines (*))
+          `).eq("child_id", childId).single();
+          
+          if (data) {
+            document.getElementById("detail-title").innerHTML = '<i class="fa-solid fa-baby"></i> Child Details';
+            document.getElementById("detail-body").innerHTML = `
+              <div class="detail-grid">
+                <div class="detail-row"><div class="detail-label">Name:</div><div class="detail-value">${esc(data.first_name)} ${esc(data.last_name)}</div></div>
+                <div class="detail-row"><div class="detail-label">Mother:</div><div class="detail-value">${esc(data.mothers?.accounts?.first_name)} ${esc(data.mothers?.accounts?.last_name)}</div></div>
+                <div class="detail-row"><div class="detail-label">Sex:</div><div class="detail-value">${data.sex || "—"}</div></div>
+                <div class="detail-row"><div class="detail-label">Birthdate:</div><div class="detail-value">${fmtDate(data.birth_details?.birthdate)}</div></div>
+                <div class="detail-row"><div class="detail-label">Birth Weight:</div><div class="detail-value">${data.birth_details?.birth_weight || "—"} kg</div></div>
+                <div class="detail-row"><div class="detail-label">Birth Place:</div><div class="detail-value">${esc(data.birth_details?.birth || "—")}</div></div>
+                <div class="detail-row"><div class="detail-label">Vaccinations:</div><div class="detail-value">${data.immunization_record?.length || 0} recorded</div></div>
+              </div>
+            `;
+            document.getElementById("detail-modal").classList.add("show");
+          }
+        };
+        
+        let currentImageUrls = [];
+        window.showImageOptions = (imageUrl, allImageUrlsJson) => {
+          if (!imageUrl) return;
+          try {
+            currentImageUrls = JSON.parse(allImageUrlsJson);
+          } catch(e) {
+            currentImageUrls = [imageUrl];
+          }
+          document.getElementById("options-modal-image").src = imageUrl;
+          document.getElementById("image-options-modal").classList.add("show");
+        };
+        
+        window.viewFullImage = () => {
+          if (currentImageUrls.length > 0) {
+            document.getElementById("modal-image").src = currentImageUrls[0];
+            document.getElementById("image-options-modal").classList.remove("show");
+            document.getElementById("image-modal").classList.add("show");
+          }
+        };
+        
+        window.downloadImage = async () => {
+          if (currentImageUrls.length === 0) return;
+          try {
+            const response = await fetch(currentImageUrls[0]);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `medical_image_${Date.now()}.jpg`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast("Image downloaded successfully!", "success");
+          } catch (error) {
+            showToast("Failed to download image.", "error");
+          }
+        };
+
+        // Modal close handlers
+        document.getElementById("detail-modal-close").addEventListener("click", () => document.getElementById("detail-modal").classList.remove("show"));
+        document.getElementById("detail-close-btn").addEventListener("click", () => document.getElementById("detail-modal").classList.remove("show"));
+        document.getElementById("image-modal-close").addEventListener("click", () => document.getElementById("image-modal").classList.remove("show"));
+        document.getElementById("image-close-btn").addEventListener("click", () => document.getElementById("image-modal").classList.remove("show"));
+        document.getElementById("image-options-close").addEventListener("click", () => document.getElementById("image-options-modal").classList.remove("show"));
+        document.getElementById("image-options-close-btn").addEventListener("click", () => document.getElementById("image-options-modal").classList.remove("show"));
+        document.getElementById("view-full-image-btn").addEventListener("click", viewFullImage);
+        document.getElementById("download-image-btn").addEventListener("click", downloadImage);
+        
+        document.getElementById("detail-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("show"); });
+        document.getElementById("image-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("show"); });
+        document.getElementById("image-options-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("show"); });
+
+        // Search handlers
+        let searchTimer;
+        document.getElementById("search-mothers")?.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadMothers, 300); });
+        document.getElementById("search-pregnancies")?.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadPregnancies, 300); });
+        document.getElementById("search-checkups")?.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadCheckups, 300); });
+        document.getElementById("search-ultrasounds")?.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadUltrasounds, 300); });
+        document.getElementById("search-labtests")?.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadLabTests, 300); });
+        document.getElementById("search-children")?.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadChildren, 300); });
+        document.getElementById("filter-bhc-mothers")?.addEventListener("change", loadMothers);
+        document.getElementById("filter-risk")?.addEventListener("change", loadPregnancies);
+        document.getElementById("filter-pregnancy-status")?.addEventListener("change", loadPregnancies);
+        
+        loadMothers();
+      })();
+    </script>
+  </body>
+</html>

@@ -70,6 +70,15 @@
           </li>
         </ul>
         <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Patient Management</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="patient-records.html"
+              ><i class="fa-solid fa-folder-open"></i> Patient Records</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
         <span class="sidebar-section-label">System</span>
         <ul class="sidebar-nav">
           <li>
@@ -95,14 +104,14 @@
       <main class="app-main">
         <div class="page-header">
           <div class="page-title-block">
-            <h1 class="page-title">Audit Trail</h1>
+            <h1 class="page-title">Activity Log</h1>
             <p class="page-subtitle">
-              Complete log of all admin actions in the system
+              Complete history of all actions performed in the system
             </p>
           </div>
           <div class="page-actions">
             <button class="btn btn-secondary" id="export-btn">
-              <i class="fa-solid fa-file-csv"></i> Export CSV
+              <i class="fa-solid fa-file-csv"></i> Export Report
             </button>
             <button class="btn btn-outline-pink" id="refresh-btn">
               <i class="fa-solid fa-arrows-rotate"></i> Refresh
@@ -130,7 +139,7 @@
                 class="form-control"
                 type="search"
                 id="search-input"
-                placeholder="Search action or description…"
+                placeholder="Search activities..."
               />
             </div>
             <div class="filter-group">
@@ -139,15 +148,27 @@
                 id="filter-action"
                 style="width: auto"
               >
-                <option value="">All Actions</option>
+                <option value="">All Activities</option>
                 <option value="login">Login</option>
                 <option value="logout">Logout</option>
-                <option value="create_account">Create Account</option>
-                <option value="update_account">Update Account</option>
-                <option value="delete_account">Delete Account</option>
-                <option value="assign_midwife">Assign Midwife</option>
-                <option value="database_backup">DB Backup</option>
-                <option value="database_restore">DB Restore</option>
+                <option value="create_account">Account Created</option>
+                <option value="update_account">Account Updated</option>
+                <option value="delete_account">Account Deleted</option>
+                <option value="assign_midwife">Midwife Assigned</option>
+                <option value="create_mother">Mother Registered</option>
+                <option value="update_mother">Mother Updated</option>
+                <option value="create_pregnancy">Pregnancy Added</option>
+                <option value="update_pregnancy">Pregnancy Updated</option>
+                <option value="create_checkup">Checkup Added</option>
+                <option value="update_checkup">Checkup Updated</option>
+                <option value="create_ultrasound">Ultrasound Added</option>
+                <option value="create_labtest">Lab Test Added</option>
+                <option value="create_child">Child Added</option>
+                <option value="ai_insight_generated">AI Insight Generated</option>
+                <option value="ai_insight_edited">AI Insight Edited</option>
+                <option value="ai_insight_approved">AI Insight Approved</option>
+                <option value="database_backup">System Backup</option>
+                <option value="database_restore">System Restore</option>
               </select>
               <input
                 type="date"
@@ -170,10 +191,10 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Timestamp</th>
+                  <th>Date & Time</th>
                   <th>User</th>
                   <th>Action</th>
-                  <th>Table</th>
+                  <th>Category</th>
                   <th>Description</th>
                   <th style="text-align: center">Details</th>
                 </tr>
@@ -189,7 +210,7 @@
                     "
                   >
                     <div class="spinner" style="margin: 0 auto 12px"></div>
-                    Loading audit trail…
+                    Loading activity log...
                   </td>
                 </tr>
               </tbody>
@@ -226,7 +247,7 @@
     <div class="modal-overlay" id="detail-modal">
       <div class="modal" style="max-width: 580px">
         <div class="modal-header">
-          <h2 class="modal-title">Audit Entry Details</h2>
+          <h2 class="modal-title">Activity Details</h2>
           <button class="modal-close" id="detail-modal-close">
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -269,6 +290,13 @@
           ).toUpperCase() || "A";
         document.getElementById("logout-btn").addEventListener("click", () => {
           if (confirm("Logout?")) {
+            db.from("audit_trail").insert({
+              account_id: session.account_id,
+              action: "logout",
+              description: "Logged out of the admin portal",
+            }).then(({ error: e }) => {
+              if (e) console.warn("Audit log:", e.message);
+            });
             localStorage.removeItem(SESSION_KEY);
             window.location.href = "../index.html";
           }
@@ -285,7 +313,6 @@
           return d.innerHTML;
         }
         function toUTC(ts) {
-          // Supabase TIMESTAMP (no tz) returns without Z — force UTC parsing
           if (!ts) return null;
           return new Date(/Z|[+-]\d{2}:?\d{2}$/.test(ts) ? ts : ts + "Z");
         }
@@ -300,6 +327,88 @@
             minute: "2-digit",
             second: "2-digit",
           });
+        }
+
+        // Human-readable descriptions for actions
+        function getHumanReadableDescription(log) {
+          const action = log.action;
+          const description = log.description || "";
+          
+          // Return natural language descriptions
+          switch(action) {
+            case 'login':
+              return 'Signed in to the system';
+            case 'logout':
+              return 'Signed out of the system';
+            case 'create_account':
+              return description.replace('Created', 'Created new');
+            case 'update_account':
+              if (description.includes('activated')) return description;
+              if (description.includes('deactivated')) return description;
+              if (description.includes('suspended')) return description;
+              return description.replace('Updated', 'Modified');
+            case 'delete_account':
+              return description.replace('Deleted', 'Removed');
+            case 'assign_midwife':
+              return description.replace('Changed', 'Reassigned');
+            case 'create_mother':
+              return 'Registered a new mother in the system';
+            case 'update_mother':
+              return 'Updated mother\'s information';
+            case 'create_pregnancy':
+              return 'Added a new pregnancy record';
+            case 'update_pregnancy':
+              return 'Updated pregnancy information';
+            case 'create_checkup':
+              return 'Added a prenatal checkup record';
+            case 'update_checkup':
+              return 'Updated prenatal checkup information';
+            case 'create_ultrasound':
+              return 'Added an ultrasound record';
+            case 'create_labtest':
+              return 'Added a laboratory test result';
+            case 'create_child':
+              return 'Added a child record';
+            case 'ai_insight_generated':
+              return 'AI generated a new health insight';
+            case 'ai_insight_edited':
+              return 'AI insight was reviewed and edited';
+            case 'ai_insight_approved':
+              return 'AI insight was approved';
+            case 'database_backup':
+              return 'Created a system backup';
+            case 'database_restore':
+              return 'Restored system from backup';
+            default:
+              return description || 'Performed an action';
+          }
+        }
+
+        // Get category for each action
+        function getActionCategory(action) {
+          const categories = {
+            login: 'Authentication',
+            logout: 'Authentication',
+            create_account: 'Account Management',
+            update_account: 'Account Management',
+            delete_account: 'Account Management',
+            assign_midwife: 'Staff Management',
+            create_mother: 'Patient Management',
+            update_mother: 'Patient Management',
+            create_pregnancy: 'Patient Management',
+            update_pregnancy: 'Patient Management',
+            create_checkup: 'Medical Records',
+            update_checkup: 'Medical Records',
+            create_ultrasound: 'Medical Records',
+            create_labtest: 'Medical Records',
+            create_child: 'Patient Management',
+            ai_insight_generated: 'AI Features',
+            ai_insight_edited: 'AI Features',
+            ai_insight_approved: 'AI Features',
+            database_backup: 'System Maintenance',
+            database_restore: 'System Maintenance'
+          };
+          return categories[action] || 'General';
         }
 
         /* ── State ── */
@@ -317,14 +426,14 @@
                 "*, accounts(first_name, last_name, email_address, account_type)",
               )
               .order("action_timestamp", { ascending: false })
-              .limit(2000);
+              .limit(5000);
             if (error) throw error;
             allLogs = data || [];
             renderStats();
             applyFilters();
           } catch (e) {
             document.getElementById("audit-tbody").innerHTML =
-              `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger);">Error loading audit trail: ${esc(e.message)}</td></tr>`;
+              `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger);">Error loading activity log: ${esc(e.message)}</div></tr>`;
           }
         }
 
@@ -338,14 +447,26 @@
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5);
           const actionLabels = {
-            login: "Login",
-            logout: "Logout",
-            create_account: "Create Acct",
-            update_account: "Update Acct",
-            delete_account: "Delete Acct",
-            assign_midwife: "Assign Midwife",
-            database_backup: "DB Backup",
-            database_restore: "DB Restore",
+            login: "Sign Ins",
+            logout: "Sign Outs",
+            create_account: "Accounts Created",
+            update_account: "Accounts Updated",
+            delete_account: "Accounts Removed",
+            assign_midwife: "Midwife Assignments",
+            create_mother: "Mothers Registered",
+            update_mother: "Mothers Updated",
+            create_pregnancy: "Pregnancies Added",
+            update_pregnancy: "Pregnancies Updated",
+            create_checkup: "Checkups Added",
+            update_checkup: "Checkups Updated",
+            create_ultrasound: "Ultrasounds Added",
+            create_labtest: "Lab Tests Added",
+            create_child: "Children Added",
+            ai_insight_generated: "AI Insights",
+            ai_insight_edited: "AI Edits",
+            ai_insight_approved: "AI Approvals",
+            database_backup: "Backups",
+            database_restore: "Restores",
           };
           const colors = [
             "var(--pink)",
@@ -378,9 +499,8 @@
             if (action && l.action !== action) return false;
             if (q) {
               const text = [
-                l.action,
-                l.description,
-                l.table_name,
+                getHumanReadableDescription(l),
+                getActionCategory(l.action),
                 l.accounts?.first_name,
                 l.accounts?.last_name,
               ]
@@ -426,14 +546,26 @@
 
         /* ── Render ── */
         const ACTION_BADGES = {
-          login: ["badge-admin", "Login"],
-          logout: ["badge-inactive", "Logout"],
-          create_account: ["badge-midwife", "Create Account"],
-          update_account: ["badge-mother", "Update Account"],
-          delete_account: ["badge-suspended", "Delete Account"],
-          assign_midwife: ["badge-midwife", "Assign Midwife"],
-          database_backup: ["badge-low", "DB Backup"],
-          database_restore: ["badge-medium", "DB Restore"],
+          login: ["badge-admin", "Sign In"],
+          logout: ["badge-inactive", "Sign Out"],
+          create_account: ["badge-midwife", "Account Created"],
+          update_account: ["badge-mother", "Account Updated"],
+          delete_account: ["badge-suspended", "Account Removed"],
+          assign_midwife: ["badge-midwife", "Midwife Assigned"],
+          create_mother: ["badge-mother", "Mother Registered"],
+          update_mother: ["badge-mother", "Mother Updated"],
+          create_pregnancy: ["badge-mother", "Pregnancy Added"],
+          update_pregnancy: ["badge-mother", "Pregnancy Updated"],
+          create_checkup: ["badge-mother", "Checkup Added"],
+          update_checkup: ["badge-mother", "Checkup Updated"],
+          create_ultrasound: ["badge-mother", "Ultrasound Added"],
+          create_labtest: ["badge-mother", "Lab Test Added"],
+          create_child: ["badge-mother", "Child Added"],
+          ai_insight_generated: ["badge-low", "AI Insight"],
+          ai_insight_edited: ["badge-medium", "AI Insight Edited"],
+          ai_insight_approved: ["badge-active", "AI Insight Approved"],
+          database_backup: ["badge-low", "Backup Created"],
+          database_restore: ["badge-medium", "System Restored"],
         };
 
         function renderTable() {
@@ -441,7 +573,7 @@
           const slice = filtered.slice(start, start + PAGE_SIZE);
           const tbody = document.getElementById("audit-tbody");
           if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--gray-400);"><i class="fa-solid fa-clipboard-list" style="font-size:32px;margin-bottom:12px;display:block;opacity:.4;"></i>No audit entries found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--gray-400);"><i class="fa-solid fa-clipboard-list" style="font-size:32px;margin-bottom:12px;display:block;opacity:.4;"></i>No activity records found. </div></tr>`;
             document.getElementById("page-info").textContent = "Showing 0 of 0";
             document.getElementById("pagination").innerHTML = "";
             return;
@@ -457,19 +589,21 @@
                 "badge-inactive",
                 l.action,
               ];
+              const description = getHumanReadableDescription(l);
+              const category = getActionCategory(l.action);
               return `<tr>
-        <td style="white-space:nowrap;font-size:12px;color:var(--gray-500);">${fmtDT(l.action_timestamp)}</td>
+        <td style="white-space:nowrap;font-size:12px;color:var(--gray-500);">${fmtDT(l.action_timestamp)}</div>
         <td>
           <div style="font-weight:600;font-size:13px;">${esc(who)}</div>
-          ${l.accounts ? `<div style="font-size:11px;color:var(--gray-400);">${esc(l.accounts.account_type || "")}</div>` : ""}
-        </td>
-        <td><span class="badge ${badgeCls}">${badgeLabel}</span></td>
-        <td style="font-size:12.5px;color:var(--gray-500);">${l.table_name ? `<code style="background:var(--gray-100);padding:2px 7px;border-radius:5px;color:var(--pink-dark);font-size:12px;">${esc(l.table_name)}</code>` : "—"}</td>
-        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${esc(l.description || "—")}</td>
+          ${l.accounts ? `<div style="font-size:11px;color:var(--gray-400);">${l.accounts.account_type === 'admin' ? 'Administrator' : (l.accounts.account_type === 'midwife' ? 'Midwife' : 'Mother')}</div>` : ""}
+        </div>
+        <td><span class="badge ${badgeCls}">${badgeLabel}</span></div>
+        <td style="font-size:12.5px;color:var(--gray-500);"><span style="background:var(--gray-100);padding:2px 8px;border-radius:5px;font-size:11px;">${category}</span></div>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${esc(description)}</div>
         <td style="text-align:center;">
-          ${l.old_data || l.new_data ? `<button class="btn btn-sm btn-outline-pink btn-icon" onclick="showDetail(${start + idx})" title="View change details"><i class="fa-solid fa-eye"></i></button>` : "—"}
-        </td>
-      </tr>`;
+          ${l.old_data || l.new_data ? `<button class="btn btn-sm btn-outline-pink btn-icon" onclick="showDetail(${start + idx})" title="View changes"><i class="fa-solid fa-eye"></i></button>` : "—"}
+        </div>
+      <tr>`;
             })
             .join("");
           document.getElementById("page-info").textContent =
@@ -508,24 +642,76 @@
           renderTable();
         };
 
-        /* ── Detail Modal ── */
+        /* ── Detail Modal with human-readable formatting ── */
         window.showDetail = (idx) => {
           const log = filtered[idx];
           if (!log) return;
-          const fmt = (obj) =>
-            obj
-              ? `<pre style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;font-size:12px;overflow:auto;max-height:200px;white-space:pre-wrap;">${esc(JSON.stringify(obj, null, 2))}</pre>`
-              : '<span style="color:var(--gray-400);">—</span>';
+          
+          // Format old_data and new_data in human-readable way
+          function formatChangeData(obj) {
+            if (!obj) return '<span style="color:var(--gray-400);">No changes recorded</span>';
+            
+            if (obj.account_type) {
+              const typeMap = { admin: 'Administrator', midwife: 'Midwife', mother: 'Mother' };
+              obj.account_type = typeMap[obj.account_type] || obj.account_type;
+            }
+            if (obj.status) {
+              const statusMap = { active: 'Active', inactive: 'Inactive', suspended: 'Suspended' };
+              obj.status = statusMap[obj.status] || obj.status;
+            }
+            if (obj.bhc_id) {
+              return `<span>Assigned to Barangay Health Center ID: ${obj.bhc_id}</span>`;
+            }
+            if (obj.response) {
+              const preview = obj.response.length > 200 ? obj.response.substring(0, 200) + '...' : obj.response;
+              return `<div style="white-space:pre-wrap;font-size:12px;">${esc(preview)}</div>`;
+            }
+            
+            const formatted = Object.entries(obj).map(([key, value]) => {
+              const keyMap = {
+                account_type: 'Account Type',
+                status: 'Status',
+                email: 'Email Address',
+                first_name: 'First Name',
+                last_name: 'Last Name',
+                bhc_id: 'Health Center',
+                response: 'Content'
+              };
+              const displayKey = keyMap[key] || key;
+              return `<div><strong>${displayKey}:</strong> ${esc(String(value))}</div>`;
+            }).join('');
+            return formatted || '<span style="color:var(--gray-400);">—</span>';
+          }
+          
+          const actionName = ACTION_BADGES[log.action] ? ACTION_BADGES[log.action][1] : log.action;
+          const description = getHumanReadableDescription(log);
+          
           document.getElementById("detail-body").innerHTML = `
-      <div style="display:grid;gap:14px;">
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">Timestamp</div><div style="font-size:13.5px;font-weight:600;">${fmtDT(log.action_timestamp)}</div></div>
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">Action</div><div>${(ACTION_BADGES[log.action] || ["badge-inactive", log.action])[1]}</div></div>
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">Description</div><div style="font-size:13.5px;">${esc(log.description || "—")}</div></div>
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">Before (old_data)</div>${fmt(log.old_data)}</div>
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:5px;">After (new_data)</div>${fmt(log.new_data)}</div>
-      </div>`;
+            <div style="display:grid;gap:16px;">
+              <div style="background:var(--gray-50);padding:12px;border-radius:12px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-400);margin-bottom:8px;">Activity Details</div>
+                <div><strong>Action:</strong> ${actionName}</div>
+                <div style="margin-top:8px;"><strong>Description:</strong> ${esc(description)}</div>
+                <div style="margin-top:8px;"><strong>Date & Time:</strong> ${fmtDT(log.action_timestamp)}</div>
+                <div style="margin-top:8px;"><strong>Performed By:</strong> ${log.accounts ? [log.accounts.first_name, log.accounts.last_name].filter(Boolean).join(" ") : "System"}</div>
+              </div>
+              ${log.old_data ? `
+              <div style="background:#fef2f2;padding:12px;border-radius:12px;border-left:3px solid var(--danger);">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--danger);margin-bottom:8px;">Before Changes</div>
+                ${formatChangeData(log.old_data)}
+              </div>
+              ` : ''}
+              ${log.new_data ? `
+              <div style="background:#ecfdf5;padding:12px;border-radius:12px;border-left:3px solid var(--success);">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--success);margin-bottom:8px;">After Changes</div>
+                ${formatChangeData(log.new_data)}
+              </div>
+              ` : ''}
+            </div>
+          `;
           document.getElementById("detail-modal").classList.add("show");
         };
+        
         ["detail-modal-close", "detail-close-btn"].forEach((id) =>
           document
             .getElementById(id)
@@ -544,11 +730,11 @@
         document.getElementById("export-btn").addEventListener("click", () => {
           if (filtered.length === 0) return;
           const headers = [
-            "Timestamp",
+            "Date & Time",
             "User",
-            "Email",
+            "Role",
             "Action",
-            "Table",
+            "Category",
             "Description",
           ];
           const rows = filtered.map((l) =>
@@ -559,10 +745,10 @@
                     .filter(Boolean)
                     .join(" ")
                 : "System",
-              l.accounts?.email_address || "",
-              l.action || "",
-              l.table_name || "",
-              (l.description || "").replace(/"/g, '""'),
+              l.accounts?.account_type === 'admin' ? 'Administrator' : (l.accounts?.account_type === 'midwife' ? 'Midwife' : 'Mother') || "",
+              (ACTION_BADGES[l.action] ? ACTION_BADGES[l.action][1] : l.action) || "",
+              getActionCategory(l.action),
+              (getHumanReadableDescription(l) || "").replace(/"/g, '""'),
             ]
               .map((v) => `"${v}"`)
               .join(","),
@@ -572,7 +758,7 @@
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = `audit_trail_${new Date().toISOString().slice(0, 10)}.csv`;
+          a.download = `activity_log_${new Date().toISOString().slice(0, 10)}.csv`;
           a.click();
           URL.revokeObjectURL(url);
         });

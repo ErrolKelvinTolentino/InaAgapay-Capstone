@@ -79,6 +79,15 @@
           </li>
         </ul>
         <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Patient Management</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="patient-records.html"
+              ><i class="fa-solid fa-folder-open"></i> Patient Records</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
         <span class="sidebar-section-label">System</span>
         <ul class="sidebar-nav">
           <li>
@@ -576,7 +585,7 @@
             const tbody = document.getElementById("recent-audit-body");
             if (!data || data.length === 0) {
               tbody.innerHTML =
-                '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--gray-400);">No activity recorded yet.</td></tr>';
+                '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--gray-400);">No activity recorded yet.专业课</tr>';
               return;
             }
             tbody.innerHTML = data

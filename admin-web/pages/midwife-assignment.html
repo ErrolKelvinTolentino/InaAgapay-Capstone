@@ -70,6 +70,15 @@
           </li>
         </ul>
         <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Patient Management</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="patient-records.html"
+              ><i class="fa-solid fa-folder-open"></i> Patient Records</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
         <span class="sidebar-section-label">System</span>
         <ul class="sidebar-nav">
           <li>
@@ -97,7 +106,7 @@
           <div class="page-title-block">
             <h1 class="page-title">Midwife Assignment</h1>
             <p class="page-subtitle">
-              Assign midwives to Barangay Health Centers
+              Assign midwives to Barangay Health Centers (One BHC per midwife)
             </p>
           </div>
           <div class="page-actions">
@@ -125,6 +134,15 @@
               "
               >— unassigned</span
             >
+          </div>
+        </div>
+
+        <!-- Info Banner -->
+        <div class="alert alert-info" style="margin-bottom: 24px">
+          <i class="fa-solid fa-info-circle"></i>
+          <div>
+            <strong>Important:</strong> Each midwife can only be assigned to <strong>ONE</strong> Barangay Health Center. 
+            Changing a midwife's assignment will replace their current BHC assignment.
           </div>
         </div>
 
@@ -160,9 +178,9 @@
                 id="filter-assigned"
                 style="width: auto"
               >
-                <option value="">All</option>
-                <option value="assigned">Assigned</option>
-                <option value="unassigned">Unassigned</option>
+                <option value="">All Midwives</option>
+                <option value="assigned">Assigned Only</option>
+                <option value="unassigned">Unassigned Only</option>
               </select>
             </div>
           </div>
@@ -210,6 +228,50 @@
     </div>
 
     <div id="toast-container"></div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirm-modal">
+      <div class="modal" style="max-width: 420px">
+        <div class="modal-header">
+          <h2 class="modal-title" style="color: var(--warning)">
+            Confirm Assignment Change
+          </h2>
+          <button class="modal-close" id="confirm-modal-close">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div style="text-align: center; padding: 12px 0 8px">
+            <i
+              class="fa-solid fa-exchange-alt"
+              style="
+                font-size: 40px;
+                color: var(--warning);
+                margin-bottom: 14px;
+              "
+            ></i>
+            <p style="font-size: 14px; color: var(--gray-700); line-height: 1.7">
+              Are you sure you want to change <strong id="confirm-midwife-name"></strong>'s 
+              BHC assignment?
+            </p>
+            <p style="font-size: 13px; color: var(--gray-500); margin-top: 12px;">
+              Current: <strong id="confirm-old-bhc"></strong><br />
+              New: <strong id="confirm-new-bhc"></strong>
+            </p>
+            <p style="font-size: 12px; color: var(--danger); margin-top: 12px;">
+              <i class="fa-solid fa-triangle-exclamation"></i> 
+              This will replace their current assignment (one BHC per midwife)
+            </p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+          <button class="btn btn-primary" id="confirm-proceed">
+            <i class="fa-solid fa-check"></i> Confirm Assignment
+          </button>
+        </div>
+      </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script>
@@ -261,7 +323,7 @@
           const c = document.getElementById("toast-container");
           const t = document.createElement("div");
           t.className = `toast ${type}`;
-          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span>`;
+          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span><button class="toast-close" onclick="this.closest('.toast').remove()"><i class="fa-solid fa-xmark"></i></button>`;
           c.appendChild(t);
           setTimeout(() => {
             t.style.animation = "fadeOut .3s ease forwards";
@@ -278,6 +340,9 @@
         let bhcs = [],
           midwives = [],
           filtered = [];
+        
+        // Store pending assignment for confirmation
+        let pendingAssignment = null;
 
         async function loadData() {
           const tbody = document.getElementById("midwife-tbody");
@@ -287,7 +352,7 @@
               db
                 .from("accounts")
                 .select(
-                  "account_id, first_name, middle_name, last_name, email_address",
+                  "account_id, first_name, middle_name, last_name, email_address"
                 )
                 .eq("account_type", "midwife")
                 .eq("status", "active")
@@ -314,6 +379,7 @@
 
             // BHC filter dropdown
             const sel = document.getElementById("filter-bhc");
+            sel.innerHTML = '<option value="">All BHCs</option>';
             bhcs.forEach((b) => {
               const o = document.createElement("option");
               o.value = b.bhc_id;
@@ -326,7 +392,7 @@
             applyFilters();
           } catch (err) {
             showToast("Failed to load data: " + err.message, "error");
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="font-size:32px;margin-bottom:12px;display:block;"></i>Failed to load midwife data. Please refresh the page.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="font-size:32px;margin-bottom:12px;display:block;"></i>Failed to load midwife data. Please refresh the page. </div></tr>`;
           }
         }
 
@@ -419,7 +485,7 @@
         function renderTable() {
           const tbody = document.getElementById("midwife-tbody");
           if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--gray-400);"><i class="fa-solid fa-user-nurse" style="font-size:32px;margin-bottom:12px;display:block;opacity:.4;"></i>No midwives found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--gray-400);"><i class="fa-solid fa-user-nurse" style="font-size:32px;margin-bottom:12px;display:block;opacity:.4;"></i>No midwives found. </div></tr>`;
             return;
           }
           tbody.innerHTML = filtered
@@ -437,7 +503,7 @@
               const options = bhcs
                 .map(
                   (b) =>
-                    `<option value="${b.bhc_id}"${m.assigned_bhc_id === b.bhc_id ? " selected" : ""}>${esc(b.bhc_name)}</option>`,
+                    `<option value="${b.bhc_id}"${m.assigned_bhc_id === b.bhc_id ? " selected" : ""}>${esc(b.bhc_name)}</option>`
                 )
                 .join("");
               return `<tr id="row-${m.account_id}">
@@ -449,48 +515,83 @@
               <div style="font-size:11.5px;color:var(--gray-400);">Midwife</div>
             </div>
           </div>
-        </td>
-        <td style="color:var(--gray-600);font-size:13px;">${esc(m.email_address)}</td>
+        </div>
+        <td style="color:var(--gray-600);font-size:13px;">${esc(m.email_address)}</div>
         <td>
           ${
             curBhc
               ? `<div style="display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-location-dot" style="color:var(--pink);font-size:12px;"></i>${esc(curBhc)}</div>`
               : `<span style="color:var(--gray-400);font-style:italic;font-size:13px;">Not assigned</span>`
           }
-        </td>
+        </div>
         <td style="min-width:220px;">
           <select class="form-select" id="bhc-sel-${m.account_id}" style="font-size:13px;">
             <option value="">— Select BHC —</option>
             ${options}
           </select>
-        </td>
+        </div>
         <td style="text-align:center;">
           ${
             m.assigned_bhc_id
               ? `<span class="badge badge-active"><i class="fa-solid fa-circle-check"></i> Assigned</span>`
               : `<span class="badge badge-medium"><i class="fa-solid fa-circle-exclamation"></i> Unassigned</span>`
           }
-        </td>
+        </div>
         <td style="text-align:center;">
-          <button class="btn btn-sm btn-primary" onclick="saveAssignment(${m.account_id})">
+          <button class="btn btn-sm btn-primary" onclick="prepareAssignment(${m.account_id})">
             <i class="fa-solid fa-floppy-disk"></i> Save
           </button>
-        </td>
+        </div>
       </tr>`;
             })
             .join("");
         }
 
-        /* ── Save Assignment ── */
-        window.saveAssignment = async (accountId) => {
+        /* ── Prepare Assignment with Confirmation ── */
+        window.prepareAssignment = (accountId) => {
           const sel = document.getElementById(`bhc-sel-${accountId}`);
-          const bhcId = sel ? parseInt(sel.value) : 0;
-          if (!bhcId) {
+          const newBhcId = sel ? parseInt(sel.value) : 0;
+          
+          if (!newBhcId) {
             showToast("Please select a BHC.", "warning");
             return;
           }
 
           const midwife = midwives.find((m) => m.account_id === accountId);
+          const oldBhcId = midwife.assigned_bhc_id;
+          
+          // If same BHC selected, no change needed
+          if (oldBhcId === newBhcId) {
+            showToast("Midwife is already assigned to this BHC.", "info");
+            return;
+          }
+
+          const oldBhcName = oldBhcId ? getBhcName(oldBhcId) : "Not assigned";
+          const newBhcName = getBhcName(newBhcId);
+          const midwifeName = [midwife.first_name, midwife.last_name].filter(Boolean).join(" ");
+
+          // Store pending assignment
+          pendingAssignment = {
+            accountId: accountId,
+            midwifeName: midwifeName,
+            oldBhcId: oldBhcId,
+            oldBhcName: oldBhcName,
+            newBhcId: newBhcId,
+            newBhcName: newBhcName
+          };
+
+          // Show confirmation modal
+          document.getElementById("confirm-midwife-name").textContent = midwifeName;
+          document.getElementById("confirm-old-bhc").textContent = oldBhcName;
+          document.getElementById("confirm-new-bhc").textContent = newBhcName;
+          document.getElementById("confirm-modal").classList.add("show");
+        };
+
+        /* ── Save Assignment after Confirmation ── */
+        async function saveAssignment(assignment) {
+          const { accountId, midwifeName, oldBhcId, newBhcId, newBhcName } = assignment;
+          const midwife = midwives.find((m) => m.account_id === accountId);
+          
           const btn = document.querySelector(`#row-${accountId} .btn-primary`);
           if (btn) {
             btn.disabled = true;
@@ -498,51 +599,76 @@
           }
 
           try {
-            const oldBhc = midwife.assigned_bhc_id;
             if (midwife.midwife_id) {
-              // Update
+              // Update existing assignment (ensures ONE BHC only)
               const { error } = await db
                 .from("midwives")
-                .update({ assigned_bhc_id: bhcId })
+                .update({ assigned_bhc_id: newBhcId })
                 .eq("midwife_id", midwife.midwife_id);
               if (error) throw error;
             } else {
-              // Insert
+              // Insert new assignment
               const { data, error } = await db
                 .from("midwives")
-                .insert({ account_id: accountId, assigned_bhc_id: bhcId })
+                .insert({ account_id: accountId, assigned_bhc_id: newBhcId })
                 .select()
                 .single();
               if (error) throw error;
               midwife.midwife_id = data.midwife_id;
             }
-            midwife.assigned_bhc_id = bhcId;
+            
+            // Update local data
+            midwife.assigned_bhc_id = newBhcId;
 
-            // Audit
+            // Audit log
             await db.from("audit_trail").insert({
               account_id: session.account_id,
               action: "assign_midwife",
               table_name: "midwives",
-              description: `Assigned midwife #${accountId} to BHC "${getBhcName(bhcId)}"`,
-              old_data: { bhc_id: oldBhc },
-              new_data: { bhc_id: bhcId },
+              description: `Changed midwife "${midwifeName}" assignment from ${oldBhcId ? getBhcName(oldBhcId) : "unassigned"} to "${newBhcName}"`,
+              old_data: { bhc_id: oldBhcId },
+              new_data: { bhc_id: newBhcId },
             });
 
-            showToast(
-              `Assigned to ${getBhcName(bhcId)} successfully.`,
-              "success",
-            );
+            showToast(`${midwifeName} assigned to ${newBhcName} successfully.`, "success");
             updateBadges();
             renderBhcCards();
             applyFilters();
           } catch (err) {
-            showToast("Error saving: " + err.message, "error");
+            showToast("Error saving assignment: " + err.message, "error");
+          } finally {
             if (btn) {
               btn.disabled = false;
               btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save';
             }
           }
-        };
+        }
+
+        // Confirm modal handlers
+        document.getElementById("confirm-proceed").addEventListener("click", () => {
+          if (pendingAssignment) {
+            saveAssignment(pendingAssignment);
+            pendingAssignment = null;
+          }
+          document.getElementById("confirm-modal").classList.remove("show");
+        });
+
+        document.getElementById("confirm-cancel").addEventListener("click", () => {
+          pendingAssignment = null;
+          document.getElementById("confirm-modal").classList.remove("show");
+        });
+
+        document.getElementById("confirm-modal-close").addEventListener("click", () => {
+          pendingAssignment = null;
+          document.getElementById("confirm-modal").classList.remove("show");
+        });
+
+        document.getElementById("confirm-modal").addEventListener("click", (e) => {
+          if (e.target === e.currentTarget) {
+            pendingAssignment = null;
+            e.currentTarget.classList.remove("show");
+          }
+        });
 
         loadData();
       })();

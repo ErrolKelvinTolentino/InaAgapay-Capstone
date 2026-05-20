@@ -70,6 +70,15 @@
           </li>
         </ul>
         <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Patient Management</span>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="patient-records.html"
+              ><i class="fa-solid fa-folder-open"></i> Patient Records</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-divider"></div>
         <span class="sidebar-section-label">System</span>
         <ul class="sidebar-nav">
           <li>
@@ -837,7 +846,7 @@
           const tbody = document.getElementById("history-tbody");
           if (!data || data.length === 0) {
             tbody.innerHTML =
-              '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--gray-400);">No backup/restore history.</td></tr>';
+              '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--gray-400);">No backup/restore history.</div></tr>';
             return;
           }
           tbody.innerHTML = data
@@ -849,15 +858,15 @@
                 : "System";
               const isBackup = l.action === "database_backup";
               return `<tr>
-        <td style="font-size:12.5px;color:var(--gray-500);white-space:nowrap;">${fmtDT(l.action_timestamp)}</td>
-        <td style="font-weight:600;">${esc(who)}</td>
+        <td style="font-size:12.5px;color:var(--gray-500);white-space:nowrap;">${fmtDT(l.action_timestamp)}</div>
+        <td style="font-weight:600;">${esc(who)}</div>
         <td>
           <span class="badge ${isBackup ? "badge-low" : "badge-medium"}">
             <i class="fa-solid ${isBackup ? "fa-download" : "fa-upload"}"></i>
             ${isBackup ? "Backup" : "Restore"}
           </span>
-        </td>
-        <td style="font-size:13px;color:var(--gray-600);">${esc(l.description || "—")}</td>
+        </div>
+        <td style="font-size:13px;color:var(--gray-600);">${esc(l.description || "—")}</div>
       </tr>`;
             })
             .join("");
