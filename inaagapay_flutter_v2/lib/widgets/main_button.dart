@@ -9,6 +9,7 @@ class MainButton extends StatelessWidget {
   final bool showIcons;
   final IconData? leftIcon;
   final IconData? rightIcon;
+  final bool isWhiteVariant;
 
   const MainButton({
     super.key,
@@ -17,6 +18,7 @@ class MainButton extends StatelessWidget {
     this.showIcons = true,
     this.leftIcon,
     this.rightIcon,
+    this.isWhiteVariant = false,
   });
 
   @override
@@ -27,12 +29,17 @@ class MainButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.brandPrimary,
-          foregroundColor: Colors.white,
-          elevation: 4,
-          shadowColor: AppColors.brandPrimary.withValues(alpha: 0.4),
+          backgroundColor: isWhiteVariant ? Colors.white : AppColors.brandPrimary,
+          foregroundColor: isWhiteVariant ? AppColors.brandPrimary : Colors.white,
+          elevation: isWhiteVariant ? 0 : 4,
+          shadowColor: isWhiteVariant
+              ? Colors.transparent
+              : AppColors.brandPrimary.withValues(alpha: 0.4),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(28),
+            side: isWhiteVariant
+                ? BorderSide(color: AppColors.brandPrimary, width: 1)
+                : BorderSide.none,
           ),
         ),
         child: Row(

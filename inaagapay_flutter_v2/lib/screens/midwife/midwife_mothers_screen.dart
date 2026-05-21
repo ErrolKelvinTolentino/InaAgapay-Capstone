@@ -1247,7 +1247,8 @@ class _MotherCard extends StatelessWidget {
                         spacing: 8,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Flexible(
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 220),
                             child: Text(
                               displayName,
                               style: const TextStyle(

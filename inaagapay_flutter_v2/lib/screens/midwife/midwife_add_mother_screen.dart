@@ -9,11 +9,12 @@ import '../../models/ocr_result.dart';
 import '../../services/auth_storage.dart';
 import '../../services/groq_service.dart';
 import '../../services/supabase_service.dart';
+import '../../services/ph_address_service.dart' as ph_addr;
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
-import '../../widgets/progressive_step_indicator.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/secondary_header.dart';
+import '../../widgets/main_button.dart';
 import 'add_prenatal_checkup_screen.dart';
 
 enum _GestationMethod { lmp, edd, aog }
@@ -267,11 +268,21 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   String? _selectedBarangay;
   final TextEditingController _cityCtrl = TextEditingController();
   final TextEditingController _provinceCtrl = TextEditingController();
+  final ScrollController _streetSuggestionController = ScrollController();
   String? _houseError;
   String? _streetError;
   String? _barangayError;
   String? _cityError;
   String? _provinceError;
+
+  // Cascading Address Selection State
+  String? _activeAddressSearchField; // 'province', 'city', 'barangay', 'street'
+  List<String> _apiProvinces = [];
+  List<String> _apiCities = [];
+  List<String> _apiBarangays = [];
+  bool _loadingProvinces = false;
+  bool _loadingCities = false;
+  bool _loadingBarangays = false;
 
   static const List<String> _bhcBarangays = [
     'Sta Barbara',
@@ -288,7 +299,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   final TextEditingController _heightCtrl = TextEditingController();
   final TextEditingController _weightCtrl = TextEditingController();
   final TextEditingController _prePregnancyWeightCtrl = TextEditingController();
+  bool _knowsPrePregnancyWeight = true;
   String? _bloodType;
+  final TextEditingController _bloodTypeCtrl = TextEditingController();
+  bool _showBloodTypeDropdown = false;
   String? _heightError;
   String? _weightError;
   String? _prePregnancyWeightError;
@@ -308,6 +322,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
   // Step 7: Gestational Info
   _GestationMethod _gestationMethod = _GestationMethod.lmp;
+  final TextEditingController _gestationMethodCtrl =
+      TextEditingController(text: 'Last Menstrual Period (LMP)');
+  bool _showGestationMethodDropdown = false;
   final TextEditingController _lmpCtrl = TextEditingController();
   final TextEditingController _eddCtrl = TextEditingController();
   final TextEditingController _aogWeeksCtrl = TextEditingController();
@@ -317,6 +334,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   DateTime? _lmp;
   DateTime? _edd;
   String? _gestationError;
+  String? _weeksError;
+  String? _daysError;
 
   // OCR - Using GroqService
   final GroqService _groqService = GroqService();
@@ -325,6 +344,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   void initState() {
     super.initState();
     _loadContext();
+    _loadProvinces();
     _phoneCtrl.addListener(_onPhoneChanged);
     _heightCtrl.addListener(_validateHeightWeight);
     _weightCtrl.addListener(_validateHeightWeight);
@@ -358,6 +378,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     ]) {
       c.dispose();
     }
+    _streetSuggestionController.dispose();
     super.dispose();
   }
 
@@ -408,27 +429,54 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   }
 
   void _calculateBMI() {
-    final height = double.tryParse(_heightCtrl.text.trim());
-    final weight = double.tryParse(_weightCtrl.text.trim());
+    if (!_knowsPrePregnancyWeight) {
+      _calculatedBMI = null;
+      _bmiClassification = null;
+      _bmiWarning = null;
+      setState(() {});
+      return;
+    }
 
-    if (height != null && weight != null && height > 0) {
+    final height = double.tryParse(_heightCtrl.text.trim());
+    final ppw = double.tryParse(_prePregnancyWeightCtrl.text.trim());
+
+    if (height != null && ppw != null && height > 0) {
       final heightM = height / 100;
-      final bmi = weight / (heightM * heightM);
+      final bmi = ppw / (heightM * heightM);
       _calculatedBMI = bmi;
 
       if (bmi < 18.5) {
         _bmiClassification = 'Underweight';
-        _bmiWarning = 'Underweight: May increase risk of complications.';
       } else if (bmi < 25) {
         _bmiClassification = 'Normal';
-        _bmiWarning = null;
       } else if (bmi < 30) {
         _bmiClassification = 'Overweight';
-        _bmiWarning = 'Overweight: Monitor weight gain during pregnancy.';
       } else {
         _bmiClassification = 'Obese';
-        _bmiWarning =
-            'Obese: Higher risk of pregnancy complications. Close monitoring advised.';
+      }
+
+      final weeks = int.tryParse(_aogWeeksCtrl.text.trim()) ?? 0;
+      if (weeks <= 12) {
+        _bmiWarning = 'Recommended total weight gain for this week (Week $weeks) is 0.5 - 2.0 kg.';
+      } else {
+        final double minRate;
+        final double maxRate;
+        if (bmi < 18.5) {
+          minRate = 0.44; // Underweight min
+          maxRate = 0.58; // Underweight max
+        } else if (bmi < 25) {
+          minRate = 0.35; // Normal min
+          maxRate = 0.50; // Normal max
+        } else if (bmi < 30) {
+          minRate = 0.23; // Overweight min
+          maxRate = 0.33; // Overweight max
+        } else {
+          minRate = 0.17; // Obese min
+          maxRate = 0.27; // Obese max
+        }
+        final minGain = 0.5 + (weeks - 12) * minRate;
+        final maxGain = 2.0 + (weeks - 12) * maxRate;
+        _bmiWarning = 'Recommended total weight gain for this week (Week $weeks) is ${minGain.toStringAsFixed(1)} - ${maxGain.toStringAsFixed(1)} kg.';
       }
     } else {
       _calculatedBMI = null;
@@ -507,17 +555,29 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
   String? _validateLmp(DateTime lmp) {
     final now = DateTime.now();
-    // LMP cannot be in the future
-    if (lmp.isAfter(now)) {
-      return 'LMP cannot be in the future.';
+    final fiveWeeksAgo = now.subtract(const Duration(days: 5 * 7));
+    if (lmp.isAfter(fiveWeeksAgo)) {
+      return 'LMP must be at least 5 weeks ago.';
     }
-    // LMP cannot be more than 43 weeks (301 days) in the past
     final daysSinceLmp = now.difference(lmp).inDays;
-    if (daysSinceLmp > 301) {
-      return 'LMP is more than 43 weeks ago. Please verify the date.';
+    if (daysSinceLmp > 42 * 7) {
+      return 'LMP is more than 42 weeks ago. Please verify the date.';
     }
-    // Also run existing pregnancy interval check
     return _validatePregnancyInterval(lmp);
+  }
+
+  String? _validateEdd(DateTime edd) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final eddDate = DateTime(edd.year, edd.month, edd.day);
+    if (eddDate.isBefore(today)) {
+      return 'EDD cannot be in the past.';
+    }
+    final maxEdd = today.add(const Duration(days: 43 * 7));
+    if (eddDate.isAfter(maxEdd)) {
+      return 'EDD cannot be more than 43 weeks from today.';
+    }
+    return null;
   }
 
   void _showEarlyPregnancyWarning() {
@@ -539,6 +599,187 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         ],
       ),
     );
+  }
+
+  Future<DateTime?> _showBrandedDatePicker({
+    required BuildContext context,
+    required DateTime initialDate,
+    required DateTime firstDate,
+    required DateTime lastDate,
+  }) {
+    DateTime clampedInitial = initialDate;
+    if (clampedInitial.isBefore(firstDate)) {
+      clampedInitial = firstDate;
+    } else if (clampedInitial.isAfter(lastDate)) {
+      clampedInitial = lastDate;
+    }
+
+    return showDatePicker(
+      context: context,
+      initialDate: clampedInitial,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.brandPrimary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.brandText,
+              secondary: AppColors.brandPrimary,
+              surface: Colors.white,
+            ),
+            dialogTheme: DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 4,
+              surfaceTintColor: Colors.transparent,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              headerBackgroundColor: Colors.white,
+              headerForegroundColor: AppColors.brandText,
+              headerHeadlineStyle: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandText,
+              ),
+              headerHelpStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandPrimary,
+              ),
+              surfaceTintColor: Colors.transparent,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
+
+  Future<void> _loadProvinces() async {
+    setState(() => _loadingProvinces = true);
+    try {
+      final list = await ph_addr.PhAddressService.getProvinces();
+      if (mounted) {
+        setState(() {
+          _apiProvinces = list.map((p) => p.name).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading provinces: $e');
+    } finally {
+      if (mounted) setState(() => _loadingProvinces = false);
+    }
+  }
+
+  Future<void> _onProvinceSelected(String provinceName) async {
+    setState(() {
+      _provinceCtrl.text = provinceName;
+      _cityCtrl.clear();
+      _barangayCtrl.clear();
+      _streetCtrl.clear();
+      _selectedBarangay = null;
+      _apiCities = [];
+      _apiBarangays = [];
+      _loadingCities = true;
+    });
+
+    try {
+      final list = await ph_addr.PhAddressService.getCities(provinceName);
+      if (mounted) {
+        setState(() {
+          _apiCities = list.map((c) => c.name).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading cities: $e');
+    } finally {
+      if (mounted) setState(() => _loadingCities = false);
+    }
+    _validateStepInline(1);
+  }
+
+  Future<void> _onCitySelected(String cityName) async {
+    setState(() {
+      _cityCtrl.text = cityName;
+      _barangayCtrl.clear();
+      _streetCtrl.clear();
+      _selectedBarangay = null;
+      _apiBarangays = [];
+      _loadingBarangays = true;
+    });
+
+    try {
+      final list = await ph_addr.PhAddressService.getBarangays(cityName);
+      if (mounted) {
+        setState(() {
+          _apiBarangays = list.map((b) => b.name).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading barangays: $e');
+    } finally {
+      if (mounted) setState(() => _loadingBarangays = false);
+    }
+    _validateStepInline(1);
+  }
+
+  void _onBarangaySelected(String barangayName) {
+    setState(() {
+      _selectedBarangay = barangayName;
+      _barangayCtrl.text = barangayName;
+      _streetCtrl.clear();
+    });
+    _validateStepInline(1);
+  }
+
+  Future<void> _preloadCitiesAndBarangays() async {
+    final province = _provinceCtrl.text.trim();
+    final city = _cityCtrl.text.trim();
+    if (province.isNotEmpty) {
+      setState(() => _loadingCities = true);
+      try {
+        final list = await ph_addr.PhAddressService.getCities(province);
+        if (mounted) {
+          setState(() {
+            _apiCities = list.map((c) => c.name).toList();
+          });
+        }
+      } catch (e) {
+        debugPrint('Error preloading cities: $e');
+      } finally {
+        if (mounted) setState(() => _loadingCities = false);
+      }
+    }
+    if (city.isNotEmpty) {
+      setState(() => _loadingBarangays = true);
+      try {
+        final list = await ph_addr.PhAddressService.getBarangays(city);
+        if (mounted) {
+          setState(() {
+            _apiBarangays = list.map((b) => b.name).toList();
+          });
+        }
+      } catch (e) {
+        debugPrint('Error preloading barangays: $e');
+      } finally {
+        if (mounted) setState(() => _loadingBarangays = false);
+      }
+    }
   }
 
   Future<void> _loadContext() async {
@@ -661,8 +902,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       _heightCtrl.text = existingData['height'].toString();
     if (existingData['weight'] != null)
       _weightCtrl.text = existingData['weight'].toString();
-    if (existingData['blood_type'] != null)
+    if (existingData['blood_type'] != null) {
       _bloodType = existingData['blood_type'];
+      _bloodTypeCtrl.text = _bloodType ?? '';
+    }
 
     if (existingData['house_number'] != null &&
         existingData['house_number'].toString().isNotEmpty) {
@@ -711,6 +954,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         }
       });
     }
+    _preloadCitiesAndBarangays();
   }
 
   void _onEmailChanged(String v) {
@@ -768,8 +1012,22 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       _lmpCtrl.text = _dateFmt.format(lmp);
       _eddCtrl.text = _dateFmt.format(_edd!);
       _gestationMethod = _GestationMethod.lmp;
+      _gestationMethodCtrl.text = 'Last Menstrual Period (LMP)';
       _gestationError = _validateLmp(lmp);
+
+      final days = DateTime.now().difference(lmp).inDays;
+      if (days >= 0) {
+        _aogWeeksCtrl.text = (days ~/ 7).toString();
+        _aogDaysCtrl.text = (days % 7).toString();
+      } else {
+        _aogWeeksCtrl.text = '';
+        _aogDaysCtrl.text = '';
+      }
+      _weeksError = null;
+      _daysError = null;
     });
+
+    _calculateBMI();
 
     // Warn if LMP is less than 4 weeks ago
     final daysSinceLmp = DateTime.now().difference(lmp).inDays;
@@ -785,17 +1043,79 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       _eddCtrl.text = _dateFmt.format(edd);
       _lmpCtrl.text = _dateFmt.format(_lmp!);
       _gestationMethod = _GestationMethod.edd;
-      _gestationError = _validateLmp(_lmp!);
+      _gestationMethodCtrl.text = 'Estimated Delivery Date (EDD)';
+      _gestationError = _validateEdd(edd) ?? _validateLmp(_lmp!);
+
+      final days = DateTime.now().difference(_lmp!).inDays;
+      if (days >= 0) {
+        _aogWeeksCtrl.text = (days ~/ 7).toString();
+        _aogDaysCtrl.text = (days % 7).toString();
+      } else {
+        _aogWeeksCtrl.text = '';
+        _aogDaysCtrl.text = '';
+      }
+      _weeksError = null;
+      _daysError = null;
     });
+
+    _calculateBMI();
   }
 
   void _updateFromAog() {
-    final w = int.tryParse(_aogWeeksCtrl.text.trim()) ?? 0;
-    final d = int.tryParse(_aogDaysCtrl.text.trim()) ?? 0;
-    if (w <= 0 && d <= 0) return;
-    final lmp = DateTime.now().subtract(Duration(days: w * 7 + d));
-    _updateFromLmp(lmp);
-    _gestationMethod = _GestationMethod.aog;
+    final wStr = _aogWeeksCtrl.text.trim();
+    final dStr = _aogDaysCtrl.text.trim();
+
+    if (wStr.isEmpty && dStr.isEmpty) {
+       setState(() {
+         _weeksError = null;
+         _daysError = null;
+         _gestationError = null;
+         _lmp = null;
+         _edd = null;
+         _lmpCtrl.clear();
+         _eddCtrl.clear();
+       });
+       _calculateBMI();
+       return;
+    }
+
+    final w = int.tryParse(wStr);
+    final d = int.tryParse(dStr);
+
+    String? wErr;
+    String? dErr;
+
+    if (w == null && wStr.isNotEmpty) {
+      wErr = 'Enter a valid number';
+    } else if (w != null && (w < 0 || w > 42)) {
+      wErr = 'Must be 0-42';
+    }
+
+    if (d == null && dStr.isNotEmpty) {
+      dErr = 'Enter a valid number';
+    } else if (d != null && (d < 0 || d > 6)) {
+      dErr = 'Must be 0-6';
+    }
+
+    setState(() {
+      _weeksError = wErr;
+      _daysError = dErr;
+      _gestationError = (wErr != null || dErr != null) ? 'Invalid AOG weeks or days' : null;
+    });
+
+    if (wErr == null && dErr == null && w != null && d != null) {
+      final lmp = DateTime.now().subtract(Duration(days: w * 7 + d));
+      setState(() {
+        _lmp = lmp;
+        _edd = lmp.add(const Duration(days: 280));
+        _lmpCtrl.text = _dateFmt.format(lmp);
+        _eddCtrl.text = _dateFmt.format(_edd!);
+        _gestationMethod = _GestationMethod.aog;
+        _gestationMethodCtrl.text = 'Age of Gestation (AOG)';
+        _gestationError = _validateLmp(lmp);
+      });
+    }
+    _calculateBMI();
   }
 
   String _formatAog() {
@@ -853,7 +1173,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           _houseError = houseEmpty ? 'House number is required' : null;
           _streetError = streetEmpty ? 'Street is required' : null;
           if (!_addressSameAsBhc) {
-            _barangayError = (_selectedBarangay ?? '').isEmpty
+            _barangayError = _barangayCtrl.text.trim().isEmpty
                 ? 'Barangay is required'
                 : null;
             _cityError = _cityCtrl.text.trim().isEmpty
@@ -871,15 +1191,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         return !houseEmpty &&
             !streetEmpty &&
             (_addressSameAsBhc ||
-                ((_selectedBarangay ?? '').isNotEmpty &&
+                (_barangayCtrl.text.trim().isNotEmpty &&
                     _cityCtrl.text.trim().isNotEmpty &&
                     _provinceCtrl.text.trim().isNotEmpty));
 
       case 3:
-        return double.tryParse(_heightCtrl.text.trim()) != null &&
-            double.tryParse(_weightCtrl.text.trim()) != null;
-
-      case 7:
         if (_gestationMethod == _GestationMethod.lmp && _lmp == null)
           return false;
         if (_gestationMethod == _GestationMethod.edd && _edd == null)
@@ -888,6 +1204,31 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             _aogWeeksCtrl.text.trim().isEmpty &&
             _aogDaysCtrl.text.trim().isEmpty) return false;
         if (_gestationError != null) return false;
+        return true;
+
+      case 4:
+        final hVal = double.tryParse(_heightCtrl.text.trim());
+        final wVal = double.tryParse(_weightCtrl.text.trim());
+        
+        setState(() {
+          if (_heightCtrl.text.trim().isEmpty) {
+            _heightError = 'Height is required';
+          }
+          if (_weightCtrl.text.trim().isEmpty) {
+            _weightError = 'Weight is required';
+          }
+          if (_knowsPrePregnancyWeight && _prePregnancyWeightCtrl.text.trim().isEmpty) {
+            _prePregnancyWeightError = 'Pre-pregnancy weight is required';
+          }
+        });
+
+        if (hVal == null || _heightError != null) return false;
+        if (wVal == null || _weightError != null) return false;
+        
+        if (_knowsPrePregnancyWeight) {
+          final ppwVal = double.tryParse(_prePregnancyWeightCtrl.text.trim());
+          if (ppwVal == null || _prePregnancyWeightError != null) return false;
+        }
         return true;
 
       default:
@@ -1072,74 +1413,210 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final firstNameCtrl = TextEditingController();
     final lastNameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
-    String? relationship;
+    final relationshipCtrl = TextEditingController();
+    final customRelationshipCtrl = TextEditingController();
+
+    bool showRelationshipDropdown = false;
+    String? phoneError;
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Add Emergency Contact'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                    controller: firstNameCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'First Name', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: lastNameCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Last Name', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: phoneCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Phone Number',
-                        border: OutlineInputBorder()),
-                    keyboardType: TextInputType.phone),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  hint: const Text('Relationship'),
-                  items: _relationshipOptions
-                      .map((rel) =>
-                          DropdownMenuItem(value: rel, child: Text(rel)))
-                      .toList(),
-                  onChanged: (value) => setS(() => relationship = value),
-                  decoration:
-                      const InputDecoration(border: OutlineInputBorder()),
-                ),
-              ],
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Container(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: StatefulBuilder(
+              builder: (dialogCtx, setDialogState) {
+                // Real-time phone validation
+                void validatePhone(String val) {
+                  final normalized = val.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+                  final isValid = RegExp(r'^(\+?63|0)9\d{9}$').hasMatch(normalized);
+                  setDialogState(() {
+                    phoneError = val.isEmpty
+                        ? null
+                        : (isValid ? null : 'Enter a valid PH mobile number');
+                  });
+                }
+
+                final isPhoneValid = phoneCtrl.text.trim().isNotEmpty && phoneError == null;
+                final isRelationshipValid = relationshipCtrl.text.trim().isNotEmpty &&
+                    (relationshipCtrl.text.trim() != 'Other' || customRelationshipCtrl.text.trim().isNotEmpty);
+                final isFormValid = firstNameCtrl.text.trim().isNotEmpty &&
+                    lastNameCtrl.text.trim().isNotEmpty &&
+                    isPhoneValid &&
+                    isRelationshipValid;
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          onPressed: () => Navigator.pop(dialogCtx, false),
+                        ),
+                        const Expanded(
+                          child: Center(
+                            child: Text(
+                              'Add Emergency Contact',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: AppColors.brandText,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Scrollable body
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildPremiumTextField(
+                              controller: firstNameCtrl,
+                              labelText: 'First Name',
+                              hintText: 'Enter first name',
+                              isRequired: true,
+                              onChanged: (val) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: lastNameCtrl,
+                              labelText: 'Last Name',
+                              hintText: 'Enter last name',
+                              isRequired: true,
+                              onChanged: (val) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: phoneCtrl,
+                              labelText: 'Contact Number',
+                              hintText: 'e.g. 09171234567',
+                              isRequired: true,
+                              keyboardType: TextInputType.phone,
+                              errorText: phoneError,
+                              onChanged: (val) {
+                                validatePhone(val);
+                                setDialogState(() {});
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            // Relationship Dropdown Field
+                            _buildPremiumTextField(
+                              controller: relationshipCtrl,
+                              labelText: 'Relationship',
+                              hintText: 'Select relationship',
+                              isRequired: true,
+                              readOnly: true,
+                              suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                              onTap: () {
+                                setDialogState(() {
+                                  showRelationshipDropdown = !showRelationshipDropdown;
+                                });
+                              },
+                            ),
+                            if (showRelationshipDropdown) ...[
+                              const SizedBox(height: 4),
+                              Card(
+                                elevation: 4,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                color: Colors.white,
+                                child: Container(
+                                  constraints: const BoxConstraints(maxHeight: 200),
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount: _relationshipOptions.length,
+                                    itemBuilder: (context, idx) {
+                                      final rel = _relationshipOptions[idx];
+                                      return ListTile(
+                                        title: Text(rel, style: const TextStyle(fontSize: 14)),
+                                        dense: true,
+                                        onTap: () {
+                                          setDialogState(() {
+                                            relationshipCtrl.text = rel;
+                                            showRelationshipDropdown = false;
+                                            if (rel != 'Other') {
+                                              customRelationshipCtrl.clear();
+                                            }
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (relationshipCtrl.text == 'Other') ...[
+                              const SizedBox(height: 16),
+                              _buildPremiumTextField(
+                                controller: customRelationshipCtrl,
+                                labelText: 'Specify Relationship',
+                                hintText: 'Enter relationship',
+                                isRequired: true,
+                                onChanged: (val) => setDialogState(() {}),
+                              ),
+                            ],
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Primary Action Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isFormValid
+                            ? () => Navigator.pop(dialogCtx, true)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Add Contact',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () => firstNameCtrl.text.trim().isNotEmpty &&
-                      lastNameCtrl.text.trim().isNotEmpty &&
-                      phoneCtrl.text.trim().isNotEmpty &&
-                      relationship != null
-                  ? Navigator.pop(ctx, true)
-                  : null,
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
 
     if (result == true) {
       setState(() {
+        final rel = relationshipCtrl.text.trim() == 'Other'
+            ? customRelationshipCtrl.text.trim()
+            : relationshipCtrl.text.trim();
         _emergencyContacts.add(_EmergencyContact()
           ..firstName = firstNameCtrl.text.trim()
           ..lastName = lastNameCtrl.text.trim()
           ..phoneNumber = phoneCtrl.text.trim()
-          ..relationship = relationship);
+          ..relationship = rel);
       });
     }
   }
@@ -1169,89 +1646,216 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     DateTime? diagDate;
     String status = 'active';
     final remarksCtrl = TextEditingController();
+    final diagDateCtrl = TextEditingController();
+
+    bool showConditionDropdown = false;
+    bool showStatusDropdown = false;
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Medical Condition'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Condition Name',
-                        border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: diagDate ?? DateTime.now(),
-                        firstDate: DateTime(1900),
-                        lastDate: DateTime.now());
-                    if (picked != null) setS(() => diagDate = picked);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 16),
-                    decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.borderPrimary),
-                        borderRadius: BorderRadius.circular(12)),
-                    child: Row(
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Container(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: StatefulBuilder(
+              builder: (dialogCtx, setDialogState) {
+                final isFormValid = nameCtrl.text.trim().isNotEmpty;
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       children: [
-                        const Icon(Icons.calendar_today,
-                            color: AppColors.textSecondary),
-                        const SizedBox(width: 12),
-                        Text(
-                            diagDate == null
-                                ? 'Diagnosis Date (optional)'
-                                : _dateFmt.format(diagDate!),
-                            style: TextStyle(
-                                color: diagDate == null
-                                    ? AppColors.textSecondary
-                                    : AppColors.textPrimary)),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          onPressed: () => Navigator.pop(dialogCtx, false),
+                        ),
+                        const Expanded(
+                          child: Center(
+                            child: Text(
+                              'Medical Condition',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: AppColors.brandText,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: status,
-                  decoration: const InputDecoration(
-                      labelText: 'Status', border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: 'active', child: Text('Active')),
-                    DropdownMenuItem(value: 'resolved', child: Text('Resolved'))
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildPremiumTextField(
+                              controller: nameCtrl,
+                              labelText: 'Condition Name',
+                              hintText: 'Enter or select condition',
+                              isRequired: true,
+                              suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                              onChanged: (val) => setDialogState(() {}),
+                              onTap: () {
+                                setDialogState(() {
+                                  showConditionDropdown = !showConditionDropdown;
+                                });
+                              },
+                            ),
+                            if (showConditionDropdown) ...[
+                              const SizedBox(height: 4),
+                              Card(
+                                elevation: 4,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                color: Colors.white,
+                                child: Container(
+                                  constraints: const BoxConstraints(maxHeight: 150),
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount: _commonConditions.length,
+                                    itemBuilder: (context, idx) {
+                                      final cond = _commonConditions[idx];
+                                      return ListTile(
+                                        title: Text(cond, style: const TextStyle(fontSize: 14)),
+                                        dense: true,
+                                        onTap: () {
+                                          setDialogState(() {
+                                            if (cond == 'Other') {
+                                              nameCtrl.clear();
+                                            } else {
+                                              nameCtrl.text = cond;
+                                            }
+                                            showConditionDropdown = false;
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: diagDateCtrl,
+                              labelText: 'Diagnosis Date',
+                              hintText: 'Select date',
+                              readOnly: true,
+                              suffixIcon: const Icon(Icons.calendar_today_outlined, color: AppColors.brandPrimary),
+                              onTap: () async {
+                                final picked = await _showBrandedDatePicker(
+                                  context: dialogCtx,
+                                  initialDate: diagDate ?? DateTime.now(),
+                                  firstDate: DateTime(1900),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    diagDate = picked;
+                                    diagDateCtrl.text = _dateFmt.format(picked);
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: TextEditingController(
+                                text: status[0].toUpperCase() + status.substring(1),
+                              ),
+                              labelText: 'Status',
+                              hintText: 'Select status',
+                              isRequired: true,
+                              readOnly: true,
+                              suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                              onTap: () {
+                                setDialogState(() {
+                                  showStatusDropdown = !showStatusDropdown;
+                                });
+                              },
+                            ),
+                            if (showStatusDropdown) ...[
+                              const SizedBox(height: 4),
+                              Card(
+                                elevation: 4,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                color: Colors.white,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ListTile(
+                                      title: const Text('Active', style: TextStyle(fontSize: 14)),
+                                      dense: true,
+                                      onTap: () {
+                                        setDialogState(() {
+                                          status = 'active';
+                                          showStatusDropdown = false;
+                                        });
+                                      },
+                                    ),
+                                    ListTile(
+                                      title: const Text('Resolved', style: TextStyle(fontSize: 14)),
+                                      dense: true,
+                                      onTap: () {
+                                        setDialogState(() {
+                                          status = 'resolved';
+                                          showStatusDropdown = false;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: remarksCtrl,
+                              labelText: 'Remarks',
+                              hintText: 'Enter remarks',
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isFormValid
+                            ? () => Navigator.pop(dialogCtx, true)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Add Condition',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
-                  onChanged: (v) => setS(() => status = v ?? 'active'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: remarksCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Remarks (optional)',
-                        border: OutlineInputBorder()),
-                    maxLines: 2),
-              ],
+                );
+              },
             ),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            ElevatedButton(
-                onPressed: nameCtrl.text.trim().isNotEmpty
-                    ? () => Navigator.pop(ctx, true)
-                    : null,
-                child: const Text('Add')),
-          ],
-        ),
-      ),
+        );
+      },
     );
 
     if (result == true && nameCtrl.text.trim().isNotEmpty) {
@@ -1290,87 +1894,176 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     DateTime? diagDate;
     String status = 'active';
     final treatmentCtrl = TextEditingController();
+    final diagDateCtrl = TextEditingController();
+
+    bool showStatusDropdown = false;
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Add Allergy'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                    controller: allergenCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Allergen', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: diagDate ?? DateTime.now(),
-                        firstDate: DateTime(1900),
-                        lastDate: DateTime.now());
-                    if (picked != null) setS(() => diagDate = picked);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 16),
-                    decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.borderPrimary),
-                        borderRadius: BorderRadius.circular(12)),
-                    child: Row(
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Container(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: StatefulBuilder(
+              builder: (dialogCtx, setDialogState) {
+                final isFormValid = allergenCtrl.text.trim().isNotEmpty;
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       children: [
-                        const Icon(Icons.calendar_today,
-                            color: AppColors.textSecondary),
-                        const SizedBox(width: 12),
-                        Text(
-                            diagDate == null
-                                ? 'Diagnosis Date (optional)'
-                                : _dateFmt.format(diagDate!),
-                            style: TextStyle(
-                                color: diagDate == null
-                                    ? AppColors.textSecondary
-                                    : AppColors.textPrimary)),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          onPressed: () => Navigator.pop(dialogCtx, false),
+                        ),
+                        const Expanded(
+                          child: Center(
+                            child: Text(
+                              'Add Allergy',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: AppColors.brandText,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: status,
-                  decoration: const InputDecoration(
-                      labelText: 'Status', border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: 'active', child: Text('Active')),
-                    DropdownMenuItem(value: 'resolved', child: Text('Resolved'))
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildPremiumTextField(
+                              controller: allergenCtrl,
+                              labelText: 'Allergen',
+                              hintText: 'Enter allergen',
+                              isRequired: true,
+                              onChanged: (val) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: diagDateCtrl,
+                              labelText: 'Diagnosis Date',
+                              hintText: 'Select date',
+                              readOnly: true,
+                              suffixIcon: const Icon(Icons.calendar_today_outlined, color: AppColors.brandPrimary),
+                              onTap: () async {
+                                final picked = await _showBrandedDatePicker(
+                                  context: dialogCtx,
+                                  initialDate: diagDate ?? DateTime.now(),
+                                  firstDate: DateTime(1900),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    diagDate = picked;
+                                    diagDateCtrl.text = _dateFmt.format(picked);
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: TextEditingController(
+                                text: status[0].toUpperCase() + status.substring(1),
+                              ),
+                              labelText: 'Status',
+                              hintText: 'Select status',
+                              isRequired: true,
+                              readOnly: true,
+                              suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                              onTap: () {
+                                setDialogState(() {
+                                  showStatusDropdown = !showStatusDropdown;
+                                });
+                              },
+                            ),
+                            if (showStatusDropdown) ...[
+                              const SizedBox(height: 4),
+                              Card(
+                                elevation: 4,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                color: Colors.white,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ListTile(
+                                      title: const Text('Active', style: TextStyle(fontSize: 14)),
+                                      dense: true,
+                                      onTap: () {
+                                        setDialogState(() {
+                                          status = 'active';
+                                          showStatusDropdown = false;
+                                        });
+                                      },
+                                    ),
+                                    ListTile(
+                                      title: const Text('Resolved', style: TextStyle(fontSize: 14)),
+                                      dense: true,
+                                      onTap: () {
+                                        setDialogState(() {
+                                          status = 'resolved';
+                                          showStatusDropdown = false;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: treatmentCtrl,
+                              labelText: 'Treatment',
+                              hintText: 'Enter treatment (optional)',
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isFormValid
+                            ? () => Navigator.pop(dialogCtx, true)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Add Allergy',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
-                  onChanged: (v) => setS(() => status = v ?? 'active'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: treatmentCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Treatment (optional)',
-                        border: OutlineInputBorder())),
-              ],
+                );
+              },
             ),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            ElevatedButton(
-                onPressed: allergenCtrl.text.trim().isNotEmpty
-                    ? () => Navigator.pop(ctx, true)
-                    : null,
-                child: const Text('Add')),
-          ],
-        ),
-      ),
+        );
+      },
     );
 
     if (result == true && allergenCtrl.text.trim().isNotEmpty) {
@@ -1412,200 +2105,369 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     List<bool> isEstimated = [false];
     List<TextEditingController> placeCtrls = [TextEditingController()];
     List<String?> deliveryMethods = [null];
+    List<bool> showOutcomeDropdowns = [false, false, false, false, false];
+    List<bool> showDeliveryDropdowns = [false, false, false, false, false];
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) {
-          bool allValid = true;
-          for (int i = 0; i < fetalCount; i++) {
-            if (outcomeDates[i] == null) allValid = false;
-            if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') {
-              if (placeCtrls[i].text.trim().isEmpty) allValid = false;
-              if (deliveryMethods[i] == null) allValid = false;
-            }
-          }
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Container(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: StatefulBuilder(
+              builder: (dialogCtx, setS) {
+                bool allValid = true;
+                for (int i = 0; i < fetalCount; i++) {
+                  if (outcomeDates[i] == null) allValid = false;
+                  if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') {
+                    if (placeCtrls[i].text.trim().isEmpty) allValid = false;
+                    if (deliveryMethods[i] == null) allValid = false;
+                  }
+                }
 
-          return AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Add Past Pregnancy'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                          child: TextField(
-                              controller: gaCtrl,
-                              decoration: const InputDecoration(
-                                  labelText: 'Gestational Age (weeks)',
-                                  border: OutlineInputBorder()),
-                              keyboardType: TextInputType.number)),
-                      const SizedBox(width: 12),
-                      Row(children: [
-                        Checkbox(
-                            value: isEstimated[0],
-                            onChanged: (v) =>
-                                setS(() => isEstimated[0] = v ?? false),
-                            activeColor: AppColors.brandPrimary),
-                        const Text('Estimated')
-                      ]),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text('Fetal Count:'),
-                      const Spacer(),
-                      IconButton(
-                          icon: const Icon(Icons.remove_circle_outline),
-                          onPressed: () {
-                            if (fetalCount > 1) {
-                              setS(() {
-                                fetalCount--;
-                                outcomes.removeLast();
-                                outcomeDates.removeLast();
-                                isEstimated.removeLast();
-                                placeCtrls.removeLast();
-                                deliveryMethods.removeLast();
-                              });
-                            }
-                          }),
-                      Text('$fetalCount'),
-                      IconButton(
-                          icon: const Icon(Icons.add_circle_outline),
-                          onPressed: () {
-                            if (fetalCount < 5) {
-                              setS(() {
-                                fetalCount++;
-                                outcomes.add('live_birth');
-                                outcomeDates.add(null);
-                                isEstimated.add(false);
-                                placeCtrls.add(TextEditingController());
-                                deliveryMethods.add(null);
-                              });
-                            }
-                          }),
-                    ],
-                  ),
-                  for (int i = 0; i < fetalCount; i++) ...[
-                    if (fetalCount > 1)
-                      Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text('Fetus ${i + 1}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold))),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      initialValue: outcomes[i],
-                      decoration: const InputDecoration(
-                          labelText: 'Outcome', border: OutlineInputBorder()),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'live_birth', child: Text('Live Birth')),
-                        DropdownMenuItem(
-                            value: 'stillbirth', child: Text('Stillbirth')),
-                        DropdownMenuItem(
-                            value: 'miscarriage', child: Text('Miscarriage')),
-                        DropdownMenuItem(
-                            value: 'abortion', child: Text('Abortion')),
-                        DropdownMenuItem(
-                            value: 'ectopic', child: Text('Ectopic'))
+                final outcomeLabels = {
+                  'live_birth': 'Live Birth',
+                  'stillbirth': 'Stillbirth',
+                  'miscarriage': 'Miscarriage',
+                  'abortion': 'Abortion',
+                  'ectopic': 'Ectopic',
+                };
+
+                final deliveryMethodsOptions = [
+                  'Normal Spontaneous Vaginal Delivery',
+                  'Cesarean Section',
+                  'Assisted Vaginal Delivery',
+                  'Other',
+                ];
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          onPressed: () => Navigator.pop(dialogCtx, false),
+                        ),
+                        const Expanded(
+                          child: Center(
+                            child: Text(
+                              'Add Past Pregnancy',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: AppColors.brandText,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
                       ],
-                      onChanged: (v) =>
-                          setS(() => outcomes[i] = v ?? 'live_birth'),
                     ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                            context: ctx,
-                            initialDate: outcomeDates[i] ?? DateTime.now(),
-                            firstDate: DateTime(1900),
-                            lastDate: DateTime.now());
-                        if (picked != null)
-                          setS(() => outcomeDates[i] = picked);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 16),
-                        decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.borderPrimary),
-                            borderRadius: BorderRadius.circular(12)),
-                        child: Row(
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.calendar_today,
-                                color: AppColors.textSecondary),
-                            const SizedBox(width: 12),
-                            Text(
-                                outcomeDates[i] == null
-                                    ? 'Outcome Date'
-                                    : _dateFmt.format(outcomeDates[i]!),
-                                style: TextStyle(
-                                    color: outcomeDates[i] == null
-                                        ? AppColors.textSecondary
-                                        : AppColors.textPrimary)),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _buildPremiumTextField(
+                                    controller: gaCtrl,
+                                    labelText: 'Gestational Age (weeks)',
+                                    hintText: 'e.g., 39',
+                                    keyboardType: TextInputType.number,
+                                    onChanged: (val) => setS(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 32.0),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Checkbox(
+                                        value: isEstimated[0],
+                                        onChanged: (v) => setS(() => isEstimated[0] = v ?? false),
+                                        activeColor: AppColors.brandPrimary,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                      ),
+                                      const Text(
+                                        'Estimated',
+                                        style: TextStyle(fontSize: 14, color: AppColors.brandText),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Fetal Count',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.brandPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF9F9F9),
+                                    borderRadius: BorderRadius.circular(28),
+                                    border: Border.all(color: Colors.grey.shade200),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.people_outline, color: Colors.grey),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'Number of Fetuses',
+                                        style: TextStyle(fontSize: 15, color: AppColors.brandText),
+                                      ),
+                                      const Spacer(),
+                                      IconButton(
+                                        icon: const Icon(Icons.remove_circle_outline, color: AppColors.brandPrimary),
+                                        onPressed: () {
+                                          if (fetalCount > 1) {
+                                            setS(() {
+                                              fetalCount--;
+                                              outcomes.removeLast();
+                                              outcomeDates.removeLast();
+                                              isEstimated.removeLast();
+                                              placeCtrls.removeLast();
+                                              deliveryMethods.removeLast();
+                                              showOutcomeDropdowns.removeLast();
+                                              showDeliveryDropdowns.removeLast();
+                                            });
+                                          }
+                                        },
+                                      ),
+                                      Text(
+                                        '$fetalCount',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.brandText,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.add_circle_outline, color: AppColors.brandPrimary),
+                                        onPressed: () {
+                                          if (fetalCount < 5) {
+                                            setS(() {
+                                              fetalCount++;
+                                              outcomes.add('live_birth');
+                                              outcomeDates.add(null);
+                                              isEstimated.add(false);
+                                              placeCtrls.add(TextEditingController());
+                                              deliveryMethods.add(null);
+                                              showOutcomeDropdowns.add(false);
+                                              showDeliveryDropdowns.add(false);
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            for (int i = 0; i < fetalCount; i++) ...[
+                              if (fetalCount > 1) ...[
+                                const SizedBox(height: 24),
+                                Row(
+                                  children: [
+                                    Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      child: Text(
+                                        'Fetus ${i + 1}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: AppColors.brandPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                              ] else ...[
+                                const SizedBox(height: 16),
+                              ],
+                              _buildPremiumTextField(
+                                controller: TextEditingController(text: outcomeLabels[outcomes[i]] ?? outcomes[i]),
+                                labelText: 'Outcome',
+                                hintText: 'Select outcome',
+                                isRequired: true,
+                                readOnly: true,
+                                suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                                onTap: () {
+                                  setS(() {
+                                    showOutcomeDropdowns[i] = !showOutcomeDropdowns[i];
+                                  });
+                                },
+                              ),
+                              if (showOutcomeDropdowns[i]) ...[
+                                const SizedBox(height: 4),
+                                Card(
+                                  elevation: 4,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  color: Colors.white,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: outcomeLabels.entries.map((entry) {
+                                      return ListTile(
+                                        title: Text(entry.value, style: const TextStyle(fontSize: 14)),
+                                        dense: true,
+                                        onTap: () {
+                                          setS(() {
+                                            outcomes[i] = entry.key;
+                                            showOutcomeDropdowns[i] = false;
+                                          });
+                                        },
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                              _buildPremiumTextField(
+                                controller: TextEditingController(
+                                  text: outcomeDates[i] == null ? '' : _dateFmt.format(outcomeDates[i]!),
+                                ),
+                                labelText: 'Outcome Date',
+                                hintText: 'Select date',
+                                isRequired: true,
+                                readOnly: true,
+                                suffixIcon: const Icon(Icons.calendar_today_outlined, color: AppColors.brandPrimary),
+                                onTap: () async {
+                                  final picked = await _showBrandedDatePicker(
+                                    context: dialogCtx,
+                                    initialDate: outcomeDates[i] ?? DateTime.now(),
+                                    firstDate: DateTime(1900),
+                                    lastDate: DateTime.now(),
+                                  );
+                                  if (picked != null) {
+                                    setS(() {
+                                      outcomeDates[i] = picked;
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: isEstimated[i],
+                                    onChanged: (v) => setS(() => isEstimated[i] = v ?? false),
+                                    activeColor: AppColors.brandPrimary,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                  ),
+                                  const Text(
+                                    'Date is estimated',
+                                    style: TextStyle(fontSize: 14, color: AppColors.brandText),
+                                  ),
+                                ],
+                              ),
+                              if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') ...[
+                                const SizedBox(height: 16),
+                                _buildPremiumTextField(
+                                  controller: placeCtrls[i],
+                                  labelText: 'Place of Delivery',
+                                  hintText: 'Enter place of delivery',
+                                  isRequired: true,
+                                  onChanged: (val) => setS(() {}),
+                                ),
+                                const SizedBox(height: 16),
+                                _buildPremiumTextField(
+                                  controller: TextEditingController(text: deliveryMethods[i] ?? ''),
+                                  labelText: 'Delivery Method',
+                                  hintText: 'Select delivery method',
+                                  isRequired: true,
+                                  readOnly: true,
+                                  suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                                  onTap: () {
+                                    setS(() {
+                                      showDeliveryDropdowns[i] = !showDeliveryDropdowns[i];
+                                    });
+                                  },
+                                ),
+                                if (showDeliveryDropdowns[i]) ...[
+                                  const SizedBox(height: 4),
+                                  Card(
+                                    elevation: 4,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    color: Colors.white,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: deliveryMethodsOptions.map((method) {
+                                        return ListTile(
+                                          title: Text(method, style: const TextStyle(fontSize: 14)),
+                                          dense: true,
+                                          onTap: () {
+                                            setS(() {
+                                              deliveryMethods[i] = method;
+                                              showDeliveryDropdowns[i] = false;
+                                            });
+                                          },
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ],
+                            const SizedBox(height: 24),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      Checkbox(
-                          value: isEstimated[i],
-                          onChanged: (v) =>
-                              setS(() => isEstimated[i] = v ?? false),
-                          activeColor: AppColors.brandPrimary),
-                      const Text('Date is estimated')
-                    ]),
-                    if (outcomes[i] == 'live_birth' ||
-                        outcomes[i] == 'stillbirth') ...[
-                      const SizedBox(height: 8),
-                      TextField(
-                          controller: placeCtrls[i],
-                          decoration: const InputDecoration(
-                              labelText: 'Place of Delivery',
-                              border: OutlineInputBorder())),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        initialValue: deliveryMethods[i],
-                        decoration: const InputDecoration(
-                            labelText: 'Delivery Method',
-                            border: OutlineInputBorder()),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'Normal Spontaneous Vaginal Delivery',
-                              child:
-                                  Text('Normal Spontaneous Vaginal Delivery')),
-                          DropdownMenuItem(
-                              value: 'Cesarean Section',
-                              child: Text('Cesarean Section')),
-                          DropdownMenuItem(
-                              value: 'Assisted Vaginal Delivery',
-                              child: Text('Assisted Vaginal Delivery')),
-                          DropdownMenuItem(value: 'Other', child: Text('Other'))
-                        ],
-                        onChanged: (v) => setS(() => deliveryMethods[i] = v),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: allValid
+                            ? () => Navigator.pop(dialogCtx, true)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Add Past Pregnancy',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ],
-                    if (i < fetalCount - 1) const Divider(height: 24),
+                    ),
                   ],
-                ],
-              ),
+                );
+              },
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancel')),
-              ElevatedButton(
-                  onPressed: allValid ? () => Navigator.pop(ctx, true) : null,
-                  child: const Text('Add')),
-            ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
 
     if (result == true) {
@@ -2190,7 +3052,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       }
       if (r.heightCm != null) _heightCtrl.text = r.heightCm!.toStringAsFixed(1);
       if (r.weightKg != null) _weightCtrl.text = r.weightKg!.toStringAsFixed(1);
-      if (r.bloodType != null) _bloodType = r.bloodType;
+      if (r.bloodType != null) {
+        _bloodType = r.bloodType;
+        _bloodTypeCtrl.text = _bloodType ?? '';
+      }
 
       for (final m in r.medicalConditions) {
         if (m.conditionName.isEmpty) continue;
@@ -2253,6 +3118,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         if (edd != null) _updateFromEdd(edd);
       }
     });
+    _preloadCitiesAndBarangays();
   }
 
   String _outcomeLabel(String outcome) {
@@ -2318,61 +3184,66 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         ),
       );
 
-  Widget _addressOption(
-          {required String title,
-          required String subtitle,
-          required bool selected,
-          required VoidCallback onTap}) =>
-      GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.brandPrimary.withValues(alpha: 0.06)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-                color:
-                    selected ? AppColors.brandPrimary : AppColors.borderPrimary,
-                width: selected ? 1.5 : 1),
-          ),
-          child: Row(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: selected ? AppColors.brandPrimary : Colors.transparent,
-                  border: Border.all(
-                      color: selected
-                          ? AppColors.brandPrimary
-                          : AppColors.textSecondary,
-                      width: 2),
-                ),
-                child: selected
-                    ? const Icon(Icons.check, size: 12, color: Colors.white)
-                    : null,
+  Widget _buildPremiumTextField({
+    required TextEditingController controller,
+    required String labelText,
+    required String hintText,
+    bool isRequired = false,
+    TextInputType keyboardType = TextInputType.text,
+    String? errorText,
+    VoidCallback? onTap,
+    bool readOnly = false,
+    Widget? suffixIcon,
+    int maxLines = 1,
+    void Function(String)? onChanged,
+  }) {
+    IconData? trailingIconData;
+    if (suffixIcon is Icon) {
+      trailingIconData = suffixIcon.icon;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              labelText,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandPrimary,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 14)),
-                    Text(subtitle,
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.textSecondary))
-                  ])),
-            ],
-          ),
+            ),
+            if (isRequired)
+              const Text(
+                ' *',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.error,
+                ),
+              ),
+          ],
         ),
-      );
+        const SizedBox(height: 8),
+        AppInputField(
+          controller: controller,
+          hintText: hintText,
+          isRequired: false, // Avoid duplicate asterisk inside AppInputField
+          keyboardType: keyboardType,
+          readOnly: readOnly,
+          onTap: onTap,
+          onChanged: onChanged,
+          trailingIcon: trailingIconData,
+          onTrailingTap: onTap,
+          errorText: errorText,
+        ),
+      ],
+    );
+  }
+
+
 
   Widget _styledDropdown(
       {required String hint,
@@ -2665,7 +3536,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           readOnly: true,
           errorText: _birthdateError,
           onTap: () async {
-            final picked = await showDatePicker(
+            final picked = await _showBrandedDatePicker(
                 context: context,
                 initialDate: _birthdate ?? DateTime(1990),
                 firstDate: DateTime(1900),
@@ -2813,98 +3684,443 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     );
   }
 
+  List<TextSpan> _buildHighlightedTextSpans(String text, String query) {
+    final List<TextSpan> spans = [];
+    final textLower = text.toLowerCase();
+    final queryLower = query.toLowerCase();
+
+    int start = 0;
+    int indexOfMatch = textLower.indexOf(queryLower, start);
+
+    while (indexOfMatch != -1) {
+      if (indexOfMatch > start) {
+        spans.add(TextSpan(
+          text: text.substring(start, indexOfMatch),
+        ));
+      }
+      spans.add(TextSpan(
+        text: text.substring(indexOfMatch, indexOfMatch + query.length),
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: AppColors.brandPrimary,
+        ),
+      ));
+      start = indexOfMatch + query.length;
+      indexOfMatch = textLower.indexOf(queryLower, start);
+    }
+
+    if (start < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(start),
+      ));
+    }
+
+    return spans;
+  }
+
+  Widget _buildSearchableAddressField({
+    required String hintText,
+    required TextEditingController controller,
+    required String fieldType, // 'province', 'city', 'barangay', 'street'
+    required bool isRequired,
+    required IconData leadingIcon,
+    required bool readOnly,
+    required bool isLoading,
+    required String? errorText,
+    required Function(String) onSelected,
+    required VoidCallback onChanged,
+  }) {
+    final bool isActive = _activeAddressSearchField == fieldType;
+
+    // Filter items
+    List<String> suggestions = [];
+    if (fieldType == 'province') {
+      suggestions = _apiProvinces;
+    } else if (fieldType == 'city') {
+      suggestions = _apiCities;
+    } else if (fieldType == 'barangay') {
+      suggestions = _apiBarangays;
+    } else if (fieldType == 'street') {
+      suggestions = ph_addr.PhAddressService.getStreetsForBarangay(_barangayCtrl.text);
+    }
+
+    final query = controller.text.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      final primary = suggestions
+          .where((item) => item.toLowerCase().startsWith(query))
+          .toList();
+      final secondary = suggestions
+          .where((item) =>
+              item.toLowerCase().contains(query) &&
+              !item.toLowerCase().startsWith(query))
+          .toList();
+      suggestions = [...primary, ...secondary];
+    }
+
+    final visibleSuggestions = suggestions.take(15).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Focus(
+          onFocusChange: (focused) {
+            if (focused && !readOnly) {
+              setState(() {
+                _activeAddressSearchField = fieldType;
+              });
+            } else {
+              Future.delayed(const Duration(milliseconds: 250), () {
+                if (mounted && _activeAddressSearchField == fieldType) {
+                  setState(() {
+                    _activeAddressSearchField = null;
+                  });
+                }
+              });
+            }
+          },
+          child: AppInputField(
+            hintText: hintText,
+            controller: controller,
+            isRequired: isRequired,
+            leadingIcon: leadingIcon,
+            readOnly: readOnly,
+            errorText: errorText,
+            onChanged: (val) {
+              onChanged();
+              setState(() {});
+            },
+          ),
+        ),
+        if (!readOnly && isActive) ...[
+          const SizedBox(height: 4),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            constraints: const BoxConstraints(maxHeight: 220),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.cardColorOf(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: isLoading
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.brandPrimaryOf(context),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : visibleSuggestions.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                          horizontal: 16,
+                        ),
+                        child: Text(
+                          query.isEmpty
+                              ? 'Start typing to search...'
+                              : 'No matches found. You can keep typing.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondaryOf(context),
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      )
+                    : Scrollbar(
+                        controller: _streetSuggestionController,
+                        thumbVisibility: true,
+                        child: ListView.builder(
+                          controller: _streetSuggestionController,
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          itemCount: visibleSuggestions.length,
+                          itemBuilder: (context, index) {
+                            final item = visibleSuggestions[index];
+                            final bool startsWithQuery =
+                                query.isNotEmpty &&
+                                item.toLowerCase().startsWith(query);
+
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  onSelected(item);
+                                  FocusScope.of(context).unfocus();
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        startsWithQuery
+                                            ? Icons.arrow_right_alt
+                                            : Icons.location_on_outlined,
+                                        size: 16,
+                                        color: startsWithQuery
+                                            ? AppColors.brandPrimaryOf(context)
+                                            : AppColors.textSecondaryOf(
+                                                context,
+                                              ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: RichText(
+                                          text: TextSpan(
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: AppColors.textPrimaryOf(
+                                                context,
+                                              ),
+                                            ),
+                                            children: query.isEmpty
+                                                ? [TextSpan(text: item)]
+                                                : _buildHighlightedTextSpans(
+                                                    item,
+                                                    query,
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
   Widget _stepAddress() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-                color: AppColors.bgSecondary,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.borderPrimary)),
-            child: Row(children: [
-              const Icon(Icons.home_work_outlined,
-                  color: AppColors.brandAccent, size: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondaryOf(context),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.borderOf(context)),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.home_work_outlined,
+                color: AppColors.brandAccent,
+                size: 18,
+              ),
               const SizedBox(width: 10),
               Expanded(
-                  child: Text(
-                      'Assigned BHC: ${_bhcName.isEmpty ? '-' : _bhcName}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13)))
-            ])),
+                child: Text(
+                  'Assigned BHC: ${_bhcName.isEmpty ? '-' : _bhcName}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 14),
         _sectionLabel('Address Type'),
-        _addressOption(
-            title: 'Same as BHC address',
-            subtitle:
-                'Bulacan - Baliwag - ${_bhcName.isEmpty ? 'Assigned barangay' : _bhcName}',
-            selected: _addressSameAsBhc,
-            onTap: () => setState(() {
-                  _addressSameAsBhc = true;
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondaryOf(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _addressSameAsBhc
+                  ? AppColors.brandPrimaryOf(context)
+                  : AppColors.borderOf(context),
+              width: 1.5,
+            ),
+          ),
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _addressSameAsBhc = !_addressSameAsBhc;
+                if (_addressSameAsBhc) {
                   _applyBhcAddress();
-                  _validateStepInline(1);
-                })),
-        const SizedBox(height: 8),
-        _addressOption(
-            title: 'Custom address',
-            subtitle: 'Enter a different barangay, city or province',
-            selected: !_addressSameAsBhc,
-            onTap: () => setState(() {
-                  _addressSameAsBhc = false;
+                } else {
                   _selectedBarangay = null;
                   _barangayCtrl.clear();
-                  _validateStepInline(1);
-                })),
+                  _cityCtrl.clear();
+                  _provinceCtrl.clear();
+                }
+                _validateStepInline(1);
+              });
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _addressSameAsBhc,
+                    onChanged: (val) {
+                      setState(() {
+                        _addressSameAsBhc = val ?? false;
+                        if (_addressSameAsBhc) {
+                          _applyBhcAddress();
+                        } else {
+                          _selectedBarangay = null;
+                          _barangayCtrl.clear();
+                          _cityCtrl.clear();
+                          _provinceCtrl.clear();
+                        }
+                        _validateStepInline(1);
+                      });
+                    },
+                    activeColor: AppColors.brandPrimaryOf(context),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Same as BHC address',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.textPrimaryOf(context),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Bulacan - Baliwag - ${_bhcName.isEmpty ? 'Assigned barangay' : _bhcName}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryOf(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 20),
         _sectionLabel('Address Details'),
         AppInputField(
-            hintText: 'House No.',
-            controller: _houseCtrl,
-            isRequired: true,
-            leadingIcon: Icons.home_outlined,
-            errorText: _houseError,
-            onChanged: (_) => _validateStepInline(1)),
+          hintText: 'House No.',
+          controller: _houseCtrl,
+          isRequired: true,
+          leadingIcon: Icons.home_outlined,
+          errorText: _houseError,
+          onChanged: (_) => _validateStepInline(1),
+        ),
         const SizedBox(height: 12),
-        AppInputField(
-            hintText: 'Street',
-            controller: _streetCtrl,
-            isRequired: true,
-            leadingIcon: Icons.streetview_outlined,
-            errorText: _streetError,
-            onChanged: (_) => _validateStepInline(1)),
+        _buildSearchableAddressField(
+          hintText: 'Street',
+          controller: _streetCtrl,
+          fieldType: 'street',
+          isRequired: true,
+          leadingIcon: Icons.streetview_outlined,
+          readOnly: false,
+          isLoading: false,
+          errorText: _streetError,
+          onSelected: (val) {
+            setState(() {
+              _streetCtrl.text = val;
+            });
+            _validateStepInline(1);
+          },
+          onChanged: () => _validateStepInline(1),
+        ),
         const SizedBox(height: 12),
-        if (_addressSameAsBhc)
-          AppInputField(
-              hintText: 'Barangay',
-              controller: _barangayCtrl,
-              leadingIcon: Icons.location_on_outlined,
-              readOnly: true)
-        else
-          _styledDropdown(
-              hint: 'Barangay *',
-              value: _selectedBarangay,
-              items: _bhcBarangays,
-              icon: Icons.location_on_outlined,
-              errorText: _barangayError,
-              onChanged: (v) => setState(() {
-                    _selectedBarangay = v;
-                    _validateStepInline(1);
-                  })),
+        _buildSearchableAddressField(
+          hintText: 'Province',
+          controller: _provinceCtrl,
+          fieldType: 'province',
+          isRequired: true,
+          leadingIcon: Icons.map_outlined,
+          readOnly: _addressSameAsBhc,
+          isLoading: _loadingProvinces,
+          errorText: _provinceError,
+          onSelected: (val) {
+            _onProvinceSelected(val);
+          },
+          onChanged: () {
+            _cityCtrl.clear();
+            _barangayCtrl.clear();
+            _streetCtrl.clear();
+            _selectedBarangay = null;
+            _validateStepInline(1);
+          },
+        ),
         const SizedBox(height: 12),
-        AppInputField(
-            hintText: 'City / Municipality',
-            controller: _cityCtrl,
-            readOnly: _addressSameAsBhc,
-            errorText: _cityError,
-            onChanged: (_) => _validateStepInline(1)),
+        _buildSearchableAddressField(
+          hintText: 'City / Municipality',
+          controller: _cityCtrl,
+          fieldType: 'city',
+          isRequired: true,
+          leadingIcon: Icons.location_city_outlined,
+          readOnly: _addressSameAsBhc || _provinceCtrl.text.isEmpty,
+          isLoading: _loadingCities,
+          errorText: _cityError,
+          onSelected: (val) {
+            _onCitySelected(val);
+          },
+          onChanged: () {
+            _barangayCtrl.clear();
+            _streetCtrl.clear();
+            _selectedBarangay = null;
+            _validateStepInline(1);
+          },
+        ),
         const SizedBox(height: 12),
-        AppInputField(
-            hintText: 'Province',
-            controller: _provinceCtrl,
-            readOnly: _addressSameAsBhc,
-            errorText: _provinceError,
-            onChanged: (_) => _validateStepInline(1)),
+        _buildSearchableAddressField(
+          hintText: 'Barangay',
+          controller: _barangayCtrl,
+          fieldType: 'barangay',
+          isRequired: true,
+          leadingIcon: Icons.location_on_outlined,
+          readOnly: _addressSameAsBhc || _cityCtrl.text.isEmpty,
+          isLoading: _loadingBarangays,
+          errorText: _barangayError,
+          onSelected: (val) {
+            _onBarangaySelected(val);
+          },
+          onChanged: () {
+            _selectedBarangay = _barangayCtrl.text.trim();
+            _validateStepInline(1);
+          },
+        ),
       ],
     );
   }
@@ -2951,97 +4167,286 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         Row(
           children: [
             Expanded(
-                child: AppInputField(
-                    hintText: 'Height (cm)',
-                    controller: _heightCtrl,
-                    isRequired: true,
-                    leadingIcon: Icons.straighten_outlined,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                      LengthLimitingTextInputFormatter(5)
-                    ],
-                    errorText: _heightError,
-                    onChanged: (_) => _validateStepInline(3))),
+              child: AppInputField(
+                hintText: 'Height (cm)',
+                controller: _heightCtrl,
+                isRequired: true,
+                leadingIcon: Icons.straighten_outlined,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  LengthLimitingTextInputFormatter(5)
+                ],
+                errorText: _heightError,
+                onChanged: (_) => _validateStepInline(4),
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
-                child: AppInputField(
-                    hintText: 'Weight (kg)',
-                    controller: _weightCtrl,
-                    isRequired: true,
-                    leadingIcon: Icons.monitor_weight_outlined,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                      LengthLimitingTextInputFormatter(5)
-                    ],
-                    errorText: _weightError,
-                    onChanged: (_) => _validateStepInline(3))),
+              child: AppInputField(
+                hintText: 'Weight (kg)',
+                controller: _weightCtrl,
+                isRequired: true,
+                leadingIcon: Icons.monitor_weight_outlined,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  LengthLimitingTextInputFormatter(5)
+                ],
+                errorText: _weightError,
+                onChanged: (_) => _validateStepInline(4),
+              ),
+            ),
           ],
         ),
-        if (_calculatedBMI != null) ...[
-          const SizedBox(height: 4),
-          Padding(
-              padding: const EdgeInsets.only(left: 16),
-              child: Row(children: [
-                Text('BMI: ${_calculatedBMI!.toStringAsFixed(1)}',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary)),
-                const SizedBox(width: 8),
-                _bmiTag(_calculatedBMI!)
-              ])),
-          if (_bmiWarning != null) ...[
-            const SizedBox(height: 4),
-            Padding(
-                padding: const EdgeInsets.only(left: 16),
-                child: Row(children: [
-                  Icon(Icons.warning_amber_rounded,
-                      size: 12, color: AppColors.warning),
-                  const SizedBox(width: 4),
-                  Expanded(
-                      child: Text(_bmiWarning!,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.warning)))
-                ]))
+        const SizedBox(height: 24),
+        _sectionLabel('Pre-Pregnancy Weight'),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _knowsPrePregnancyWeight = true;
+                    _calculateBMI();
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: _knowsPrePregnancyWeight
+                        ? AppColors.brandPrimary.withValues(alpha: 0.08)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _knowsPrePregnancyWeight
+                          ? AppColors.brandPrimary
+                          : AppColors.borderPrimary,
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        _knowsPrePregnancyWeight ? Icons.check_circle : Icons.circle_outlined,
+                        color: _knowsPrePregnancyWeight ? AppColors.brandPrimary : Colors.grey,
+                        size: 20,
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Knows Weight',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _knowsPrePregnancyWeight = false;
+                    _prePregnancyWeightCtrl.clear();
+                    _prePregnancyWeightError = null;
+                    _calculateBMI();
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: !_knowsPrePregnancyWeight
+                        ? AppColors.brandPrimary.withValues(alpha: 0.08)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: !_knowsPrePregnancyWeight
+                          ? AppColors.brandPrimary
+                          : AppColors.borderPrimary,
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        !_knowsPrePregnancyWeight ? Icons.check_circle : Icons.circle_outlined,
+                        color: !_knowsPrePregnancyWeight ? AppColors.brandPrimary : Colors.grey,
+                        size: 20,
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Does Not Know',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            'Knowing pre-pregnancy weight helps accurately calculate the mother\'s pre-pregnancy BMI to determine correct weekly weight gain guidelines and monitor healthy fetal development.',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontStyle: FontStyle.italic,
+              height: 1.4,
+            ),
+          ),
+        ),
+        if (_knowsPrePregnancyWeight) ...[
+          const SizedBox(height: 20),
+          AppInputField(
+            hintText: 'Weight before pregnancy (kg)',
+            controller: _prePregnancyWeightCtrl,
+            isRequired: true,
+            leadingIcon: Icons.monitor_weight_outlined,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              LengthLimitingTextInputFormatter(5)
+            ],
+            errorText: _prePregnancyWeightError,
+            onChanged: (_) => _validateStepInline(4),
+          ),
+          if (_calculatedBMI != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.borderPrimary),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Pre-Pregnancy BMI: ',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        _calculatedBMI!.toStringAsFixed(1),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brandText,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _bmiTag(_calculatedBMI!),
+                    ],
+                  ),
+                  if (_bmiWarning != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: (_calculatedBMI! >= 25 || _calculatedBMI! < 18.5)
+                              ? AppColors.warning
+                              : AppColors.brandPrimary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _bmiWarning!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: (_calculatedBMI! >= 25 || _calculatedBMI! < 18.5)
+                                  ? AppColors.warning
+                                  : AppColors.brandPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ],
-        const SizedBox(height: 16),
-        _sectionLabel('Pre-Pregnancy Weight (optional)'),
-        AppInputField(
-          hintText: 'Weight before pregnancy (kg)',
-          controller: _prePregnancyWeightCtrl,
-          leadingIcon: Icons.monitor_weight_outlined,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-            LengthLimitingTextInputFormatter(5)
-          ],
-          errorText: _prePregnancyWeightError,
-        ),
-        const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: Row(children: [
-            Icon(Icons.info_outline, size: 12, color: AppColors.textSecondary),
-            const SizedBox(width: 4),
-            Expanded(
-                child: Text(
-              'If known, this enables accurate weight gain tracking using IOM 2009 guidelines.',
-              style:
-                  const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-            )),
-          ]),
-        ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
         _sectionLabel('Blood Type'),
-        _styledDropdown(
-            hint: 'Select Blood Type',
-            value: _bloodType,
-            items: _bloodTypeOptions,
-            icon: Icons.bloodtype_outlined,
-            onChanged: (v) => setState(() => _bloodType = v)),
+        AppInputField(
+          hintText: 'Select Blood Type',
+          controller: _bloodTypeCtrl,
+          isRequired: false,
+          leadingIcon: Icons.bloodtype_outlined,
+          trailingIcon: Icons.keyboard_arrow_down_rounded,
+          readOnly: true,
+          onTap: () {
+            setState(() {
+              _showBloodTypeDropdown = !_showBloodTypeDropdown;
+            });
+          },
+        ),
+        if (_showBloodTypeDropdown) ...[
+          const SizedBox(height: 4),
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            color: Colors.white,
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _bloodTypeOptions.length,
+                itemBuilder: (context, idx) {
+                  final bt = _bloodTypeOptions[idx];
+                  return ListTile(
+                    title: Text(bt, style: const TextStyle(fontSize: 14)),
+                    dense: true,
+                    onTap: () {
+                      setState(() {
+                        _bloodType = bt;
+                        _bloodTypeCtrl.text = bt;
+                        _showBloodTypeDropdown = false;
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -3207,31 +4612,69 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionLabel('Calculation Method'),
-        _styledDropdown(
-            hint: 'Select method',
-            value: _gestationMethod.name,
-            items: methodItems,
-            itemLabels: methodLabels,
-            icon: Icons.calculate_outlined,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() {
-                _gestationMethod =
-                    _GestationMethod.values.firstWhere((e) => e.name == v);
-                _gestationError = null;
-              });
-            }),
+        AppInputField(
+          hintText: 'Select method',
+          controller: _gestationMethodCtrl,
+          isRequired: false,
+          leadingIcon: Icons.calculate_outlined,
+          trailingIcon: Icons.keyboard_arrow_down_rounded,
+          readOnly: true,
+          onTap: () {
+            setState(() {
+              _showGestationMethodDropdown = !_showGestationMethodDropdown;
+            });
+          },
+        ),
+        if (_showGestationMethodDropdown) ...[
+          const SizedBox(height: 4),
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            color: Colors.white,
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: methodItems.length,
+                itemBuilder: (context, idx) {
+                  final v = methodItems[idx];
+                  final label = methodLabels[idx];
+                  return ListTile(
+                    title: Text(label, style: const TextStyle(fontSize: 14)),
+                    dense: true,
+                    onTap: () {
+                      setState(() {
+                        _gestationMethod =
+                            _GestationMethod.values.firstWhere((e) => e.name == v);
+                        _gestationMethodCtrl.text = label;
+                        _showGestationMethodDropdown = false;
+                        _gestationError = null;
+                        _weeksError = null;
+                        _daysError = null;
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         _sectionLabel('Date Entry'),
         if (_gestationMethod == _GestationMethod.lmp)
           GestureDetector(
               onTap: () async {
-                final picked = await showDatePicker(
+                final lastLmpDate = DateTime.now().subtract(const Duration(days: 5 * 7));
+                final initialLmpDate = (_lmp != null && !_lmp!.isAfter(lastLmpDate)) ? _lmp! : lastLmpDate;
+                final picked = await _showBrandedDatePicker(
                     context: context,
-                    initialDate: _lmp ?? DateTime.now(),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime.now());
-                if (picked != null) setState(() => _updateFromLmp(picked));
+                    initialDate: initialLmpDate,
+                    firstDate: DateTime.now().subtract(const Duration(days: 42 * 7)),
+                    lastDate: lastLmpDate);
+                if (picked != null) {
+                  setState(() => _updateFromLmp(picked));
+                  _validateStepInline(3);
+                }
               },
               child: AppInputField(
                   hintText: 'Last Menstrual Period',
@@ -3243,13 +4686,15 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         else if (_gestationMethod == _GestationMethod.edd)
           GestureDetector(
               onTap: () async {
-                final picked = await showDatePicker(
+                final picked = await _showBrandedDatePicker(
                     context: context,
-                    initialDate:
-                        _edd ?? DateTime.now().add(const Duration(days: 1)),
+                    initialDate: _edd ?? DateTime.now(),
                     firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 300)));
-                if (picked != null) setState(() => _updateFromEdd(picked));
+                    lastDate: DateTime.now().add(const Duration(days: 43 * 7)));
+                if (picked != null) {
+                  setState(() => _updateFromEdd(picked));
+                  _validateStepInline(3);
+                }
               },
               child: AppInputField(
                   hintText: 'Estimated Delivery Date',
@@ -3258,7 +4703,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   leadingIcon: Icons.event_available_outlined,
                   readOnly: true,
                   errorText: _gestationError))
-        else
+        else ...[
           Row(children: [
             Expanded(
                 child: AppInputField(
@@ -3266,7 +4711,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     controller: _aogWeeksCtrl,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (_) => _updateFromAog())),
+                    errorText: _weeksError,
+                    onChanged: (_) {
+                      _updateFromAog();
+                      _validateStepInline(3);
+                    })),
             const SizedBox(width: 12),
             Expanded(
                 child: AppInputField(
@@ -3274,20 +4723,23 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     controller: _aogDaysCtrl,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (_) => _updateFromAog()))
+                    errorText: _daysError,
+                    onChanged: (_) {
+                      _updateFromAog();
+                      _validateStepInline(3);
+                    }))
           ]),
-        const SizedBox(height: 20),
-        _sectionLabel('Fetal Details'),
-        AppInputField(
-            hintText: 'Fetal Count (e.g., 1 for single, 2 for twins)',
-            controller: _fetalCountCtrl,
-            keyboardType: TextInputType.number,
-            isRequired: true,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(2)
-            ],
-            onChanged: (_) => _validateStepInline(7)),
+          if (_gestationError != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: Text(
+                _gestationError!,
+                style: const TextStyle(fontSize: 12, color: AppColors.error),
+              ),
+            ),
+          ]
+        ],
         const SizedBox(height: 20),
         _sectionLabel('Computed Values'),
         _derivedRow(Icons.calendar_today_outlined, 'LMP',
@@ -3362,19 +4814,21 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             [
               _summaryRow('Height / Weight',
                   '${_heightCtrl.text.trim().isEmpty ? '-' : _heightCtrl.text.trim()} cm / ${_weightCtrl.text.trim().isEmpty ? '-' : _weightCtrl.text.trim()} kg'),
-              _summaryRow(
-                  'Pre-Pregnancy Weight',
-                  _prePregnancyWeightCtrl.text.trim().isEmpty
-                      ? 'Not provided'
-                      : '${_prePregnancyWeightCtrl.text.trim()} kg'),
-              _summaryRow(
-                  'BMI',
-                  _calculatedBMI != null
-                      ? '${_calculatedBMI!.toStringAsFixed(1)} ($_bmiClassification)'
-                      : '-'),
+              if (_knowsPrePregnancyWeight) ...[
+                _summaryRow(
+                    'Pre-Pregnancy Weight',
+                    _prePregnancyWeightCtrl.text.trim().isEmpty
+                        ? 'Not provided'
+                        : '${_prePregnancyWeightCtrl.text.trim()} kg'),
+                _summaryRow(
+                    'BMI',
+                    _calculatedBMI != null
+                        ? '${_calculatedBMI!.toStringAsFixed(1)} ($_bmiClassification)'
+                        : '-'),
+              ],
               _summaryRow('Blood Type', _bloodType ?? '-')
             ],
-            onTap: () => _jumpToStep(3)),
+            onTap: () => _jumpToStep(4)),
         const SizedBox(height: 12),
         _buildClickableSummarySection(
             'Gestational Information',
@@ -3382,9 +4836,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               _summaryRow('LMP', _lmp != null ? _dateFmt.format(_lmp!) : '-'),
               _summaryRow('EDD', _edd != null ? _dateFmt.format(_edd!) : '-'),
               _summaryRow('AOG', _formatAog()),
-              _summaryRow('Fetal Count', _fetalCountCtrl.text.trim())
             ],
-            onTap: () => _jumpToStep(7)),
+            onTap: () => _jumpToStep(3)),
         const SizedBox(height: 12),
         _buildExpandableRecordsSection(
             'Emergency Contacts',
@@ -3399,15 +4852,15 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             _medicalConditions
                 .map((c) => '${c.conditionName} (${c.status})')
                 .toList(),
-            onTap: () => _jumpToStep(4)),
+            onTap: () => _jumpToStep(5)),
         const SizedBox(height: 12),
         _buildExpandableRecordsSection('Allergies',
             _allergies.map((a) => '${a.allergen} (${a.status})').toList(),
-            onTap: () => _jumpToStep(5)),
+            onTap: () => _jumpToStep(6)),
         const SizedBox(height: 12),
         _buildExpandableRecordsSection('Past Pregnancies',
             _pastPregnancies.map((p) => _pastPregnancyTitle(p)).toList(),
-            onTap: () => _jumpToStep(6)),
+            onTap: () => _jumpToStep(7)),
         const SizedBox(height: 12),
         if (_riskWarning != null)
           Container(
@@ -3536,15 +4989,15 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       case 2:
         return _stepEmergencyContacts();
       case 3:
-        return _stepVitals();
-      case 4:
-        return _stepMedicalConditions();
-      case 5:
-        return _stepAllergies();
-      case 6:
-        return _stepPregnancyHistory();
-      case 7:
         return _stepGestational();
+      case 4:
+        return _stepVitals();
+      case 5:
+        return _stepMedicalConditions();
+      case 6:
+        return _stepAllergies();
+      case 7:
+        return _stepPregnancyHistory();
       default:
         return _stepSummary();
     }
@@ -3598,9 +5051,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Column(
                 children: [
-                  ProgressiveStepIndicator(
-                      currentStep: _step, totalSteps: _totalSteps),
-                  const SizedBox(height: 10),
                   Text(_stepTitles[_step],
                       style: const TextStyle(
                           fontSize: 20,
@@ -3611,10 +5061,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                           fontSize: 12, color: AppColors.textSecondary)),
-                  const SizedBox(height: 2),
-                  Text('Step ${_step + 1} of $_totalSteps',
-                      style: const TextStyle(
-                          fontSize: 10, color: AppColors.textSecondary)),
                 ],
               ),
             ),
@@ -3649,62 +5095,28 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             child: Row(
               children: [
                 if (_step > 0) ...[
-                  OutlinedButton.icon(
-                    onPressed: _submitting ? null : _goBack,
-                    icon: const Icon(Icons.arrow_back_ios_rounded, size: 13),
-                    label: const Text('Back'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.brandAccent,
-                      side: const BorderSide(color: AppColors.brandAccent),
-                      minimumSize: const Size(100, 48),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                  Expanded(
+                    child: MainButton(
+                      label: 'Back',
+                      leftIcon: Icons.arrow_back_ios_new_rounded,
+                      isWhiteVariant: true,
+                      onPressed: _submitting ? null : _goBack,
                     ),
                   ),
                   const SizedBox(width: 12),
                 ],
                 Expanded(
-                  child: SizedBox(
-                    height: 48,
-                    child: _step < _totalSteps - 1
-                        ? ElevatedButton(
-                            onPressed: _submitting ? null : _goNext,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brandPrimary,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text('Next'),
-                                SizedBox(width: 6),
-                                Icon(Icons.arrow_forward_ios_rounded, size: 13)
-                              ],
-                            ),
-                          )
-                        : ElevatedButton.icon(
-                            onPressed: _submitting ? null : _submit,
-                            icon: _submitting
-                                ? const SizedBox(
-                                    width: 15,
-                                    height: 15,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.check_rounded, size: 17),
-                            label: Text(
-                                _submitting ? 'Saving...' : 'Finalize & Save'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brandPrimary,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
-                            ),
-                          ),
-                  ),
+                  child: _step < _totalSteps - 1
+                      ? MainButton(
+                          label: 'Next',
+                          rightIcon: Icons.arrow_forward_ios_rounded,
+                          onPressed: _submitting ? null : _goNext,
+                        )
+                      : MainButton(
+                          label: _submitting ? 'Saving...' : 'Finalize & Save',
+                          rightIcon: _submitting ? null : Icons.check_rounded,
+                          onPressed: _submitting ? null : _submit,
+                        ),
                 ),
               ],
             ),
@@ -3718,11 +5130,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     'Personal Information',
     'Address Information',
     'Emergency Contacts',
+    'Gestational Information',
     'Vital Statistics',
     'Medical Conditions',
     'Allergies',
     'Pregnancy History',
-    'Gestational Information',
     'Summary & Submit',
   ];
 
@@ -3730,11 +5142,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     'Name, birthdate, phone, email and login credentials',
     'Current place of residence',
     'Who to contact in an emergency',
+    'Current pregnancy dating',
     'Height, weight and blood type',
     'Known diagnoses and health conditions',
     'Known allergens and reactions',
     'Previous pregnancy outcomes',
-    'Current pregnancy dating',
     'Review before saving',
   ];
 }
