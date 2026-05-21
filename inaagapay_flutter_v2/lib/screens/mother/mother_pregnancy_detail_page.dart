@@ -980,7 +980,7 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
             ),
             background: Container(
               color: AppColors.brandPrimary,
-              padding: const EdgeInsets.fromLTRB(20, 36, 20, 18),
+              padding: EdgeInsets.fromLTRB(60, topPadding + 16, 20, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1405,126 +1405,200 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
   }
 
   Widget _buildRiskSummaryCard(AppLanguage language) {
-    final riskLevel = widget.riskLevel.trim();
+    if (widget.riskLevel.isEmpty) return const SizedBox.shrink();
+
+    final riskLevel = widget.riskLevel.toUpperCase().trim();
+    final badgeColor = _riskColor(riskLevel);
     final riskFactors = _personalizedWarnings.isNotEmpty
         ? _personalizedWarnings
         : (widget.riskFactors ?? []);
-    final badgeColor = _riskColor(riskLevel);
 
-    if (riskLevel.toLowerCase() == 'low' && riskFactors.isEmpty) {
-      return _Card(
-        color: AppColors.success.withValues(alpha: 0.08),
+    return InkWell(
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.68,
+              minChildSize: 0.4,
+              maxChildSize: 0.9,
+              builder: (_, controller) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: ListView(
+                    controller: controller,
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: badgeColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.shield_outlined, color: badgeColor, size: 28),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _translate('Prenatal Risk Summary', 'Buod ng Panganib', language),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  riskLevel,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: badgeColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      if (riskFactors.isNotEmpty) ...[
+                        Text(
+                          _translate('Risk Factors', 'Mga Salik ng Panganib', language),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ...riskFactors.map((f) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Icon(Icons.circle, size: 8, color: badgeColor),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  f,
+                                  style: const TextStyle(fontSize: 15, height: 1.4),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                      ] else ...[
+                        Text(
+                          _translate('No active risk factors detected.', 'Walang nakitang aktibong salik ng panganib.', language),
+                          style: const TextStyle(fontSize: 15, color: AppColors.textSecondary),
+                        ),
+                      ],
+                      const SizedBox(height: 32),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.brandPrimary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(_translate('Close', 'Isara', language)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              badgeColor,
+              badgeColor.withValues(alpha: 0.8),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: badgeColor.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Colors.white24,
+                shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle_outline,
-                  color: AppColors.success, size: 22),
+              child: const Icon(Icons.shield_outlined, color: Colors.white, size: 24),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _translate('Low Risk Pregnancy',
-                        'Mababang Panganib na Pagbubuntis', language),
+                    _translate('Prenatal Risk Summary', 'Buod ng Panganib', language),
                     style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _translate(
-                      'Your pregnancy is progressing normally. Continue with regular checkups.',
-                      'Maayos ang iyong pagbubuntis. Ipagpatuloy ang regular na checkup.',
-                      language,
-                    ),
+                    riskLevel,
                     style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      height: 1.5,
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
             ),
+            const Icon(Icons.chevron_right, color: Colors.white),
           ],
         ),
-      );
-    }
-
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.shield_outlined, color: badgeColor, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _translate(
-                      'Prenatal Risk Summary', 'Buod ng Panganib', language),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: badgeColor.withValues(alpha: 0.25)),
-            ),
-            child: Text(
-              riskLevel.toUpperCase(),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: badgeColor,
-              ),
-            ),
-          ),
-          if (riskFactors.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Text(
-              _translate('Risk Factors', 'Mga Salik ng Panganib', language),
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: riskFactors.map((factor) {
-                return _RiskFactorChip(factor: factor);
-              }).toList(),
-            ),
-          ],
-        ],
       ),
     );
   }
@@ -1733,10 +1807,11 @@ class _PregnancyDetailPageState extends State<PregnancyDetailPage>
                   color: AppColors.brandPrimary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(
-                  Icons.child_care,
-                  size: 36,
-                  color: AppColors.brandPrimary,
+                child: const Center(
+                  child: Text(
+                    '👶',
+                    style: TextStyle(fontSize: 36),
+                  ),
                 ),
               ),
               const SizedBox(height: 14),

@@ -109,6 +109,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   List<Map<String, dynamic>> _weightCheckups = [];
   bool _loadingWeightGain = true;
 
+  bool _isMotherRole = false;
+  bool get _readOnly => widget.readOnly || _isMotherRole;
+
   @override
   void initState() {
     super.initState();
@@ -117,6 +120,16 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     _loadProfilePicture();
     _loadLatestGrowthData();
     _loadWeightGainData();
+    _loadUserRole();
+  }
+
+  Future<void> _loadUserRole() async {
+    final role = await AuthStorage.getUserRole();
+    if (mounted) {
+      setState(() {
+        _isMotherRole = role == 'mother';
+      });
+    }
   }
 
   @override
@@ -3244,7 +3257,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 const SizedBox(height: 8),
                 _buildInfoRow(
                     'Extension Name', profile['extension_name'] ?? 'None'),
-                if (!widget.readOnly) ...[
+                if (!_readOnly) ...[
                   const SizedBox(height: 16),
                   Align(
                     alignment: Alignment.centerRight,
@@ -3636,7 +3649,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 _buildInfoRow('City', profile['city_municipality'] ?? '-'),
                 _buildInfoRow('Province', profile['province'] ?? '-'),
                 const SizedBox(height: 8),
-                if (!widget.readOnly)
+                if (!_readOnly)
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
@@ -3649,7 +3662,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       label: const Text('Edit Address'),
                     ),
                   ),
-                if (!widget.readOnly && _isEditingAddress) ...[
+                if (!_readOnly && _isEditingAddress) ...[
                   const SizedBox(height: 12),
                   _buildEditableAddressForm(),
                   const SizedBox(height: 12),
@@ -3715,7 +3728,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     ],
                                   ),
                                 ),
-                                if (!widget.readOnly && _isEditingConditions && c['status'] == 'active')
+                                if (!_readOnly && _isEditingConditions && c['status'] == 'active')
                                   IconButton(
                                     icon: const Icon(Icons.remove_circle_outline,
                                         color: AppColors.error, size: 20),
@@ -3728,7 +3741,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                             ),
                           ))
                       .toList(),
-                if (!widget.readOnly) ...[
+                if (!_readOnly) ...[
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -3798,7 +3811,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     ],
                                   ),
                                 ),
-                                if (!widget.readOnly && _isEditingAllergies && a['status'] == 'active')
+                                if (!_readOnly && _isEditingAllergies && a['status'] == 'active')
                                   IconButton(
                                     icon: const Icon(Icons.remove_circle_outline,
                                         color: AppColors.error, size: 20),
@@ -3811,7 +3824,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                             ),
                           ))
                       .toList(),
-                if (!widget.readOnly) ...[
+                if (!_readOnly) ...[
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -3986,7 +3999,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               const SizedBox(height: 8),
               const Text('Start a new pregnancy to begin tracking',
                   style: TextStyle(color: AppColors.textSecondary)),
-              if (!widget.readOnly) ...[
+              if (!_readOnly) ...[
                 const SizedBox(height: 24),
                 MainButton(
                     label: 'Start New Pregnancy',
@@ -4041,7 +4054,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             const SizedBox(height: 16),
 
             // Quick actions (hidden in read-only / mother self-view mode)
-            if (!widget.readOnly) ...[
+            if (!_readOnly) ...[
               PregnancyActionsCard(
                 onAddCheckup: () async {
                   final pregnancyId = pregnancy['pregnancy_id'];

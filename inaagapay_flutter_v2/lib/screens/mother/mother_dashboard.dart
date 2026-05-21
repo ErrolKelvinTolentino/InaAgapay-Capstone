@@ -923,6 +923,46 @@ class _MotherDashboardState extends State<MotherDashboard> {
     }
   }
 
+  String _localizedFruitName(String name) {
+    const filipinoNames = {
+      'Poppy seed': 'Buto ng Poppy',
+      'Sesame seed': 'Linga',
+      'Pea': 'Berdeng Gisantes',
+      'Blueberry': 'Blueberry',
+      'Raspberry': 'Raspberry',
+      'Cherry': 'Cherry',
+      'Strawberry': 'Strawberry',
+      'Lime': 'Dayap',
+      'Plum': 'Plum',
+      'Lemon': 'Lemon',
+      'Peach': 'Peach',
+      'Orange': 'Kahel',
+      'Avocado': 'Abukado',
+      'Pear': 'Peras',
+      'Pepper': 'Bell Pepper',
+      'Mango': 'Mangga',
+      'Banana': 'Saging',
+      'Carrot': 'Karot',
+      'Corn': 'Mais',
+      'Eggplant': 'Talong',
+      'Cucumber': 'Pipino',
+      'Cauliflower': 'Cauliflower',
+      'Lettuce': 'Litsugas',
+      'Cabbage': 'Repolyo',
+      'Coconut': 'Niyog',
+      'Kabocha': 'Kalabasa',
+      'Squash': 'Kalabasa',
+      'Pineapple': 'Pinya',
+      'Melon': 'Melon',
+      'Honeydew melon': 'Honeydew melon',
+      'Pomelo': 'Suha',
+      'Romaine lettuce': 'Litsugas',
+      'Pumpkin': 'Kalabasa',
+      'Watermelon': 'Pakwan',
+    };
+    return LanguageService.isFilipino ? (filipinoNames[name] ?? name) : name;
+  }
+
   Widget _buildBabySizeCard() {
     final sizeData = _babySizeByWeek[_week];
     final fruitName = sizeData?['fruit'] ?? '';
@@ -948,8 +988,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
       child: Row(
         children: [
           Container(
-            width: 80,
-            height: 80,
+            width: 100,
+            height: 100,
             decoration: BoxDecoration(
               color: AppColors.brandPrimary.withValues(alpha: 0.08),
               shape: BoxShape.circle,
@@ -957,7 +997,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
             child: hasMapping
                 ? ClipOval(
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(8),
                       child: Image.asset(
                         'assets/images/$imageName',
                         fit: BoxFit.contain,
@@ -992,7 +1032,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
                 const SizedBox(height: 4),
                 Text(
                   hasMapping
-                      ? '${_t('Your baby is about the size of a', 'Ang iyong sanggol ay kasinlaki ng isang')} $fruitName!'
+                      ? '${_t('Your baby is about the size of a', 'Ang iyong sanggol ay kasinlaki ng isang')} ${_localizedFruitName(fruitName)}!'
                       : _t('Your baby is growing!',
                           'Lumalaki ang iyong sanggol!'),
                   style: const TextStyle(
@@ -1319,8 +1359,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
                               Expanded(
                                 child: SmallInfoBox(
                                   icon: Icons.straighten,
-                                  title: _t(
-                                      'Ideal Baby Size', 'Inaasahang Sukat ng Sanggol'),
+                                  title: _t('Estimated Baby Size',
+                                      'Inaasahang Sukat ng Sanggol'),
                                   value: _babySize,
                                 ),
                               ),
@@ -1328,7 +1368,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
                               Expanded(
                                 child: SmallInfoBox(
                                   icon: Icons.monitor_weight,
-                                  title: _t('Ideal Baby Weight',
+                                  title: _t('Estimated Baby Weight',
                                       'Inaasahang Timbang ng Sanggol'),
                                   value: _babyWeight,
                                 ),
@@ -1388,12 +1428,6 @@ class _MotherDashboardState extends State<MotherDashboard> {
                           ],
                         ),
 
-                        const SizedBox(height: 16),
-
-                        // Comparison Card
-                        if (_hasPregnancy && _week > 0)
-                          ComparisonCard(week: _week),
-
                         const SizedBox(height: 24),
 
                         // Action Buttons
@@ -1431,16 +1465,6 @@ class _MotherDashboardState extends State<MotherDashboard> {
                             );
                           },
                         ),
-                        const SizedBox(height: 12),
-
-                        SecondaryButton(
-                          label: _t('Conclude Pregnancy',
-                              'Tapusin ang Pagbubuntis'),
-                          showIcons: true,
-                          leadingIcon: Icons.check,
-                          onPressed: _showConcludePregnancyDialog,
-                        ),
-
                         const SizedBox(height: 20),
                       ],
                     ),

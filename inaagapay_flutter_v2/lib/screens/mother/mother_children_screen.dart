@@ -240,7 +240,7 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
+                            color: Colors.white,
                           ),
                         ),
                         Text(
@@ -248,7 +248,7 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                           style: const TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.brandPrimary,
+                            color: Colors.white,
                           ),
                         ),
                       ],
