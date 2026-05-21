@@ -101,7 +101,9 @@ class _AppInputFieldState extends State<AppInputField> {
                       onChanged: widget.onChanged,
                       style: TextStyle(
                         color: widget.readOnly
-                            ? AppColors.textSecondary
+                            ? (widget.controller.text.isNotEmpty
+                                ? AppColors.inputText
+                                : AppColors.textSecondary)
                             : AppColors.inputText,
                         fontSize: 16,
                       ),
