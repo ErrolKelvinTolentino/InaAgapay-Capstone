@@ -52,6 +52,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
             _buildUltrasoundRecord(
               'Maria Santos',
               'May 15, 2026',
+              'Added May 16, 2026',
               '24 weeks',
               'Normal',
               AppColors.success,
@@ -60,6 +61,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
             _buildUltrasoundRecord(
               'Juana Dela Cruz',
               'May 10, 2026',
+              'Added May 11, 2026',
               '32 weeks',
               'Requires Monitoring',
               AppColors.warning,
@@ -68,6 +70,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
             _buildUltrasoundRecord(
               'Ana Lopez',
               'May 5, 2026',
+              'Added May 6, 2026',
               '16 weeks',
               'Normal',
               AppColors.success,
@@ -79,6 +82,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'Maria Santos',
               'CBC',
               'May 14, 2026',
+              'Added May 15, 2026',
               'All Normal',
               AppColors.success,
             ),
@@ -87,6 +91,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'Juana Dela Cruz',
               'Blood Glucose',
               'May 12, 2026',
+              'Added May 13, 2026',
               'Borderline',
               AppColors.warning,
             ),
@@ -95,6 +100,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               'Ana Lopez',
               'Urinalysis',
               'May 8, 2026',
+              'Added May 9, 2026',
               'Normal',
               AppColors.success,
             ),
@@ -106,7 +112,8 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
               decoration: BoxDecoration(
                 color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -116,8 +123,8 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
                       color: AppColors.warning.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.warning,
-                        color: AppColors.warning, size: 20),
+                    child:
+                        Icon(Icons.warning, color: AppColors.warning, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -172,8 +179,8 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
     );
   }
 
-  Widget _buildUltrasoundRecord(String patient, String date, String weeks,
-      String status, Color statusColor) {
+  Widget _buildUltrasoundRecord(String patient, String date, String addedOn,
+      String weeks, String status, Color statusColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -225,6 +232,12 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  addedOn,
+                  style:
+                      TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                ),
               ],
             ),
           ),
@@ -249,7 +262,7 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
   }
 
   Widget _buildLabTestRecord(String patient, String test, String date,
-      String result, Color resultColor) {
+      String addedOn, String result, Color resultColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -300,6 +313,12 @@ class _MidwifeRecordsState extends State<MidwifeRecords> {
                           fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  addedOn,
+                  style:
+                      TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
               ],
             ),
