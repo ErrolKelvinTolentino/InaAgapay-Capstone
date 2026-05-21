@@ -1,6 +1,7 @@
 // lib/screens/midwife/midwife_mother_list.dart
 import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
+import '../../widgets/search_bar.dart' as local_widgets;
 
 class MidwifeMotherList extends StatefulWidget {
   const MidwifeMotherList({super.key});
@@ -20,27 +21,18 @@ class _MidwifeMotherListState extends State<MidwifeMotherList> {
     return SafeArea(
       child: Column(
         children: [
-          // Search Bar
           Padding(
             padding: const EdgeInsets.all(20),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search mothers...',
-                  prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                onChanged: (value) {
-                  // Implement search
-                },
-              ),
+            child: local_widgets.SearchBar(
+              controller: _searchController,
+              hintText: 'Search mothers...',
+              onChanged: (value) {
+                // Implement search
+              },
+              onClear: () {
+                _searchController.clear();
+                setState(() {});
+              },
             ),
           ),
 

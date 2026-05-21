@@ -31,6 +31,7 @@ class AppColors {
   static const bgSecondary = Color(0xFFFFF5F8);
 
   static const textPrimary = Color(0xFF2D2D2D);
+  static const inputText = Color(0xFF4B4B4B);
   static const textSecondary = Color(0xFF8A8A8A);
   static const textOnColor = Color(0xFFFFFFFF);
   static const faintWhite = Color(0xFFFFF9FC);

@@ -13,6 +13,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/progressive_step_indicator.dart';
 import '../../widgets/dialog_box.dart';
+import '../../widgets/secondary_header.dart';
 import 'add_prenatal_checkup_screen.dart';
 
 enum _GestationMethod { lmp, edd, aog }
@@ -239,6 +240,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   final TextEditingController _birthdateCtrl = TextEditingController();
   String? _birthdateError;
   String? _riskWarning;
+  Color? _riskWarningColor;
   int? _calculatedAge;
 
   String? _phoneError;
@@ -451,19 +453,45 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         (DateTime.now().difference(_birthdate!).inDays / 365.25).floor();
     _calculatedAge = age;
 
-    setState(() => _birthdateError = (age < 10 || age > 50)
-        ? 'Maternal age ($age years) must be between 10 and 50'
-        : null);
+    Color? warningColor;
+    String? warningText;
+    String? birthdateError;
 
-    if (age < 18) {
-      setState(() => _riskWarning =
-          'High-risk: Adolescent pregnancy (under 18). Close monitoring required.');
-    } else if (age > 35) {
-      setState(() => _riskWarning =
-          'High-risk: Advanced maternal age (over 35). Regular checkups recommended.');
+    if (age < 5) {
+      birthdateError =
+          'Maternal age ($age years) is too young for registration.';
+      warningText = null;
+    } else if (age <= 14) {
+      warningColor = AppColors.error;
+      warningText =
+          'Entered maternal age is outside typical reproductive ranges. Please verify the information.';
+    } else if (age <= 19) {
+      warningColor = AppColors.warning;
+      warningText = 'High-Risk Adolescent Pregnancy.';
+    } else if (age <= 34) {
+      warningText = null;
+    } else if (age <= 60) {
+      warningColor = AppColors.warning;
+      warningText = 'High-Risk Advanced Maternal Age Pregnancy.';
     } else {
-      setState(() => _riskWarning = null);
+      warningColor = AppColors.error;
+      warningText =
+          'Entered maternal age is outside supported maternal monitoring ranges. Please verify the information.';
     }
+
+    if (age < 13) {
+      _emailCtrl.clear();
+      _emailError = null;
+      _isEmailReadOnly = false;
+      _emailChecking = false;
+      _lastEmailChecked = null;
+    }
+
+    setState(() {
+      _birthdateError = birthdateError;
+      _riskWarning = warningText;
+      _riskWarningColor = warningColor;
+    });
   }
 
   String? _validatePregnancyInterval(DateTime newLmp) {
@@ -780,8 +808,14 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   String _resolveEmail() {
     final provided = _emailCtrl.text.trim();
     if (provided.isNotEmpty) return provided;
-    final first = _firstNameCtrl.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
-    final last = _lastNameCtrl.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    final first = _firstNameCtrl.text
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z]'), '');
+    final last = _lastNameCtrl.text
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z]'), '');
     final phone = _phoneCtrl.text.trim().replaceAll(RegExp(r'[^0-9]'), '');
     final ts = DateTime.now().millisecondsSinceEpoch;
     final safeName = (first.isEmpty ? 'mother' : first);
@@ -796,6 +830,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         final lastNameEmpty = _lastNameCtrl.text.trim().isEmpty;
         final phoneEmpty = _phoneCtrl.text.trim().isEmpty;
         final birthdateEmpty = _birthdate == null;
+        final emailVisible = _calculatedAge == null || _calculatedAge! >= 13;
+        final emailHasValue = _emailCtrl.text.trim().isNotEmpty;
+        final emailValid =
+            !emailVisible || !emailHasValue || _emailError == null;
 
         setState(() {
           _firstNameError = firstNameEmpty ? 'First name is required' : null;
@@ -805,8 +843,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             !lastNameEmpty &&
             !phoneEmpty &&
             !birthdateEmpty &&
-            _birthdateError == null;
-
+            _birthdateError == null &&
+            emailValid;
 
       case 1:
         final houseEmpty = _houseCtrl.text.trim().isEmpty;
@@ -1050,14 +1088,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 TextField(
                     controller: firstNameCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'First Name',
-                        border: OutlineInputBorder())),
+                        labelText: 'First Name', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 TextField(
                     controller: lastNameCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'Last Name',
-                        border: OutlineInputBorder())),
+                        labelText: 'Last Name', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 TextField(
                     controller: phoneCtrl,
@@ -2650,9 +2686,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               child: Text('Age: $_calculatedAge years old',
                   style: TextStyle(
                       fontSize: 12,
-                      color: (_calculatedAge! < 10 || _calculatedAge! > 50)
-                          ? AppColors.error
-                          : AppColors.textSecondary))),
+                      color: _riskWarningColor ?? AppColors.textSecondary))),
         ],
         if (_riskWarning != null) ...[
           const SizedBox(height: 4),
@@ -2660,12 +2694,13 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               padding: const EdgeInsets.only(left: 16),
               child: Row(children: [
                 Icon(Icons.warning_amber_rounded,
-                    size: 14, color: AppColors.warning),
+                    size: 14, color: _riskWarningColor ?? AppColors.warning),
                 const SizedBox(width: 6),
                 Expanded(
                     child: Text(_riskWarning!,
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.warning)))
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: _riskWarningColor ?? AppColors.warning)))
               ])),
         ],
         const SizedBox(height: 24),
@@ -2680,75 +2715,100 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             onChanged: (_) => _validateStepInline(0)),
         const SizedBox(height: 24),
         _sectionLabel('Account Credentials'),
-        AppInputField(
-            hintText: 'Email Address (optional)',
-            controller: _emailCtrl,
-            leadingIcon: Icons.email_outlined,
-            keyboardType: TextInputType.emailAddress,
-            onChanged: _onEmailChanged,
-            errorText: _emailError,
-            readOnly: _isEmailReadOnly),
-        if (_emailChecking) ...[
-          const SizedBox(height: 6),
-          Padding(
-              padding: const EdgeInsets.only(left: 16),
-              child: Row(children: const [
-                SizedBox(
-                    width: 13,
-                    height: 13,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 1.8, color: AppColors.brandAccent)),
-                SizedBox(width: 8),
-                Text('Checking availability...',
-                    style:
-                        TextStyle(fontSize: 11, color: AppColors.textSecondary))
-              ])),
-        ],
-        if (_checkingAccount) ...[
-          const SizedBox(height: 6),
-          Padding(
-              padding: const EdgeInsets.only(left: 16),
-              child: Row(children: const [
-                SizedBox(
-                    width: 13,
-                    height: 13,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 1.8, color: AppColors.brandAccent)),
-                SizedBox(width: 8),
-                Text('Checking for existing account...',
-                    style:
-                        TextStyle(fontSize: 11, color: AppColors.textSecondary))
-              ])),
-        ],
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-              color: AppColors.info.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.info.withValues(alpha: 0.3))),
-          child: Row(
-            children: [
-              Icon(Icons.email_outlined, color: AppColors.info, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                    Text('Password will be auto-generated',
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.info)),
-                    SizedBox(height: 4),
-                    Text(
-                        'If email is provided, credentials will be sent. Otherwise, the password will be shown after registration.',
-                        style: TextStyle(
-                            fontSize: 11, color: AppColors.textSecondary))
-                  ])),
-            ],
+        if (_calculatedAge == null || _calculatedAge! >= 13) ...[
+          AppInputField(
+              hintText: 'Email Address (optional)',
+              controller: _emailCtrl,
+              leadingIcon: Icons.email_outlined,
+              keyboardType: TextInputType.emailAddress,
+              onChanged: _onEmailChanged,
+              errorText: _emailError,
+              readOnly: _isEmailReadOnly),
+          if (_emailChecking) ...[
+            const SizedBox(height: 6),
+            Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Row(children: const [
+                  SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 1.8, color: AppColors.brandAccent)),
+                  SizedBox(width: 8),
+                  Text('Checking availability...',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textSecondary))
+                ])),
+          ],
+          if (_checkingAccount) ...[
+            const SizedBox(height: 6),
+            Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Row(children: const [
+                  SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 1.8, color: AppColors.brandAccent)),
+                  SizedBox(width: 8),
+                  Text('Checking for existing account...',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textSecondary))
+                ])),
+          ],
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+                color: AppColors.info.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: AppColors.info.withValues(alpha: 0.3))),
+            child: Row(
+              children: [
+                Icon(Icons.email_outlined, color: AppColors.info, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                      Text('Password will be auto-generated',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.info)),
+                      SizedBox(height: 4),
+                      Text(
+                          'If email is provided, credentials will be sent. Otherwise, the password will be shown after registration.',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.textSecondary))
+                    ])),
+              ],
+            ),
           ),
-        ),
+        ] else ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+                color: AppColors.info.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: AppColors.info.withValues(alpha: 0.25))),
+            child: Row(
+              children: const [
+                Icon(Icons.info_outline, color: AppColors.info, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                    child: Text(
+                        'Mothers under 13 are not asked for email. A password will be generated and shown after registration.',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textSecondary))),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -3502,76 +3562,76 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        title: const Text('Add Mother',
-            style: TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: AppColors.bgPrimary,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: TextButton.icon(
-              onPressed: _startOcrFlow,
-              icon: const Icon(Icons.document_scanner_outlined, size: 18),
-              label: const Text('OCR'),
-              style:
-                  TextButton.styleFrom(foregroundColor: AppColors.brandPrimary),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            SecondaryHeader(
+              title: 'Add Mother',
+              onBack: () => Navigator.pop(context),
             ),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: AppColors.borderPrimary),
-        ),
-      ),
-      body: Column(
-        children: [
-          LinearProgressIndicator(
-            value: (_step + 1) / _totalSteps,
-            backgroundColor: AppColors.borderPrimary,
-            valueColor:
-                const AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
-            minHeight: 3,
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Column(
-              children: [
-                ProgressiveStepIndicator(
-                    currentStep: _step, totalSteps: _totalSteps),
-                const SizedBox(height: 10),
-                Text(_stepTitles[_step],
-                    style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brandText)),
-                const SizedBox(height: 4),
-                Text(_stepSubtitles[_step],
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary)),
-                const SizedBox(height: 2),
-                Text('Step ${_step + 1} of $_totalSteps',
-                    style: const TextStyle(
-                        fontSize: 10, color: AppColors.textSecondary)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: PageView.builder(
-              controller: _pageController,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _totalSteps,
-              itemBuilder: (_, i) => SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                child: _buildStepContent(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: _startOcrFlow,
+                    icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                    label: const Text('OCR'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.brandPrimary,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: (_step + 1) / _totalSteps,
+              backgroundColor: AppColors.borderPrimary,
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+              minHeight: 3,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                children: [
+                  ProgressiveStepIndicator(
+                      currentStep: _step, totalSteps: _totalSteps),
+                  const SizedBox(height: 10),
+                  Text(_stepTitles[_step],
+                      style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brandText)),
+                  const SizedBox(height: 4),
+                  Text(_stepSubtitles[_step],
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary)),
+                  const SizedBox(height: 2),
+                  Text('Step ${_step + 1} of $_totalSteps',
+                      style: const TextStyle(
+                          fontSize: 10, color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _totalSteps,
+                itemBuilder: (_, i) => SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                  child: _buildStepContent(),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

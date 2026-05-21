@@ -102,7 +102,7 @@ class _AppInputFieldState extends State<AppInputField> {
                       style: TextStyle(
                         color: widget.readOnly
                             ? AppColors.textSecondary
-                            : AppColors.textPrimary,
+                            : AppColors.inputText,
                         fontSize: 16,
                       ),
                       decoration: InputDecoration(
