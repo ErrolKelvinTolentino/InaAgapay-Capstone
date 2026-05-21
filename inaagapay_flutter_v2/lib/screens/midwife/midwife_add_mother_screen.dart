@@ -14,7 +14,6 @@ import '../../widgets/app_input_field.dart';
 import '../../widgets/progressive_step_indicator.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/secondary_header.dart';
-import '../../widgets/main_button.dart';
 import 'add_prenatal_checkup_screen.dart';
 
 enum _GestationMethod { lmp, edd, aog }
@@ -54,25 +53,14 @@ const List<String> _relationshipOptions = [
 ];
 const List<String> _commonConditions = [
   'Anemia',
-  'Asthma',
   'Diabetes',
-  'Epilepsy',
-  'Heart Disease',
-  'Hepatitis',
   'Hypertension',
-  'Kidney Disease',
+  'Asthma',
   'Thyroid Disorder',
-  'Other',
-];
-
-const List<String> _commonAllergens = [
-  'Aspirin',
-  'Dairy',
-  'Latex',
-  'Peanuts',
-  'Penicillin',
-  'Seafood',
-  'Sulfonamides (Sulfa)',
+  'Heart Disease',
+  'Kidney Disease',
+  'Epilepsy',
+  'Hepatitis',
   'Other',
 ];
 
@@ -1089,89 +1077,59 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) {
-          final bool allValid = firstNameCtrl.text.trim().isNotEmpty &&
-              lastNameCtrl.text.trim().isNotEmpty &&
-              phoneCtrl.text.trim().isNotEmpty &&
-              relationship != null;
-
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            backgroundColor: AppColors.bgPrimary,
-            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-            contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-            title: const Row(
+        builder: (ctx, setS) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Add Emergency Contact'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.contact_phone_outlined, color: AppColors.brandPrimary),
-                SizedBox(width: 8),
-                Text('Add Emergency Contact',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                TextField(
+                    controller: firstNameCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'First Name', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: lastNameCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Last Name', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Phone Number',
+                        border: OutlineInputBorder()),
+                    keyboardType: TextInputType.phone),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  hint: const Text('Relationship'),
+                  items: _relationshipOptions
+                      .map((rel) =>
+                          DropdownMenuItem(value: rel, child: Text(rel)))
+                      .toList(),
+                  onChanged: (value) => setS(() => relationship = value),
+                  decoration:
+                      const InputDecoration(border: OutlineInputBorder()),
+                ),
               ],
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  AppInputField(
-                    hintText: 'First Name',
-                    controller: firstNameCtrl,
-                    isRequired: true,
-                    leadingIcon: Icons.person_outline,
-                    onChanged: (_) => setS(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  AppInputField(
-                    hintText: 'Last Name',
-                    controller: lastNameCtrl,
-                    isRequired: true,
-                    leadingIcon: Icons.person_outline,
-                    onChanged: (_) => setS(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  AppInputField(
-                    hintText: 'Phone Number',
-                    controller: phoneCtrl,
-                    isRequired: true,
-                    leadingIcon: Icons.phone_outlined,
-                    keyboardType: TextInputType.phone,
-                    onChanged: (_) => setS(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  _styledDropdown(
-                    hint: 'Relationship',
-                    value: relationship,
-                    items: _relationshipOptions,
-                    icon: Icons.people_outline,
-                    onChanged: (v) => setS(() => relationship = v),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel',
-                            style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 150,
-                        child: MainButton(
-                          label: 'Add Contact',
-                          showIcons: false,
-                          onPressed: allValid ? () => Navigator.pop(ctx, true) : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => firstNameCtrl.text.trim().isNotEmpty &&
+                      lastNameCtrl.text.trim().isNotEmpty &&
+                      phoneCtrl.text.trim().isNotEmpty &&
+                      relationship != null
+                  ? Navigator.pop(ctx, true)
+                  : null,
+              child: const Text('Add'),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
 
@@ -1215,123 +1173,84 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) {
-          final bool allValid = nameCtrl.text.trim().isNotEmpty;
-
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            backgroundColor: AppColors.bgPrimary,
-            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-            contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-            title: const Row(
+        builder: (ctx, setS) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Medical Condition'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.medical_services_outlined, color: AppColors.brandPrimary),
-                SizedBox(width: 8),
-                Text('Medical Condition',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  AppInputField(
-                    hintText: 'Condition Name',
+                TextField(
                     controller: nameCtrl,
-                    isRequired: true,
-                    leadingIcon: Icons.vaccines_outlined,
-                    onChanged: (_) => setS(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: diagDate ?? DateTime.now(),
-                          firstDate: DateTime(1900),
-                          lastDate: DateTime.now());
-                      if (picked != null) setS(() => diagDate = picked);
-                    },
-                    child: Container(
-                      height: 56,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_today_outlined,
-                              color: AppColors.brandAccent, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              diagDate == null
-                                  ? 'Diagnosis Date (optional)'
-                                  : _dateFmt.format(diagDate!),
-                              style: TextStyle(
+                    decoration: const InputDecoration(
+                        labelText: 'Condition Name',
+                        border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: diagDate ?? DateTime.now(),
+                        firstDate: DateTime(1900),
+                        lastDate: DateTime.now());
+                    if (picked != null) setS(() => diagDate = picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 16),
+                    decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.borderPrimary),
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today,
+                            color: AppColors.textSecondary),
+                        const SizedBox(width: 12),
+                        Text(
+                            diagDate == null
+                                ? 'Diagnosis Date (optional)'
+                                : _dateFmt.format(diagDate!),
+                            style: TextStyle(
                                 color: diagDate == null
                                     ? AppColors.textSecondary
-                                    : AppColors.inputText,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                                    : AppColors.textPrimary)),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _styledDropdown(
-                    hint: 'Status',
-                    value: status,
-                    items: const ['active', 'resolved'],
-                    itemLabels: const ['Active', 'Resolved'],
-                    icon: Icons.info_outline,
-                    onChanged: (v) => setS(() => status = v ?? 'active'),
-                  ),
-                  const SizedBox(height: 12),
-                  AppInputField(
-                    hintText: 'Remarks (optional)',
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: status,
+                  decoration: const InputDecoration(
+                      labelText: 'Status', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'active', child: Text('Active')),
+                    DropdownMenuItem(value: 'resolved', child: Text('Resolved'))
+                  ],
+                  onChanged: (v) => setS(() => status = v ?? 'active'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
                     controller: remarksCtrl,
-                    leadingIcon: Icons.comment_outlined,
-                    onChanged: (_) => setS(() {}),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel',
-                            style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 150,
-                        child: MainButton(
-                          label: 'Add Condition',
-                          showIcons: false,
-                          onPressed: allValid ? () => Navigator.pop(ctx, true) : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    decoration: const InputDecoration(
+                        labelText: 'Remarks (optional)',
+                        border: OutlineInputBorder()),
+                    maxLines: 2),
+              ],
             ),
-          );
-        },
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+                onPressed: nameCtrl.text.trim().isNotEmpty
+                    ? () => Navigator.pop(ctx, true)
+                    : null,
+                child: const Text('Add')),
+          ],
+        ),
       ),
     );
 
@@ -1366,8 +1285,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     if (confirm == true) setState(() => _medicalConditions.removeAt(index));
   }
 
-  Future<void> _showAddAllergy({String? prefill}) async {
-    final allergenCtrl = TextEditingController(text: prefill ?? '');
+  Future<void> _showAddAllergy() async {
+    final allergenCtrl = TextEditingController();
     DateTime? diagDate;
     String status = 'active';
     final treatmentCtrl = TextEditingController();
@@ -1375,123 +1294,82 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) {
-          final bool allValid = allergenCtrl.text.trim().isNotEmpty;
-
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            backgroundColor: AppColors.bgPrimary,
-            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-            contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-            title: const Row(
+        builder: (ctx, setS) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Add Allergy'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.warning_amber_outlined, color: AppColors.brandPrimary),
-                SizedBox(width: 8),
-                Text('Add Allergy',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  AppInputField(
-                    hintText: 'Allergen',
+                TextField(
                     controller: allergenCtrl,
-                    isRequired: true,
-                    leadingIcon: Icons.no_food_outlined,
-                    onChanged: (_) => setS(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: diagDate ?? DateTime.now(),
-                          firstDate: DateTime(1900),
-                          lastDate: DateTime.now());
-                      if (picked != null) setS(() => diagDate = picked);
-                    },
-                    child: Container(
-                      height: 56,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_today_outlined,
-                              color: AppColors.brandAccent, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              diagDate == null
-                                  ? 'Diagnosis Date (optional)'
-                                  : _dateFmt.format(diagDate!),
-                              style: TextStyle(
+                    decoration: const InputDecoration(
+                        labelText: 'Allergen', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: diagDate ?? DateTime.now(),
+                        firstDate: DateTime(1900),
+                        lastDate: DateTime.now());
+                    if (picked != null) setS(() => diagDate = picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 16),
+                    decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.borderPrimary),
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today,
+                            color: AppColors.textSecondary),
+                        const SizedBox(width: 12),
+                        Text(
+                            diagDate == null
+                                ? 'Diagnosis Date (optional)'
+                                : _dateFmt.format(diagDate!),
+                            style: TextStyle(
                                 color: diagDate == null
                                     ? AppColors.textSecondary
-                                    : AppColors.inputText,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                                    : AppColors.textPrimary)),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _styledDropdown(
-                    hint: 'Status',
-                    value: status,
-                    items: const ['active', 'resolved'],
-                    itemLabels: const ['Active', 'Resolved'],
-                    icon: Icons.info_outline,
-                    onChanged: (v) => setS(() => status = v ?? 'active'),
-                  ),
-                  const SizedBox(height: 12),
-                  AppInputField(
-                    hintText: 'Treatment (optional)',
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: status,
+                  decoration: const InputDecoration(
+                      labelText: 'Status', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'active', child: Text('Active')),
+                    DropdownMenuItem(value: 'resolved', child: Text('Resolved'))
+                  ],
+                  onChanged: (v) => setS(() => status = v ?? 'active'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
                     controller: treatmentCtrl,
-                    leadingIcon: Icons.healing_outlined,
-                    onChanged: (_) => setS(() {}),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel',
-                            style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 150,
-                        child: MainButton(
-                          label: 'Add Allergy',
-                          showIcons: false,
-                          onPressed: allValid ? () => Navigator.pop(ctx, true) : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    decoration: const InputDecoration(
+                        labelText: 'Treatment (optional)',
+                        border: OutlineInputBorder())),
+              ],
             ),
-          );
-        },
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+                onPressed: allergenCtrl.text.trim().isNotEmpty
+                    ? () => Navigator.pop(ctx, true)
+                    : null,
+                child: const Text('Add')),
+          ],
+        ),
       ),
     );
 
