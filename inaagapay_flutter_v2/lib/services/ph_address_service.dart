@@ -46,7 +46,7 @@ class PhBarangay {
 }
 
 class PhAddressService {
-  static const String baseUrl = 'https://psgc.cloud/api/v2';
+  static const String baseUrl = 'https://psgc.gitlab.io/api';
 
   // In-memory cache to avoid redundant API hits
   static List<PhProvince> _cachedProvinces = [];

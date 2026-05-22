@@ -555,9 +555,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
   String? _validateLmp(DateTime lmp) {
     final now = DateTime.now();
-    final fiveWeeksAgo = now.subtract(const Duration(days: 5 * 7));
-    if (lmp.isAfter(fiveWeeksAgo)) {
-      return 'LMP must be at least 5 weeks ago.';
+    final twoWeeksAgo = now.subtract(const Duration(days: 2 * 7));
+    if (lmp.isAfter(twoWeeksAgo)) {
+      return 'LMP must be at least 2 weeks ago.';
     }
     final daysSinceLmp = now.difference(lmp).inDays;
     if (daysSinceLmp > 42 * 7) {
@@ -4130,24 +4130,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionLabel('Emergency Contacts'),
-        const SizedBox(height: 8),
-        Center(
-            child: SizedBox(
-                width: 200,
-                child: ElevatedButton.icon(
-                    onPressed: _showAddEmergencyContact,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add Contact'),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandPrimary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30)))))),
         const SizedBox(height: 16),
         if (_emergencyContacts.isEmpty)
           _emptyState(Icons.contacts_outlined,
-              'No emergency contacts added.\nTap "Add Contact" to add one.')
+              'No emergency contacts added.\nClick the add button to add one.')
         else
           ..._emergencyContacts.asMap().entries.map((e) => _itemCard(
               leading: _iconAvatar(Icons.person_outline),
@@ -4470,23 +4456,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 .toList()),
         const SizedBox(height: 20),
         _sectionLabel('Medical Conditions List'),
-        Center(
-            child: SizedBox(
-                width: 180,
-                child: ElevatedButton.icon(
-                    onPressed: () => _showAddMedicalCondition(),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add Custom'),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandPrimary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30)))))),
         const SizedBox(height: 16),
         if (_medicalConditions.isEmpty)
           _emptyState(Icons.medical_services_outlined,
-              'No medical conditions added.\nTap "Add Custom" to add one.')
+              'No medical conditions added.\nClick the add button to add one.')
         else
           ..._medicalConditions.asMap().entries.map((e) => _itemCard(
               leading: _iconAvatar(Icons.medical_services_outlined),
@@ -4507,23 +4480,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionLabel('Allergies List'),
-        Center(
-            child: SizedBox(
-                width: 180,
-                child: ElevatedButton.icon(
-                    onPressed: _showAddAllergy,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add Allergy'),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandPrimary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30)))))),
         const SizedBox(height: 16),
         if (_allergies.isEmpty)
           _emptyState(Icons.no_food_outlined,
-              'No allergies recorded.\nTap "Add Allergy" to add one.')
+              'No allergies recorded.\nClick the add button to add one.')
         else
           ..._allergies.asMap().entries.map((e) => _itemCard(
               leading: _iconAvatar(Icons.warning_amber_outlined,
@@ -4570,23 +4530,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         ),
         if (_hasPastPregnancy) ...[
           const SizedBox(height: 16),
-          Center(
-              child: SizedBox(
-                  width: 180,
-                  child: ElevatedButton.icon(
-                      onPressed: _showAddPastPregnancy,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add Pregnancy'),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandPrimary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30)))))),
-          const SizedBox(height: 16),
           if (_pastPregnancies.isEmpty)
             _emptyState(Icons.history_outlined,
-                'No past pregnancies recorded.\nTap "Add Pregnancy" to add one.')
+                'No past pregnancies recorded.\nClick the add button to add one.')
           else
             ..._pastPregnancies.asMap().entries.map((e) {
               final p = e.value;
@@ -5003,6 +4949,41 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     }
   }
 
+  Widget? _buildFloatingActionButton() {
+    if (_submitting) return null;
+    
+    if (_step == 2) {
+      return FloatingActionButton(
+        onPressed: _showAddEmergencyContact,
+        backgroundColor: AppColors.brandPrimary,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add, color: Colors.white),
+      );
+    } else if (_step == 5) {
+      return FloatingActionButton(
+        onPressed: () => _showAddMedicalCondition(),
+        backgroundColor: AppColors.brandPrimary,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add, color: Colors.white),
+      );
+    } else if (_step == 6) {
+      return FloatingActionButton(
+        onPressed: _showAddAllergy,
+        backgroundColor: AppColors.brandPrimary,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add, color: Colors.white),
+      );
+    } else if (_step == 7 && _hasPastPregnancy) {
+      return FloatingActionButton(
+        onPressed: _showAddPastPregnancy,
+        backgroundColor: AppColors.brandPrimary,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add, color: Colors.white),
+      );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loadingContext) {
@@ -5079,6 +5060,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ],
         ),
       ),
+      floatingActionButton: _buildFloatingActionButton(),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
