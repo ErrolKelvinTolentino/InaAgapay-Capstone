@@ -15,6 +15,8 @@ class GroqService {
   static const String _visionModel =
       'meta-llama/llama-4-scout-17b-16e-instruct';
   static const String _reasoningModel = 'openai/gpt-oss-120b';
+  static const String _firstFallbackReasoningModel = 'openai/gpt-oss-20b';
+  static const String _secondFallbackReasoningModel = 'qwen/qwen3-32b';
 
   // ── API Constraints ─────────────────────────────────────────────────────
 
@@ -165,8 +167,7 @@ class GroqService {
       messages: [
         {
           'role': 'system',
-          'content':
-              'You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. '
+          'content': 'You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. '
               'Write as if you are a trusted ate (older sister) sitting beside the mother, gently explaining things. '
               'Celebrate good news warmly. When something needs attention, be honest but gentle and always offer practical next steps. '
               'Use simple Filipino-context language. Explain medical terms by what they mean for the mother and baby. '
@@ -196,7 +197,7 @@ class GroqService {
   /// Uses canopylabs/orpheus-v1-english with "diana" voice.
   /// Handles the 200-char limit by splitting into sentence chunks automatically.
   static const int _ttsMaxChunkChars = 190; // safely under the 200-char limit
-  static const int _wavHeaderSize = 44;     // standard WAV header bytes
+  static const int _wavHeaderSize = 44; // standard WAV header bytes
 
   Future<List<int>> speakWithGroqTts(String text) async {
     final apiKey = _getApiKey();
@@ -222,21 +223,24 @@ class GroqService {
       final chunk = chunks[i];
       if (chunk.trim().isEmpty) continue;
 
-      _log('   Chunk ${i + 1}/${chunks.length}: "${chunk.substring(0, chunk.length.clamp(0, 50))}..." (${chunk.length} chars)');
+      _log(
+          '   Chunk ${i + 1}/${chunks.length}: "${chunk.substring(0, chunk.length.clamp(0, 50))}..." (${chunk.length} chars)');
 
-      final response = await http.post(
-        Uri.parse('https://api.groq.com/openai/v1/audio/speech'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: jsonEncode({
-          'model': 'canopylabs/orpheus-v1-english',
-          'input': '[cheerful] $chunk',
-          'voice': 'autumn',
-          'response_format': 'wav',
-        }),
-      ).timeout(const Duration(seconds: 60));
+      final response = await http
+          .post(
+            Uri.parse('https://api.groq.com/openai/v1/audio/speech'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $apiKey',
+            },
+            body: jsonEncode({
+              'model': 'canopylabs/orpheus-v1-english',
+              'input': '[cheerful] $chunk',
+              'voice': 'autumn',
+              'response_format': 'wav',
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
 
       if (response.statusCode != 200) {
         String errMsg;
@@ -287,7 +291,9 @@ class GroqService {
       int breakAt = -1;
       for (int j = end; j > start + 30; j--) {
         final ch = text[j];
-        if ((ch == '.' || ch == '!' || ch == '?') && j + 1 < text.length && text[j + 1] == ' ') {
+        if ((ch == '.' || ch == '!' || ch == '?') &&
+            j + 1 < text.length &&
+            text[j + 1] == ' ') {
           breakAt = j + 1; // include the punctuation, break after it
           break;
         }
@@ -305,12 +311,13 @@ class GroqService {
 
       chunks.add(text.substring(start, breakAt).trim());
       start = breakAt;
-      while (start < text.length && text[start] == ' ') { start++; }
+      while (start < text.length && text[start] == ' ') {
+        start++;
+      }
     }
 
     return chunks.where((c) => c.isNotEmpty).toList();
   }
-
 
   Future<String> getChatResponse({
     required List<Map<String, dynamic>> chatHistory,
@@ -884,6 +891,7 @@ Rules:
     required double temperature,
     required int maxOutputTokens,
     bool forceJsonMode = false,
+    bool allowModelFallback = true,
   }) async {
     final bool useJsonMode = forceJsonMode || _detectJsonMode(messages);
 
@@ -913,8 +921,29 @@ Rules:
           .timeout(const Duration(seconds: 120));
 
       if (response.statusCode != 200) {
-        final errorData = jsonDecode(response.body);
-        final errorMessage = errorData['error']?['message'] ?? response.body;
+        String errorMessage = response.body;
+        try {
+          final errorData = jsonDecode(response.body);
+          errorMessage = errorData['error']?['message'] ?? response.body;
+        } catch (_) {}
+
+        if (allowModelFallback && _isTokenLimitError(errorMessage)) {
+          final nextModel = _nextReasoningFallbackModel(model);
+          if (nextModel != null) {
+            _log(
+                '⚠️ ${model.split('/').last} token limit reached; retrying with ${nextModel.split('/').last}');
+            return _sendChatCompletion(
+              messages: messages,
+              apiKey: apiKey,
+              model: nextModel,
+              temperature: temperature,
+              maxOutputTokens: maxOutputTokens,
+              forceJsonMode: forceJsonMode,
+              allowModelFallback: true,
+            );
+          }
+        }
+
         throw Exception('API Error (${response.statusCode}): $errorMessage');
       }
 
@@ -926,6 +955,27 @@ Rules:
     } on FormatException catch (e) {
       throw Exception('Invalid response format from Groq API: $e');
     }
+  }
+
+  bool _isTokenLimitError(String message) {
+    final normalized = message.toLowerCase();
+    return (normalized.contains('token') || normalized.contains('context')) &&
+        (normalized.contains('limit') ||
+            normalized.contains('maximum') ||
+            normalized.contains('exceeded') ||
+            normalized.contains('too long') ||
+            normalized.contains('max tokens') ||
+            normalized.contains('context length'));
+  }
+
+  String? _nextReasoningFallbackModel(String currentModel) {
+    if (currentModel == _reasoningModel) {
+      return _firstFallbackReasoningModel;
+    }
+    if (currentModel == _firstFallbackReasoningModel) {
+      return _secondFallbackReasoningModel;
+    }
+    return null;
   }
 
   bool _detectJsonMode(List<Map<String, dynamic>> messages) {
