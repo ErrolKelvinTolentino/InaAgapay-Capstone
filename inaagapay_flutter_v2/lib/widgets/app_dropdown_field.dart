@@ -30,6 +30,8 @@ class AppDropdownField<T extends Object> extends StatefulWidget {
 class _AppDropdownFieldState<T extends Object> extends State<AppDropdownField<T>> {
   final LayerLink _layerLink = LayerLink();
   late final TextEditingController _controller;
+  bool _isOpen = false;
+  OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
@@ -41,6 +43,7 @@ class _AppDropdownFieldState<T extends Object> extends State<AppDropdownField<T>
 
   @override
   void dispose() {
+    _closeDropdown();
     _controller.dispose();
     super.dispose();
   }
@@ -50,14 +53,105 @@ class _AppDropdownFieldState<T extends Object> extends State<AppDropdownField<T>
     super.didUpdateWidget(oldWidget);
     if (widget.value != oldWidget.value) {
       _controller.text = widget.value == null ? '' : widget.displayStringForOption(widget.value!);
+      if (_isOpen) {
+        _closeDropdown();
+        _openDropdown();
+      }
     }
   }
 
-  Iterable<T> _filterOptions(String query) {
-    final lower = query.toLowerCase();
-    return widget.options.where((option) {
-      return widget.displayStringForOption(option).toLowerCase().contains(lower);
+  void _toggleDropdown() {
+    if (_isOpen) {
+      _closeDropdown();
+    } else {
+      _openDropdown();
+    }
+  }
+
+  void _openDropdown() {
+    _overlayEntry = _createOverlayEntry();
+    Overlay.of(context).insert(_overlayEntry!);
+    setState(() {
+      _isOpen = true;
     });
+  }
+
+  void _closeDropdown() {
+    if (_overlayEntry != null) {
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+    }
+    if (mounted) {
+      setState(() {
+        _isOpen = false;
+      });
+    }
+  }
+
+  OverlayEntry _createOverlayEntry() {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final Size size = renderBox.size;
+
+    return OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          // Dismiss when clicking outside
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _closeDropdown,
+            ),
+          ),
+          CompositedTransformFollower(
+            link: _layerLink,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.bottomLeft,
+            followerAnchor: Alignment.topLeft,
+            offset: const Offset(0, 6),
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(20),
+              clipBehavior: Clip.hardEdge,
+              color: Colors.white,
+              shadowColor: Colors.black.withAlpha(20),
+              child: Container(
+                width: size.width,
+                constraints: const BoxConstraints(maxHeight: 250),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.borderPrimary, width: 1.5),
+                ),
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  children: widget.options.map((T option) {
+                    final isSelected = widget.value == option;
+                    return InkWell(
+                      onTap: () {
+                        widget.onSelected(option);
+                        _closeDropdown();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        color: isSelected ? AppColors.brandPrimary.withAlpha(15) : null,
+                        child: Text(
+                          widget.displayStringForOption(option),
+                          style: TextStyle(
+                            color: isSelected ? AppColors.brandPrimary : AppColors.textPrimary,
+                            fontSize: 14,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -67,65 +161,57 @@ class _AppDropdownFieldState<T extends Object> extends State<AppDropdownField<T>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(
-              color: hasError ? AppColors.error : AppColors.borderPrimary,
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(15),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+        GestureDetector(
+          onTap: _toggleDropdown,
+          behavior: HitTestBehavior.opaque,
+          child: CompositedTransformTarget(
+            link: _layerLink,
+            child: Container(
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: hasError
+                      ? AppColors.error
+                      : (_isOpen ? AppColors.brandPrimary : AppColors.borderPrimary),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(15),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Row(
-            children: [
-              if (widget.leadingIcon != null) ...[
-                Icon(widget.leadingIcon, color: AppColors.brandAccent),
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<T>(
-                    value: widget.value,
-                    hint: Text(
-                      widget.hintText,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
+              child: Row(
+                children: [
+                  if (widget.leadingIcon != null) ...[
+                    Icon(widget.leadingIcon, color: AppColors.brandAccent),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Text(
+                      widget.value == null
+                          ? widget.hintText
+                          : widget.displayStringForOption(widget.value!),
+                      style: TextStyle(
+                        color: widget.value == null
+                            ? AppColors.textSecondary
+                            : AppColors.inputText,
                         fontSize: 14,
                       ),
                     ),
-                    isExpanded: true,
-                    dropdownColor: Colors.white,
-                    focusColor: Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
-                    style: const TextStyle(
-                      color: AppColors.inputText,
-                      fontSize: 16,
-                    ),
-                    onChanged: (T? newValue) {
-                      if (newValue != null) {
-                        widget.onSelected(newValue);
-                      }
-                    },
-                    items: widget.options.map((T option) {
-                      return DropdownMenuItem<T>(
-                        value: option,
-                        child: Text(widget.displayStringForOption(option)),
-                      );
-                    }).toList(),
                   ),
-                ),
+                  Icon(
+                    _isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                    color: AppColors.textSecondary,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
         if (hasError)

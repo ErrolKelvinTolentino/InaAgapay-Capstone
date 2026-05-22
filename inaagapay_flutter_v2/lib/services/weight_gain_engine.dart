@@ -191,11 +191,21 @@ class WeightGainEngine {
       final weeksAfterFirst = aogWeeks - 13;
       expectedGainMid = firstTrimesterGain + (weeksAfterFirst * weeklyRate);
 
-      // Min/max expected using IOM total range proportionally
-      final totalWeeks = 40.0;
-      final progressFraction = aogWeeks / totalWeeks;
-      expectedGainMin = totalMin * progressFraction;
-      expectedGainMax = totalMax * progressFraction;
+      final firstTrimesterMin = firstTrimesterGain * 0.7;
+      final firstTrimesterMax = firstTrimesterGain * 1.3;
+
+      if (aogWeeks <= 40) {
+        final progressFraction = (aogWeeks - 13) / 27.0;
+        expectedGainMin = firstTrimesterMin + (totalMin - firstTrimesterMin) * progressFraction;
+        expectedGainMax = firstTrimesterMax + (totalMax - firstTrimesterMax) * progressFraction;
+      } else {
+        // Post-term: extrapolate using weekly rate min/max
+        final weeksAfterForty = aogWeeks - 40;
+        final weeklyMin = guidelines['weekly_min'] ?? (weeklyRate * 0.8);
+        final weeklyMax = guidelines['weekly_max'] ?? (weeklyRate * 1.2);
+        expectedGainMin = totalMin + (weeksAfterForty * weeklyMin);
+        expectedGainMax = totalMax + (weeksAfterForty * weeklyMax);
+      }
     }
 
     final actualGain = currentWeight - prePregnancyWeight;
