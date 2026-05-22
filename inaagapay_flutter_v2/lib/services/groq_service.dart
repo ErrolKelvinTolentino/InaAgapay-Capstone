@@ -18,6 +18,11 @@ class GroqService {
   static const String _firstFallbackReasoningModel = 'openai/gpt-oss-20b';
   static const String _secondFallbackReasoningModel = 'qwen/qwen3-32b';
 
+  static const String _sttModelPrimary = 'whisper-large-v3-turbo';
+  static const String _sttModelFallback = 'whisper-large-v3';
+  static const String _audioTranscriptionUrl =
+      'https://api.groq.com/openai/v1/audio/transcriptions';
+
   // ── API Constraints ─────────────────────────────────────────────────────
 
   static const String _baseUrl =
@@ -317,6 +322,77 @@ class GroqService {
     }
 
     return chunks.where((c) => c.isNotEmpty).toList();
+  }
+
+  Future<String> transcribeAudio({
+    required Uint8List audioBytes,
+    required String fileName,
+    String? language,
+  }) async {
+    final apiKey = _getApiKey();
+    final models = [_sttModelPrimary, _sttModelFallback];
+    String? lastError;
+
+    for (final model in models) {
+      try {
+        return await _sendAudioTranscription(
+          audioBytes: audioBytes,
+          fileName: fileName,
+          apiKey: apiKey,
+          model: model,
+          language: language,
+        );
+      } catch (e) {
+        lastError = e.toString();
+        _log('⚠️ STT model ${model.split('/').last} failed: $e');
+      }
+    }
+
+    throw Exception(
+        'Speech transcription failed: ${lastError ?? 'Unknown error'}');
+  }
+
+  Future<String> _sendAudioTranscription({
+    required Uint8List audioBytes,
+    required String fileName,
+    required String apiKey,
+    required String model,
+    String? language,
+  }) async {
+    final request =
+        http.MultipartRequest('POST', Uri.parse(_audioTranscriptionUrl));
+    request.headers['Authorization'] = 'Bearer $apiKey';
+    request.fields['model'] = model;
+    if (language != null && language.isNotEmpty) {
+      request.fields['language'] = language;
+    }
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        audioBytes,
+        filename: fileName,
+      ),
+    );
+
+    final streamedResponse =
+        await request.send().timeout(const Duration(seconds: 120));
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode != 200) {
+      String errorMessage = response.body;
+      try {
+        final errorData = jsonDecode(response.body);
+        errorMessage = errorData['error']?['message'] ?? response.body;
+      } catch (_) {}
+      throw Exception('Groq STT Error (${response.statusCode}): $errorMessage');
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final text = data['text'] as String?;
+    if (text == null || text.trim().isEmpty) {
+      throw Exception('Groq STT returned empty transcription');
+    }
+    return text.trim();
   }
 
   Future<String> getChatResponse({

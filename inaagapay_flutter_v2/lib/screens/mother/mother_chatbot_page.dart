@@ -1,10 +1,16 @@
 // lib/screens/mother/mother_chatbot_page.dart
 
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:intl/intl.dart';
+import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_colors.dart';
@@ -41,7 +47,8 @@ class MotherChatbotPage extends StatefulWidget {
   State<MotherChatbotPage> createState() => _MotherChatbotPageState();
 }
 
-class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTickerProviderStateMixin {
+class _MotherChatbotPageState extends State<MotherChatbotPage>
+    with TickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -54,6 +61,15 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
   bool _loadingSessions = true;
   bool _loadingMessages = false;
   bool _isTyping = false;
+  late final AudioRecorder _audioRecorder;
+  bool _isRecording = false;
+  bool _isTranscribing = false;
+  Timer? _recordingTimer;
+  int _recordingDuration = 0;
+  Timer? _amplitudeTimer;
+  double _currentAmplitude = 0.0;
+  late AnimationController _recordingGlowController;
+  bool _isVoiceActionPending = false;
 
   List<String> _activeAllergies = [];
   List<String> _activeMedicalConditions = [];
@@ -65,7 +81,7 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
   // TTS & Search State
   late AudioPlayer _audioPlayer;
   String? _currentlyReadingMessageId;
-  String? _loadingTtsMessageId;          // shows spinner while fetching audio
+  String? _loadingTtsMessageId; // shows spinner while fetching audio
   final TextEditingController _drawerSearchController = TextEditingController();
   String _drawerSearchQuery = '';
 
@@ -73,11 +89,21 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
     return LanguageService.translate(english, filipino);
   }
 
+  String get _onlyFirstName {
+    if (widget.firstName.isEmpty) return '';
+    return widget.firstName.trim().split(' ').first;
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _audioPlayer = AudioPlayer();
+    _audioRecorder = AudioRecorder();
+    _recordingGlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
     _initAudioPlayer();
     _loadMotherMedicalInfo().then((_) {
       _initializeChat();
@@ -94,6 +120,265 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
     });
   }
 
+  Future<void> _toggleVoiceInput() async {
+    if (_isVoiceActionPending) return;
+    _isVoiceActionPending = true;
+    try {
+      if (_isRecording) {
+        await _stopVoiceRecording();
+      } else {
+        await _startVoiceRecording();
+      }
+    } finally {
+      _isVoiceActionPending = false;
+    }
+  }
+
+  Future<void> _startVoiceRecording() async {
+    try {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_t(
+                'Microphone permission is required to record your voice.',
+                'Kailangang payagan ang mikropono para maitala ang iyong boses.',
+              )),
+            ),
+          );
+        }
+        return;
+      }
+
+      final recordConfig = await _buildSafeRecordConfig();
+      final String filePath;
+      if (kIsWeb) {
+        filePath = '';
+      } else {
+        final tempDir = await getTemporaryDirectory();
+        filePath =
+            '${tempDir.path}/chatbot_voice_${DateTime.now().millisecondsSinceEpoch}.${_extensionForEncoder(recordConfig.encoder)}';
+      }
+
+      await _audioRecorder.start(recordConfig, path: filePath);
+
+      _recordingTimer?.cancel();
+      _recordingDuration = 0;
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted) {
+          setState(() {
+            _recordingDuration++;
+          });
+        }
+      });
+
+      _amplitudeTimer?.cancel();
+      _currentAmplitude = 0.0;
+      _amplitudeTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) async {
+        try {
+          if (_isRecording) {
+            final amp = await _audioRecorder.getAmplitude();
+            double db = amp.current;
+            double normalized = 0.0;
+            // Silence starts at -50dB or lower, and peak volume around -5dB or higher.
+            const double minDb = -50.0;
+            const double maxDb = -5.0;
+            if (db > minDb) {
+              normalized = (db - minDb) / (maxDb - minDb);
+              if (normalized > 1.0) normalized = 1.0;
+              if (normalized < 0.0) normalized = 0.0;
+            }
+            if (mounted) {
+              setState(() {
+                _currentAmplitude = normalized;
+              });
+            }
+          }
+        } catch (e) {
+          debugPrint('Error getting amplitude: $e');
+        }
+      });
+
+      _recordingGlowController.repeat(reverse: true);
+
+      if (mounted) {
+        setState(() {
+          _isRecording = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('[MotherChatbotPage] Voice recording start failed: $e');
+      _recordingGlowController.stop();
+      _amplitudeTimer?.cancel();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_t(
+              'Unable to start recording. Please try again.',
+              'Hindi masimulan ang recording. Pakisubukan muli.',
+            )),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<RecordConfig> _buildSafeRecordConfig() async {
+    if (kIsWeb) {
+      return const RecordConfig(
+        encoder: AudioEncoder.wav,
+        sampleRate: 16000,
+        bitRate: 128000,
+        numChannels: 1,
+      );
+    }
+
+    final candidateEncoders = [
+      AudioEncoder.aacLc,
+      AudioEncoder.wav,
+      AudioEncoder.pcm16bits,
+      AudioEncoder.opus,
+    ];
+
+    for (final encoder in candidateEncoders) {
+      try {
+        if (await _audioRecorder.isEncoderSupported(encoder)) {
+          return RecordConfig(
+            encoder: encoder,
+            sampleRate: 16000,
+            bitRate: 128000,
+            numChannels: 1,
+          );
+        }
+      } catch (e) {
+        debugPrint('⚠️ Encoder support check failed for $encoder: $e');
+      }
+    }
+
+    return const RecordConfig(
+      encoder: AudioEncoder.wav,
+      sampleRate: 16000,
+      bitRate: 128000,
+      numChannels: 1,
+    );
+  }
+
+  String _extensionForEncoder(AudioEncoder encoder) {
+    switch (encoder) {
+      case AudioEncoder.aacLc:
+      case AudioEncoder.aacEld:
+      case AudioEncoder.aacHe:
+        return 'm4a';
+      case AudioEncoder.amrNb:
+      case AudioEncoder.amrWb:
+        return '3gp';
+      case AudioEncoder.opus:
+        return 'opus';
+      case AudioEncoder.flac:
+        return 'flac';
+      case AudioEncoder.wav:
+        return 'wav';
+      case AudioEncoder.pcm16bits:
+        return 'pcm';
+    }
+  }
+
+  Future<void> _stopVoiceRecording() async {
+    _recordingTimer?.cancel();
+    _amplitudeTimer?.cancel();
+    _recordingGlowController.stop();
+    String? path;
+    try {
+      path = await _audioRecorder.stop();
+    } catch (e) {
+      debugPrint('[MotherChatbotPage] Voice recording stop failed: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _recordingDuration = 0;
+        _currentAmplitude = 0.0;
+        _isTranscribing = true;
+      });
+    }
+
+    if (path == null || path.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isTranscribing = false;
+        });
+      }
+      return;
+    }
+
+    try {
+      final Uint8List audioBytes;
+      final String fileName;
+      if (kIsWeb) {
+        final response = await http.get(Uri.parse(path));
+        audioBytes = response.bodyBytes;
+        fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.wav';
+      } else {
+        audioBytes = await File(path).readAsBytes();
+        fileName = path.split(RegExp(r'[/\\]')).last;
+      }
+
+      final transcript = await _groqService.transcribeAudio(
+        audioBytes: audioBytes,
+        fileName: fileName,
+      );
+
+      if (transcript.isNotEmpty) {
+        _inputController.text = transcript;
+      }
+    } catch (e) {
+      debugPrint('[MotherChatbotPage] STT failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_t(
+              'Unable to transcribe audio. Please try again.',
+              'Hindi ma-transcribe ang audio. Pakisubukan muli.',
+            )),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isTranscribing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _cancelVoiceRecording() async {
+    _recordingTimer?.cancel();
+    _amplitudeTimer?.cancel();
+    _recordingGlowController.stop();
+    try {
+      await _audioRecorder.stop();
+    } catch (e) {
+      debugPrint('[MotherChatbotPage] Voice recording cancel failed: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _recordingDuration = 0;
+        _currentAmplitude = 0.0;
+      });
+    }
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final int minutes = totalSeconds ~/ 60;
+    final int seconds = totalSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, "0")}';
+  }
+
   Future<void> _loadMotherMedicalInfo() async {
     try {
       final motherId = await AuthStorage.getMotherId();
@@ -108,7 +393,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
           .eq('mother_id', motherId);
 
       final activeAllergiesList = (allergyRows as List)
-          .where((row) => (row['status'] ?? '').toString().toLowerCase() == 'active')
+          .where((row) =>
+              (row['status'] ?? '').toString().toLowerCase() == 'active')
           .map((row) => (row['allergen'] ?? '').toString().trim())
           .where((allergen) => allergen.isNotEmpty)
           .toList();
@@ -120,7 +406,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
           .eq('mother_id', motherId);
 
       final activeConditionsList = (conditionRows as List)
-          .where((row) => (row['status'] ?? '').toString().toLowerCase() == 'active')
+          .where((row) =>
+              (row['status'] ?? '').toString().toLowerCase() == 'active')
           .map((row) => (row['condition_name'] ?? '').toString().trim())
           .where((cond) => cond.isNotEmpty)
           .toList();
@@ -128,7 +415,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
       // Fetch AI Privacy settings from secure storage
       final hidePregnancy = await AuthStorage.getHiddenPregnancyInfo();
       final hiddenAllergiesList = await AuthStorage.getHiddenAllergies();
-      final hiddenConditionsList = await AuthStorage.getHiddenMedicalConditions();
+      final hiddenConditionsList =
+          await AuthStorage.getHiddenMedicalConditions();
 
       if (mounted) {
         setState(() {
@@ -146,7 +434,11 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
 
   @override
   void dispose() {
+    _recordingTimer?.cancel();
+    _amplitudeTimer?.cancel();
+    _recordingGlowController.dispose();
     _audioPlayer.dispose();
+    _audioRecorder.dispose();
     _drawerSearchController.dispose();
     _tabController.dispose();
     _inputController.dispose();
@@ -216,9 +508,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
     });
 
     try {
-      final title = '${_t('Chat w/ Ate', 'Kausap si Ate')} - ${DateFormat('MMM dd').format(DateTime.now())}';
+      final title =
+          '${_t('Chat w/ Ate', 'Kausap si Ate')} - ${DateFormat('MMM dd').format(DateTime.now())}';
       final newSession = await ChatbotService.createSession(title);
-      
+
       setState(() {
         if (!_sessions.any((s) => s.sessionId == newSession.sessionId)) {
           _sessions.insert(0, newSession);
@@ -243,19 +536,19 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
     if (widget.hasPregnancy) {
       if (widget.week > 0) {
         greeting = _t(
-          "Hi ${widget.firstName}! I'm Ate Assistant, your digital midwife guide. You're currently in Week ${widget.week} of your pregnancy (${widget.trimester}). How can I help you today? 🌸",
-          "Kumusta, ${widget.firstName}! Ako si Ate Assistant, ang iyong gabay sa pagbubuntis. Nasa Week ${widget.week} ka na ngayon (${_tTrimester(widget.trimester)}). Paano kita matutulungan ngayong araw? 🌸",
+          "Hi $_onlyFirstName! I'm Ate Assistant, your digital midwife guide. You're currently in Week ${widget.week} of your pregnancy (${widget.trimester}). How can I help you today? 🌸",
+          "Kumusta, $_onlyFirstName! Ako si Ate Assistant, ang iyong gabay sa pagbubuntis. Nasa Week ${widget.week} ka na ngayon (${_tTrimester(widget.trimester)}). Paano kita matutulungan ngayong araw? 🌸",
         );
       } else {
         greeting = _t(
-          "Hi ${widget.firstName}! I'm Ate Assistant, your digital midwife guide. How are you and your baby doing today? 🌸",
-          "Kumusta, ${widget.firstName}! Ako si Ate Assistant, ang iyong gabay sa pagbubuntis. Kumusta ang lagay mo at ng iyong baby ngayon? 🌸",
+          "Hi $_onlyFirstName! I'm Ate Assistant, your digital midwife guide. How are you and your baby doing today? 🌸",
+          "Kumusta, $_onlyFirstName! Ako si Ate Assistant, ang iyong gabay sa pagbubuntis. Kumusta ang lagay mo at ng iyong baby ngayon? 🌸",
         );
       }
     } else {
       greeting = _t(
-        "Hi ${widget.firstName}! I'm Ate Assistant, your digital midwife guide. How can I help you today? 🌸",
-        "Kumusta, ${widget.firstName}! Ako si Ate Assistant, ang iyong gabay. Ano ang maitutulong ko sa iyo ngayon? 🌸",
+        "Hi $_onlyFirstName! I'm Ate Assistant, your digital midwife guide. How can I help you today? 🌸",
+        "Kumusta, $_onlyFirstName! Ako si Ate Assistant, ang iyong gabay. Ano ang maitutulong ko sa iyo ngayon? 🌸",
       );
     }
 
@@ -272,9 +565,15 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
   }
 
   String _tTrimester(String trim) {
-    if (trim.contains('First') || trim.contains('Unang')) return 'Unang Trimester';
-    if (trim.contains('Second') || trim.contains('Ikalawang')) return 'Ikalawang Trimester';
-    if (trim.contains('Third') || trim.contains('Ikatlong')) return 'Ikatlong Trimester';
+    if (trim.contains('First') || trim.contains('Unang')) {
+      return 'Unang Trimester';
+    }
+    if (trim.contains('Second') || trim.contains('Ikalawang')) {
+      return 'Ikalawang Trimester';
+    }
+    if (trim.contains('Third') || trim.contains('Ikatlong')) {
+      return 'Ikatlong Trimester';
+    }
     return trim;
   }
 
@@ -313,8 +612,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
       ];
 
       // Add recent messages to history context
-      final recentMessages = _messages.length > 16 
-          ? _messages.sublist(_messages.length - 16) 
+      final recentMessages = _messages.length > 16
+          ? _messages.sublist(_messages.length - 16)
           : _messages;
 
       for (final msg in recentMessages) {
@@ -325,7 +624,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
       }
 
       // 3. Request LLM response from Groq
-      final aiResponseText = await _groqService.getChatResponse(chatHistory: apiHistory);
+      final aiResponseText =
+          await _groqService.getChatResponse(chatHistory: apiHistory);
 
       // 4. Save and display AI response
       final aiMessage = await ChatbotService.saveMessage(
@@ -342,7 +642,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_t('Connection error. Please try again.', 'May problema sa koneksyon. Pakisubukan muli.')),
+            content: Text(_t('Connection error. Please try again.',
+                'May problema sa koneksyon. Pakisubukan muli.')),
             backgroundColor: AppColors.error,
           ),
         );
@@ -356,26 +657,33 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
   }
 
   String _buildSystemPrompt() {
-    final visibleAllergies = _activeAllergies.where((a) => !_hiddenAllergies.contains(a)).toList();
-    final visibleConditions = _activeMedicalConditions.where((c) => !_hiddenMedicalConditions.contains(c)).toList();
+    final visibleAllergies =
+        _activeAllergies.where((a) => !_hiddenAllergies.contains(a)).toList();
+    final visibleConditions = _activeMedicalConditions
+        .where((c) => !_hiddenMedicalConditions.contains(c))
+        .toList();
 
-    final allergiesStr = visibleAllergies.isEmpty ? 'Wala (o walang ibinahagi ang ina)' : visibleAllergies.join(', ');
-    final medicalConditionsStr = visibleConditions.isEmpty ? 'Wala (o walang ibinahagi ang ina)' : visibleConditions.join(', ');
+    final allergiesStr = visibleAllergies.isEmpty
+        ? 'Wala (o walang ibinahagi ang ina)'
+        : visibleAllergies.join(', ');
+    final medicalConditionsStr = visibleConditions.isEmpty
+        ? 'Wala (o walang ibinahagi ang ina)'
+        : visibleConditions.join(', ');
 
     final includePregnancy = widget.hasPregnancy && !_hidePregnancyInfo;
 
     final contextString = includePregnancy
-        ? "Pangalan ng Buntis: ${widget.firstName}\n"
-          "Linggo ng Pagbubuntis: Week ${widget.week} (${widget.trimester})\n"
-          "Risk Level: ${widget.riskLevel}\n"
-          "Mga Risk Factors: ${widget.riskFactors?.join(', ') ?? 'Wala'}\n"
-          "Mga Rekomendadong Aksyon: ${widget.suggestedActions?.join(', ') ?? 'Wala'}\n"
-          "Mga Aktibong Alerdye (Allergies) na ibinahagi: $allergiesStr\n"
-          "Mga Kasalukuyang Kondisyong Medikal (Medical Conditions) na ibinahagi: $medicalConditionsStr"
-        : "Pangalan ng Ina: ${widget.firstName}\n"
-          "Pregnancy Status: Walang aktibong pagbubuntis na rehistrado o tinago ng ina ang detalye.\n"
-          "Mga Aktibong Alerdye (Allergies) na ibinahagi: $allergiesStr\n"
-          "Mga Kasalukuyang Kondisyong Medikal (Medical Conditions) na ibinahagi: $medicalConditionsStr";
+        ? "Pangalan ng Buntis: $_onlyFirstName\n"
+            "Linggo ng Pagbubuntis: Week ${widget.week} (${widget.trimester})\n"
+            "Risk Level: ${widget.riskLevel}\n"
+            "Mga Risk Factors: ${widget.riskFactors?.join(', ') ?? 'Wala'}\n"
+            "Mga Rekomendadong Aksyon: ${widget.suggestedActions?.join(', ') ?? 'Wala'}\n"
+            "Mga Aktibong Alerdye (Allergies) na ibinahagi: $allergiesStr\n"
+            "Mga Kasalukuyang Kondisyong Medikal (Medical Conditions) na ibinahagi: $medicalConditionsStr"
+        : "Pangalan ng Ina: $_onlyFirstName\n"
+            "Pregnancy Status: Walang aktibong pagbubuntis na rehistrado o tinago ng ina ang detalye.\n"
+            "Mga Aktibong Alerdye (Allergies) na ibinahagi: $allergiesStr\n"
+            "Mga Kasalukuyang Kondisyong Medikal (Medical Conditions) na ibinahagi: $medicalConditionsStr";
 
     return "You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. "
         "Write as if you are a trusted ate (older sister) sitting beside the mother, gently explaining things. "
@@ -390,7 +698,7 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
         "2. STRICT LANGUAGE MATCHING: You must detect and mirror the language or dialect style the mother uses. If she asks in Tagalog, respond in warm, conversational Tagalog. If she asks in Taglish, respond in natural Taglish. If she asks in English, respond in clear English. Sound warm, natural, and never use rigid clinical translations.\n"
         "3. Every message you send MUST end with a caring tag and a soft disclaimer: "
         "\"Tandaan: Ang payo na ito ay gabay lamang at hindi kapalit ng pagkonsulta sa iyong midwife o doktor.\"\n"
-        "4. Address the mother by name (${widget.firstName}) naturally occasionally.\n"
+        "4. Address the mother by name ($_onlyFirstName) naturally occasionally.\n"
         "5. CRITICAL: You are STRICTLY a maternal health, pregnancy, and baby care assistant. Do NOT write computer code, programming instructions, web scripts, or answer any questions unrelated to pregnancy, motherhood, maternal/infant nutrition, or parenting. If asked about programming, code, web projects, or other unrelated subjects, politely and warmly decline in Taglish (e.g., 'Pasensya na, mama, ako ay ginawa lamang para sa mga usaping pagbubuntis at pangangalaga sa inyong baby...').\n"
         "6. CRITICAL SAFETY RULE: You must ALWAYS cross-reference the mother's list of active allergies and medical conditions when she asks about food, diet, nutrition, home remedies, medications, activities, or exercises. If she asks if she can eat or do something that matches or is related to her active allergies or medical conditions (e.g. asking to eat fish when allergic to fish, or do heavy tasks with high risk), you MUST strongly advise against it, state the reason clearly by referring to her allergy or condition, and provide safe, healthy local alternatives in your warm Filipino midwife ('Ate') persona.\n"
         "7. EMERGENCY HOTLINES: If the mother mentions or describes any pregnancy danger signs (such as vaginal bleeding, severe abdominal pain, high fever, blurred vision, severe headache, swelling/edema of face or hands, or sudden decrease in baby movement), or if she is experiencing a mental health crisis, you MUST suggest that she seek immediate medical help or contact emergency services. In these cases, append `[CALL_HOTLINE: <number>]` on a new line at the very end of your response, where `<number>` is:\n"
@@ -436,11 +744,15 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
     final lines = text.split('\n');
     for (int i = lines.length - 1; i >= 0; i--) {
       final line = lines[i].trim();
-      if (line.toLowerCase().startsWith('tandaan:') || 
+      if (line.toLowerCase().startsWith('tandaan:') ||
           line.toLowerCase().startsWith('disclaimer:') ||
           line.toLowerCase().startsWith('reminder:')) {
         final lower = line.toLowerCase();
-        if (lower.contains('midwife') || lower.contains('doktor') || lower.contains('doctor') || lower.contains('pagkonsulta') || lower.contains('consult')) {
+        if (lower.contains('midwife') ||
+            lower.contains('doktor') ||
+            lower.contains('doctor') ||
+            lower.contains('pagkonsulta') ||
+            lower.contains('consult')) {
           final disclaimerText = line;
           lines.removeAt(i);
           return {
@@ -459,17 +771,36 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
 
   String? _checkForEmergencyKeywords(String text) {
     final lower = text.toLowerCase();
-    if (lower.contains('bleeding') || lower.contains('pagdurugo') || lower.contains('dinudugo') ||
-        lower.contains('abdominal pain') || lower.contains('matinding sakit ng tiyan') || lower.contains('sumasakit ang tiyan') ||
-        lower.contains('blurred vision') || lower.contains('panlalabo ng paningin') || lower.contains('lumalabo ang mata') ||
-        lower.contains('severe headache') || lower.contains('matinding sakit ng ulo') || lower.contains('sumasakit ang ulo') ||
-        lower.contains('hindi gumagalaw ang baby') || lower.contains('bawas ang galaw ng baby') || lower.contains('baby not moving') ||
-        lower.contains('decreased fetal movement') || lower.contains('tubig na lumabas') || lower.contains('panubigan') || lower.contains('water broke')) {
+    if (lower.contains('bleeding') ||
+        lower.contains('pagdurugo') ||
+        lower.contains('dinudugo') ||
+        lower.contains('abdominal pain') ||
+        lower.contains('matinding sakit ng tiyan') ||
+        lower.contains('sumasakit ang tiyan') ||
+        lower.contains('blurred vision') ||
+        lower.contains('panlalabo ng paningin') ||
+        lower.contains('lumalabo ang mata') ||
+        lower.contains('severe headache') ||
+        lower.contains('matinding sakit ng ulo') ||
+        lower.contains('sumasakit ang ulo') ||
+        lower.contains('hindi gumagalaw ang baby') ||
+        lower.contains('bawas ang galaw ng baby') ||
+        lower.contains('baby not moving') ||
+        lower.contains('decreased fetal movement') ||
+        lower.contains('tubig na lumabas') ||
+        lower.contains('panubigan') ||
+        lower.contains('water broke')) {
       return '911';
     }
-    if (lower.contains('magpakamatay') || lower.contains('suicide') || lower.contains('gusto ko nang mamatay') ||
-        lower.contains('ayoko na mabuhay') || lower.contains('self-harm') || lower.contains('laslas') ||
-        lower.contains('kitilin') || lower.contains('depression') || lower.contains('depress')) {
+    if (lower.contains('magpakamatay') ||
+        lower.contains('suicide') ||
+        lower.contains('gusto ko nang mamatay') ||
+        lower.contains('ayoko na mabuhay') ||
+        lower.contains('self-harm') ||
+        lower.contains('laslas') ||
+        lower.contains('kitilin') ||
+        lower.contains('depression') ||
+        lower.contains('depress')) {
       return '1553';
     }
     return null;
@@ -477,14 +808,16 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
 
   List<String> _extractHotlineNumbers(ChatMessage message) {
     final regex = RegExp(r'\[CALL_HOTLINE:\s*(\d+)\]');
-    final extracted = regex.allMatches(message.content).map((m) => m.group(1)!).toList();
+    final extracted =
+        regex.allMatches(message.content).map((m) => m.group(1)!).toList();
 
     if (extracted.isEmpty && !message.isUser) {
       final index = _messages.indexOf(message);
       if (index > 0) {
         final prevMessage = _messages[index - 1];
         if (prevMessage.isUser) {
-          final keywordHotline = _checkForEmergencyKeywords(prevMessage.content);
+          final keywordHotline =
+              _checkForEmergencyKeywords(prevMessage.content);
           if (keywordHotline != null) {
             extracted.add(keywordHotline);
           }
@@ -505,7 +838,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
 
   List<String> _extractNavigationActions(String text) {
     final regex = RegExp(r'\[NAVIGATE:\s*([a-zA-Z_]+)\]');
-    return regex.allMatches(text).map((m) => m.group(1)!.trim().toLowerCase()).toList();
+    return regex
+        .allMatches(text)
+        .map((m) => m.group(1)!.trim().toLowerCase())
+        .toList();
   }
 
   Future<void> _callNumber(String number) async {
@@ -517,7 +853,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(_t('Could not call $number', 'Hindi matawagan ang $number')),
+              content: Text(
+                  _t('Could not call $number', 'Hindi matawagan ang $number')),
               backgroundColor: AppColors.error,
             ),
           );
@@ -550,17 +887,20 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
         color = const Color(0xFFD32F2F);
         break;
       case '1553':
-        label = _t('Call Mental Health Crisis (1553)', 'Tawagan ang Mental Health Crisis (1553)');
+        label = _t('Call Mental Health Crisis (1553)',
+            'Tawagan ang Mental Health Crisis (1553)');
         icon = Icons.psychology_rounded;
         color = const Color(0xFF7B1FA2);
         break;
       case '117':
-        label = _t('Call PNP Emergency (117)', 'Tawagan ang PNP Emergency (117)');
+        label =
+            _t('Call PNP Emergency (117)', 'Tawagan ang PNP Emergency (117)');
         icon = Icons.shield_rounded;
         color = const Color(0xFF1565C0);
         break;
       case '160':
-        label = _t('Call Fire Department (160)', 'Tawagan ang Bureau of Fire (160)');
+        label = _t(
+            'Call Fire Department (160)', 'Tawagan ang Bureau of Fire (160)');
         icon = Icons.local_fire_department_rounded;
         color = const Color(0xFFE65100);
         break;
@@ -618,7 +958,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
         routeBuilder = (_) => const MotherChildrenScreen();
         break;
       case 'privacy':
-        label = _t('Open AI Privacy Settings', 'Buksan ang AI Privacy Settings');
+        label =
+            _t('Open AI Privacy Settings', 'Buksan ang AI Privacy Settings');
         icon = Icons.shield_outlined;
         customAction = _showPrivacySettingsSheet;
         break;
@@ -692,12 +1033,14 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
               child: ActionChip(
                 backgroundColor: AppColors.cardColorOf(context),
                 side: BorderSide(
-                  color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.2),
+                  color:
+                      AppColors.brandPrimaryOf(context).withValues(alpha: 0.2),
                   width: 1,
                 ),
                 elevation: 1,
                 shadowColor: Colors.black.withValues(alpha: 0.05),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -740,8 +1083,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
           style: TextStyle(color: AppColors.textPrimaryOf(context)),
         ),
         content: Text(
-          _t('Are you sure you want to delete all chat history? This cannot be undone.', 
-             'Sigurado ka bang nais mong burahin ang lahat ng chat history? Hindi na ito maibabalik.'),
+          _t('Are you sure you want to delete all chat history? This cannot be undone.',
+              'Sigurado ka bang nais mong burahin ang lahat ng chat history? Hindi na ito maibabalik.'),
           style: TextStyle(color: AppColors.textSecondaryOf(context)),
         ),
         actions: [
@@ -751,7 +1094,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Burahin', style: TextStyle(color: AppColors.error)),
+            child:
+                const Text('Burahin', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -784,7 +1128,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
               height: MediaQuery.of(context).size.height * 0.7,
               decoration: BoxDecoration(
                 color: AppColors.cardColorOf(context),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: Column(
                 children: [
@@ -798,13 +1143,16 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: Row(
                       children: [
-                        const Icon(Icons.shield_outlined, color: AppColors.brandPrimary),
+                        const Icon(Icons.shield_outlined,
+                            color: AppColors.brandPrimary),
                         const SizedBox(width: 8),
                         Text(
-                          _t('AI Privacy Settings', 'Mga Setting ng Privacy sa AI'),
+                          _t('AI Privacy Settings',
+                              'Mga Setting ng Privacy sa AI'),
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -817,26 +1165,29 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                   const Divider(),
                   Expanded(
                     child: ListView(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
                       children: [
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.08),
+                            color: AppColors.brandPrimaryOf(context)
+                                .withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.2)),
+                            border: Border.all(
+                                color: AppColors.brandPrimaryOf(context)
+                                    .withValues(alpha: 0.2)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.info_outline_rounded, color: AppColors.brandPrimary, size: 20),
+                              const Icon(Icons.info_outline_rounded,
+                                  color: AppColors.brandPrimary, size: 20),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  _t(
-                                    'Your privacy is respected. The settings below control what information is shared with Ate Assistant to tailor her advice. Toggling off an item will exclude it from the AI context.',
-                                    'Pinahahalagahan namin ang inyong privacy. Ang mga setting sa ibaba ay kumokontrol sa impormasyong ibinabahagi kay Ate Assistant. Ang pag-toggle off ay magtatanggal nito sa konteksto ng AI.'
-                                  ),
+                                  _t('Your privacy is respected. The settings below control what information is shared with Ate Assistant to tailor her advice. Toggling off an item will exclude it from the AI context.',
+                                      'Pinahahalagahan namin ang inyong privacy. Ang mga setting sa ibaba ay kumokontrol sa impormasyong ibinabahagi kay Ate Assistant. Ang pag-toggle off ay magtatanggal nito sa konteksto ng AI.'),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: AppColors.brandPrimaryOf(context),
@@ -850,25 +1201,29 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                         ),
                         const SizedBox(height: 20),
                         if (widget.hasPregnancy) ...[
-                          _buildPrivacyHeader(_t('Pregnancy Profile', 'Profile ng Pagbubuntis')),
+                          _buildPrivacyHeader(_t(
+                              'Pregnancy Profile', 'Profile ng Pagbubuntis')),
                           SwitchListTile(
                             activeThumbColor: AppColors.brandPrimary,
                             contentPadding: EdgeInsets.zero,
                             title: Text(
-                              _t('Share Pregnancy Details', 'Ibahagi ang Detalye ng Pagbubuntis'),
-                              style: TextStyle(color: AppColors.textPrimaryOf(context), fontSize: 14),
+                              _t('Share Pregnancy Details',
+                                  'Ibahagi ang Detalye ng Pagbubuntis'),
+                              style: TextStyle(
+                                  color: AppColors.textPrimaryOf(context),
+                                  fontSize: 14),
                             ),
                             subtitle: Text(
-                              _t(
-                                'Week ${widget.week}, ${widget.trimester}, Risk Level: ${widget.riskLevel}',
-                                'Week ${widget.week}, ${widget.trimester}, Risk Level: ${widget.riskLevel}'
-                              ),
-                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              _t('Week ${widget.week}, ${widget.trimester}, Risk Level: ${widget.riskLevel}',
+                                  'Week ${widget.week}, ${widget.trimester}, Risk Level: ${widget.riskLevel}'),
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.textSecondary),
                             ),
                             value: !_hidePregnancyInfo,
                             onChanged: (val) async {
                               final newHide = !val;
-                              await AuthStorage.saveHiddenPregnancyInfo(newHide);
+                              await AuthStorage.saveHiddenPregnancyInfo(
+                                  newHide);
                               setSheetState(() {
                                 _hidePregnancyInfo = newHide;
                               });
@@ -884,23 +1239,31 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0),
                             child: Text(
-                              _t('No active allergies recorded.', 'Walang nakatalang alerdye.'),
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
+                              _t('No active allergies recorded.',
+                                  'Walang nakatalang alerdye.'),
+                              style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic),
                             ),
                           )
                         else
                           ..._activeAllergies.map((allergen) {
-                            final isVisible = !_hiddenAllergies.contains(allergen);
+                            final isVisible =
+                                !_hiddenAllergies.contains(allergen);
                             return SwitchListTile(
                               activeThumbColor: AppColors.brandPrimary,
                               contentPadding: EdgeInsets.zero,
                               title: Text(
                                 allergen,
-                                style: TextStyle(color: AppColors.textPrimaryOf(context), fontSize: 14),
+                                style: TextStyle(
+                                    color: AppColors.textPrimaryOf(context),
+                                    fontSize: 14),
                               ),
                               value: isVisible,
                               onChanged: (val) async {
-                                final updatedList = List<String>.from(_hiddenAllergies);
+                                final updatedList =
+                                    List<String>.from(_hiddenAllergies);
                                 if (val) {
                                   updatedList.remove(allergen);
                                 } else {
@@ -908,7 +1271,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                                     updatedList.add(allergen);
                                   }
                                 }
-                                await AuthStorage.saveHiddenAllergies(updatedList);
+                                await AuthStorage.saveHiddenAllergies(
+                                    updatedList);
                                 setSheetState(() {
                                   _hiddenAllergies = updatedList;
                                 });
@@ -919,28 +1283,37 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                             );
                           }),
                         const Divider(),
-                        _buildPrivacyHeader(_t('Medical Conditions', 'Mga Medikal na Kondisyon')),
+                        _buildPrivacyHeader(_t(
+                            'Medical Conditions', 'Mga Medikal na Kondisyon')),
                         if (_activeMedicalConditions.isEmpty)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0),
                             child: Text(
-                              _t('No active medical conditions recorded.', 'Walang nakatalang medikal na kondisyon.'),
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
+                              _t('No active medical conditions recorded.',
+                                  'Walang nakatalang medikal na kondisyon.'),
+                              style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic),
                             ),
                           )
                         else
                           ..._activeMedicalConditions.map((cond) {
-                            final isVisible = !_hiddenMedicalConditions.contains(cond);
+                            final isVisible =
+                                !_hiddenMedicalConditions.contains(cond);
                             return SwitchListTile(
                               activeThumbColor: AppColors.brandPrimary,
                               contentPadding: EdgeInsets.zero,
                               title: Text(
                                 cond,
-                                style: TextStyle(color: AppColors.textPrimaryOf(context), fontSize: 14),
+                                style: TextStyle(
+                                    color: AppColors.textPrimaryOf(context),
+                                    fontSize: 14),
                               ),
                               value: isVisible,
                               onChanged: (val) async {
-                                final updatedList = List<String>.from(_hiddenMedicalConditions);
+                                final updatedList =
+                                    List<String>.from(_hiddenMedicalConditions);
                                 if (val) {
                                   updatedList.remove(cond);
                                 } else {
@@ -948,7 +1321,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                                     updatedList.add(cond);
                                   }
                                 }
-                                await AuthStorage.saveHiddenMedicalConditions(updatedList);
+                                await AuthStorage.saveHiddenMedicalConditions(
+                                    updatedList);
                                 setSheetState(() {
                                   _hiddenMedicalConditions = updatedList;
                                 });
@@ -960,46 +1334,47 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                           }),
                         const Divider(),
                         const SizedBox(height: 8),
-                        _buildPrivacyHeader(_t('AI Ethical Code & Safe Use', 'Etika at Ligtas na Paggamit ng AI')),
+                        _buildPrivacyHeader(_t('AI Ethical Code & Safe Use',
+                            'Etika at Ligtas na Paggamit ng AI')),
                         const SizedBox(height: 8),
                         _buildEthicalCard(
                           context,
                           icon: Icons.psychology_alt_rounded,
-                          title: _t('Informational Support Only', 'Impormasyon Lamang ang Layunin'),
+                          title: _t('Informational Support Only',
+                              'Impormasyon Lamang ang Layunin'),
                           description: _t(
-                            'Ate Assistant is an AI helper, not a doctor or midwife. It cannot provide clinical diagnoses or prescriptions. Always consult your midwife or OB-GYN.',
-                            'Si Ate Assistant ay AI na katulong at hindi doktor o midwife. Hindi ito maaaring magbigay ng medikal na diagnosis o reseta. Kumonsulta palagi sa inyong midwife o doktor.'
-                          ),
+                              'Ate Assistant is an AI helper, not a doctor or midwife. It cannot provide clinical diagnoses or prescriptions. Always consult your midwife or OB-GYN.',
+                              'Si Ate Assistant ay AI na katulong at hindi doktor o midwife. Hindi ito maaaring magbigay ng medikal na diagnosis o reseta. Kumonsulta palagi sa inyong midwife o doktor.'),
                         ),
                         const SizedBox(height: 10),
                         _buildEthicalCard(
                           context,
                           icon: Icons.lock_outline,
-                          title: _t('Secure Data Processing', 'Ligtas na Pagproseso ng Data'),
+                          title: _t('Secure Data Processing',
+                              'Ligtas na Pagproseso ng Data'),
                           description: _t(
-                            'Your shared health context is only processed to personalize recommendations and is never stored for model training or shared with third parties.',
-                            'Ang iyong ibinabahaging detalye ay ginagamit lamang para sa iyong rekomendasyon. Hindi ito ginagamit para sa pagsasanay ng AI o ibinabahagi sa iba.'
-                          ),
+                              'Your shared health context is only processed to personalize recommendations and is never stored for model training or shared with third parties.',
+                              'Ang iyong ibinabahaging detalye ay ginagamit lamang para sa iyong rekomendasyon. Hindi ito ginagamit para sa pagsasanay ng AI o ibinabahagi sa iba.'),
                         ),
                         const SizedBox(height: 10),
                         _buildEthicalCard(
                           context,
                           icon: Icons.chat_bubble_outline_rounded,
-                          title: _t('Inclusive & Respectful AI', 'Madaling Maunawaan at May Kagalangang AI'),
+                          title: _t('Inclusive & Respectful AI',
+                              'Madaling Maunawaan at May Kagalangang AI'),
                           description: _t(
-                            'Ate Assistant is designed to be culturally respectful and to converse in your preferred language style (English, Tagalog, or Taglish).',
-                            'Si Ate Assistant ay idinisenyo upang maging magalang sa kultura at makipag-usap sa iyong ginustong wika (English, Tagalog, o Taglish).'
-                          ),
+                              'Ate Assistant is designed to be culturally respectful and to converse in your preferred language style (English, Tagalog, or Taglish).',
+                              'Si Ate Assistant ay idinisenyo upang maging magalang sa kultura at makipag-usap sa iyong ginustong wika (English, Tagalog, o Taglish).'),
                         ),
                         const SizedBox(height: 10),
                         _buildEthicalCard(
                           context,
                           icon: Icons.local_hospital_outlined,
-                          title: _t('Emergency Redirection', 'Pang-emerhensiyang Direksyon'),
+                          title: _t('Emergency Redirection',
+                              'Pang-emerhensiyang Direksyon'),
                           description: _t(
-                            'Critical symptoms automatically trigger local hotline suggestions. The AI will never attempt to diagnose severe warning signs.',
-                            'Ang mga malulubhang sintomas ay awtomatikong nagpapakita ng hotline. Hindi susubukang suriin ng AI ang mga pang-emerhensiyang senyales.'
-                          ),
+                              'Critical symptoms automatically trigger local hotline suggestions. The AI will never attempt to diagnose severe warning signs.',
+                              'Ang mga malulubhang sintomas ay awtomatikong nagpapakita ng hotline. Hindi susubukang suriin ng AI ang mga pang-emerhensiyang senyales.'),
                         ),
                         const SizedBox(height: 24),
                       ],
@@ -1040,7 +1415,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
       decoration: BoxDecoration(
         color: AppColors.bgSecondaryOf(context),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderOf(context).withValues(alpha: 0.5)),
+        border: Border.all(
+            color: AppColors.borderOf(context).withValues(alpha: 0.5)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1108,7 +1484,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
               IconButton(
                 icon: const Icon(Icons.shield_outlined, size: 22),
                 color: AppColors.brandPrimaryOf(context),
-                tooltip: _t('AI Privacy Settings', 'Mga Setting ng Privacy sa AI'),
+                tooltip:
+                    _t('AI Privacy Settings', 'Mga Setting ng Privacy sa AI'),
                 onPressed: _showPrivacySettingsSheet,
               ),
               IconButton(
@@ -1123,7 +1500,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
               unselectedLabelColor: AppColors.textSecondaryOf(context),
               indicatorColor: AppColors.brandPrimaryOf(context),
               indicatorWeight: 3,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              labelStyle:
+                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               tabs: [
                 Tab(text: _t('Chat with Ate', 'Chat kay Ate')),
                 Tab(text: _t('FAQs', 'Mga Tanong')),
@@ -1163,7 +1541,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_sweep_outlined, color: AppColors.error),
+                    icon: const Icon(Icons.delete_sweep_outlined,
+                        color: AppColors.error),
                     tooltip: _t('Delete All', 'Burahin Lahat'),
                     onPressed: _handleClearAllConversations,
                   ),
@@ -1253,7 +1632,9 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                   ? const Center(child: CircularProgressIndicator())
                   : () {
                       final filteredSessions = _sessions.where((session) {
-                        return session.title.toLowerCase().contains(_drawerSearchQuery.toLowerCase());
+                        return session.title
+                            .toLowerCase()
+                            .contains(_drawerSearchQuery.toLowerCase());
                       }).toList();
 
                       if (filteredSessions.isEmpty) {
@@ -1261,8 +1642,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                           child: Text(
                             _drawerSearchQuery.isEmpty
                                 ? _t('No chat history', 'Walang nakaraang chat')
-                                : _t('No matching history found', 'Walang nahanap na tugmang chat'),
-                            style: TextStyle(color: AppColors.textSecondaryOf(context)),
+                                : _t('No matching history found',
+                                    'Walang nahanap na tugmang chat'),
+                            style: TextStyle(
+                                color: AppColors.textSecondaryOf(context)),
                           ),
                         );
                       }
@@ -1271,12 +1654,13 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                         itemCount: filteredSessions.length,
                         itemBuilder: (context, index) {
                           final session = filteredSessions[index];
-                          final isSelected = _currentSession?.sessionId == session.sessionId;
+                          final isSelected =
+                              _currentSession?.sessionId == session.sessionId;
                           return ListTile(
                             leading: Icon(
                               Icons.chat_bubble_outline,
-                              color: isSelected 
-                                  ? AppColors.brandPrimaryOf(context) 
+                              color: isSelected
+                                  ? AppColors.brandPrimaryOf(context)
                                   : AppColors.textSecondaryOf(context),
                             ),
                             title: Text(
@@ -1284,15 +1668,20 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                color: isSelected 
-                                    ? AppColors.brandPrimaryOf(context) 
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: isSelected
+                                    ? AppColors.brandPrimaryOf(context)
                                     : AppColors.textPrimaryOf(context),
                               ),
                             ),
                             subtitle: Text(
-                              DateFormat('MMM dd, yyyy').format(session.createdAt),
-                              style: TextStyle(fontSize: 11, color: AppColors.textSecondaryOf(context)),
+                              DateFormat('MMM dd, yyyy')
+                                  .format(session.createdAt),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondaryOf(context)),
                             ),
                             selected: isSelected,
                             onTap: () {
@@ -1321,7 +1710,9 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
 
     return Column(
       children: [
-        if (_hidePregnancyInfo || _hiddenAllergies.isNotEmpty || _hiddenMedicalConditions.isNotEmpty)
+        if (_hidePregnancyInfo ||
+            _hiddenAllergies.isNotEmpty ||
+            _hiddenMedicalConditions.isNotEmpty)
           Container(
             width: double.infinity,
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -1366,7 +1757,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
               color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.15),
+                color:
+                    AppColors.brandPrimaryOf(context).withValues(alpha: 0.15),
               ),
             ),
             child: Row(
@@ -1410,7 +1802,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
               ? _buildWelcomeView()
               : ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   itemCount: _messages.length + (_isTyping ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == _messages.length) {
@@ -1469,10 +1862,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
           const SizedBox(height: 6),
           // Subtitle
           Text(
-            _t(
-              'Your personal AI guide for a safe and healthy pregnancy. Ask me anything about nutrition, symptoms, or baby updates!',
-              'Ang iyong personal na AI guide para sa ligtas at malusog na pagbubuntis. Magtanong tungkol sa pagkain, mga sintomas, o paglaki ng bata!'
-            ),
+            _t('Your personal AI guide for a safe and healthy pregnancy. Ask me anything about nutrition, symptoms, or baby updates!',
+                'Ang iyong personal na AI guide para sa ligtas at malusog na pagbubuntis. Magtanong tungkol sa pagkain, mga sintomas, o paglaki ng bata!'),
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
@@ -1498,29 +1889,37 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
           // Grid/List of starter prompts
           _buildStarterPromptTile(
             title: _t('Foods to Avoid', 'Mga Pagkaing Dapat Iwasan'),
-            subtitle: _t('What foods should I stay away from?', 'Ano ang mga pagkaing hindi ligtas?'),
-            query: _t('What foods should I avoid during pregnancy?', 'Ano ang mga pagkaing dapat kong iwasan habang buntis?'),
+            subtitle: _t('What foods should I stay away from?',
+                'Ano ang mga pagkaing hindi ligtas?'),
+            query: _t('What foods should I avoid during pregnancy?',
+                'Ano ang mga pagkaing dapat kong iwasan habang buntis?'),
             icon: Icons.no_food_outlined,
           ),
           const SizedBox(height: 8),
           _buildStarterPromptTile(
             title: _t('Relieving Back Pain', 'Sakit sa Likod'),
-            subtitle: _t('Safe ways to ease pregnancy back aches.', 'Paano maibsan ang pananakit ng likod?'),
-            query: _t('How can I relieve back pain safely during pregnancy?', 'Paano maibsan ang pananakit ng likod nang ligtas habang buntis?'),
+            subtitle: _t('Safe ways to ease pregnancy back aches.',
+                'Paano maibsan ang pananakit ng likod?'),
+            query: _t('How can I relieve back pain safely during pregnancy?',
+                'Paano maibsan ang pananakit ng likod nang ligtas habang buntis?'),
             icon: Icons.health_and_safety_outlined,
           ),
           const SizedBox(height: 8),
           _buildStarterPromptTile(
             title: _t('Exercises per Trimester', 'Mga Ehersisyo'),
-            subtitle: _t('Learn about safe physical activities.', 'Anong mga ehersisyo ang ligtas sa akin?'),
-            query: _t('What are safe exercises for my trimester?', 'Anong mga ehersisyo ang ligtas para sa aking trimester?'),
+            subtitle: _t('Learn about safe physical activities.',
+                'Anong mga ehersisyo ang ligtas sa akin?'),
+            query: _t('What are safe exercises for my trimester?',
+                'Anong mga ehersisyo ang ligtas para sa aking trimester?'),
             icon: Icons.fitness_center_outlined,
           ),
           const SizedBox(height: 8),
           _buildStarterPromptTile(
             title: _t('Coffee & Caffeine', 'Uminom ng Kape'),
-            subtitle: _t('Is it safe to consume caffeine?', 'Ligtas ba ang uminom ng kape?'),
-            query: _t('Is coffee safe for pregnant mothers?', 'Ligtas ba ang uminom ng kape kapag buntis?'),
+            subtitle: _t('Is it safe to consume caffeine?',
+                'Ligtas ba ang uminom ng kape?'),
+            query: _t('Is coffee safe for pregnant mothers?',
+                'Ligtas ba ang uminom ng kape kapag buntis?'),
             icon: Icons.coffee_outlined,
           ),
         ],
@@ -1540,7 +1939,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
       color: AppColors.bgSecondaryOf(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.15)),
+        side: BorderSide(
+            color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.15)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -1552,10 +1952,12 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.1),
+                  color:
+                      AppColors.brandPrimaryOf(context).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: AppColors.brandPrimaryOf(context), size: 18),
+                child: Icon(icon,
+                    color: AppColors.brandPrimaryOf(context), size: 18),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1596,10 +1998,12 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
   Widget _buildMessageBubble(ChatMessage message) {
     final isUser = message.isUser;
     final cleanText = _cleanMessageContent(message.content);
-    final splitText = !isUser ? _splitMessageDisclaimer(cleanText) : {'content': cleanText, 'disclaimer': ''};
+    final splitText = !isUser
+        ? _splitMessageDisclaimer(cleanText)
+        : {'content': cleanText, 'disclaimer': ''};
     final mainContent = splitText['content'] ?? cleanText;
     final disclaimer = splitText['disclaimer'] ?? '';
-    
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -1609,8 +2013,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
           maxWidth: MediaQuery.of(context).size.width * 0.8,
         ),
         decoration: BoxDecoration(
-          color: isUser 
-              ? AppColors.brandPrimaryOf(context) 
+          color: isUser
+              ? AppColors.brandPrimaryOf(context)
               : AppColors.cardColorOf(context),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
@@ -1671,8 +2075,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
               ),
             ],
             if (!isUser) ...[
-              ..._extractHotlineNumbers(message).map((hotlineNum) => _buildHotlineButton(hotlineNum)),
-              ..._extractNavigationActions(message.content).map((screenKey) => _buildNavigationButton(screenKey)),
+              ..._extractHotlineNumbers(message)
+                  .map((hotlineNum) => _buildHotlineButton(hotlineNum)),
+              ..._extractNavigationActions(message.content)
+                  .map((screenKey) => _buildNavigationButton(screenKey)),
             ],
             const SizedBox(height: 8),
             Row(
@@ -1683,7 +2089,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildTtsActionButton(message.messageId?.toString() ?? message.hashCode.toString(), mainContent),
+                      _buildTtsActionButton(
+                          message.messageId?.toString() ??
+                              message.hashCode.toString(),
+                          mainContent),
                       _buildCopyActionButton(mainContent),
                       _buildShareActionButton(mainContent),
                     ],
@@ -1694,7 +2103,9 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                   DateFormat('hh:mm a').format(message.createdAt),
                   style: TextStyle(
                     fontSize: 9,
-                    color: isUser ? Colors.white70 : AppColors.textSecondaryOf(context),
+                    color: isUser
+                        ? Colors.white70
+                        : AppColors.textSecondaryOf(context),
                   ),
                 ),
               ],
@@ -1723,7 +2134,9 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                   ),
                 )
               : Icon(
-                  isPlaying ? Icons.stop_circle_outlined : Icons.volume_up_rounded,
+                  isPlaying
+                      ? Icons.stop_circle_outlined
+                      : Icons.volume_up_rounded,
                   size: 16,
                   color: isPlaying
                       ? AppColors.brandPrimaryOf(context)
@@ -1737,14 +2150,17 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
   Widget _buildCopyActionButton(String text, {bool isUser = false}) {
     return GestureDetector(
       onTap: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        final snackColor = AppColors.brandPrimaryOf(context);
         await Clipboard.setData(ClipboardData(text: text));
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(_t('Copied to clipboard!', 'Kopya sa clipboard!')),
             duration: const Duration(seconds: 1),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            backgroundColor: AppColors.brandPrimaryOf(context),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: snackColor,
           ),
         );
       },
@@ -1762,8 +2178,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
   Widget _buildShareActionButton(String text) {
     return GestureDetector(
       onTap: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        final snackColor = AppColors.brandPrimaryOf(context);
         await Clipboard.setData(ClipboardData(text: text));
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
               _t(
@@ -1773,8 +2191,9 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
             ),
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            backgroundColor: AppColors.brandPrimaryOf(context),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: snackColor,
           ),
         );
       },
@@ -1788,7 +2207,6 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
       ),
     );
   }
-
 
   Future<void> _toggleTts(String messageId, String text) async {
     // If already playing this message → stop
@@ -1834,7 +2252,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
             content: Text('TTS Error: $e'),
             duration: const Duration(seconds: 8),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1863,12 +2282,14 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
             const SizedBox(
               width: 12,
               height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandPrimary),
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.brandPrimary),
             ),
             const SizedBox(width: 8),
             Text(
               _t('Ate is typing...', 'Sumusulat si Ate...'),
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -1915,7 +2336,7 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
 
   Widget _buildInputContainer() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.cardColorOf(context),
         border: Border(
@@ -1925,32 +2346,134 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
       child: SafeArea(
         child: Row(
           children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: AppColors.bgPrimaryOf(context),
-                  borderRadius: BorderRadius.circular(24),
+            if (_isTranscribing)
+              Expanded(
+                child: ShimmerTranscribingLoader(
+                  text: _t('Converting speech to text...', 'Isinasalin ang boses sa teksto...'),
                 ),
-                child: TextField(
-                  controller: _inputController,
-                  maxLines: null,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    hintText: _t('Ask Ate Assistant...', 'Magtanong kay Ate Assistant...'),
-                    hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                    border: InputBorder.none,
+              )
+            else if (_isRecording)
+              Expanded(
+                child: AnimatedBuilder(
+                  animation: _recordingGlowController,
+                  builder: (context, child) {
+                    final glowVal = _recordingGlowController.value;
+                    return Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgPrimaryOf(context),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.redAccent.withValues(alpha: 0.2 + 0.3 * glowVal),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.redAccent.withValues(alpha: 0.05 + 0.15 * glowVal),
+                            blurRadius: 8.0,
+                            spreadRadius: 1.0,
+                          ),
+                        ],
+                      ),
+                      child: child,
+                    );
+                  },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      AnimatedBuilder(
+                        animation: _recordingGlowController,
+                        builder: (context, _) {
+                          return Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: 0.4 + 0.6 * _recordingGlowController.value),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.redAccent.withValues(alpha: 0.4 * _recordingGlowController.value),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                )
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${_t("Recording", "Nagre-record")}... ${_formatDuration(_recordingDuration)}',
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      SoundwaveVisualizer(volume: _currentAmplitude),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(
+                          Icons.delete_outline_rounded,
+                          color: AppColors.textSecondaryOf(context),
+                        ),
+                        onPressed: () {
+                          try {
+                            HapticFeedback.mediumImpact();
+                          } catch (e) {
+                            debugPrint('HapticFeedback failed: $e');
+                          }
+                          _cancelVoiceRecording();
+                        },
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        tooltip: _t('Cancel recording', 'Kanselahin ang recording'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgPrimaryOf(context),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: TextField(
+                    controller: _inputController,
+                    maxLines: null,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      hintText: _t('Ask Ate Assistant...',
+                          'Magtanong kay Ate Assistant...'),
+                      hintStyle: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 14),
+                      border: InputBorder.none,
+                    ),
                   ),
                 ),
               ),
+            const SizedBox(width: 8),
+            PulsingMicButton(
+              isRecording: _isRecording,
+              onPressed: (_isTyping || _isTranscribing) ? () {} : _toggleVoiceInput,
             ),
             const SizedBox(width: 8),
             IconButton(
               icon: Icon(
-                Icons.send_rounded, 
-                color: _isTyping ? AppColors.textSecondary : AppColors.brandPrimaryOf(context)
+                Icons.send_rounded,
+                color: (_isTyping || _isTranscribing || _isRecording)
+                    ? AppColors.textSecondary
+                    : AppColors.brandPrimaryOf(context),
               ),
-              onPressed: _isTyping ? null : () => _sendMessage(_inputController.text),
+              onPressed: (_isTyping || _isTranscribing || _isRecording)
+                  ? null
+                  : () => _sendMessage(_inputController.text),
             ),
           ],
         ),
@@ -1969,7 +2492,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
           elevation: 2,
           shadowColor: Colors.black.withValues(alpha: 0.05),
           color: AppColors.cardColorOf(context),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ExpansionTile(
             title: Text(
               _t(faq.questionEn, faq.questionTl),
@@ -2018,8 +2542,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage> with SingleTicker
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.white,
                     backgroundColor: AppColors.brandPrimaryOf(context),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
                   ),
                 ),
               ),
@@ -2052,35 +2578,392 @@ final List<FAQItem> faqsList = [
     category: 'Nutrisyon / Nutrition',
     questionEn: 'What foods should I avoid during pregnancy?',
     questionTl: 'Ano ang mga pagkaing dapat iwasan kapag buntis?',
-    answerEn: 'Avoid raw or undercooked foods (like raw eggs, sashimi, kilawin) to prevent bacterial infections. Limit salty or sugary foods, and fish high in mercury (like tuna). Limit caffeine intake.',
-    answerTl: 'Iwasan ang mga hilaw o hindi gaanong lutong pagkain (gaya ng hilaw na itlog, sashimi, o kilawin) upang maiwasan ang impeksyon. Bawasan ang maaalat, matatamis, at isdang mataas sa mercury tulad ng tuna. Limitahan din ang kape o caffeine.',
+    answerEn:
+        'Avoid raw or undercooked foods (like raw eggs, sashimi, kilawin) to prevent bacterial infections. Limit salty or sugary foods, and fish high in mercury (like tuna). Limit caffeine intake.',
+    answerTl:
+        'Iwasan ang mga hilaw o hindi gaanong lutong pagkain (gaya ng hilaw na itlog, sashimi, o kilawin) upang maiwasan ang impeksyon. Bawasan ang maaalat, matatamis, at isdang mataas sa mercury tulad ng tuna. Limitahan din ang kape o caffeine.',
   ),
   FAQItem(
     category: 'Prenatal Care / Pagpapasuri',
     questionEn: 'How often should I get a prenatal checkup?',
     questionTl: 'Gaano kadalas dapat magpa-prenatal checkup?',
-    answerEn: 'It is recommended to have at least 4 prenatal checkups: 1 in the 1st trimester (before 12 weeks), 1 in the 2nd trimester (12-26 weeks), and 2 in the 3rd trimester (27 weeks onwards). More frequent checkups are highly encouraged if recommended by your midwife.',
-    answerTl: 'Inirerekomenda ang hindi bababa sa 4 na prenatal checkup: 1 sa 1st trimester (bago mag-12 weeks), 1 sa 2nd trimester (12-26 weeks), at 2 sa 3rd trimester (27 weeks pataas). Mas mabuti kung mas madalas, lalo na kung nireseta ng iyong midwife.',
+    answerEn:
+        'It is recommended to have at least 4 prenatal checkups: 1 in the 1st trimester (before 12 weeks), 1 in the 2nd trimester (12-26 weeks), and 2 in the 3rd trimester (27 weeks onwards). More frequent checkups are highly encouraged if recommended by your midwife.',
+    answerTl:
+        'Inirerekomenda ang hindi bababa sa 4 na prenatal checkup: 1 sa 1st trimester (bago mag-12 weeks), 1 sa 2nd trimester (12-26 weeks), at 2 sa 3rd trimester (27 weeks pataas). Mas mabuti kung mas madalas, lalo na kung nireseta ng iyong midwife.',
   ),
   FAQItem(
     category: 'Mga Babala / Danger Signs',
-    questionEn: 'What are the pregnancy danger signs that require immediate care?',
-    questionTl: 'Ano ang mga danger signs sa pagbubuntis na kailangang ipatingin agad?',
-    answerEn: 'Seek emergency medical attention if you experience: vaginal bleeding, severe abdominal pain, high fever, severe headaches with blurred vision, swelling of the face or hands, or sudden reduction of baby movements.',
-    answerTl: 'Magpatingin agad sa doktor o midwife kapag nakaranas ng: pagdurugo sa puwerta, matinding pananakit ng tiyan, mataas na lagnat, matinding sakit ng ulo na may kasamang panlalabo ng paningin, pamamanas ng mukha o kamay, o biglang paghinto/pagbawas ng galaw ng sanggol.',
+    questionEn:
+        'What are the pregnancy danger signs that require immediate care?',
+    questionTl:
+        'Ano ang mga danger signs sa pagbubuntis na kailangang ipatingin agad?',
+    answerEn:
+        'Seek emergency medical attention if you experience: vaginal bleeding, severe abdominal pain, high fever, severe headaches with blurred vision, swelling of the face or hands, or sudden reduction of baby movements.',
+    answerTl:
+        'Magpatingin agad sa doktor o midwife kapag nakaranas ng: pagdurugo sa puwerta, matinding pananakit ng tiyan, mataas na lagnat, matinding sakit ng ulo na may kasamang panlalabo ng paningin, pamamanas ng mukha o kamay, o biglang paghinto/pagbawas ng galaw ng sanggol.',
   ),
   FAQItem(
     category: 'Pamamanas / Swelling',
     questionEn: 'Is foot swelling normal during pregnancy?',
     questionTl: 'Normal ba ang pamamanas ng paa habang buntis?',
-    answerEn: 'Yes, mild swelling of the feet is common in late pregnancy. Elevate your feet when resting, avoid long periods of sitting/standing, and wear comfortable shoes. However, if swelling affects your face/hands or is accompanied by headaches, check with your midwife immediately as it may indicate preeclampsia.',
-    answerTl: 'Oo, karaniwan ang banayad na pamamanas ng paa lalo na sa huling bahagi ng pagbubuntis. Itaas ang paa kapag nagpapahinga, iwasan ang matagal na pagtayo/pag-upo, at gumamit ng malambot na sapatos. Ngunit kung mamamaga ang mukha/kamay o sasakit ang ulo, magpatingin agad dahil maaari itong preeclampsia.',
+    answerEn:
+        'Yes, mild swelling of the feet is common in late pregnancy. Elevate your feet when resting, avoid long periods of sitting/standing, and wear comfortable shoes. However, if swelling affects your face/hands or is accompanied by headaches, check with your midwife immediately as it may indicate preeclampsia.',
+    answerTl:
+        'Oo, karaniwan ang banayad na pamamanas ng paa lalo na sa huling bahagi ng pagbubuntis. Itaas ang paa kapag nagpapahinga, iwasan ang matagal na pagtayo/pag-upo, at gumamit ng malambot na sapatos. Ngunit kung mamamaga ang mukha/kamay o sasakit ang ulo, magpatingin agad dahil maaari itong preeclampsia.',
   ),
   FAQItem(
     category: 'Morning Sickness / Pagduduwal',
     questionEn: 'How can I manage severe morning sickness?',
     questionTl: 'Paano maiiwasan ang matinding morning sickness o pagduduwal?',
-    answerEn: 'Eat small, frequent meals instead of large ones. Avoid greasy, spicy, or strong-smelling foods. Keep simple crackers by your bed to eat before standing up in the morning, and drink water in between meals to stay hydrated.',
-    answerTl: 'Kumain ng maliliit at madalas na bahagi (small, frequent meals). Iwasan ang mamantika, maanghang, o mabahong pagkain. Magtabi ng crackers o biskwit sa tabi ng higaan para kainin bago bumangon sa umaga. Uminom ng tubig sa pagitan ng pagkain.',
+    answerEn:
+        'Eat small, frequent meals instead of large ones. Avoid greasy, spicy, or strong-smelling foods. Keep simple crackers by your bed to eat before standing up in the morning, and drink water in between meals to stay hydrated.',
+    answerTl:
+        'Kumain ng maliliit at madalas na bahagi (small, frequent meals). Iwasan ang mamantika, maanghang, o mabahong pagkain. Magtabi ng crackers o biskwit sa tabi ng higaan para kainin bago bumangon sa umaga. Uminom ng tubig sa pagitan ng pagkain.',
   ),
 ];
+
+// ── Voice Recording UI Components ──────────────────────────────────────────
+
+class ShimmerTranscribingLoader extends StatefulWidget {
+  final String text;
+  const ShimmerTranscribingLoader({super.key, required this.text});
+
+  @override
+  State<ShimmerTranscribingLoader> createState() => _ShimmerTranscribingLoaderState();
+}
+
+class _ShimmerTranscribingLoaderState extends State<ShimmerTranscribingLoader>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: AppColors.bgPrimaryOf(context),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.2),
+              width: 1.0,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.3),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  RotationTransition(
+                    turns: _controller,
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.brandPrimaryOf(context),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ShaderMask(
+                  shaderCallback: (bounds) {
+                    return LinearGradient(
+                      colors: [
+                        AppColors.textSecondaryOf(context),
+                        AppColors.brandPrimaryOf(context),
+                        AppColors.textSecondaryOf(context),
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                      begin: Alignment(-2.0 + 4.0 * _controller.value, 0.0),
+                      end: Alignment(-1.0 + 4.0 * _controller.value, 0.0),
+                    ).createShader(bounds);
+                  },
+                  child: Text(
+                    widget.text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class SoundwaveVisualizer extends StatefulWidget {
+  final double volume;
+  const SoundwaveVisualizer({super.key, required this.volume});
+
+  @override
+  State<SoundwaveVisualizer> createState() => _SoundwaveVisualizerState();
+}
+
+class _SoundwaveVisualizerState extends State<SoundwaveVisualizer>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  final List<double> _baseHeights = [8.0, 16.0, 24.0, 12.0, 32.0, 20.0, 28.0, 16.0, 22.0, 10.0, 6.0];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(_baseHeights.length, (index) {
+            final value = _controller.value;
+            final phase = (index * 0.15) % 1.0;
+            final sine = (value + phase) % 1.0;
+            final factor = sine < 0.5 ? sine * 2 : (1.0 - sine) * 2;
+            
+            const double idleLevel = 0.15;
+            final double scalingFactor = idleLevel + (1.0 - idleLevel) * widget.volume;
+            
+            const double minHeight = 4.0;
+            final double height = minHeight + (_baseHeights[index] - minHeight) * factor * scalingFactor;
+
+            return Container(
+              width: 3.0,
+              height: height,
+              margin: const EdgeInsets.symmetric(horizontal: 2.0),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    AppColors.brandPrimaryOf(context),
+                    Colors.redAccent,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.redAccent.withValues(alpha: 0.3 * scalingFactor),
+                    blurRadius: 2.0,
+                    spreadRadius: 0.5,
+                  ),
+                ],
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+}
+
+class PulsingMicButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final bool isRecording;
+  const PulsingMicButton({
+    super.key,
+    required this.onPressed,
+    required this.isRecording,
+  });
+
+  @override
+  State<PulsingMicButton> createState() => _PulsingMicButtonState();
+}
+
+class _PulsingMicButtonState extends State<PulsingMicButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    if (widget.isRecording) {
+      _pulseController.repeat(reverse: false);
+    }
+  }
+
+  @override
+  void didUpdateWidget(PulsingMicButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isRecording && !oldWidget.isRecording) {
+      _pulseController.repeat(reverse: false);
+    } else if (!widget.isRecording && oldWidget.isRecording) {
+      _pulseController.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.isRecording) {
+      return InkWell(
+        onTap: () {
+          try {
+            HapticFeedback.lightImpact();
+          } catch (e) {
+            debugPrint('HapticFeedback failed: $e');
+          }
+          widget.onPressed();
+        },
+        borderRadius: BorderRadius.circular(28),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.brandPrimaryOf(context),
+                Colors.pinkAccent.shade100,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.mic_rounded,
+            color: Colors.white,
+            size: 22,
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: AnimatedBuilder(
+        animation: _pulseController,
+        builder: (context, child) {
+          final pulseVal = _pulseController.value;
+          final size1 = 48.0 + (24.0 * pulseVal);
+          final size2 = 48.0 + (12.0 * pulseVal);
+          
+          return Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                width: size1,
+                height: size1,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.redAccent.withValues(
+                      alpha: 0.25 * (1.0 - pulseVal),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                width: size2,
+                height: size2,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.redAccent.withValues(
+                      alpha: 0.4 * (1.0 - pulseVal),
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(
+                  color: Colors.redAccent,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.stop_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                  onPressed: () {
+                    try {
+                      HapticFeedback.mediumImpact();
+                    } catch (e) {
+                      debugPrint('HapticFeedback failed: $e');
+                    }
+                    widget.onPressed();
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
