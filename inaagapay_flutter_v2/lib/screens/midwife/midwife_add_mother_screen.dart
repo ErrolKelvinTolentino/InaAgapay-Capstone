@@ -5148,24 +5148,15 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             SecondaryHeader(
               title: 'Add Mother',
               onBack: () => Navigator.pop(context),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    onPressed: _startOcrFlow,
-                    icon: const Icon(Icons.document_scanner_outlined, size: 18),
-                    label: const Text('OCR'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.brandPrimary,
-                    ),
-                  ),
-                ],
+              trailing: TextButton.icon(
+                onPressed: _startOcrFlow,
+                icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                label: const Text('OCR'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.brandPrimary,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
             LinearProgressIndicator(
               value: (_step + 1) / _totalSteps,
               backgroundColor: AppColors.borderPrimary,
