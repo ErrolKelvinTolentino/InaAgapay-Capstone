@@ -1073,7 +1073,7 @@ ${previousCheckupLines.isEmpty ? '- none recorded' : previousCheckupLines.join('
 ${weightTrendLines.isEmpty ? '- not enough data' : weightTrendLines.join('\n')}
 - LMP: ${_formatDate(_effectiveLmp(pregnancy))}
 - EDD: ${_formatDate(_effectiveEdd(pregnancy))}
-- Age of gestation: ${_aogWeeks?.toStringAsFixed(1) ?? 'unknown'} weeks ($trimester)
+- Age of gestation: ${_aogWeeks?.toInt() ?? 'unknown'} weeks ($trimester)
 - Planned follow-up date: ${_nextSchedule != null ? DateFormat('yyyy-MM-dd').format(_nextSchedule!) : 'none'}
 
 CURRENT CHECKUP DRAFT
@@ -1228,7 +1228,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         .difference(_normalizedDate(lmp))
         .inDays;
     if (days < 0) return null;
-    return double.parse((days / 7).toStringAsFixed(1));
+    return (days / 7).floorToDouble();
   }
 
   _BpStatus get _bpStatus {
@@ -1323,6 +1323,46 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     );
   }
 
+  Widget _buildClickableSummarySection(String title, List<Widget> rows,
+      {required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2))
+            ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Row(children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandPrimary)),
+                  const Spacer(),
+                  const Icon(Icons.edit_outlined,
+                      size: 16, color: AppColors.brandPrimary)
+                ])),
+            Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.borderPrimary),
+            Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(children: rows)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _summaryRow(String label, String value,
       {Color? valueColor, IconData? icon}) {
     return Padding(
@@ -1345,8 +1385,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
               value,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: valueColor ?? AppColors.textPrimary,
+                fontWeight: FontWeight.w500,
+                color: valueColor ?? AppColors.brandText,
               ),
             ),
           ),
@@ -2344,6 +2384,12 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     }
   }
 
+  void _jumpToStep(int step) {
+    if (step >= 0 && step < _totalSteps) {
+      setState(() => _step = step);
+    }
+  }
+
   Widget _stepTitle() {
     const labels = [
       'Vitals',
@@ -2456,7 +2502,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                     border: Border.all(color: AppColors.brandPrimary),
                   ),
                   child: Text(
-                    '${_aogWeeks!.toStringAsFixed(1)} wks AOG',
+                    '${_aogWeeks!.toInt()} wks AOG',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -3004,7 +3050,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AppInputField(
-                hintText: 'Tap to set next schedule (optional)',
+                hintText: 'Tap to set recommended next visit (optional)',
                 controller: TextEditingController(
                   text: _nextSchedule == null
                       ? ''
@@ -3017,11 +3063,6 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                 onTrailingTap: _nextSchedule != null
                     ? () => setState(() => _nextSchedule = null)
                     : null,
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                "Must be after today's checkup date.",
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -3085,148 +3126,144 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             ],
           ),
         ),
-        _sectionCard(
-          title: 'VITALS',
-          child: Column(
-            children: [
-              _summaryRow('Checkup Date',
-                  DateFormat('MMM d, yyyy h:mm a').format(_checkupDateTime)),
-              if (_aogWeeks != null)
-                _summaryRow(
-                  'AOG',
-                  '${_aogWeeks!.toStringAsFixed(1)} weeks',
-                  valueColor: AppColors.brandPrimary,
-                ),
-              _summaryRow('Weight',
-                  _weightCtrl.text.trim().isEmpty ? 'Not recorded' : '${_weightCtrl.text.trim()} kg'),
-              _summaryRow('Blood Pressure', bpText),
+        _buildClickableSummarySection(
+          'VITALS',
+          [
+            _summaryRow('Checkup Date',
+                DateFormat('MMM d, yyyy h:mm a').format(_checkupDateTime)),
+            if (_aogWeeks != null)
               _summaryRow(
-                'Fetal Heart Rate',
-                _fetalBeatCtrl.text.trim().isEmpty
-                    ? 'Not recorded'
-                    : '${_fetalBeatCtrl.text.trim()} bpm',
-                valueColor: () {
-                  final v = int.tryParse(_fetalBeatCtrl.text.trim());
-                  if (v == null) return null;
-                  return (v >= 110 && v <= 160)
-                      ? AppColors.success
-                      : AppColors.error;
-                }(),
+                'AOG',
+                '${_aogWeeks!.toInt()} weeks',
+                valueColor: AppColors.brandPrimary,
               ),
-              _summaryRow('Heart Tone', _fetalTone ?? 'Not recorded'),
+            _summaryRow('Weight',
+                _weightCtrl.text.trim().isEmpty ? 'Not recorded' : '${_weightCtrl.text.trim()} kg'),
+            _summaryRow('Blood Pressure', bpText),
+            if (_bpStatus != _BpStatus.unknown) _bpBadge(),
+          ],
+          onTap: () => _jumpToStep(0),
+        ),
+        _buildClickableSummarySection(
+          'FETAL ASSESSMENT',
+          [
+            _summaryRow(
+              'Fetal Heart Rate',
+              _fetalBeatCtrl.text.trim().isEmpty
+                  ? 'Not recorded'
+                  : '${_fetalBeatCtrl.text.trim()} bpm',
+              valueColor: () {
+                final v = int.tryParse(_fetalBeatCtrl.text.trim());
+                if (v == null) return null;
+                return (v >= 110 && v <= 160)
+                    ? AppColors.success
+                    : AppColors.error;
+              }(),
+            ),
+            _summaryRow('Heart Tone', _fetalTone ?? 'Not recorded'),
+          ],
+          onTap: () => _jumpToStep(1),
+        ),
+        _buildClickableSummarySection(
+          'SYMPTOMS & EDEMA',
+          [
+            _summaryRow('Edema Level', _edema == 'none'
+                ? 'None'
+                : '${_edema[0].toUpperCase()}${_edema.substring(1)}'),
+            const SizedBox(height: 4),
+            if (_symptoms.isEmpty)
+              _summaryRow('Symptoms', 'None recorded')
+            else ...[
+              const Text(
+                'Symptoms:',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               const SizedBox(height: 6),
-              _bpBadge(),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'SYMPTOMS & EDEMA',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _summaryRow('Edema Level', _edema == 'none'
-                  ? 'None'
-                  : '${_edema[0].toUpperCase()}${_edema.substring(1)}'),
-              const SizedBox(height: 4),
-              if (_symptoms.isEmpty)
-                _summaryRow('Symptoms', 'None recorded')
-              else ...[
-                const Text(
-                  'Symptoms:',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                ..._symptoms.map((s) => Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 4),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
+              ..._symptoms.map((s) => Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: _riskColor(s.riskCategory),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${s.name} -- ${_riskLabel(s.riskCategory)}',
+                        style: TextStyle(
+                          fontSize: 13,
                           color: _riskColor(s.riskCategory),
-                          shape: BoxShape.circle,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      Expanded(
-                        child: Text(
-                          '${s.name} -- ${_riskLabel(s.riskCategory)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: _riskColor(s.riskCategory),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
-              ],
-              if (_dangerSymptomCount > 0) ...[
-                const SizedBox(height: 6),
-                _summaryRow(
-                  'Danger Flagged',
-                  '$_dangerSymptomCount: ${_dangerSymptomNames.join(", ")}',
-                  valueColor: AppColors.error,
+                    ),
+                  ],
                 ),
-              ],
+              )),
             ],
-          ),
+            if (_dangerSymptomCount > 0) ...[
+              const SizedBox(height: 6),
+              _summaryRow(
+                'Severe Flagged',
+                '$_dangerSymptomCount: ${_dangerSymptomNames.join(", ")}',
+                valueColor: AppColors.error,
+              ),
+            ],
+          ],
+          onTap: () => _jumpToStep(2),
         ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'SUPPLEMENTS & TD VACCINE',
-          child: Column(
-            children: [
-              _summaryRow(
-                'Ferrous + FA',
-                _ferrousQtyCtrl.text.trim().isEmpty
-                    ? 'Not given'
-                    : '${_ferrousQtyCtrl.text.trim()} tablet${(int.tryParse(_ferrousQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
-              ),
-              _summaryRow(
-                'Calcium',
-                _calciumQtyCtrl.text.trim().isEmpty
-                    ? 'Not given'
-                    : '${_calciumQtyCtrl.text.trim()} tablet${(int.tryParse(_calciumQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
-              ),
-              _summaryRow(
-                'TD Vaccine Dose',
-                _tdDose ??
-                    (_availableTdDoses.isEmpty ? 'Complete (all doses given)' : 'None given today'),
-                valueColor:
-                    _availableTdDoses.isEmpty ? AppColors.success : null,
-              ),
-            ],
-          ),
+        _buildClickableSummarySection(
+          'SUPPLEMENTS & TD VACCINE',
+          [
+            _summaryRow(
+              'Ferrous + FA',
+              _ferrousQtyCtrl.text.trim().isEmpty
+                  ? 'Not given'
+                  : '${_ferrousQtyCtrl.text.trim()} tablet${(int.tryParse(_ferrousQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
+            ),
+            _summaryRow(
+              'Calcium',
+              _calciumQtyCtrl.text.trim().isEmpty
+                  ? 'Not given'
+                  : '${_calciumQtyCtrl.text.trim()} tablet${(int.tryParse(_calciumQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
+            ),
+            _summaryRow(
+              'TD Vaccine Dose',
+              _tdDose ??
+                  (_availableTdDoses.isEmpty ? 'Complete (all doses given)' : 'None given today'),
+              valueColor:
+                  _availableTdDoses.isEmpty ? AppColors.success : null,
+            ),
+          ],
+          onTap: () => _jumpToStep(3),
         ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'SCHEDULE & REMARKS',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _summaryRow(
-                'Next Appointment',
-                _nextSchedule == null
-                    ? 'Not set'
-                    : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
-                valueColor:
-                    _nextSchedule != null ? AppColors.brandPrimary : null,
-              ),
-              _summaryRow(
-                'Remarks',
-                _remarksCtrl.text.trim().isEmpty
-                    ? 'None'
-                    : _remarksCtrl.text.trim(),
-              ),
-            ],
-          ),
+        _buildClickableSummarySection(
+          'SCHEDULE & REMARKS',
+          [
+            _summaryRow(
+              'Next Visit',
+              _nextSchedule == null
+                  ? 'Not set'
+                  : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
+              valueColor:
+                  _nextSchedule != null ? AppColors.brandPrimary : null,
+            ),
+            _summaryRow(
+              'Remarks',
+              _remarksCtrl.text.trim().isEmpty
+                  ? 'None'
+                  : _remarksCtrl.text.trim(),
+            ),
+          ],
+          onTap: () => _jumpToStep(4),
         ),
       ],
     );
