@@ -191,6 +191,144 @@ class GroqService {
     );
   }
 
+  // ── TTS API ─────────────────────────────────────────────────────────────
+  /// Calls the Groq text-to-speech endpoint and returns concatenated WAV bytes.
+  /// Uses canopylabs/orpheus-v1-english with "diana" voice.
+  /// Handles the 200-char limit by splitting into sentence chunks automatically.
+  static const int _ttsMaxChunkChars = 190; // safely under the 200-char limit
+  static const int _wavHeaderSize = 44;     // standard WAV header bytes
+
+  Future<List<int>> speakWithGroqTts(String text) async {
+    final apiKey = _getApiKey();
+
+    // 1. Sanitise markdown
+    final clean = text
+        .replaceAll(RegExp(r'\*{1,2}'), '')
+        .replaceAll(RegExp(r'#{1,6} ?'), '')
+        .replaceAll(RegExp(r'-{3,}'), '')
+        .replaceAll(RegExp(r'[_`]'), '')
+        .replaceAll(RegExp(r'\n{2,}'), '. ')
+        .replaceAll('\n', ' ')
+        .trim();
+
+    // 2. Split into ≤190-char chunks on sentence boundaries
+    final chunks = _splitIntoTtsChunks(clean);
+    _log('🔊 Groq TTS: ${clean.length} chars → ${chunks.length} chunk(s)');
+
+    // 3. Fetch each chunk sequentially and combine the audio
+    List<int> combinedAudio = [];
+
+    for (int i = 0; i < chunks.length; i++) {
+      final chunk = chunks[i];
+      if (chunk.trim().isEmpty) continue;
+
+      _log('   Chunk ${i + 1}/${chunks.length}: "${chunk.substring(0, chunk.length.clamp(0, 50))}..." (${chunk.length} chars)');
+
+      final response = await http.post(
+        Uri.parse('https://api.groq.com/openai/v1/audio/speech'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+        },
+        body: jsonEncode({
+          'model': 'canopylabs/orpheus-v1-english',
+          'input': '[cheerful] $chunk',
+          'voice': 'autumn',
+          'response_format': 'wav',
+        }),
+      ).timeout(const Duration(seconds: 60));
+
+      if (response.statusCode != 200) {
+        String errMsg;
+        try {
+          final errData = jsonDecode(response.body);
+          errMsg = errData['error']?['message'] ?? response.body;
+        } catch (_) {
+          errMsg = response.body;
+        }
+        _log('❌ Groq TTS chunk $i failed (${response.statusCode}): $errMsg');
+        throw Exception('Groq TTS Error (${response.statusCode}): $errMsg');
+      }
+
+      final bytes = response.bodyBytes;
+      _log('   ✅ Chunk ${i + 1}: ${bytes.length} bytes received');
+
+      if (i == 0) {
+        // First chunk: keep the full WAV including header
+        combinedAudio.addAll(bytes);
+      } else {
+        // Subsequent chunks: skip the 44-byte WAV header to avoid duplicates
+        if (bytes.length > _wavHeaderSize) {
+          combinedAudio.addAll(bytes.sublist(_wavHeaderSize));
+        }
+      }
+    }
+
+    _log('✅ Groq TTS complete: ${combinedAudio.length} total bytes');
+    return combinedAudio;
+  }
+
+  /// Splits text into chunks of at most [_ttsMaxChunkChars] characters,
+  /// preferring to break on sentence-ending punctuation (. ! ?) or commas.
+  List<String> _splitIntoTtsChunks(String text) {
+    if (text.length <= _ttsMaxChunkChars) return [text];
+
+    final chunks = <String>[];
+    int start = 0;
+
+    while (start < text.length) {
+      int end = (start + _ttsMaxChunkChars).clamp(0, text.length);
+      if (end == text.length) {
+        chunks.add(text.substring(start).trim());
+        break;
+      }
+
+      // Walk back to find a good break point: ". ", "! ", "? ", ", "
+      int breakAt = -1;
+      for (int j = end; j > start + 30; j--) {
+        final ch = text[j];
+        if ((ch == '.' || ch == '!' || ch == '?') && j + 1 < text.length && text[j + 1] == ' ') {
+          breakAt = j + 1; // include the punctuation, break after it
+          break;
+        }
+        if (ch == ',' && j + 1 < text.length && text[j + 1] == ' ') {
+          breakAt = j + 1;
+          // don't break yet — prefer sentence-ending punctuation
+        }
+      }
+
+      if (breakAt == -1) {
+        // No good punct found — fall back to last space
+        breakAt = text.lastIndexOf(' ', end);
+        if (breakAt <= start) breakAt = end; // hard cut
+      }
+
+      chunks.add(text.substring(start, breakAt).trim());
+      start = breakAt;
+      while (start < text.length && text[start] == ' ') { start++; }
+    }
+
+    return chunks.where((c) => c.isNotEmpty).toList();
+  }
+
+
+  Future<String> getChatResponse({
+    required List<Map<String, dynamic>> chatHistory,
+    double temperature = 0.5,
+    int maxOutputTokens = 2048,
+  }) async {
+    final apiKey = _getApiKey();
+    _log('💬 Generating chat response...');
+
+    return _sendChatCompletion(
+      messages: chatHistory,
+      apiKey: apiKey,
+      model: _reasoningModel,
+      temperature: temperature,
+      maxOutputTokens: maxOutputTokens,
+    );
+  }
+
   Future<OcrResult> extractMotherRegistrationData(XFile imageFile) async {
     final apiKey = _getApiKey();
     _log('📄 Extracting registration data...');

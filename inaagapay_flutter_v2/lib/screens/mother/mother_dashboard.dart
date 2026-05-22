@@ -17,6 +17,7 @@ import '../../services/language_service.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/supabase_service.dart';
 import 'mother_pregnancy_detail_page.dart';
+import 'mother_chatbot_page.dart';
 
 class MotherDashboard extends StatefulWidget {
   const MotherDashboard({super.key});
@@ -1470,6 +1471,48 @@ class _MotherDashboardState extends State<MotherDashboard> {
                         ),
                       ),
                     ),
+          floatingActionButton: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MotherChatbotPage(
+                        firstName: _firstName,
+                        week: _week,
+                        trimester: _trimester,
+                        riskLevel: _riskLevel,
+                        riskFactors: _riskFactors,
+                        suggestedActions: _suggestedActions,
+                        hasPregnancy: _hasPregnancy,
+                      ),
+                    ),
+                  );
+                },
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: Image.asset(
+                    'assets/images/chatbot_icon.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
