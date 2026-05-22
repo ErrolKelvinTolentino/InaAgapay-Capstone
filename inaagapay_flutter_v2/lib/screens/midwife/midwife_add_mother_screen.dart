@@ -2149,16 +2149,18 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     if (confirm == true) setState(() => _allergies.removeAt(index));
   }
 
-  Future<void> _showAddPastPregnancy() async {
-    int fetalCount = 1;
-    final gaCtrl = TextEditingController();
-    List<String> outcomes = ['live_birth'];
-    List<DateTime?> outcomeDates = [null];
-    List<bool> isEstimated = [false];
-    List<TextEditingController> placeCtrls = [TextEditingController()];
-    List<String?> deliveryMethods = [null];
-    List<bool> showOutcomeDropdowns = [false, false, false, false, false];
-    List<bool> showDeliveryDropdowns = [false, false, false, false, false];
+  Future<void> _showAddPastPregnancy({int? editIndex}) async {
+    _PastPregnancy? existing = editIndex != null ? _pastPregnancies[editIndex] : null;
+
+    int fetalCount = existing?.outcomes.length ?? 1;
+    final gaCtrl = TextEditingController(text: existing?.outcomes.firstOrNull?.gestationalAgeAtEnd?.toStringAsFixed(0) ?? '');
+    DateTime? pregnancyOutcomeDate = existing?.outcomes.isNotEmpty == true ? existing?.outcomes.first.outcomeDate : null;
+    bool isPregnancyDateEstimated = existing?.outcomes.isNotEmpty == true ? existing!.outcomes.first.isEstimated : false;
+    List<String> outcomes = existing?.outcomes.map((o) => o.outcome).toList() ?? ['live_birth'];
+    List<TextEditingController> placeCtrls = existing?.outcomes.map((o) => TextEditingController(text: o.placeOfDelivery ?? '')).toList() ?? [TextEditingController()];
+    List<String?> deliveryMethods = existing?.outcomes.map((o) => o.deliveryMethod).toList() ?? [null];
+    List<bool> showOutcomeDropdowns = List.generate(10, (_) => false);
+    List<bool> showDeliveryDropdowns = List.generate(10, (_) => false);
 
     final result = await showDialog<bool>(
       context: context,
@@ -2179,9 +2181,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   if (gaVal == null || gaVal > 42) gaError = '0-42 wks';
                 }
                 if (gaError != null) allValid = false;
+                if (pregnancyOutcomeDate == null) allValid = false;
 
                 for (int i = 0; i < fetalCount; i++) {
-                  if (outcomeDates[i] == null) allValid = false;
                   if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') {
                     if (placeCtrls[i].text.trim().isEmpty) allValid = false;
                     if (deliveryMethods[i] == null) allValid = false;
@@ -2212,11 +2214,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                           icon: const Icon(Icons.close, color: AppColors.brandText),
                           onPressed: () => Navigator.pop(dialogCtx, false),
                         ),
-                        const Expanded(
+                        Expanded(
                           child: Center(
                             child: Text(
-                              'Add Past Pregnancy',
-                              style: TextStyle(
+                              editIndex != null ? 'Edit Past Pregnancy' : 'Add Past Pregnancy',
+                              style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18,
                                 color: AppColors.brandText,
@@ -2251,6 +2253,78 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                   ),
                                 ),
                               ],
+                            ),
+                            const SizedBox(height: 16),
+                            _buildPremiumTextField(
+                              controller: TextEditingController(
+                                text: pregnancyOutcomeDate == null ? '' : _dateFmt.format(pregnancyOutcomeDate!),
+                              ),
+                              labelText: 'Outcome Date',
+                              hintText: 'Select date',
+                              isRequired: true,
+                              readOnly: true,
+                              suffixIcon: const Icon(Icons.calendar_today_outlined, color: AppColors.brandPrimary),
+                              onTap: () async {
+                                final maxDate = _lmp != null ? _lmp!.subtract(const Duration(days: 14)) : DateTime.now();
+                                final picked = await _showBrandedDatePicker(
+                                  context: dialogCtx,
+                                  initialDate: pregnancyOutcomeDate ?? maxDate,
+                                  firstDate: DateTime(1900),
+                                  lastDate: maxDate,
+                                );
+                                if (picked != null) {
+                                  setS(() {
+                                    pregnancyOutcomeDate = picked;
+                                  });
+                                }
+                              },
+                            ),
+                            if (pregnancyOutcomeDate != null && _lmp != null && _lmp!.difference(pregnancyOutcomeDate!).inDays < 180) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.warning.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        'The interval between recorded pregnancies appears shorter than commonly expected maternal recovery intervals. Continued healthcare monitoring may be beneficial.',
+                                        style: TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            GestureDetector(
+                              onTap: () => setS(() => isPregnancyDateEstimated = !isPregnancyDateEstimated),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Checkbox(
+                                      value: isPregnancyDateEstimated,
+                                      onChanged: (v) => setS(() => isPregnancyDateEstimated = v ?? false),
+                                      activeColor: AppColors.brandPrimary,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Date is estimated',
+                                    style: TextStyle(fontSize: 14, color: AppColors.brandText),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 20),
                             Column(
@@ -2288,12 +2362,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                             setS(() {
                                               fetalCount--;
                                               outcomes.removeLast();
-                                              outcomeDates.removeLast();
-                                              isEstimated.removeLast();
                                               placeCtrls.removeLast();
                                               deliveryMethods.removeLast();
-                                              showOutcomeDropdowns.removeLast();
-                                              showDeliveryDropdowns.removeLast();
                                             });
                                           }
                                         },
@@ -2313,12 +2383,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                             setS(() {
                                               fetalCount++;
                                               outcomes.add('live_birth');
-                                              outcomeDates.add(null);
-                                              isEstimated.add(false);
                                               placeCtrls.add(TextEditingController());
                                               deliveryMethods.add(null);
-                                              showOutcomeDropdowns.add(false);
-                                              showDeliveryDropdowns.add(false);
                                             });
                                           }
                                         },
@@ -2388,78 +2454,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 16),
-                              _buildPremiumTextField(
-                                controller: TextEditingController(
-                                  text: outcomeDates[i] == null ? '' : _dateFmt.format(outcomeDates[i]!),
-                                ),
-                                labelText: 'Outcome Date',
-                                hintText: 'Select date',
-                                isRequired: true,
-                                readOnly: true,
-                                suffixIcon: const Icon(Icons.calendar_today_outlined, color: AppColors.brandPrimary),
-                                onTap: () async {
-                                  final maxDate = _lmp != null ? _lmp!.subtract(const Duration(days: 14)) : DateTime.now();
-                                  final picked = await _showBrandedDatePicker(
-                                    context: dialogCtx,
-                                    initialDate: outcomeDates[i] ?? maxDate,
-                                    firstDate: DateTime(1900),
-                                    lastDate: maxDate,
-                                  );
-                                  if (picked != null) {
-                                    setS(() {
-                                      outcomeDates[i] = picked;
-                                    });
-                                  }
-                                },
-                              ),
-                              if (outcomeDates[i] != null && _lmp != null && _lmp!.difference(outcomeDates[i]!).inDays < 180) ...[
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.warning.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
-                                      const SizedBox(width: 8),
-                                      const Expanded(
-                                        child: Text(
-                                          'The interval between recorded pregnancies appears shorter than commonly expected maternal recovery intervals. Continued healthcare monitoring may be beneficial.',
-                                          style: TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w500),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                              GestureDetector(
-                                onTap: () => setS(() => isEstimated[i] = !isEstimated[i]),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: Checkbox(
-                                        value: isEstimated[i],
-                                        onChanged: (v) => setS(() => isEstimated[i] = v ?? false),
-                                        activeColor: AppColors.brandPrimary,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Date is estimated',
-                                      style: TextStyle(fontSize: 14, color: AppColors.brandText),
-                                    ),
-                                  ],
-                                ),
-                              ),
                               if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') ...[
                                 const SizedBox(height: 16),
                                 _buildPremiumTextField(
@@ -2530,9 +2524,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'Add Past Pregnancy',
-                          style: TextStyle(
+                        child: Text(
+                          editIndex != null ? 'Save Changes' : 'Add Past Pregnancy',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -2554,15 +2548,19 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         pastPreg.fetalCount = fetalCount;
         for (int i = 0; i < fetalCount; i++) {
           pastPreg.outcomes.add(_PastFetalOutcome(
-              outcome: outcomes[i], outcomeDate: outcomeDates[i]!)
-            ..isEstimated = isEstimated[i]
+              outcome: outcomes[i], outcomeDate: pregnancyOutcomeDate!)
+            ..isEstimated = isPregnancyDateEstimated
             ..placeOfDelivery = placeCtrls[i].text.trim().isEmpty
                 ? null
                 : placeCtrls[i].text.trim()
             ..deliveryMethod = deliveryMethods[i]
             ..gestationalAgeAtEnd = double.tryParse(gaCtrl.text.trim()));
         }
-        _pastPregnancies.add(pastPreg);
+        if (editIndex != null) {
+          _pastPregnancies[editIndex] = pastPreg;
+        } else {
+          _pastPregnancies.add(pastPreg);
+        }
         _hasPastPregnancy = true;
       });
     }
@@ -3214,15 +3212,14 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
   String _pastPregnancyTitle(_PastPregnancy p) {
     if (p.outcomes.isEmpty) return 'Past Pregnancy';
-    if (p.outcomes.length == 1) return _outcomeLabel(p.outcomes.first.outcome);
-    return '${p.outcomes.length} fetal outcomes';
+    final dateText = p.earliestOutcomeDate == p.latestOutcomeDate
+        ? _dateFmt.format(p.latestOutcomeDate)
+        : '${_dateFmt.format(p.earliestOutcomeDate)} to ${_dateFmt.format(p.latestOutcomeDate)}';
+    return dateText;
   }
 
   String _pastPregnancySubtitle(_PastPregnancy p) {
     if (p.outcomes.isEmpty) return 'No outcomes recorded';
-    final dateText = p.earliestOutcomeDate == p.latestOutcomeDate
-        ? _dateFmt.format(p.latestOutcomeDate)
-        : '${_dateFmt.format(p.earliestOutcomeDate)} to ${_dateFmt.format(p.latestOutcomeDate)}';
     final outcomeText = p.outcomes
         .asMap()
         .entries
@@ -3233,7 +3230,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final gaText = p.gestationalAgeAtEnd != null
         ? ' - ${p.gestationalAgeAtEnd!.toStringAsFixed(1)} weeks'
         : '';
-    return '$dateText\n$outcomeText$gaText';
+    return '$outcomeText$gaText';
   }
 
   // UI Helpers
@@ -3473,10 +3470,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             const SizedBox(width: 8),
             Expanded(
                 child: Text(value,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: AppColors.textPrimary))),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade800,
+                        fontSize: 14))),
           ],
         ),
       );
@@ -4646,34 +4643,37 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2))
-              ]),
-          child: SwitchListTile(
-              title: const Text('Had previous pregnancies?',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: const Text('Toggle on to log past pregnancy records'),
-              value: _hasPastPregnancy,
-              activeThumbColor: AppColors.brandPrimary,
-              activeTrackColor: AppColors.brandPrimary.withValues(alpha: 0.5),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-              onChanged: (v) => setState(() {
-                    _hasPastPregnancy = v;
-                    if (!v) _pastPregnancies.clear();
-                  })),
-        ),
+        if (_pastPregnancies.isEmpty)
+          Container(
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2))
+                ]),
+            child: SwitchListTile(
+                title: const Text('Had previous pregnancies?',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Toggle on to log past pregnancy records'),
+                value: _hasPastPregnancy,
+                activeThumbColor: AppColors.brandPrimary,
+                activeTrackColor: AppColors.brandPrimary.withValues(alpha: 0.5),
+                inactiveThumbColor: Colors.grey.shade400,
+                inactiveTrackColor: Colors.grey.shade200,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                onChanged: (v) => setState(() {
+                      _hasPastPregnancy = v;
+                      if (!v) _pastPregnancies.clear();
+                    })),
+          ),
         if (_hasPastPregnancy) ...[
-          const SizedBox(height: 16),
+          if (_pastPregnancies.isEmpty) const SizedBox(height: 16),
           if (_pastPregnancies.isEmpty)
             _emptyState(Icons.history_outlined,
                 'No past pregnancies recorded.\nClick the add button to add one.')
@@ -4684,6 +4684,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   leading: _iconAvatar(Icons.pregnant_woman_outlined),
                   title: _pastPregnancyTitle(p),
                   subtitle: _pastPregnancySubtitle(p),
+                  onEdit: () => _showAddPastPregnancy(editIndex: e.key),
                   onDelete: () => _confirmDeletePastPregnancy(e.key));
             }),
         ],
@@ -5000,7 +5001,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   const Icon(Icons.edit_outlined,
                       size: 16, color: AppColors.brandPrimary)
                 ])),
-            const Divider(height: 1, indent: 16, endIndent: 16),
+            Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.borderPrimary),
             Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(children: rows)),
@@ -5039,7 +5040,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   const Icon(Icons.edit_outlined,
                       size: 16, color: AppColors.brandPrimary)
                 ])),
-            const Divider(height: 1, indent: 16, endIndent: 16),
+            Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.borderPrimary),
             Padding(
               padding: const EdgeInsets.all(12),
               child: items.isEmpty
