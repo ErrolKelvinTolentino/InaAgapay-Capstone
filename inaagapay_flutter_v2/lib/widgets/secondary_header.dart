@@ -6,11 +6,13 @@ import '../theme/app_colors.dart';
 class SecondaryHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onBack;
+  final Widget? trailing;
 
   const SecondaryHeader({
     super.key,
     required this.title,
     this.onBack,
+    this.trailing,
   });
 
   @override
@@ -19,17 +21,12 @@ class SecondaryHeader extends StatelessWidget {
       bottom: false,
       child: SizedBox(
         height: 56,
-        child: Row(
+        width: double.infinity,
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            if (onBack != null)
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new),
-                color: AppColors.brandPrimary,
-                onPressed: onBack,
-              )
-            else
-              const SizedBox(width: 48),
-            Expanded(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 48.0),
               child: Text(
                 title,
                 textAlign: TextAlign.center,
@@ -40,7 +37,21 @@ class SecondaryHeader extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 48),
+            Positioned(
+              left: 0,
+              child: onBack != null
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new),
+                      color: AppColors.brandPrimary,
+                      onPressed: onBack,
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            if (trailing != null)
+              Positioned(
+                right: 8,
+                child: trailing!,
+              ),
           ],
         ),
       ),

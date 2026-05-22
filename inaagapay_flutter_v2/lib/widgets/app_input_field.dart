@@ -99,10 +99,8 @@ class _AppInputFieldState extends State<AppInputField> {
                       inputFormatters: widget.inputFormatters,
                       onTap: widget.onTap,
                       onChanged: widget.onChanged,
-                      style: TextStyle(
-                        color: widget.readOnly
-                            ? AppColors.textSecondary
-                            : AppColors.textPrimary,
+                      style: const TextStyle(
+                        color: AppColors.inputText,
                         fontSize: 16,
                       ),
                       decoration: InputDecoration(

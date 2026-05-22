@@ -95,7 +95,7 @@ class _OtpInputFieldState extends State<OtpInputField>
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  color: AppColors.inputText,
                   height: 1.2,
                 ),
                 decoration: InputDecoration(

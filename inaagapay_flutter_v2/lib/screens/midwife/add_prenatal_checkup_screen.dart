@@ -13,6 +13,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/progressive_step_indicator.dart';
+import '../../widgets/secondary_header.dart';
 
 class AddPrenatalCheckupScreen extends StatefulWidget {
   const AddPrenatalCheckupScreen({
@@ -3927,22 +3928,25 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         }
       },
       child: Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        title: const Text('Add Prenatal Checkup'),
         backgroundColor: AppColors.bgPrimary,
-        elevation: 0,
-        automaticallyImplyLeading: !widget.isInitialRegistration,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        body: SafeArea(
           child: Column(
             children: [
-              ProgressiveStepIndicator(
-                  currentStep: _step, totalSteps: _totalSteps),
-              const SizedBox(height: 10),
-              _stepTitle(),
+              SecondaryHeader(
+                title: 'Add Prenatal Checkup',
+                onBack: widget.isInitialRegistration ? null : () => Navigator.pop(context),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  children: [
+                    ProgressiveStepIndicator(currentStep: _step, totalSteps: _totalSteps),
+                    const SizedBox(height: 10),
+                    _stepTitle(),
+                  ],
+                ),
+              ),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.only(top: 4, bottom: 8),
@@ -3950,50 +3954,52 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                 ),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  if (_step > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  children: [
+                    if (_step > 0)
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _submitting ? null : _back,
+                          child: const Text('Back'),
+                        ),
+                      ),
+                    if (_step > 0) const SizedBox(width: 8),
                     Expanded(
-                      child: OutlinedButton(
-                        onPressed: _submitting ? null : _back,
-                        child: const Text('Back'),
+                      flex: 2,
+                      child: FilledButton(
+                        onPressed: _submitting
+                            ? null
+                            : (_step == _totalSteps - 1
+                                ? ((_aiResponseApproved || _aiAnalysisSkipped) ? _submit : null)
+                                : _next),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: _submitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(_step == _totalSteps - 1
+                                ? ((_aiResponseApproved || _aiAnalysisSkipped)
+                                    ? 'Save Checkup'
+                                    : 'Approve AI to Save')
+                                : 'Next'),
                       ),
                     ),
-                  if (_step > 0) const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton(
-                      onPressed: _submitting
-                          ? null
-                          : (_step == _totalSteps - 1
-                              ? ((_aiResponseApproved || _aiAnalysisSkipped) ? _submit : null)
-                              : _next),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.brandPrimary,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: _submitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(_step == _totalSteps - 1
-                              ? ((_aiResponseApproved || _aiAnalysisSkipped)
-                                  ? 'Save Checkup'
-                                  : 'Approve AI to Save')
-                              : 'Next'),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
         ),
-      ),
       ),
     );
   }

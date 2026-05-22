@@ -1,6 +1,7 @@
 // lib/widgets/dialog_box.dart
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import 'modal_button.dart';
 
 enum DialogType { info, success, warning, error }
 
@@ -99,27 +100,9 @@ class DialogBox extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onPressed,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accentColor,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  elevation: 4,
-                ),
-                child: Text(
-                  buttonText,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textOnColor,
-                  ),
-                ),
-              ),
+            ModalButton(
+              label: buttonText,
+              onPressed: onPressed,
             ),
           ],
         ),

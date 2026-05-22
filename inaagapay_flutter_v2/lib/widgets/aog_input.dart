@@ -49,6 +49,10 @@ class AogInput extends StatelessWidget {
                   controller: weeksController,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(
+                    color: AppColors.inputText,
+                    fontSize: 16,
+                  ),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     hintText: 'Weeks',
@@ -80,6 +84,10 @@ class AogInput extends StatelessWidget {
                   controller: daysController,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(
+                    color: AppColors.inputText,
+                    fontSize: 16,
+                  ),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     hintText: 'Days',
