@@ -12,8 +12,10 @@ import '../../models/weight_gain_models.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
-import '../../widgets/progressive_step_indicator.dart';
+import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/secondary_header.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/app_dropdown_field.dart';
 
 class AddPrenatalCheckupScreen extends StatefulWidget {
   const AddPrenatalCheckupScreen({
@@ -193,6 +195,11 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   final _groqService = GroqService();
   final _aiAssessmentCtrl = TextEditingController();
   final _aiAssessmentEditCtrl = TextEditingController();
+  final _aiFilipinoCtrl = TextEditingController();
+  final _aiEnglishCtrl = TextEditingController();
+  String _selectedLanguage = 'filipino';
+  String _backupFilipino = '';
+  String _backupEnglish = '';
   final _symptomSearchCtrl = TextEditingController();
   final _weightCtrl = TextEditingController();
   final _sysCtrl = TextEditingController();
@@ -247,6 +254,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   String _editableRiskLevel = 'low';
   List<_RiskFactorItem> _editableRiskFactors = [];
   List<String> _editableSuggestedActions = [];
+
 
   static const List<String> _fetalTones = [
     'Normal',
@@ -612,7 +620,9 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       return _stripAiSectionHeaders(cleanedAiText);
     }
 
-    return _buildRuleBasedAssessmentText(snapshot);
+    final en = _buildRuleBasedAssessmentText(snapshot);
+    final fil = _buildRuleBasedAssessmentTextFilipino(snapshot);
+    return '=== FILIPINO ===\n$fil\n\n=== ENGLISH ===\n$en';
   }
 
   String _stripAiSectionHeaders(String text) {
@@ -676,36 +686,133 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   String _buildRuleBasedAssessmentText(_RiskSnapshot snapshot) {
     final currentBp =
         _sysCtrl.text.trim().isEmpty || _diaCtrl.text.trim().isEmpty
-            ? 'not recorded'
-            : '${_sysCtrl.text.trim()}/${_diaCtrl.text.trim()} mmHg';
-    final gaNote = snapshot.notableRecords.firstWhere(
-      (note) =>
-          note.toLowerCase().contains('current gestational age estimate:'),
-      orElse: () => 'Gestational age estimate not available',
-    );
-    final gaText =
-        gaNote.contains(':') ? gaNote.split(':').last.trim() : gaNote;
+            ? null
+            : '${_sysCtrl.text.trim()}/${_diaCtrl.text.trim()}';
     final highFactors = snapshot.factors
         .where((f) => f.influence == 'high')
         .map((f) => f.factor)
         .toList();
-    final factorSummary =
-        snapshot.factors.take(3).map((f) => f.factor).join('; ');
     final keyAction = snapshot.suggestedActions.isNotEmpty
         ? snapshot.suggestedActions.first
-        : 'Continue routine prenatal follow-up and monitor for new warning signs.';
+        : 'Continue with regular prenatal visits so we can keep watching over you and your baby.';
 
-    final riskIntro =
-        'Risk classification: ${_riskLevelLabel(snapshot.level)} based on current prenatal checkup findings.';
-    final findings =
-        'Current prenatal findings: gestational age $gaText, blood pressure $currentBp.';
-    final concernText = highFactors.isEmpty
-        ? 'No abnormal findings are currently detected from available records.'
-        : 'Finding(s): ${highFactors.join(', ')}.';
-    final summaryText =
-        factorSummary.isNotEmpty ? 'Notable items: $factorSummary.' : '';
+    final buf = StringBuffer();
 
-    return '$riskIntro $findings $concernText $summaryText Priority next step: $keyAction';
+    if (snapshot.level == 'low' && highFactors.isEmpty) {
+      buf.write('Based on your checkup today, everything is looking good. ');
+      if (currentBp != null) {
+        buf.write('Your blood pressure reading of $currentBp is within a healthy range, which is a wonderful sign for you and your baby. ');
+      }
+      buf.write('Keep taking good care of yourself — eating nutritious food, resting well, and staying hydrated will help you and your little one stay healthy. ');
+    } else {
+      buf.write('Some of the recent pregnancy monitoring information may need closer healthcare attention. ');
+      if (highFactors.isNotEmpty) {
+        final symptomsText = highFactors.join(', ');
+        buf.write('The current pregnancy monitoring record includes $symptomsText, which may require consultation with healthcare personnel. ');
+      }
+      if (currentBp != null) {
+        buf.write('Your blood pressure was recorded at $currentBp during this visit. ');
+      }
+      buf.write('$keyAction ');
+    }
+
+    buf.write('Continued prenatal checkups are recommended to help support your health during pregnancy.');
+
+    return buf.toString();
+  }
+
+  String _buildRuleBasedAssessmentTextFilipino(_RiskSnapshot snapshot) {
+    final currentBp =
+        _sysCtrl.text.trim().isEmpty || _diaCtrl.text.trim().isEmpty
+            ? null
+            : '${_sysCtrl.text.trim()}/${_diaCtrl.text.trim()}';
+    final highFactors = snapshot.factors
+        .where((f) => f.influence == 'high')
+        .map((f) => f.factor)
+        .toList();
+
+    final buf = StringBuffer();
+
+    if (snapshot.level == 'low' && highFactors.isEmpty) {
+      buf.write('Kamusta, mommy! Sa checkup natin ngayon, maayos at normal naman ang lahat. ');
+      if (currentBp != null) {
+        buf.write('Ang iyong blood pressure na $currentBp ay nasa magandang antas, na isang napakagandang balita para sa inyo ni baby. ');
+      }
+      buf.write('Patuloy ka sanang mag-alaga sa iyong sarili — kumain ng masusustansyang pagkain, matulog nang sapat, at uminom ng maraming tubig para manatiling malakas kayo ng iyong munting anghel. ');
+    } else {
+      buf.write('May ilang detalye sa iyong checkup ngayon na kailangan nating bigyan ng kaunting pansin at subaybayan. ');
+      if (highFactors.isNotEmpty) {
+        final symptomsText = highFactors.map((f) {
+          var translated = f;
+          if (f.startsWith('Severe symptom:')) {
+            translated = f.replaceAll('Severe symptom:', 'Sintomas na');
+          }
+          return translated;
+        }).join(', ');
+        buf.write('Kasama sa ating talaan ngayon ang $symptomsText, na mas mabuting masubaybayan natin kasama ng mga doktor o healthcare personnel. ');
+      }
+      if (currentBp != null) {
+        buf.write('Ang iyong blood pressure ay naitala sa $currentBp sa bisitang ito. ');
+      }
+      buf.write('Huwag mag-alala, mommy, babantayan natin ito nang mabuti at sundin ang mga payo sa pangangalaga. ');
+    }
+
+    buf.write('Ang patuloy na prenatal checkup ay inirerekomenda upang suportahan ang iyong kalusugan sa buong pagbubuntis.');
+
+    return buf.toString();
+  }
+
+  void _parseBilingualText(String text) {
+    String filipino = '';
+    String english = '';
+
+    final filipinoIndex = text.indexOf('=== FILIPINO ===');
+    final englishIndex = text.indexOf('=== ENGLISH ===');
+
+    if (filipinoIndex != -1 && englishIndex != -1) {
+      if (filipinoIndex < englishIndex) {
+        filipino = text.substring(filipinoIndex + '=== FILIPINO ==='.length, englishIndex).trim();
+        english = text.substring(englishIndex + '=== ENGLISH ==='.length).trim();
+      } else {
+        english = text.substring(englishIndex + '=== ENGLISH ==='.length, filipinoIndex).trim();
+        filipino = text.substring(filipinoIndex + '=== FILIPINO ==='.length).trim();
+      }
+    } else if (filipinoIndex != -1) {
+      filipino = text.substring(filipinoIndex + '=== FILIPINO ==='.length).trim();
+      english = filipino;
+    } else if (englishIndex != -1) {
+      english = text.substring(englishIndex + '=== ENGLISH ==='.length).trim();
+      filipino = english;
+    } else {
+      english = text.trim();
+      filipino = _translateRuleTextToFilipino(text);
+    }
+
+    _aiFilipinoCtrl.text = filipino;
+    _aiEnglishCtrl.text = english;
+  }
+
+  String _translateRuleTextToFilipino(String text) {
+    final isLow = text.contains('everything is looking good') || text.contains('maayos');
+    final currentBpMatch = RegExp(r'(\d+/\d+)').firstMatch(text);
+    final currentBp = currentBpMatch != null ? currentBpMatch.group(1) : null;
+
+    final buf = StringBuffer();
+    if (isLow) {
+      buf.write('Kamusta, mommy! Sa checkup natin ngayon, maayos at normal naman ang lahat. ');
+      if (currentBp != null) {
+        buf.write('Ang iyong blood pressure na $currentBp ay nasa magandang antas, na isang napakagandang balita para sa inyo ni baby. ');
+      }
+      buf.write('Patuloy ka sanang mag-alaga sa iyong sarili — kumain ng masusustansyang pagkain, matulog nang sapat, at uminom ng maraming tubig para manatiling malakas kayo ng iyong munting anghel. ');
+    } else {
+      buf.write('May ilang detalye sa iyong checkup ngayon na kailangan nating bigyan ng kaunting pansin at subaybayan. ');
+      if (currentBp != null) {
+        buf.write('Ang iyong blood pressure ay naitala sa $currentBp sa bisitang ito. ');
+      }
+      buf.write('Huwag mag-alala, mommy, babantayan natin ito nang mabuti at sundin ang mga payo sa pangangalaga. ');
+    }
+    buf.write('Ang patuloy na prenatal checkup ay inirerekomenda upang suportahan ang iyong kalusugan sa buong pagbubuntis.');
+    return buf.toString();
   }
 
   void _syncEditableRiskState(_RiskSnapshot snapshot, String mergedText) {
@@ -715,6 +822,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
     _aiOriginalAssessment = mergedText;
     _aiAssessmentCtrl.text = mergedText;
     _aiAssessmentEditCtrl.text = mergedText;
+    _parseBilingualText(mergedText);
     _isEditingAiAssessment = false;
     _aiAssessmentEdited = false;
     _aiResponseApproved = false;
@@ -799,12 +907,12 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       isHigh = true;
       for (final s in dangerSymptomsFiltered) {
         factors.add(_RiskFactorItem(
-          factor: 'Danger symptom: ${s.name}',
+          factor: 'Severe symptom: ${s.name}',
           influence: 'high',
         ));
       }
       actions.add(
-          'Prioritize immediate danger sign protocol and referral if needed.');
+          'Prioritize immediate care protocol and referral if needed.');
     }
 
     // 5. Medical History & Pregnancy Context (Watch Items)
@@ -1018,81 +1126,140 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
       }
     }
 
-    return '''You are a caring, knowledgeable midwife assistant in the Philippines. You genuinely care about this mother and her baby.
+    return '''[CRITICAL WARNING - SAFETY MANDATE - DO NOT DEVIATE]
+1. YOU MUST NEVER USE THE WORD "NORMAL" OR "NORMAL VALUE" OR "NORMAL SYMPTOMS" OR "WHICH IS NORMAL" (English) / "NORMAL" OR "KARANIWAN" OR "OKAY LANG" FOR CLINICAL FINDINGS (Tagalog).
+   - INSTEAD of "which is normal" / "normal ang blood pressure" in English, use: "appears within the commonly expected range".
+   - INSTEAD of "normal ang blood pressure" / "normal naman" in Tagalog, use: "ay nasa loob ng karaniwang inaasahang range" or "ay nasa karaniwang antas".
+   - Example English: “Your blood pressure currently appears within the commonly expected range during this prenatal checkup.”
+   - Example Tagalog: “Ang iyong blood pressure ay kasalukuyang nasa loob ng karaniwang inaasahang antas para sa prenatal checkup na ito.”
 
-Write as if you are sitting beside the mother, gently explaining what her checkup results mean. Your tone should feel like a trusted ate (older sister) who also happens to be medically trained — warm, personal, but informative.
+2. NEVER CLINICALLY VALIDATE FETAL CONDITION.
+   - Do NOT say "steady", "healthy", "normal", "maganda", "matatag", or "malakas" for fetal heartbeat.
+   - INSTEAD state it factually and neutrally:
+     * English: "The recorded fetal heartbeat during this prenatal checkup is [X] bpm."
+     * Tagalog: "Ang naitalang fetal heartbeat sa prenatal checkup na ito ay [X] bpm."
 
-STYLE GUIDE:
-- Start by acknowledging the mother: "Based on your checkup today..."
-- When results are normal, celebrate it: "Great news — your blood pressure is looking healthy at 120/80."
-- When something needs attention, be honest but gentle: "Your blood pressure is a bit elevated today. This doesn't mean something is wrong, but it's something your midwife will want to keep an eye on."
-- Explain WHY things matter, not just WHAT they are: "Your baby's heartbeat at 140 bpm is right in the healthy range — this tells us your little one is active and doing well."
-- Include practical advice a Filipino mother can act on: "Try to rest more, eat malunggay and green leafy vegetables, and drink plenty of water."
-- End with encouragement and a clear next step.
+3. DO NOT VALIDATE OR COMMENT ON MINOR SYMPTOMS.
+   - Do NOT say "skin rash seems normal", "rash looks fine", "okay lang ang pantal", or "normal naman ang rash".
+   - RULE: If a minor symptom like skin rash is not concerning, OMIT IT COMPLETELY from both the English and Tagalog assessments. Focus ONLY on clinically relevant findings.
 
-MATERNAL WEIGHT INTERPRETATION RULES:
-- You do NOT compute BMI or weight gain — the system provides those values. You only explain them.
-- NEVER use "ideal weight", "perfect weight", "required weight", or "normal pregnancy weight".
-- Use softer wording: "commonly expected range", "appears within range", "appears slightly lower/higher than expected".
-- NEVER present exact target weights or rigid expectations.
-- If pre-pregnancy weight is unavailable (shown as 'unknown'), do NOT mention BMI categories or overweight/obese labels. Add: "Since pre-pregnancy weight was not recorded, these insights are partially estimated."
-- For FIRST TRIMESTER (weeks 1-13): note that small weight changes are common. Do NOT judge weight gain/loss harshly.
-- For SECOND/THIRD TRIMESTER: you may reference the Weight Gain Engine Assessment if provided, but explain it gently.
-- Be weight-sensitive — never shame. Guide positively: "Your weight appears slightly lower than the commonly expected range. Adding an extra nutritious snack each day can help."
-- End every weight-related observation with: "This interpretation is for monitoring support only and does not replace professional medical advice."
+4. NEVER PROVIDE DIRECTIVE CARE PLANNING OR PRESCRIPTIVE COMMANDS.
+   - Do NOT say "Continue to focus on nutrition and scheduling regular healthcare consultations" or "Ipagpatuloy ang pagtutok sa nutrisyon at pag-iskedyul ng konsultasyon".
+   - INSTEAD use soft support phrasing:
+     * English: "Continued prenatal checkups and healthcare consultation may help support maternal health during pregnancy."
+     * Tagalog: "Ang patuloy na prenatal checkup at konsultasyon sa inyong healthcare provider ay makakatulong sa inyong kalusugan habang nagbubuntis."
 
-Always mention the actual measured values (e.g., 'your blood pressure reading of 120/80', 'your weight of 58 kg', 'your baby's heart rate of 142 bpm') and explain what they mean in simple terms.
+=========================================
 
-FORMAT: Write 5-8 sentences as flowing text (not bullet points). End with one sentence starting with "Priority next step:".
-DO NOT use section headers, markdown, or structured data. Just write naturally.
+You are an AI-assisted maternal healthcare interpretation assistant integrated into a barangay-level maternal healthcare monitoring system.
 
-Use ONLY the data provided below. State uncertainty clearly when data is missing.
-Never invent data.
+Your role is ONLY to:
+- simplify maternal healthcare information
+- explain prenatal monitoring findings in understandable language
+- provide supportive and empathetic healthcare communication
+- encourage continued prenatal monitoring and healthcare consultation
 
-PATIENT CONTEXT
-- Mother ID: ${widget.motherId}
-- Pregnancy ID: ${widget.pregnancyId}
+You are NOT:
+- a doctor
+- a diagnostic system
+- a treatment recommendation engine
+- a replacement for healthcare professionals
+
+You must provide BOTH a conversational Tagalog/Filipino translation and an English translation.
+Use the following format exactly, with the uppercase delimiters:
+
+=== FILIPINO ===
+[Sweet, gentle conversational Tagalog "ate" advice matching the behavior rules below]
+
+=== ENGLISH ===
+[Empathetic, reassuring English advice matching the behavior rules below]
+
+CRITICAL BEHAVIOR AND SAFETY RULES:
+
+1. NEVER diagnose medical conditions or use diagnostic/absolute phrasing.
+- Do NOT say: “You have…”, “This confirms…”, “You are diagnosed with…”, “Your baby is unhealthy…”, “This pregnancy is dangerous…”.
+- Do NOT use the word “normal” to describe clinical values or symptoms.
+- INSTEAD, use: “appears within the commonly expected range” or similar safe, observational phrasing.
+
+2. NEVER clinically validate fetal condition or use clinical reassurances for the baby.
+- Do NOT say: “baby’s heartbeat is a steady 120 bpm”, “your baby is perfectly healthy”, or "the baby's heart is beating normally".
+- AI must NOT sound like it is clinically validating the fetal condition.
+- INSTEAD, state the findings neutrally, simply, and factually: “The recorded fetal heartbeat during this prenatal checkup is 120 bpm.”
+
+3. NEVER visually or clinically validate symptoms.
+- Do NOT say: “skin rash seems normal”, “swelling looks fine”, or “minor itchiness is normal”.
+- AI should NOT visually or clinically validate symptoms.
+- RULE: If a symptom like a skin rash is NOT concerning or is minor/unrelated to core risk factors, OMIT it completely! The AI should focus only on clinically relevant findings.
+
+4. NEVER provide directive care planning or prescriptive lifestyle orders.
+- Do NOT say: “Continue to focus on nutrition and scheduling regular healthcare consultations”, “You must eat specific foods”, or dictate specific daily care schedules.
+- Soften all guidance to support maternal health through standard checks.
+- INSTEAD, use: “Continued prenatal checkups and healthcare consultation may help support maternal health during pregnancy.”
+
+5. ALWAYS remain empathetic, gentle, and calm.
+- The tone should feel warm, respectful, supportive, and easy to understand for rural mothers and non-medical users.
+- For the Tagalog/Filipino version, speak like a comforting, warm, and sweet "ate" (older sister) speaking face-to-face to a maternal patient in the Philippines (e.g. "Kamusta mommy? Ang ating prenatal records ay nagpapakita...").
+
+6. NEVER pretend to personally observe or examine the mother.
+- Do NOT say: “I hear you are experiencing…”, “I noticed…”, or “I examined…”.
+- INSTEAD say: “The recorded symptoms include…” or “The prenatal monitoring information shows…”.
+
+7. Gently and contextually simplify findings.
+- Summarize maternal monitoring findings, symptoms, risk monitoring info, and prenatal trends in a simplified, gentle, and understandable way. Do not use bullet points or lists in the output.
+
+8. ALWAYS include the disclaimer in BOTH languages as the final sentence:
+- English disclaimer: "This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation."
+- Filipino disclaimer: "Ang AI-assisted interpretation na ito ay gabay lamang para sa pagsubaybay sa kalusugan at hindi pamalit sa konsultasyon sa inyong doktor o midwife."
+
+OUTPUT STYLE REQUIREMENTS:
+- Use short-to-medium length paragraphs (1-2 paragraphs total per language).
+- Avoid excessive medical jargon.
+- Avoid sounding robotic or overly directive.
+- Avoid excessive emotional language.
+- Keep explanations understandable to non-medical users.
+- Focus on healthcare support and monitoring, not diagnosis.
+
+GOOD EXAMPLE OUTPUT
+“Hello, Mommy. The recent prenatal monitoring information shows that maternal findings currently appear within the commonly expected range. The recorded fetal heartbeat during this prenatal checkup is 120 bpm. Continued prenatal checkups and healthcare consultation may help support maternal health during pregnancy. This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation.”
+
+BAD EXAMPLE OUTPUT
+“You have dangerous pregnancy complications. Eat malunggay and take supplements immediately. Your blood pressure is normal, skin rash seems normal, and your baby's heartbeat is a steady 120 bpm, which is normal. Continue to focus on nutrition and scheduling regular healthcare consultations.”
+
+Use ONLY the data provided below. If data is missing, simply skip it — do not mention that data is missing.
+
+MOTHER'S HEALTH BACKGROUND
 - Maternal age: ${maternalAge ?? 'unknown'} years
-- Maternal birthdate: ${mother?['birthdate'] ?? 'unknown'}
-- Maternal height: ${mother?['height'] ?? 'unknown'} cm
-- Pre-pregnancy weight (or baseline): ${pregnancy?['pre_pregnancy_weight'] ?? mother?['weight'] ?? 'unknown'} kg
+- Height: ${mother?['height'] ?? 'unknown'} cm
 - Blood type: ${mother?['blood_type'] ?? 'unknown'}
-- Current pregnancy fetal count: ${_fetalCount ?? 'unconfirmed'}
 - Active medical conditions:
-${activeConditionLines.isEmpty ? '- none recorded' : activeConditionLines.join('\n')}
+${activeConditionLines.isEmpty ? '- none' : activeConditionLines.join('\n')}
 - Active allergies:
-${activeAllergyLines.isEmpty ? '- none recorded' : activeAllergyLines.join('\n')}
-- Past pregnancy records (including outcomes):
-${pastPregnancyLines.isEmpty ? '- none recorded' : pastPregnancyLines.join('\n')}
-- Previous prenatal checkups (${previousCheckups.length} total):
-${previousCheckupLines.isEmpty ? '- none recorded' : previousCheckupLines.join('\n')}
-- Weight gain trend between checkups:
+${activeAllergyLines.isEmpty ? '- none' : activeAllergyLines.join('\n')}
+- Past pregnancies:
+${pastPregnancyLines.isEmpty ? '- none' : pastPregnancyLines.join('\n')}
+- Previous checkups (${previousCheckups.length} total):
+${previousCheckupLines.isEmpty ? '- none' : previousCheckupLines.join('\n')}
+- Weight trend between checkups:
 ${weightTrendLines.isEmpty ? '- not enough data' : weightTrendLines.join('\n')}
-- LMP: ${_formatDate(_effectiveLmp(pregnancy))}
-- EDD: ${_formatDate(_effectiveEdd(pregnancy))}
-- Age of gestation: ${_aogWeeks?.toStringAsFixed(1) ?? 'unknown'} weeks ($trimester)
-- Planned follow-up date: ${_nextSchedule != null ? DateFormat('yyyy-MM-dd').format(_nextSchedule!) : 'none'}
+- Age of gestation: ${_aogWeeks?.toInt() ?? 'unknown'} weeks ($trimester)
 
-CURRENT CHECKUP DRAFT
-- Checkup datetime: ${_checkupDateTime.toIso8601String()}
-- Current pregnancy fetal count: ${_fetalCount ?? 'unconfirmed'}
+TODAY'S CHECKUP
 - Weight: ${_weightCtrl.text.trim()} kg
-- Weight Gain Engine Assessment: ${wgResult != null ? '${wgResult.status.name.toUpperCase()} - ${wgResult.message}' : 'Not evaluated'}
+- Weight Gain Assessment: ${wgResult != null ? '${wgResult.status.name.toUpperCase()} - ${wgResult.message}' : 'Not evaluated'}
 - Blood pressure: ${_sysCtrl.text.trim()}/${_diaCtrl.text.trim()} mmHg
 - Fetal heart beat: ${_fetalBeatCtrl.text.trim().isEmpty ? 'not recorded' : '${_fetalBeatCtrl.text.trim()} bpm'}
 - Fetal heart tone: ${_fetalTone ?? 'not recorded'}
-- TD dose today: ${_tdDose ?? 'none'}
-- Symptoms:
-${symptomLines.isEmpty ? '- none recorded' : symptomLines.join('\n')}
+- Edema level: ${_edema == 'none' ? 'No swelling' : _edema == 'mild' ? 'Mild swelling in feet or ankles' : _edema == 'moderate' ? 'Moderate swelling in lower legs, feet, or hands' : 'Severe significant swelling in face, hands, and legs'}
+- Symptoms reported:
+${symptomLines.isEmpty ? '- none' : symptomLines.join('\n')}
 - Remarks: ${_remarksCtrl.text.trim().isEmpty ? 'none' : _remarksCtrl.text.trim()}
 
-RULE BASED PRE-ASSESSMENT
+SYSTEM PRE-ASSESSMENT (use this to guide your tone, but do NOT expose these labels to the mother):
 - Level: ${draft.level}
 - Factors: ${draft.factors.map((f) => '${f.factor} [${f.influence}]').join('; ')}
-- Notable records: ${draft.notableRecords.join('; ')}
 - Suggested actions: ${draft.suggestedActions.join('; ')}
 
-IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write your analysis directly.''';
+IMPORTANT: Your response must consist ONLY of the two sections labeled with "=== FILIPINO ===" and "=== ENGLISH ===". No other text or labels.''';
   }
 
   Future<void> _refreshRiskPreview({bool force = false}) async {
@@ -1179,6 +1346,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   void dispose() {
     _aiAssessmentCtrl.dispose();
     _aiAssessmentEditCtrl.dispose();
+    _aiFilipinoCtrl.dispose();
+    _aiEnglishCtrl.dispose();
     _symptomSearchCtrl.dispose();
     _weightCtrl.dispose();
     _sysCtrl.dispose();
@@ -1225,7 +1394,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         .difference(_normalizedDate(lmp))
         .inDays;
     if (days < 0) return null;
-    return double.parse((days / 7).toStringAsFixed(1));
+    return (days / 7).floorToDouble();
   }
 
   _BpStatus get _bpStatus {
@@ -1320,6 +1489,46 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     );
   }
 
+  Widget _buildClickableSummarySection(String title, List<Widget> rows,
+      {required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2))
+            ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Row(children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandPrimary)),
+                  const Spacer(),
+                  const Icon(Icons.edit_outlined,
+                      size: 16, color: AppColors.brandPrimary)
+                ])),
+            Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.borderPrimary),
+            Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(children: rows)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _summaryRow(String label, String value,
       {Color? valueColor, IconData? icon}) {
     return Padding(
@@ -1342,8 +1551,8 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
               value,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: valueColor ?? AppColors.textPrimary,
+                fontWeight: FontWeight.w500,
+                color: valueColor ?? AppColors.brandText,
               ),
             ),
           ),
@@ -1390,7 +1599,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   String _riskLabel(String riskCategory) {
     switch (riskCategory) {
       case 'danger':
-        return 'Danger';
+        return 'Severe';
       case 'warning':
         return 'Warning';
       default:
@@ -1414,10 +1623,10 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     return _symptoms.any((s) => s.symptomTypeId == symptomTypeId);
   }
 
-  int get _dangerSymptomCount =>
+  int get _severeSymptomCount =>
       _symptoms.where((s) => s.riskCategory == 'danger').length;
 
-  List<String> get _dangerSymptomNames => _symptoms
+  List<String> get _severeSymptomNames => _symptoms
       .where((s) => s.riskCategory == 'danger')
       .map((s) => s.name)
       .toList();
@@ -1529,63 +1738,102 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Symptom'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                symptomType.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
+        return Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.brandText),
+                      onPressed: () => Navigator.pop(context, false),
+                    ),
+                    const Expanded(
+                      child: Center(
+                        child: Text(
+                          'Add Symptom',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.brandText,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _riskColor(symptomType.riskCategory)
-                      .withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: _riskColor(symptomType.riskCategory)
-                        .withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Text(
-                  _riskLabel(symptomType.riskCategory),
-                  style: TextStyle(
-                    fontSize: 12,
+                const SizedBox(height: 16),
+                Text(
+                  symptomType.name,
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: _riskColor(symptomType.riskCategory),
+                    fontSize: 16,
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesCtrl,
-                maxLines: 2,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                  hintText: 'Add short clinical note',
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _riskColor(symptomType.riskCategory).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _riskColor(symptomType.riskCategory).withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    _riskLabel(symptomType.riskCategory),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _riskColor(symptomType.riskCategory),
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderPrimary, width: 1.5),
+                  ),
+                  child: TextField(
+                    controller: notesCtrl,
+                    maxLines: 2,
+                    maxLength: 200,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'Notes (optional)',
+                      hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                      counterText: '',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    ),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Add Symptom', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Add'),
-            ),
-          ],
         );
       },
     );
@@ -1613,41 +1861,83 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Symptom Notes'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
+        return Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.brandText),
+                      onPressed: () => Navigator.pop(context, false),
+                    ),
+                    const Expanded(
+                      child: Center(
+                        child: Text(
+                          'Edit Symptom',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.brandText,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: notesCtrl,
-                maxLines: 3,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                  hintText: 'Update short clinical note',
+                const SizedBox(height: 16),
+                Text(
+                  entry.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderPrimary, width: 1.5),
+                  ),
+                  child: TextField(
+                    controller: notesCtrl,
+                    maxLines: 2,
+                    maxLength: 200,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'Notes (optional)',
+                      hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                      counterText: '',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    ),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save'),
-            ),
-          ],
         );
       },
     );
@@ -1734,22 +2024,20 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             runSpacing: 8,
             children: group.map((symptomType) {
               final selected = _isSymptomSelected(symptomType.id);
-              return FilterChip(
-                label: Text(symptomType.name),
-                selected: selected,
-                selectedColor: color.withValues(alpha: 0.18),
-                checkmarkColor: color,
-                side: BorderSide(
-                  color: selected
-                      ? color.withValues(alpha: 0.55)
-                      : color.withValues(alpha: 0.30),
+              return ActionChip(
+                label: Text(
+                  symptomType.name,
+                  style: TextStyle(
+                    color: selected ? Colors.white : color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                labelStyle: TextStyle(
-                  color: selected ? color : AppColors.textPrimary,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                ),
-                onSelected: (picked) {
-                  if (picked) {
+                backgroundColor: selected ? color : Colors.white,
+                side: BorderSide(color: color),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                onPressed: () {
+                  if (!selected) {
                     _openSymptomNotesDialog(symptomType);
                   } else {
                     setState(() => _symptoms.removeWhere(
@@ -1774,9 +2062,32 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         (_nextSchedule != null && _nextSchedule!.isAfter(baseDate))
             ? _nextSchedule!
             : baseDate;
-    // Advance past weekends so the picker opens on a valid day
+    bool isHoliday(DateTime date) {
+      final holidays = <String>[
+        '01-01', // New Year's Day
+        '02-25', // EDSA Revolution Anniversary
+        '04-09', // Araw ng Kagitingan
+        '05-01', // Labor Day
+        '06-12', // Independence Day
+        '08-21', // Ninoy Aquino Day
+        '11-01', // All Saints' Day
+        '11-02', // All Souls' Day
+        '11-30', // Bonifacio Day
+        '12-08', // Feast of the Immaculate Conception
+        '12-24', // Christmas Eve
+        '12-25', // Christmas Day
+        '12-30', // Rizal Day
+        '12-31', // Last Day of the Year
+      ];
+      final monthStr = date.month.toString().padLeft(2, '0');
+      final dayStr = date.day.toString().padLeft(2, '0');
+      return holidays.contains('$monthStr-$dayStr');
+    }
+
+    // Advance past weekends and holidays so the picker opens on a valid day
     while (initialDate.weekday == DateTime.saturday ||
-        initialDate.weekday == DateTime.sunday) {
+        initialDate.weekday == DateTime.sunday ||
+        isHoliday(initialDate)) {
       initialDate = initialDate.add(const Duration(days: 1));
     }
 
@@ -1788,8 +2099,59 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       helpText: 'Must be after ${_prettyDate(_checkupDateTime)}',
       selectableDayPredicate: (date) {
         // Block weekends — BHCs are typically closed on Sat/Sun
-        return date.weekday != DateTime.saturday &&
-            date.weekday != DateTime.sunday;
+        if (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday) return false;
+        // Block Philippine regular holidays
+        if (isHoliday(date)) return false;
+        
+        return true;
+      },
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.brandPrimary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.brandText,
+              secondary: AppColors.brandPrimary,
+              surface: Colors.white,
+            ),
+            dialogTheme: DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 4,
+              surfaceTintColor: Colors.transparent,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              headerBackgroundColor: Colors.white,
+              headerForegroundColor: AppColors.brandText,
+              headerHeadlineStyle: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandText,
+              ),
+              headerHelpStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandPrimary,
+              ),
+              surfaceTintColor: Colors.transparent,
+            ),
+          ),
+          child: child!,
+        );
       },
     );
     if (picked == null) return;
@@ -1848,9 +2210,10 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     final client = Supabase.instance.client;
     final originalText =
         (_aiOriginalAssessment ?? snapshot.aiAssessment).trim();
-    final editedText = _aiAssessmentCtrl.text.trim();
-    final finalAiText = editedText.isEmpty ? originalText : editedText;
-    final wasEdited = finalAiText != originalText;
+    final filipinoText = _aiFilipinoCtrl.text.trim();
+    final englishText = _aiEnglishCtrl.text.trim();
+    final finalAiText = '=== FILIPINO ===\n$filipinoText\n\n=== ENGLISH ===\n$englishText';
+    final wasEdited = finalAiText.trim() != originalText;
     final aiStatus =
         _aiResponseApproved ? 'approved' : (wasEdited ? 'edited' : 'generated');
     final finalRiskLevel = _editableRiskLevel;
@@ -2177,7 +2540,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       final nextStep = _step + 1;
       setState(() => _step = nextStep);
       if (nextStep == _totalSteps - 1) {
-        await _refreshRiskPreview(force: true);
+        await _refreshRiskPreview(force: false);
       }
     }
   }
@@ -2185,6 +2548,15 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   void _back() {
     if (_step > 0) {
       setState(() => _step -= 1);
+    }
+  }
+
+  void _jumpToStep(int step) {
+    if (step >= 0 && step < _totalSteps) {
+      setState(() => _step = step);
+      if (step == _totalSteps - 1) {
+        _refreshRiskPreview(force: false);
+      }
     }
   }
 
@@ -2208,31 +2580,30 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       'Review and edit AI risk analysis before final save',
     ];
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              labels[_step],
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.brandText,
-              ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            labels[_step],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandText,
             ),
-            const SizedBox(height: 2),
-            Text(
-              subtitles[_step],
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitles[_step],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -2257,6 +2628,10 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   }
 
   Widget _buildStep0() {
+    final motherData = _motherRiskContext?['mother'] as Map<String, dynamic>?;
+    final motherHeight = motherData?['height']?.toString();
+    final pregnancy = _motherRiskContext?['pregnancy'] as Map<String, dynamic>?;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2298,7 +2673,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                     border: Border.all(color: AppColors.brandPrimary),
                   ),
                   child: Text(
-                    '${_aogWeeks!.toStringAsFixed(1)} wks AOG',
+                    '${_aogWeeks!.toInt()} wks AOG',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -2311,17 +2686,36 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         ),
         const SizedBox(height: 12),
         _sectionCard(
-          title: 'Weight',
+          title: 'Height',
           child: AppInputField(
-            hintText: 'Weight (kg)',
-            controller: _weightCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(
-                  RegExp(r'^\d{0,3}(\.\d{0,2})?$')),
+            hintText: 'Height (cm)',
+            controller: TextEditingController(text: motherHeight ?? 'Not recorded'),
+            readOnly: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          title: 'Weight',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppInputField(
+                hintText: 'Weight (kg)',
+                controller: _weightCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d{0,3}(\.\d{0,2})?$')),
+                ],
+                isRequired: true,
+                errorText: _weightError,
+              ),
+              if (_weightError == null)
+                _buildWeightGainInsight(
+                  motherHeight != null ? double.tryParse(motherHeight) : null,
+                  pregnancy,
+                ) ?? const SizedBox.shrink(),
             ],
-            isRequired: true,
-            errorText: _weightError,
           ),
         ),
         const SizedBox(height: 12),
@@ -2367,39 +2761,259 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     );
   }
 
+  Widget? _buildWeightGainInsight(double? heightCmVal, Map<String, dynamic>? pregnancyData) {
+    if (_aogWeeks == null || _aogWeeks! < 13.0) return null; // Only 2nd Trimester (week 13) and up
+
+    final t = _weightCtrl.text.trim();
+    if (t.isEmpty) return null;
+    final currentWeight = double.tryParse(t);
+    if (currentWeight == null || currentWeight < 30 || currentWeight > 200) return null;
+
+    final mother = _motherRiskContext?['mother'] as Map<String, dynamic>?;
+    final previousCheckups = (_motherRiskContext?['previous_checkups'] as List? ?? const []).cast<dynamic>();
+
+    final rawPrePreg = pregnancyData?['pre_pregnancy_weight'];
+    final prePregnancyWeight = rawPrePreg != null ? double.tryParse(rawPrePreg.toString()) : null;
+
+    final rawMotherW = mother?['weight'];
+    final motherWeight = rawMotherW != null ? double.tryParse(rawMotherW.toString()) : null;
+
+    final baselineWeight = prePregnancyWeight ?? motherWeight;
+
+    final rawMotherH = mother?['height'];
+    final heightCm = heightCmVal ?? (rawMotherH != null ? double.tryParse(rawMotherH.toString()) : null);
+
+    final checkupList = previousCheckups.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    checkupList.add({
+       'checkup_datetime': _checkupDateTime.toIso8601String(),
+       'age_of_gestation': _aogWeeks,
+       'checkup_weight': currentWeight,
+    });
+    checkupList.sort((a, b) => DateTime.parse(a['checkup_datetime']).compareTo(DateTime.parse(b['checkup_datetime'])));
+
+    try {
+      final result = WeightGainEngine.evaluate(
+        currentWeight: currentWeight,
+        aogWeeks: _aogWeeks!,
+        allCheckups: checkupList,
+        prePregnancyWeight: baselineWeight,
+        heightCm: heightCm,
+        fetalCount: _fetalCount ?? 1,
+      );
+
+      final isLow = result.status == WeightGainStatus.low;
+      final isHigh = result.status == WeightGainStatus.high;
+
+      Color bgColor;
+      Color textColor;
+      IconData icon;
+      String statusText;
+
+      if (isLow) {
+        bgColor = AppColors.warning.withValues(alpha: 0.1);
+        textColor = AppColors.warning;
+        icon = Icons.trending_down;
+        statusText = "Below expected range";
+      } else if (isHigh) {
+        bgColor = AppColors.error.withValues(alpha: 0.1);
+        textColor = AppColors.error;
+        icon = Icons.trending_up;
+        statusText = "Above expected range";
+      } else {
+        bgColor = AppColors.success.withValues(alpha: 0.1);
+        textColor = AppColors.success;
+        icon = Icons.trending_flat;
+        statusText = "Within expected range";
+      }
+
+      String detailsText = '';
+      if (result.mode == WeightGainMode.full && result.expectedGain != null && result.baselineWeight != null) {
+        final activeGuidelines = (_fetalCount ?? 1) >= 2 
+            ? WeightGainEngine.iomTwinGuidelines 
+            : WeightGainEngine.iomGuidelines;
+        final guidelines = activeGuidelines[result.bmiCategory] ?? activeGuidelines['Normal']!;
+        
+        final firstTrimesterGain = guidelines['first_trimester']!;
+        final weeklyRate = guidelines['weekly_rate']!;
+        final totalMin = guidelines['total_min']!;
+        final totalMax = guidelines['total_max']!;
+
+        double expectedGainMin;
+        double expectedGainMax;
+
+        if (_aogWeeks! <= 13) {
+          final fraction = _aogWeeks! / 13.0;
+          final expectedGainMid = firstTrimesterGain * fraction;
+          expectedGainMin = expectedGainMid * 0.7;
+          expectedGainMax = expectedGainMid * 1.3;
+        } else {
+          final firstTrimesterMin = firstTrimesterGain * 0.7;
+          final firstTrimesterMax = firstTrimesterGain * 1.3;
+
+          if (_aogWeeks! <= 40) {
+            final progressFraction = (_aogWeeks! - 13) / 27.0;
+            expectedGainMin = firstTrimesterMin + (totalMin - firstTrimesterMin) * progressFraction;
+            expectedGainMax = firstTrimesterMax + (totalMax - firstTrimesterMax) * progressFraction;
+          } else {
+            final weeksAfterForty = _aogWeeks! - 40;
+            final weeklyMin = guidelines['weekly_min'] ?? (weeklyRate * 0.8);
+            final weeklyMax = guidelines['weekly_max'] ?? (weeklyRate * 1.2);
+            expectedGainMin = totalMin + (weeksAfterForty * weeklyMin);
+            expectedGainMax = totalMax + (weeksAfterForty * weeklyMax);
+          }
+        }
+
+        final expectedWeightMin = result.baselineWeight! + expectedGainMin;
+        final expectedWeightMax = result.baselineWeight! + expectedGainMax;
+
+        final actualGain = result.actualGain ?? 0.0;
+        final actualStr = "${actualGain >= 0 ? '+' : ''}${actualGain.toStringAsFixed(1)} kg";
+        final gainRangeStr = "${expectedGainMin.toStringAsFixed(1)} - ${expectedGainMax.toStringAsFixed(1)} kg";
+        final weightRangeStr = "${expectedWeightMin.toStringAsFixed(1)} - ${expectedWeightMax.toStringAsFixed(1)} kg";
+
+        if (isLow) {
+          detailsText = "Weight gain is slightly lower than the expected range (current gain is $actualStr, recommended gain is $gainRangeStr).\n"
+              "Based on your pre-pregnancy weight of ${result.baselineWeight!.toStringAsFixed(1)} kg (${result.bmiCategory}), "
+              "the recommended weight range for Week ${_aogWeeks!.toInt()} is $weightRangeStr kg.";
+        } else if (isHigh) {
+          detailsText = "Weight gain exceeds the expected range (current gain is $actualStr, recommended gain is $gainRangeStr).\n"
+              "Based on your pre-pregnancy weight of ${result.baselineWeight!.toStringAsFixed(1)} kg (${result.bmiCategory}), "
+              "the recommended weight range for Week ${_aogWeeks!.toInt()} is $weightRangeStr kg.";
+        } else {
+          detailsText = "Weight gain is within the commonly expected range (current gain is $actualStr, recommended gain is $gainRangeStr).\n"
+              "Based on your pre-pregnancy weight of ${result.baselineWeight!.toStringAsFixed(1)} kg (${result.bmiCategory}), "
+              "the recommended weight range for Week ${_aogWeeks!.toInt()} is $weightRangeStr kg.";
+        }
+      } else if (result.weeklyGain != null) {
+        final activeGuidelines = (_fetalCount ?? 1) >= 2 
+            ? WeightGainEngine.iomTwinGuidelines 
+            : WeightGainEngine.iomGuidelines;
+        final guidelines = activeGuidelines[result.bmiCategory] ?? activeGuidelines['Normal']!;
+        final weeklyMin = guidelines['weekly_min']!;
+        final weeklyMax = guidelines['weekly_max']!;
+
+        final weeklyStr = "${result.weeklyGain! >= 0 ? '+' : ''}${result.weeklyGain!.toStringAsFixed(2)} kg/wk";
+        final rangeStr = "${weeklyMin.toStringAsFixed(2)} - ${weeklyMax.toStringAsFixed(2)} kg/wk";
+
+        // Try to get previous checkup weight and week to compute expectation since last entry
+        final sortedPrev = List<Map<String, dynamic>>.from(
+          previousCheckups.map((e) => Map<String, dynamic>.from(e as Map))
+        );
+        sortedPrev.sort((a, b) {
+          final da = DateTime.tryParse(a['checkup_datetime']?.toString() ?? '');
+          final db = DateTime.tryParse(b['checkup_datetime']?.toString() ?? '');
+          if (da == null || db == null) return 0;
+          return da.compareTo(db);
+        });
+
+        double? prevWeight;
+        double? prevWeek;
+        if (sortedPrev.isNotEmpty) {
+          prevWeight = double.tryParse(sortedPrev.last['checkup_weight']?.toString() ?? '');
+          prevWeek = double.tryParse(sortedPrev.last['age_of_gestation']?.toString() ?? '');
+        }
+
+        if (prevWeight != null && prevWeek != null) {
+          final weekDiff = _aogWeeks! - prevWeek;
+          if (weekDiff > 0) {
+            final expectedGainMin = weeklyMin * weekDiff;
+            final expectedGainMax = weeklyMax * weekDiff;
+            final expectedWeightMin = prevWeight + expectedGainMin;
+            final expectedWeightMax = prevWeight + expectedGainMax;
+
+            final weightRangeStr = "${expectedWeightMin.toStringAsFixed(1)} - ${expectedWeightMax.toStringAsFixed(1)} kg";
+            final gainRangeStr = "${expectedGainMin.toStringAsFixed(1)} - ${expectedGainMax.toStringAsFixed(1)} kg";
+
+            if (isLow) {
+              detailsText = "Weight gain is slightly lower than the expected range.\n"
+                  "From your last entry at Week ${prevWeek.toStringAsFixed(1)} (${prevWeight.toStringAsFixed(1)} kg), "
+                  "the recommended weight gain from your last entry is $gainRangeStr (expected weight range: $weightRangeStr).";
+            } else if (isHigh) {
+              detailsText = "Weight gain exceeds the expected range.\n"
+                  "From your last entry at Week ${prevWeek.toStringAsFixed(1)} (${prevWeight.toStringAsFixed(1)} kg), "
+                  "the recommended weight gain from your last entry is $gainRangeStr (expected weight range: $weightRangeStr).";
+            } else {
+              detailsText = "Weight gain is within the commonly expected range.\n"
+                  "From your last entry at Week ${prevWeek.toStringAsFixed(1)} (${prevWeight.toStringAsFixed(1)} kg), "
+                  "the recommended weight gain from your last entry is $gainRangeStr (expected weight range: $weightRangeStr).";
+            }
+          }
+        }
+
+        if (detailsText.isEmpty) {
+          if (isLow) {
+            detailsText = "Weekly rate of $weeklyStr is lower than the expected rate of $rangeStr.";
+          } else if (isHigh) {
+            detailsText = "Weekly rate of $weeklyStr exceeds the expected rate of $rangeStr.";
+          } else {
+            detailsText = "Weekly rate of $weeklyStr is within the expected rate of $rangeStr.";
+          }
+        }
+      } else {
+        detailsText = result.message;
+      }
+
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: textColor.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: textColor, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "IOM Weight Gain: $statusText",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    detailsText,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.3,
+                      color: textColor.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Widget _buildStep1() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_fetalCount != null)
-          _sectionCard(
-            title: 'Fetal Count (from ultrasound records)',
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline,
-                    size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: 8),
-                Text(
-                  '$_fetalCount Fetus${_fetalCount! > 1 ? 'es' : ''}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  '(edit via ultrasound records)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ),
+        _sectionCard(
+          title: 'Fetal Count (from ultrasound records)',
+          child: AppInputField(
+            hintText: 'Fetal Count',
+            controller: TextEditingController(
+                text: _fetalCount == null
+                    ? 'Unknown'
+                    : '$_fetalCount Fetus${_fetalCount! > 1 ? 'es' : ''}'),
+            readOnly: true,
           ),
-        if (_fetalCount != null) const SizedBox(height: 12),
+        ),
+        const SizedBox(height: 12),
         _sectionCard(
           title: 'Fetal Heart Rate',
           child: Column(
@@ -2438,22 +3052,70 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         const SizedBox(height: 12),
         _sectionCard(
           title: 'Fetal Heart Tone',
-          child: DropdownButtonFormField<String>(
-            initialValue: _fetalTone,
-            decoration: const InputDecoration(
-              hintText: 'Select tone',
-              border: InputBorder.none,
-              isDense: true,
-            ),
-            items: _fetalTones
-                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                .toList(),
-            onChanged: (value) => setState(() => _fetalTone = value),
+          child: AppDropdownField<String>(
+            hintText: 'Select tone',
+            value: _fetalTone,
+            options: _fetalTones,
+            displayStringForOption: (t) => t,
+            onSelected: (value) => setState(() => _fetalTone = value),
           ),
         ),
       ],
     );
   }
+
+  Widget _iconAvatar(IconData icon, {Color? color}) => Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+            color: (color ?? AppColors.brandPrimary).withValues(alpha: 0.1),
+            shape: BoxShape.circle),
+        child: Icon(icon, size: 18, color: color ?? AppColors.brandPrimary),
+      );
+
+  Widget _itemCard(
+          {required Widget leading,
+          required String title,
+          required String subtitle,
+          required VoidCallback onDelete,
+          VoidCallback? onEdit}) =>
+      Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2))
+            ]),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          leading: leading,
+          title: Text(title,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          subtitle: Text(subtitle,
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.textSecondary)),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (onEdit != null)
+                IconButton(
+                    icon: const Icon(Icons.edit_outlined,
+                        color: AppColors.brandPrimary, size: 20),
+                    onPressed: onEdit),
+              IconButton(
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      color: AppColors.error, size: 20),
+                  onPressed: onDelete),
+            ],
+          ),
+        ),
+      );
 
   Widget _buildStep2() {
     return Column(
@@ -2485,20 +3147,25 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         ),
         _sectionCard(
           title: 'Edema Level',
-          child: DropdownButtonFormField<String>(
+          child: AppDropdownField<String>(
+            hintText: 'Select edema level',
             value: _edema,
-            decoration: const InputDecoration(
-              hintText: 'Select edema level',
-              border: InputBorder.none,
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(value: 'none', child: Text('None')),
-              DropdownMenuItem(value: 'mild', child: Text('Mild (+)')),
-              DropdownMenuItem(value: 'moderate', child: Text('Moderate (++)')),
-              DropdownMenuItem(value: 'severe', child: Text('Severe (+++)')),
-            ],
-            onChanged: (value) => setState(() => _edema = value ?? 'none'),
+            options: const ['none', 'mild', 'moderate', 'severe'],
+            displayStringForOption: (val) {
+              switch (val) {
+                case 'none':
+                  return 'None (No swelling)';
+                case 'mild':
+                  return 'Mild (Slight swelling in feet or ankles)';
+                case 'moderate':
+                  return 'Moderate (Swelling in lower legs, feet, or hands)';
+                case 'severe':
+                  return 'Severe (Significant swelling in face, hands, and legs)';
+                default:
+                  return 'None (No swelling)';
+              }
+            },
+            onSelected: (value) => setState(() => _edema = value),
           ),
         ),
         const SizedBox(height: 12),
@@ -2530,78 +3197,85 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextField(
+                        AppInputField(
+                          hintText: 'Search symptom name',
                           controller: _symptomSearchCtrl,
+                          leadingIcon: Icons.search,
+                          trailingIcon: _symptomSearchCtrl.text.isEmpty
+                              ? null
+                              : Icons.clear,
+                          onTrailingTap: _symptomSearchCtrl.text.isEmpty
+                              ? null
+                              : () {
+                                  _symptomSearchCtrl.clear();
+                                  setState(() {});
+                                },
                           onChanged: (_) => setState(() {}),
-                          decoration: InputDecoration(
-                            hintText: 'Search symptom name',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _symptomSearchCtrl.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    onPressed: () {
-                                      _symptomSearchCtrl.clear();
-                                      setState(() {});
-                                    },
-                                    icon: const Icon(Icons.clear),
-                                  ),
-                            isDense: true,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
                         ),
                         const SizedBox(height: 12),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              ChoiceChip(
+                              FilterChip(
                                 label: const Text('All'),
                                 selected: _symptomRiskFilter == 'all',
+                                backgroundColor: Colors.white,
+                                selectedColor: AppColors.brandPrimary,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: _symptomRiskFilter == 'all' ? Colors.white : AppColors.brandPrimary,
+                                ),
+                                side: const BorderSide(color: AppColors.brandPrimary),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 onSelected: (_) {
                                   setState(() => _symptomRiskFilter = 'all');
                                 },
                               ),
                               const SizedBox(width: 8),
-                              ChoiceChip(
+                              FilterChip(
                                 label: const Text('Normal'),
                                 selected: _symptomRiskFilter == 'normal',
-                                selectedColor:
-                                    AppColors.success.withValues(alpha: 0.16),
-                                side: BorderSide(
-                                  color:
-                                      AppColors.success.withValues(alpha: 0.35),
+                                backgroundColor: Colors.white,
+                                selectedColor: AppColors.success,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: _symptomRiskFilter == 'normal' ? Colors.white : AppColors.success,
                                 ),
+                                side: const BorderSide(color: AppColors.success),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 onSelected: (_) {
                                   setState(() => _symptomRiskFilter = 'normal');
                                 },
                               ),
                               const SizedBox(width: 8),
-                              ChoiceChip(
+                              FilterChip(
                                 label: const Text('Warning'),
                                 selected: _symptomRiskFilter == 'warning',
-                                selectedColor:
-                                    AppColors.warning.withValues(alpha: 0.16),
-                                side: BorderSide(
-                                  color:
-                                      AppColors.warning.withValues(alpha: 0.35),
+                                backgroundColor: Colors.white,
+                                selectedColor: AppColors.warning,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: _symptomRiskFilter == 'warning' ? Colors.white : AppColors.warning,
                                 ),
+                                side: const BorderSide(color: AppColors.warning),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 onSelected: (_) {
-                                  setState(
-                                      () => _symptomRiskFilter = 'warning');
+                                  setState(() => _symptomRiskFilter = 'warning');
                                 },
                               ),
                               const SizedBox(width: 8),
-                              ChoiceChip(
-                                label: const Text('Danger'),
+                              FilterChip(
+                                label: const Text('Severe'),
                                 selected: _symptomRiskFilter == 'danger',
-                                selectedColor:
-                                    AppColors.error.withValues(alpha: 0.16),
-                                side: BorderSide(
-                                  color:
-                                      AppColors.error.withValues(alpha: 0.35),
+                                backgroundColor: Colors.white,
+                                selectedColor: AppColors.error,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: _symptomRiskFilter == 'danger' ? Colors.white : AppColors.error,
                                 ),
+                                side: const BorderSide(color: AppColors.error),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 onSelected: (_) {
                                   setState(() => _symptomRiskFilter = 'danger');
                                 },
@@ -2619,7 +3293,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                           riskCategory: 'warning',
                         ),
                         _buildSymptomGroup(
-                          title: 'DANGER SIGNS',
+                          title: 'SEVERE SIGNS',
                           riskCategory: 'danger',
                         ),
                       ],
@@ -2654,7 +3328,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   ],
                 )
               else ...[
-                if (_dangerSymptomCount > 0)
+                if (_severeSymptomCount > 0)
                   Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 10),
@@ -2670,7 +3344,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '⚠️ $_dangerSymptomCount danger ${_dangerSymptomCount == 1 ? 'symptom' : 'symptoms'} detected. Consider urgent follow-up.',
+                          '⚠️ $_severeSymptomCount severe ${_severeSymptomCount == 1 ? 'symptom' : 'symptoms'} detected. Consider urgent follow-up.',
                           style: const TextStyle(
                             color: AppColors.error,
                             fontWeight: FontWeight.w700,
@@ -2679,7 +3353,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _dangerSymptomNames.join(', '),
+                          _severeSymptomNames.join(', '),
                           style: const TextStyle(
                             color: AppColors.textPrimary,
                             fontWeight: FontWeight.w600,
@@ -2693,95 +3367,12 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   final index = entry.key;
                   final item = entry.value;
                   final riskColor = _riskColor(item.riskCategory);
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: riskColor.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border:
-                          Border.all(color: riskColor.withValues(alpha: 0.30)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: riskColor,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: [
-                                  Chip(
-                                    visualDensity: VisualDensity.compact,
-                                    label: Text(
-                                      _riskLabel(item.riskCategory),
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: riskColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    backgroundColor:
-                                        riskColor.withValues(alpha: 0.10),
-                                    side: BorderSide(
-                                        color:
-                                            riskColor.withValues(alpha: 0.35)),
-                                  ),
-                                ],
-                              ),
-                              if ((item.notes ?? '').isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  item.notes!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        Column(
-                          children: [
-                            IconButton(
-                              onPressed: () => _editSymptomNotesDialog(index),
-                              icon: const Icon(Icons.edit_outlined,
-                                  color: AppColors.brandPrimary, size: 20),
-                              visualDensity: VisualDensity.compact,
-                              tooltip: 'Edit notes',
-                            ),
-                            IconButton(
-                              onPressed: () =>
-                                  setState(() => _symptoms.removeAt(index)),
-                              icon: const Icon(Icons.delete_outline,
-                                  color: AppColors.error, size: 20),
-                              visualDensity: VisualDensity.compact,
-                              tooltip: 'Remove symptom',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  return _itemCard(
+                    leading: _iconAvatar(Icons.healing_outlined, color: riskColor),
+                    title: item.name,
+                    subtitle: '${_riskLabel(item.riskCategory)}${(item.notes?.isNotEmpty == true) ? ' - ${item.notes}' : ''}',
+                    onEdit: () => _editSymptomNotesDialog(index),
+                    onDelete: () => setState(() => _symptoms.removeAt(index)),
                   );
                 }),
               ],
@@ -2836,18 +3427,12 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: _tdDose,
-                      decoration: const InputDecoration(
-                        hintText: 'Select dose given today',
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
-                      items: _availableTdDoses
-                          .map((dose) =>
-                              DropdownMenuItem(value: dose, child: Text(dose)))
-                          .toList(),
-                      onChanged: (value) => setState(() => _tdDose = value),
+                    AppDropdownField<String>(
+                      hintText: 'Select dose given today',
+                      value: _tdDose,
+                      options: _availableTdDoses,
+                      displayStringForOption: (t) => t,
+                      onSelected: (value) => setState(() => _tdDose = value),
                     ),
                     if (widget.takenTdDoses.isNotEmpty) ...[
                       const SizedBox(height: 6),
@@ -2887,43 +3472,20 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              InkWell(
-                onTap: _pickNextSchedule,
-                borderRadius: BorderRadius.circular(10),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_month,
-                        size: 20, color: AppColors.brandPrimary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _nextSchedule == null
-                            ? 'Tap to set next schedule (optional)'
-                            : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
-                        style: TextStyle(
-                          fontWeight: _nextSchedule != null
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                          color: _nextSchedule != null
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    if (_nextSchedule != null)
-                      IconButton(
-                        onPressed: () => setState(() => _nextSchedule = null),
-                        icon: const Icon(Icons.clear,
-                            size: 18, color: AppColors.textSecondary),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
+              AppInputField(
+                hintText: 'Tap to set recommended next visit (optional)',
+                controller: TextEditingController(
+                  text: _nextSchedule == null
+                      ? ''
+                      : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
                 ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                "Must be after today's checkup date.",
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                readOnly: true,
+                onTap: _pickNextSchedule,
+                leadingIcon: Icons.calendar_month,
+                trailingIcon: _nextSchedule != null ? Icons.clear : null,
+                onTrailingTap: _nextSchedule != null
+                    ? () => setState(() => _nextSchedule = null)
+                    : null,
               ),
             ],
           ),
@@ -2987,148 +3549,144 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             ],
           ),
         ),
-        _sectionCard(
-          title: 'VITALS',
-          child: Column(
-            children: [
-              _summaryRow('Checkup Date',
-                  DateFormat('MMM d, yyyy h:mm a').format(_checkupDateTime)),
-              if (_aogWeeks != null)
-                _summaryRow(
-                  'AOG',
-                  '${_aogWeeks!.toStringAsFixed(1)} weeks',
-                  valueColor: AppColors.brandPrimary,
-                ),
-              _summaryRow('Weight',
-                  _weightCtrl.text.trim().isEmpty ? 'Not recorded' : '${_weightCtrl.text.trim()} kg'),
-              _summaryRow('Blood Pressure', bpText),
+        _buildClickableSummarySection(
+          'VITALS',
+          [
+            _summaryRow('Checkup Date',
+                DateFormat('MMM d, yyyy h:mm a').format(_checkupDateTime)),
+            if (_aogWeeks != null)
               _summaryRow(
-                'Fetal Heart Rate',
-                _fetalBeatCtrl.text.trim().isEmpty
-                    ? 'Not recorded'
-                    : '${_fetalBeatCtrl.text.trim()} bpm',
-                valueColor: () {
-                  final v = int.tryParse(_fetalBeatCtrl.text.trim());
-                  if (v == null) return null;
-                  return (v >= 110 && v <= 160)
-                      ? AppColors.success
-                      : AppColors.error;
-                }(),
+                'AOG',
+                '${_aogWeeks!.toInt()} weeks',
+                valueColor: AppColors.brandPrimary,
               ),
-              _summaryRow('Heart Tone', _fetalTone ?? 'Not recorded'),
+            _summaryRow('Weight',
+                _weightCtrl.text.trim().isEmpty ? 'Not recorded' : '${_weightCtrl.text.trim()} kg'),
+            _summaryRow('Blood Pressure', bpText),
+            if (_bpStatus != _BpStatus.unknown) _bpBadge(),
+          ],
+          onTap: () => _jumpToStep(0),
+        ),
+        _buildClickableSummarySection(
+          'FETAL ASSESSMENT',
+          [
+            _summaryRow(
+              'Fetal Heart Rate',
+              _fetalBeatCtrl.text.trim().isEmpty
+                  ? 'Not recorded'
+                  : '${_fetalBeatCtrl.text.trim()} bpm',
+              valueColor: () {
+                final v = int.tryParse(_fetalBeatCtrl.text.trim());
+                if (v == null) return null;
+                return (v >= 110 && v <= 160)
+                    ? AppColors.success
+                    : AppColors.error;
+              }(),
+            ),
+            _summaryRow('Heart Tone', _fetalTone ?? 'Not recorded'),
+          ],
+          onTap: () => _jumpToStep(1),
+        ),
+        _buildClickableSummarySection(
+          'SYMPTOMS & EDEMA',
+          [
+            _summaryRow('Edema Level', _edema == 'none'
+                ? 'None'
+                : '${_edema[0].toUpperCase()}${_edema.substring(1)}'),
+            const SizedBox(height: 4),
+            if (_symptoms.isEmpty)
+              _summaryRow('Symptoms', 'None recorded')
+            else ...[
+              const Text(
+                'Symptoms:',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               const SizedBox(height: 6),
-              _bpBadge(),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'SYMPTOMS & EDEMA',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _summaryRow('Edema Level', _edema == 'none'
-                  ? 'None'
-                  : '${_edema[0].toUpperCase()}${_edema.substring(1)}'),
-              const SizedBox(height: 4),
-              if (_symptoms.isEmpty)
-                _summaryRow('Symptoms', 'None recorded')
-              else ...[
-                const Text(
-                  'Symptoms:',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                ..._symptoms.map((s) => Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 4),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
+              ..._symptoms.map((s) => Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: _riskColor(s.riskCategory),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${s.name} -- ${_riskLabel(s.riskCategory)}',
+                        style: TextStyle(
+                          fontSize: 13,
                           color: _riskColor(s.riskCategory),
-                          shape: BoxShape.circle,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      Expanded(
-                        child: Text(
-                          '${s.name} -- ${_riskLabel(s.riskCategory)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: _riskColor(s.riskCategory),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
-              ],
-              if (_dangerSymptomCount > 0) ...[
-                const SizedBox(height: 6),
-                _summaryRow(
-                  'Danger Flagged',
-                  '$_dangerSymptomCount: ${_dangerSymptomNames.join(", ")}',
-                  valueColor: AppColors.error,
+                    ),
+                  ],
                 ),
-              ],
+              )),
             ],
-          ),
+            if (_severeSymptomCount > 0) ...[
+              const SizedBox(height: 6),
+              _summaryRow(
+                'Severe Flagged',
+                '$_severeSymptomCount: ${_severeSymptomNames.join(", ")}',
+                valueColor: AppColors.error,
+              ),
+            ],
+          ],
+          onTap: () => _jumpToStep(2),
         ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'SUPPLEMENTS & TD VACCINE',
-          child: Column(
-            children: [
-              _summaryRow(
-                'Ferrous + FA',
-                _ferrousQtyCtrl.text.trim().isEmpty
-                    ? 'Not given'
-                    : '${_ferrousQtyCtrl.text.trim()} tablet${(int.tryParse(_ferrousQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
-              ),
-              _summaryRow(
-                'Calcium',
-                _calciumQtyCtrl.text.trim().isEmpty
-                    ? 'Not given'
-                    : '${_calciumQtyCtrl.text.trim()} tablet${(int.tryParse(_calciumQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
-              ),
-              _summaryRow(
-                'TD Vaccine Dose',
-                _tdDose ??
-                    (_availableTdDoses.isEmpty ? 'Complete (all doses given)' : 'None given today'),
-                valueColor:
-                    _availableTdDoses.isEmpty ? AppColors.success : null,
-              ),
-            ],
-          ),
+        _buildClickableSummarySection(
+          'SUPPLEMENTS & TD VACCINE',
+          [
+            _summaryRow(
+              'Ferrous + FA',
+              _ferrousQtyCtrl.text.trim().isEmpty
+                  ? 'Not given'
+                  : '${_ferrousQtyCtrl.text.trim()} tablet${(int.tryParse(_ferrousQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
+            ),
+            _summaryRow(
+              'Calcium',
+              _calciumQtyCtrl.text.trim().isEmpty
+                  ? 'Not given'
+                  : '${_calciumQtyCtrl.text.trim()} tablet${(int.tryParse(_calciumQtyCtrl.text.trim()) ?? 0) != 1 ? 's' : ''}',
+            ),
+            _summaryRow(
+              'TD Vaccine Dose',
+              _tdDose ??
+                  (_availableTdDoses.isEmpty ? 'Complete (all doses given)' : 'None given today'),
+              valueColor:
+                  _availableTdDoses.isEmpty ? AppColors.success : null,
+            ),
+          ],
+          onTap: () => _jumpToStep(3),
         ),
-        const SizedBox(height: 12),
-        _sectionCard(
-          title: 'SCHEDULE & REMARKS',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _summaryRow(
-                'Next Appointment',
-                _nextSchedule == null
-                    ? 'Not set'
-                    : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
-                valueColor:
-                    _nextSchedule != null ? AppColors.brandPrimary : null,
-              ),
-              _summaryRow(
-                'Remarks',
-                _remarksCtrl.text.trim().isEmpty
-                    ? 'None'
-                    : _remarksCtrl.text.trim(),
-              ),
-            ],
-          ),
+        _buildClickableSummarySection(
+          'SCHEDULE & REMARKS',
+          [
+            _summaryRow(
+              'Next Visit',
+              _nextSchedule == null
+                  ? 'Not set'
+                  : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
+              valueColor:
+                  _nextSchedule != null ? AppColors.brandPrimary : null,
+            ),
+            _summaryRow(
+              'Remarks',
+              _remarksCtrl.text.trim().isEmpty
+                  ? 'None'
+                  : _remarksCtrl.text.trim(),
+            ),
+          ],
+          onTap: () => _jumpToStep(4),
         ),
       ],
     );
@@ -3192,660 +3750,505 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   }
 
   Widget _buildStep6() {
-    final content = _aiAssessmentCtrl.text.trim().isEmpty
-        ? (_riskSnapshot?.aiAssessment ?? '')
-        : _aiAssessmentCtrl.text.trim();
-    final lineCount = '\n'.allMatches(content).length + 1;
-    final editorLines = (lineCount + 2).clamp(4, 22);
+    final activeInsight = _selectedLanguage == 'filipino'
+        ? _aiFilipinoCtrl.text.trim()
+        : _aiEnglishCtrl.text.trim();
 
-    Widget statPill({
-      required IconData icon,
-      required String label,
-      Color? color,
-    }) {
-      final fg = color ?? AppColors.textSecondary;
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: fg.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: fg.withValues(alpha: 0.25)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 13, color: fg),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: fg,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    final content = activeInsight.isEmpty
+        ? (_selectedLanguage == 'filipino'
+            ? 'Kamusta mommy? Ang pangangalaga sa inyong kalusugan ay magsisimula sa sandaling makuha ang AI assessment...'
+            : 'The care insight will appear here once generated...')
+        : activeInsight;
+
+    final lineCount = '\n'.allMatches(content).length + 1;
+    final editorLines = (lineCount + 2).clamp(5, 18);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // A. Mother-Facing Info Banner
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          margin: const EdgeInsets.only(bottom: 14),
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
-            color: AppColors.faintWhite,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.borderPrimary),
+            color: AppColors.brandPrimary.withAlpha(12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.brandPrimary.withAlpha(35)),
           ),
-          child: const Row(
-            children: [
-              Icon(Icons.shield_outlined, size: 18, color: AppColors.brandText),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Icon(
+                Icons.info_outline,
+                color: AppColors.brandPrimary,
+                size: 20,
+              ),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Review the risk summary and care plan before saving this prenatal checkup.',
+                  'This Care Insight is what the mother will see on her mobile app. It is written in a warm, reassuring tone to guide and support her.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.brandText,
-                    fontWeight: FontWeight.w600,
+                    color: AppColors.inputText,
+                    height: 1.4,
                   ),
                 ),
               ),
             ],
           ),
         ),
-        _sectionCard(
-          title: 'Assessment Summary',
+
+        // Main Card
+        Container(
+          width: double.infinity,
+          clipBehavior: Clip.hardEdge,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.borderPrimary),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  if (_riskSnapshot != null)
-                    statPill(
-                      icon: Icons.flag_outlined,
-                      label: _riskLevelLabel(_riskSnapshot!.level),
-                      color: _riskLevelColor(_riskSnapshot!.level),
-                    )
-                  else
-                    statPill(
-                      icon: Icons.hourglass_empty_rounded,
-                      label: 'Risk Pending',
+              // Header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                  border: const Border(bottom: BorderSide(color: AppColors.borderPrimary)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, color: AppColors.brandPrimary, size: 20),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Care Insight for Mother',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ),
                     ),
-                  if (_riskSnapshot != null)
-                    statPill(
-                      icon: Icons.checklist_rtl_rounded,
-                      label:
-                          '${_riskSnapshot!.factors.where((f) => f.influence == "high").length} Major Concerns',
-                      color: _riskSnapshot!.level == 'high'
-                          ? AppColors.error
-                          : AppColors.brandPrimary,
-                    ),
-                  statPill(
-                    icon: Icons.fact_check_outlined,
-                    label: 'Risk Factors ${_editableRiskFactors.length}',
-                    color: AppColors.brandAccent,
-                  ),
-                ],
+                    if (_loadingRiskPreview)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandPrimary),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: () => _refreshRiskPreview(force: true),
+                        child: const Icon(Icons.refresh_rounded, size: 18, color: AppColors.brandPrimary),
+                      ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
+
+              // Body
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Error banner
+                    if (_riskPreviewError != null)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _riskPreviewError!,
+                          style: const TextStyle(fontSize: 12, color: AppColors.error),
+                        ),
+                      ),
+
+                    // Risk Level (read-only pill or dropdown when editing)
+                    Row(
+                      children: [
+                        const Text(
+                          'Risk Level',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(width: 10),
+                        if (_isEditingAiAssessment)
+                          Expanded(
+                            child: AppDropdownField<String>(
+                              value: _editableRiskLevel,
+                              options: const ['low', 'high'],
+                              displayStringForOption: (val) => val == 'low' ? 'Low Risk' : 'High Risk',
+                              onSelected: (val) {
+                                setState(() {
+                                  _editableRiskLevel = val;
+                                  _aiResponseApproved = false;
+                                });
+                              },
+                              hintText: 'Select Risk',
+                              leadingIcon: Icons.flag_rounded,
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: _editableRiskLevel == 'high'
+                                  ? AppColors.error.withValues(alpha: 0.1)
+                                  : AppColors.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              _editableRiskLevel == 'high' ? 'High Risk' : 'Low Risk',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: _editableRiskLevel == 'high'
+                                    ? AppColors.error
+                                    : AppColors.success,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Risk Factors (always read-only)
+                    if (_editableRiskFactors.isNotEmpty) ...[
+                      const Text(
+                        'Based on',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: _editableRiskFactors.map((f) {
+                          final isHigh = f.influence == 'high';
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: isHigh
+                                  ? AppColors.error.withValues(alpha: 0.06)
+                                  : AppColors.brandPrimary.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isHigh
+                                    ? AppColors.error.withValues(alpha: 0.15)
+                                    : AppColors.brandPrimary.withValues(alpha: 0.15),
+                              ),
+                            ),
+                            child: Text(
+                              f.factor,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: isHigh ? AppColors.error : AppColors.textPrimary,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    const Divider(color: AppColors.borderPrimary, height: 1),
+                    const SizedBox(height: 14),
+
+                    // B. Bilingual Translation Switcher Toggle
+                    Align(
+                      alignment: Alignment.center,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgPrimary,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppColors.borderPrimary, width: 1.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedLanguage = 'filipino';
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'Filipino (Conversational)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
+                                    color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedLanguage = 'english';
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'English',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
+                                    color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // C. AI Insight Text (Color is AppColors.inputText)
+                    if (!_isEditingAiAssessment)
+                      Text(
+                        content,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: activeInsight.isEmpty ? AppColors.textSecondary : AppColors.inputText,
+                          height: 1.65,
+                          fontStyle: activeInsight.isEmpty ? FontStyle.italic : FontStyle.normal,
+                        ),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.faintWhite,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.borderPrimary),
+                        ),
+                        child: TextField(
+                          controller: _selectedLanguage == 'filipino' ? _aiFilipinoCtrl : _aiEnglishCtrl,
+                          minLines: editorLines,
+                          maxLines: editorLines,
+                          decoration: InputDecoration(
+                            hintText: _selectedLanguage == 'filipino'
+                                ? 'Isulat ang care message para sa ina (Filipino)...'
+                                : 'Write the care message for the mother (English)...',
+                            hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.all(14),
+                          ),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.inputText,
+                            height: 1.65,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // E. Redesigned Action Buttons (Friction-Free Override Flow)
+        if (_isEditingAiAssessment) ...[
+          // Case 3: In Edit Mode
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      // Revert controllers to backup
+                      _aiFilipinoCtrl.text = _backupFilipino;
+                      _aiEnglishCtrl.text = _backupEnglish;
+                      _isEditingAiAssessment = false;
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.borderPrimary),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: FilledButton(
+                  onPressed: () {
+                    final nextFilText = _aiFilipinoCtrl.text.trim();
+                    final nextEngText = _aiEnglishCtrl.text.trim();
+                    if (nextFilText.isEmpty || nextEngText.isEmpty) {
+                      _showMessage('Both Filipino and English insights are required.');
+                      return;
+                    }
+                    setState(() {
+                      // Save changes to primary _aiAssessmentCtrl combined text
+                      _aiAssessmentCtrl.text = '=== FILIPINO ===\n$nextFilText\n\n=== ENGLISH ===\n$nextEngText';
+                      _aiAssessmentEdited = _aiAssessmentCtrl.text.trim() != (_aiOriginalAssessment ?? '').trim();
+                      _aiResponseApproved = false;
+                      _isEditingAiAssessment = false;
+                    });
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Save Changes'),
+                ),
+              ),
+            ],
+          ),
+        ] else if (_aiResponseApproved) ...[
+          // Case 2: When Care Insight IS approved
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Care insight approved! This insight is ready and will be saved when you submit the checkup.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _aiResponseApproved = false;
+                    });
+                  },
+                  child: const Text(
+                    'Re-edit',
+                    style: TextStyle(
+                      color: AppColors.brandPrimary,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          // Case 1: When Care Insight is NOT approved
+          Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: (content.isEmpty || activeInsight.isEmpty)
+                      ? null
+                      : () {
+                          setState(() {
+                            _aiResponseApproved = true;
+                          });
+                          _showMessage('Insight approved! You can now save the checkup.');
+                        },
+                  icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                  label: const Text('Approve Care Insight'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      'Review the AI assessment, care priority, and recommended action plan for this visit.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        height: 1.6,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          // Copy current texts to backup
+                          _backupFilipino = _aiFilipinoCtrl.text;
+                          _backupEnglish = _aiEnglishCtrl.text;
+                          _isEditingAiAssessment = true;
+                          _aiResponseApproved = false;
+                        });
+                      },
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Edit Insight'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(color: AppColors.borderPrimary),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: _loadingRiskPreview
-                        ? null
-                        : () => _refreshRiskPreview(force: true),
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: const Text('Refresh AI Assessment'),
-                  ),
-                ],
-              ),
-              if (_loadingRiskPreview) ...[
-                const SizedBox(height: 14),
-                const LinearProgressIndicator(minHeight: 3),
-              ],
-              if (_riskPreviewError != null) ...[
-                const SizedBox(height: 14),
-                Text(
-                  _riskPreviewError!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.faintWhite,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.borderPrimary),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Edit Risk Level',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        ChoiceChip(
-                          label: const Text('Low'),
-                          selected: _editableRiskLevel == 'low',
-                          selectedColor:
-                              AppColors.success.withValues(alpha: 0.14),
-                          labelStyle:
-                              const TextStyle(color: AppColors.textPrimary),
-                          onSelected: _isEditingAiAssessment
-                              ? (_) => setState(() {
-                                    _editableRiskLevel = 'low';
-                                    _aiResponseApproved = false;
-                                  })
-                              : null,
-                        ),
-                        ChoiceChip(
-                          label: const Text('High'),
-                          selected: _editableRiskLevel == 'high',
-                          selectedColor:
-                              AppColors.error.withValues(alpha: 0.14),
-                          labelStyle:
-                              const TextStyle(color: AppColors.textPrimary),
-                          onSelected: _isEditingAiAssessment
-                              ? (_) => setState(() {
-                                    _editableRiskLevel = 'high';
-                                    _aiResponseApproved = false;
-                                  })
-                              : null,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.faintWhite,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.borderPrimary),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Risk Factors & Actions',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_editableRiskFactors.isEmpty)
-                      const Text(
-                        'No major risk factors identified from current records.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                          height: 1.5,
-                        ),
-                      )
-                    else
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: _editableRiskFactors.asMap().entries.map(
-                          (e) {
-                            final f = e.value;
-                            final idx = e.key;
-                            final isHigh = f.influence == 'high';
-                            return InputChip(
-                              label: Text('${f.factor} (${f.influence})'),
-                              labelStyle: TextStyle(
-                                fontSize: 12,
-                                fontWeight:
-                                    isHigh ? FontWeight.w700 : FontWeight.w500,
-                                color: isHigh
-                                    ? AppColors.error
-                                    : AppColors.textPrimary,
-                              ),
-                              backgroundColor: isHigh
-                                  ? AppColors.error.withValues(alpha: 0.12)
-                                  : AppColors.success.withValues(alpha: 0.12),
-                              side: BorderSide(
-                                color: isHigh
-                                    ? AppColors.error.withValues(alpha: 0.35)
-                                    : AppColors.success.withValues(alpha: 0.35),
-                              ),
-                              onPressed: _isEditingAiAssessment
-                                  ? () => setState(() {
-                                        _editableRiskFactors[idx] =
-                                            _RiskFactorItem(
-                                          factor: f.factor,
-                                          influence: isHigh ? 'low' : 'high',
-                                          sourceTable: f.sourceTable,
-                                          sourceId: f.sourceId,
-                                        );
-                                        _aiResponseApproved = false;
-                                      })
-                                  : null,
-                              onDeleted: _isEditingAiAssessment
-                                  ? () => setState(() {
-                                        _editableRiskFactors.removeAt(idx);
-                                        _aiResponseApproved = false;
-                                      })
-                                  : null,
-                            );
-                          },
-                        ).toList(),
-                      ),
-                    if (_isEditingAiAssessment) ...[
-                      const SizedBox(height: 12),
-                      TextButton.icon(
-                        onPressed: () => _openAddRiskFactorDialog(),
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Add Risk Factor'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'AI Insights (Editable)',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              if (!_isEditingAiAssessment)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.faintWhite,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.borderPrimary),
-                  ),
-                  child: Text(
-                    content.isEmpty
-                        ? 'AI insights will appear here once the assessment is generated.'
-                        : content,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textPrimary,
-                      height: 1.7,
-                    ),
-                  ),
-                )
-              else
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.borderPrimary),
-                  ),
-                  child: TextField(
-                    controller: _aiAssessmentEditCtrl,
-                    minLines: editorLines,
-                    maxLines: editorLines,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'Edit AI insights only (no duplicate system lists).',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(16),
-                    ),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textPrimary,
-                      height: 1.7,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
                   Expanded(
-                    child: !_isEditingAiAssessment
-                        ? OutlinedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                _aiAssessmentEditCtrl.text =
-                                    _aiAssessmentCtrl.text;
-                                _isEditingAiAssessment = true;
-                                _aiResponseApproved = false;
-                              });
-                            },
-                            icon: const Icon(Icons.edit_outlined, size: 16),
-                            label: const Text('Edit Insights'),
-                          )
-                        : OutlinedButton(
-                            onPressed: () {
-                              setState(() {
-                                _aiAssessmentEditCtrl.text =
-                                    _aiAssessmentCtrl.text;
-                                _editableRiskLevel = _riskSnapshot!.level;
-                                _editableRiskFactors =
-                                    List<_RiskFactorItem>.from(
-                                        _riskSnapshot!.factors);
-                                _isEditingAiAssessment = false;
-                              });
-                            },
-                            child: const Text('Discard Changes'),
-                          ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _isEditingAiAssessment
-                        ? FilledButton(
-                            onPressed: () {
-                              final nextText =
-                                  _aiAssessmentEditCtrl.text.trim();
-                              if (nextText.isEmpty) {
-                                _showMessage('AI insights cannot be empty.');
-                                return;
-                              }
-                              setState(() {
-                                _aiAssessmentCtrl.text = nextText;
-                                _aiAssessmentEdited =
-                                    _aiAssessmentCtrl.text.trim() !=
-                                        (_aiOriginalAssessment ?? '').trim();
-                                _aiResponseApproved = false;
-                                _isEditingAiAssessment = false;
-                              });
-                            },
-                            child: const Text('Save Insights'),
-                          )
-                        : FilledButton.icon(
-                            onPressed: (_riskSnapshot == null ||
-                                    _aiAssessmentCtrl.text.trim().isEmpty ||
-                                    _isEditingAiAssessment)
-                                ? null
-                                : () {
-                                    setState(() => _aiResponseApproved = true);
-                                    _showMessage(
-                                        'AI response approved. You can now save the checkup.');
-                                  },
-                            icon: Icon(_aiResponseApproved
-                                ? Icons.verified_rounded
-                                : Icons.check_circle_outline_rounded),
-                            label: Text(
-                                _aiResponseApproved ? 'Approved' : 'Approve'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _aiResponseApproved
-                                  ? AppColors.success
-                                  : AppColors.brandPrimary,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Chip: AI Generated / Reviewed by Midwife
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: (_aiAssessmentEdited || _aiResponseApproved)
-                          ? AppColors.brandPrimary.withValues(alpha: 0.12)
-                          : (_riskSnapshot?.aiGenerated == true
-                              ? AppColors.info.withValues(alpha: 0.12)
-                              : AppColors.textSecondary.withValues(alpha: 0.12)),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: (_aiAssessmentEdited || _aiResponseApproved)
-                            ? AppColors.brandPrimary.withValues(alpha: 0.4)
-                            : (_riskSnapshot?.aiGenerated == true
-                                ? AppColors.info.withValues(alpha: 0.4)
-                                : AppColors.textSecondary.withValues(alpha: 0.4)),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          (_aiAssessmentEdited || _aiResponseApproved)
-                              ? Icons.verified_user_rounded
-                              : Icons.smart_toy_outlined,
-                          size: 14,
-                          color: (_aiAssessmentEdited || _aiResponseApproved)
-                              ? AppColors.brandPrimary
-                              : (_riskSnapshot?.aiGenerated == true
-                                  ? AppColors.info
-                                  : AppColors.textSecondary),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          (_aiAssessmentEdited || _aiResponseApproved)
-                              ? 'Reviewed by Midwife'
-                              : 'AI Generated',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: (_aiAssessmentEdited || _aiResponseApproved)
-                                ? AppColors.brandPrimary
-                                : (_riskSnapshot?.aiGenerated == true
-                                    ? AppColors.info
-                                    : AppColors.textSecondary),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Icon(
-                    _aiResponseApproved
-                        ? Icons.verified_rounded
-                        : (_aiAnalysisSkipped
-                            ? Icons.skip_next_rounded
-                            : (_aiAssessmentEdited
-                                ? Icons.edit_note_rounded
-                                : Icons.smart_toy_outlined)),
-                    size: 14,
-                    color: _aiResponseApproved
-                        ? AppColors.success
-                        : (_aiAnalysisSkipped
-                            ? AppColors.warning
-                            : (_aiAssessmentEdited
-                                ? AppColors.brandAccent
-                                : AppColors.textSecondary)),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _aiResponseApproved
-                          ? 'AI response approved for final save.'
-                          : (_aiAnalysisSkipped
-                              ? 'AI analysis skipped. Rule-based assessment will be saved.'
-                              : (_aiAssessmentEdited
-                                  ? 'Edited by midwife. Press Approve to enable saving. Changes are logged in AI edit history.'
-                                  : 'Review then press Approve AI Response, or skip AI analysis to save with rule-based assessment only.')),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _aiAnalysisSkipped = true;
+                          final ruleSnapshot = _buildRuleBasedRiskSnapshot();
+                          _syncEditableRiskState(ruleSnapshot, ruleSnapshot.aiAssessment);
+                          _riskSnapshot = ruleSnapshot;
+                        });
+                      },
+                      icon: const Icon(Icons.settings_backup_restore_rounded, size: 16),
+                      label: const Text('Use Default'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(color: AppColors.borderPrimary),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
                   ),
                 ],
               ),
-              if (!_aiResponseApproved && !_aiAnalysisSkipped) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _isEditingAiAssessment
-                        ? null
-                        : () {
-                            setState(() {
-                              _aiAnalysisSkipped = true;
-                              // Use rule-based snapshot if no AI was generated
-                              final ruleSnapshot = _buildRuleBasedRiskSnapshot();
-                              _syncEditableRiskState(ruleSnapshot, ruleSnapshot.aiAssessment);
-                              _riskSnapshot = ruleSnapshot;
-                            });
-                            _showMessage(
-                                'AI analysis skipped. You can now save with rule-based assessment.',
-                                type: AppSnackType.warning);
-                          },
-                    icon: const Icon(Icons.skip_next_rounded, size: 18),
-                    label: const Text('Skip AI Analysis'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.warning,
-                      side: BorderSide(color: AppColors.warning.withValues(alpha: 0.5)),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
-        ),
+        ],
       ],
     );
   }
 
-  Future<void> _openAddRiskFactorDialog() async {
-    final factorCtrl = TextEditingController();
-    String influence = 'low';
-    final added = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setS) {
-            return AlertDialog(
-              title: const Text('Add Risk Factor Chip'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: factorCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Risk factor',
-                      hintText: 'e.g. Elevated BP trend',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: influence,
-                    decoration: const InputDecoration(labelText: 'Influence'),
-                    items: const [
-                      DropdownMenuItem(value: 'low', child: Text('Low')),
-                      DropdownMenuItem(value: 'high', child: Text('High')),
-                    ],
-                    onChanged: (v) => setS(() => influence = v ?? 'low'),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (factorCtrl.text.trim().isEmpty) return;
-                    Navigator.pop(ctx, true);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
 
-    if (added == true && mounted) {
-      setState(() {
-        _editableRiskFactors.add(_RiskFactorItem(
-          factor: factorCtrl.text.trim(),
-          influence: influence,
-          sourceTable: 'prenatal_checkups',
-        ));
-        _aiResponseApproved = false;
-      });
-    }
-    factorCtrl.dispose();
-  }
-
-  Future<void> _openAddSuggestedActionDialog() async {
-    final actionCtrl = TextEditingController();
-    final added = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Add Suggested Action'),
-          content: TextField(
-            controller: actionCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Action',
-              hintText: 'e.g. Schedule follow-up in 2 weeks',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (actionCtrl.text.trim().isEmpty) return;
-                Navigator.pop(ctx, true);
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (added == true && mounted) {
-      setState(() {
-        _editableSuggestedActions.add(actionCtrl.text.trim());
-        _riskSnapshot = _riskSnapshot?.copyWith(
-          suggestedActions: List<String>.from(_editableSuggestedActions),
-        );
-        _aiResponseApproved = false;
-      });
-    }
-    actionCtrl.dispose();
-  }
 
   bool get _hasEnteredData =>
       _weightCtrl.text.trim().isNotEmpty ||
@@ -3860,25 +4263,16 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   Future<bool> _showSkipCheckupDialog() async {
     final result = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: const Text('Skip Initial Checkup?'),
-        content: const Text(
-          'The initial prenatal checkup is required to complete the '
-          'mother\'s registration. Skipping will leave her record '
-          'incomplete.\n\nAre you sure you want to skip?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Continue Checkup'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Skip'),
-          ),
-        ],
+      builder: (_) => ConfirmationDialogBox(
+        title: 'Skip Initial Checkup?',
+        subtitle:
+            'The initial prenatal checkup is required to complete the '
+            'mother\'s registration. Skipping will leave her record '
+            'incomplete.\n\nAre you sure you want to skip?',
+        cancelText: 'Continue Checkup',
+        confirmText: 'Skip',
+        onCancel: () => Navigator.pop(context, false),
+        onConfirm: () => Navigator.pop(context, true),
       ),
     );
     return result ?? false;
@@ -3888,25 +4282,27 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     if (!_hasEnteredData) return true;
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Discard changes?'),
-        content: const Text(
-          'You have unsaved prenatal checkup data. Are you sure you want to go back?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Discard'),
-          ),
-        ],
+      builder: (_) => ConfirmationDialogBox(
+        title: 'Discard changes?',
+        subtitle:
+            'You have unsaved prenatal checkup data. Are you sure you want to go back?',
+        cancelText: 'Cancel',
+        confirmText: 'Discard',
+        onCancel: () => Navigator.pop(context, false),
+        onConfirm: () => Navigator.pop(context, true),
       ),
     );
     return result ?? false;
+  }
+
+  void _backOrPop() async {
+    if (widget.isInitialRegistration) {
+      final shouldSkip = await _showSkipCheckupDialog();
+      if (shouldSkip && mounted) Navigator.pop(context);
+    } else {
+      final shouldDiscard = await _showDiscardCheckupDialog();
+      if (shouldDiscard && mounted) Navigator.pop(context);
+    }
   }
 
   @override
@@ -3915,17 +4311,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        if (widget.isInitialRegistration) {
-          final shouldSkip = await _showSkipCheckupDialog();
-          if (shouldSkip && mounted) {
-            Navigator.pop(context);
-          }
-        } else {
-          final shouldDiscard = await _showDiscardCheckupDialog();
-          if (shouldDiscard && mounted) {
-            Navigator.pop(context);
-          }
-        }
+        _backOrPop();
       },
       child: Scaffold(
         backgroundColor: AppColors.bgPrimary,
@@ -3934,70 +4320,80 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             children: [
               SecondaryHeader(
                 title: 'Add Prenatal Checkup',
-                onBack: widget.isInitialRegistration ? null : () => Navigator.pop(context),
+                onBack: _backOrPop,
               ),
-              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: (_step + 1) / _totalSteps,
+                backgroundColor: AppColors.borderPrimary,
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                minHeight: 3,
+              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Column(
-                  children: [
-                    ProgressiveStepIndicator(currentStep: _step, totalSteps: _totalSteps),
-                    const SizedBox(height: 10),
-                    _stepTitle(),
-                  ],
-                ),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: _stepTitle(),
               ),
+              const SizedBox(height: 10),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                   child: _buildStepContent(),
                 ),
               ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  children: [
-                    if (_step > 0)
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _submitting ? null : _back,
-                          child: const Text('Back'),
-                        ),
-                      ),
-                    if (_step > 0) const SizedBox(width: 8),
+            ],
+          ),
+        ),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 14,
+                  offset: const Offset(0, -4))
+            ],
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                children: [
+                  if (_step > 0) ...[
                     Expanded(
-                      flex: 2,
-                      child: FilledButton(
-                        onPressed: _submitting
-                            ? null
-                            : (_step == _totalSteps - 1
-                                ? ((_aiResponseApproved || _aiAnalysisSkipped) ? _submit : null)
-                                : _next),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.brandPrimary,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: _submitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Text(_step == _totalSteps - 1
-                                ? ((_aiResponseApproved || _aiAnalysisSkipped)
-                                    ? 'Save Checkup'
-                                    : 'Approve AI to Save')
-                                : 'Next'),
+                      child: MainButton(
+                        label: 'Back',
+                        leftIcon: Icons.arrow_back_ios_new_rounded,
+                        isWhiteVariant: true,
+                        onPressed: _submitting ? null : _back,
                       ),
                     ),
+                    const SizedBox(width: 12),
                   ],
-                ),
+                  Expanded(
+                    flex: (_step > 0) ? 2 : 1,
+                    child: _step == _totalSteps - 1
+                        ? MainButton(
+                            label: (_aiResponseApproved || _aiAnalysisSkipped)
+                                ? 'Save Checkup'
+                                : 'Approve AI to Save',
+                            rightIcon: (_aiResponseApproved || _aiAnalysisSkipped)
+                                ? Icons.check_rounded
+                                : Icons.arrow_forward_ios_rounded,
+                            onPressed: _submitting
+                                ? null
+                                : ((_aiResponseApproved || _aiAnalysisSkipped)
+                                    ? _submit
+                                    : null),
+                          )
+                        : MainButton(
+                            label: 'Next',
+                            rightIcon: Icons.arrow_forward_ios_rounded,
+                            onPressed: _submitting ? null : _next,
+                          ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

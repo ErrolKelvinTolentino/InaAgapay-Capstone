@@ -606,6 +606,135 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     return null;
   }
 
+  // ── Official DOH/Annex P Risk Factors ──
+  // Only factors in this list flip is_high_risk to true.
+  List<String> _evaluatePregnancyRisk() {
+    final factors = <String>[];
+
+    // 1. Demographics — Adolescent pregnancy
+    if (_calculatedAge != null && _calculatedAge! < 19) {
+      factors.add('Maternal age below 19 years');
+    }
+
+    // 1. Demographics — Advanced maternal age (first pregnancy only per Annex P)
+    if (_calculatedAge != null &&
+        _calculatedAge! >= 35 &&
+        _pastPregnancies.isEmpty) {
+      factors.add('First pregnancy age ≥ 35 years');
+    }
+
+    // 2. Multiple gestation
+    final fetalCount = int.tryParse(_fetalCountCtrl.text.trim()) ?? 1;
+    if (fetalCount > 1) {
+      factors.add('Multiple gestation');
+    }
+
+    // 3. Short interpregnancy interval
+    if (_lmp != null && _pastPregnancies.isNotEmpty) {
+      DateTime? mostRecentOutcome;
+      for (final p in _pastPregnancies) {
+        final latest = p.latestOutcomeDate;
+        if (mostRecentOutcome == null || latest.isAfter(mostRecentOutcome)) {
+          mostRecentOutcome = latest;
+        }
+      }
+      if (mostRecentOutcome != null) {
+        final gapDays = _lmp!.difference(mostRecentOutcome).inDays;
+        if (gapDays > 0 && gapDays < 180) {
+          factors.add('Short interpregnancy interval');
+        }
+      }
+    }
+
+    // 4. Obstetric History
+    int miscarriages = 0;
+    bool hasStillbirth = false;
+    bool hasCs = false;
+
+    for (final p in _pastPregnancies) {
+      for (final outcome in p.outcomes) {
+        final o = outcome.outcome.toLowerCase();
+        if (o == 'miscarriage' || o == 'abortion') miscarriages++;
+        if (o == 'stillbirth') hasStillbirth = true;
+
+        final method = outcome.deliveryMethod?.toLowerCase() ?? '';
+        if (method.contains('cesarean') || method == 'cs') hasCs = true;
+      }
+    }
+    if (miscarriages >= 3) {
+      factors.add('History of 3 or more miscarriages/abortions');
+    }
+    if (hasStillbirth) factors.add('History of stillbirth');
+    if (hasCs) {
+      factors.add('History of major obstetric surgery (Cesarean section)');
+    }
+
+    // 5. Medical Conditions — ACTIVE / ONGOING only
+    final dohConditions = [
+      'Hypertension', 'Preeclampsia', 'Eclampsia',
+      'Heart disease', 'Cardiovascular',
+      'Diabetes', 'Thyroid', 'Asthma', 'Epilepsy',
+      'Renal', 'Kidney', 'Bleeding', 'Clotting', 'Hemophilia',
+    ];
+    for (final mc in _medicalConditions) {
+      final st = mc.status.toLowerCase();
+      if (st != 'active' && st != 'ongoing') continue;
+      final name = mc.conditionName.toLowerCase();
+      if (dohConditions.any((c) => name.contains(c.toLowerCase()))) {
+        factors.add('Pre-Existing: ${mc.conditionName}');
+      }
+    }
+
+    // 6. Morbid obesity (BMI >= 40, pre-pregnancy weight only)
+    if (_heightCtrl.text.isNotEmpty &&
+        _prePregnancyWeightCtrl.text.isNotEmpty) {
+      final heightCm = double.tryParse(_heightCtrl.text) ?? 0;
+      final weightKg = double.tryParse(_prePregnancyWeightCtrl.text) ?? 0;
+      if (heightCm > 0 && weightKg > 0) {
+        final heightM = heightCm / 100;
+        final bmi = weightKg / (heightM * heightM);
+        if (bmi >= 40) factors.add('Morbid obesity');
+      }
+    }
+
+    return factors;
+  }
+
+  // ── Monitoring Insights (non-risk, informational only) ──
+  // These do NOT flip is_high_risk and are not stored in risk_factors.
+  List<String> _evaluateMonitoringInsights() {
+    final insights = <String>[];
+
+    // AMA with previous pregnancies — closer monitoring, not official risk
+    if (_calculatedAge != null &&
+        _calculatedAge! >= 35 &&
+        _pastPregnancies.isNotEmpty) {
+      insights.add(
+          'Maternal age ≥ 35 — closer prenatal monitoring recommended');
+    }
+
+    // Elevated BMI (30–39.9) or underweight — monitoring only
+    if (_heightCtrl.text.isNotEmpty &&
+        _prePregnancyWeightCtrl.text.isNotEmpty) {
+      final heightCm = double.tryParse(_heightCtrl.text) ?? 0;
+      final weightKg = double.tryParse(_prePregnancyWeightCtrl.text) ?? 0;
+      if (heightCm > 0 && weightKg > 0) {
+        final heightM = heightCm / 100;
+        final bmi = weightKg / (heightM * heightM);
+        if (bmi >= 30 && bmi < 40) {
+          insights.add(
+              'Elevated pre-pregnancy BMI — weight monitoring recommended');
+        }
+        if (bmi < 18.5) {
+          insights.add(
+              'Low pre-pregnancy BMI — nutritional monitoring recommended');
+        }
+      }
+    }
+
+    return insights;
+  }
+
   String? _validateLmp(DateTime lmp) {
     final now = DateTime.now();
     final twoWeeksAgo = now.subtract(const Duration(days: 2 * 7));
@@ -1339,6 +1468,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           fetalCount: int.tryParse(_fetalCountCtrl.text.trim()) ?? 1,
           prePregnancyWeight:
               double.tryParse(_prePregnancyWeightCtrl.text.trim()),
+          riskFactors: _evaluatePregnancyRisk(),
         );
       } else {
         result = await SupabaseService.addMotherFullByMidwifeWithAutoPassword(
@@ -1372,6 +1502,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           fetalCount: int.tryParse(_fetalCountCtrl.text.trim()) ?? 1,
           prePregnancyWeight:
               double.tryParse(_prePregnancyWeightCtrl.text.trim()),
+          riskFactors: _evaluatePregnancyRisk(),
         );
       }
 
@@ -1386,7 +1517,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             ? 'Mother account updated successfully!'
             : (hasRealEmail && result['email_sent'] == true
                 ? 'Mother account created successfully!\n\nA temporary password has been sent to ${_emailCtrl.text.trim()}.'
-                : 'Mother account created successfully!\n\nTemporary password: ${result['generated_password']}\n\nPlease provide this password to the mother.');
+                : 'Mother account created successfully!\n\nThe mother can register online later. Her account will sync automatically if she provides the same contact number.');
 
         await showDialog(
           context: context,
@@ -4878,6 +5009,193 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                           fontSize: 12, color: AppColors.textSecondary)))
             ])),
         const SizedBox(height: 20),
+        Builder(
+          builder: (context) {
+            final riskFactors = _evaluatePregnancyRisk();
+            final insights = _evaluateMonitoringInsights();
+            final isHighRisk = riskFactors.isNotEmpty;
+            return Column(
+              children: [
+                // ── Tier 1: Official DOH Risk Assessment ──
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isHighRisk
+                        ? AppColors.error.withValues(alpha: 0.05)
+                        : AppColors.success.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: isHighRisk ? AppColors.error : AppColors.success),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isHighRisk
+                                ? Icons.warning_rounded
+                                : Icons.check_circle_rounded,
+                            color:
+                                isHighRisk ? AppColors.error : AppColors.success,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Pregnancy Risk Assessment',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: isHighRisk
+                                  ? AppColors.error
+                                  : AppColors.success,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 28),
+                        child: Text(
+                          'Based on DOH/PhilHealth Annex P criteria',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade500,
+                              fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Text(
+                            'Status: ',
+                            style: TextStyle(
+                                fontSize: 13, color: AppColors.textSecondary),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color:
+                                  isHighRisk ? AppColors.error : AppColors.success,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              isHighRisk ? 'HIGH RISK' : 'LOW RISK',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (isHighRisk) ...[
+                        const SizedBox(height: 14),
+                        Divider(color: AppColors.error.withValues(alpha: 0.15), height: 1),
+                        const SizedBox(height: 14),
+                        const Text('Identified Risk Factors:',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary)),
+                        const SizedBox(height: 8),
+                        ...riskFactors.map((f) => Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 5, right: 8),
+                                    child: Icon(Icons.circle,
+                                        size: 5, color: AppColors.error),
+                                  ),
+                                  Expanded(
+                                      child: Text(f,
+                                          style: const TextStyle(
+                                              fontSize: 13,
+                                              color: AppColors.textPrimary))),
+                                ],
+                              ),
+                            )),
+                      ],
+                      if (!isHighRisk) ...[
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 0),
+                          child: Text(
+                            'No official DOH risk factors were identified based on the information provided.',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // ── Tier 2: Monitoring Insights (amber, non-risk) ──
+                if (insights.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: AppColors.warning.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.visibility_outlined,
+                                size: 18,
+                                color: AppColors.warning),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Monitoring Insights',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ...insights.map((i) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.only(top: 5, right: 8),
+                                    child: Icon(Icons.circle,
+                                        size: 4, color: AppColors.warning),
+                                  ),
+                                  Expanded(
+                                      child: Text(i,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade700))),
+                                ],
+                              ),
+                            )),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+              ],
+            );
+          },
+        ),
         _buildClickableSummarySection(
             'Personal Information',
             [
@@ -4952,22 +5270,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         _buildExpandableRecordsSection('Past Pregnancies',
             _pastPregnancies.map((p) => _pastPregnancyTitle(p)).toList(),
             onTap: () => _jumpToStep(7)),
-        const SizedBox(height: 12),
-        if (_riskWarning != null)
-          Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.warning.withValues(alpha: 0.3))),
-              child: Row(children: [
-                Icon(Icons.warning_amber, color: AppColors.warning),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: Text(_riskWarning!,
-                        style: const TextStyle(color: AppColors.warning)))
-              ])),
       ],
     );
   }

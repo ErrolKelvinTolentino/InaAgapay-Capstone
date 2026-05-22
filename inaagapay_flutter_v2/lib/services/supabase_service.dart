@@ -909,6 +909,7 @@ class SupabaseService {
     List<Map<String, dynamic>> pastPregnancies = const [],
     int fetalCount = 1,
     double? prePregnancyWeight,
+    List<String> riskFactors = const [],
   }) async {
     try {
       final motherResponse = await client
@@ -976,12 +977,37 @@ class SupabaseService {
               'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
               'pre_pregnancy_weight': prePregnancyWeight,
               'status': 'ongoing',
+              'pregnancy_risk_level': riskFactors.isNotEmpty ? 'high' : 'low',
             })
             .select('pregnancy_id')
             .maybeSingle();
 
         if (pregRow != null) {
           pregnancyId = pregRow['pregnancy_id'] as int;
+
+          if (riskFactors.isNotEmpty) {
+            final assessmentRow = await client
+                .from('pregnancy_risk_assessments')
+                .insert({
+                  'pregnancy_id': pregnancyId,
+                  'risk_level': 'high',
+                  'assessed_by_ai': false,
+                })
+                .select('pregnancy_risk_id')
+                .maybeSingle();
+
+            if (assessmentRow != null) {
+              final riskId = assessmentRow['pregnancy_risk_id'] as int;
+              await client.from('pregnancy_risk_factors').insert(
+                    riskFactors
+                        .map((f) => {
+                              'pregnancy_risk_id': riskId,
+                              'factor': f,
+                            })
+                        .toList(),
+                  );
+            }
+          }
         }
       }
 
@@ -1071,6 +1097,7 @@ class SupabaseService {
     List<Map<String, dynamic>> pastPregnancies = const [],
     int fetalCount = 1,
     double? prePregnancyWeight,
+    List<String> riskFactors = const [],
   }) async {
     try {
       final emailFree = await isEmailAvailable(email);
@@ -1165,13 +1192,37 @@ class SupabaseService {
               'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
               'pre_pregnancy_weight': prePregnancyWeight,
               'status': 'ongoing',
-              if (prePregnancyWeight != null) 'pre_pregnancy_weight': prePregnancyWeight,
+              'pregnancy_risk_level': riskFactors.isNotEmpty ? 'high' : 'low',
             })
             .select('pregnancy_id')
             .maybeSingle();
 
         if (pregRow != null) {
           pregnancyId = pregRow['pregnancy_id'] as int;
+
+          if (riskFactors.isNotEmpty) {
+            final assessmentRow = await client
+                .from('pregnancy_risk_assessments')
+                .insert({
+                  'pregnancy_id': pregnancyId,
+                  'risk_level': 'high',
+                  'assessed_by_ai': false,
+                })
+                .select('pregnancy_risk_id')
+                .maybeSingle();
+
+            if (assessmentRow != null) {
+              final riskId = assessmentRow['pregnancy_risk_id'] as int;
+              await client.from('pregnancy_risk_factors').insert(
+                    riskFactors
+                        .map((f) => {
+                              'pregnancy_risk_id': riskId,
+                              'factor': f,
+                            })
+                        .toList(),
+                  );
+            }
+          }
         }
       }
 
