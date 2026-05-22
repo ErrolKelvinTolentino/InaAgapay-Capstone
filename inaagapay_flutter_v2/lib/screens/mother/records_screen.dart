@@ -22,6 +22,7 @@ class RecordsScreen extends StatefulWidget {
 class _RecordsScreenState extends State<RecordsScreen>
     with SingleTickerProviderStateMixin {
   bool _isLoading = true;
+  bool _isOpeningRecord = false;
   String? _errorMessage;
   int? _motherId;
 
@@ -131,7 +132,8 @@ class _RecordsScreenState extends State<RecordsScreen>
     if (pregnancyIds.isNotEmpty) {
       final checkupsResponse = await SupabaseService.client
           .from('prenatal_checkups')
-          .select('*, weight_gain:weight_gain_evaluations (evaluation_id, mode, status, confidence, message, flags, actual_gain, weekly_gain)')
+          .select(
+              '*, weight_gain:weight_gain_evaluations (evaluation_id, mode, status, confidence, message, flags, actual_gain, weekly_gain)')
           .inFilter('pregnancy_id', pregnancyIds)
           .order('checkup_datetime', ascending: false);
 
@@ -170,9 +172,8 @@ class _RecordsScreenState extends State<RecordsScreen>
           final checkupId = symbol['prenatal_checkup_id'] as int?;
           if (checkupId == null) continue;
           final symptomType = symbol['symptom_type'] as Map<String, dynamic>?;
-          final name =
-              symptomType?['symptom_name']?.toString() ??
-                  _t('Unknown symptom', 'Hindi alam na sintomas');
+          final name = symptomType?['symptom_name']?.toString() ??
+              _t('Unknown symptom', 'Hindi alam na sintomas');
           final risk = symptomType?['risk_category']?.toString() ??
               _t('unknown', 'hindi alam');
           final note = (symbol['notes'] as String?)?.trim();
@@ -242,6 +243,20 @@ class _RecordsScreenState extends State<RecordsScreen>
   String _formatInputValue(dynamic value) {
     final formatted = _formatValue(value);
     return formatted == '—' ? _notInputted() : formatted;
+  }
+
+  bool _isSameDay(dynamic dateVal1, dynamic dateVal2) {
+    if (dateVal1 == null || dateVal2 == null) return false;
+    try {
+      var d1 = DateTime.tryParse(dateVal1.toString());
+      var d2 = DateTime.tryParse(dateVal2.toString());
+      if (d1 == null || d2 == null) return false;
+      d1 = d1.toLocal();
+      d2 = d2.toLocal();
+      return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
+    } catch (_) {
+      return false;
+    }
   }
 
   List<String> _parseImageUrls(dynamic imageField) {
@@ -674,9 +689,9 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                 ScaffoldMessenger.of(context)
                                                     .showSnackBar(
                                                   SnackBar(
-                                                    content: Text(
-                                                        _t('AI insights updated locally',
-                                                            'Na-update ang AI na pagsusuri sa lokal')),
+                                                    content: Text(_t(
+                                                        'AI insights updated locally',
+                                                        'Na-update ang AI na pagsusuri sa lokal')),
                                                     backgroundColor:
                                                         AppColors.success,
                                                   ),
@@ -701,8 +716,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      _t(
-                                          'Note: This is AI-generated analysis for informational purposes only.',
+                                      _t('Note: This is AI-generated analysis for informational purposes only.',
                                           'Paalala: Ang pagsusuring ito ay gawa ng AI at para lamang sa impormasyon.'),
                                       style: const TextStyle(
                                         fontSize: 11,
@@ -741,7 +755,8 @@ class _RecordsScreenState extends State<RecordsScreen>
     final remarks = ultrasound['remarks']?.toString().toLowerCase() ?? '';
     final buffer = StringBuffer();
 
-    buffer.write('${_t('Ultrasound AI Insights', 'AI na Pagsusuri ng Ultrasound')}:\n\n');
+    buffer.write(
+        '${_t('Ultrasound AI Insights', 'AI na Pagsusuri ng Ultrasound')}:\n\n');
 
     if (remarks.contains('normal') || remarks.contains('healthy')) {
       buffer.write(_t(
@@ -761,7 +776,8 @@ class _RecordsScreenState extends State<RecordsScreen>
           'Impormasyong Diagnostic: Nagbibigay ang ultrasound ng mahalagang impormasyon.\n\n'));
     }
 
-    buffer.write('${_t('Key Recommendations', 'Mahahalagang Rekomendasyon')}:\n');
+    buffer
+        .write('${_t('Key Recommendations', 'Mahahalagang Rekomendasyon')}:\n');
     buffer.write(
         '• ${_t('Discuss findings with your healthcare provider', 'Ipag-usap ang resulta sa iyong healthcare provider')}\n');
     buffer.write(
@@ -993,7 +1009,8 @@ class _RecordsScreenState extends State<RecordsScreen>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -1028,7 +1045,9 @@ class _RecordsScreenState extends State<RecordsScreen>
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Headline(text: _t('Failed to Load Records', 'Hindi Na-load ang Records')),
+                  Headline(
+                      text: _t('Failed to Load Records',
+                          'Hindi Na-load ang Records')),
                   const SizedBox(height: 8),
                   Text(
                     _errorMessage!,
@@ -1099,7 +1118,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                         items: [
                           DropdownMenuItem(
                               value: 'all',
-                              child: Text(_t('All Records', 'Lahat ng Records'))),
+                              child:
+                                  Text(_t('All Records', 'Lahat ng Records'))),
                           DropdownMenuItem(
                               value: 'checkup',
                               child:
@@ -1212,18 +1232,16 @@ class _RecordsScreenState extends State<RecordsScreen>
                           child: SizedBox(
                             width: double.infinity,
                             child: OutlinedButton.icon(
-                              onPressed: () => setState(
-                                  () => _displayCount += _pageSize),
-                              icon:
-                                  const Icon(Icons.expand_more, size: 18),
+                              onPressed: () =>
+                                  setState(() => _displayCount += _pageSize),
+                              icon: const Icon(Icons.expand_more, size: 18),
                               label: Text(
                                 _t(
                                   'Load More ($nextBatch of $remaining remaining)',
                                   'Mag-load Pa ($nextBatch sa $remaining natitira)',
                                 ),
                                 style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500),
+                                    fontSize: 13, fontWeight: FontWeight.w500),
                               ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.brandPrimary,
@@ -1233,8 +1251,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                               ),
                             ),
                           ),
@@ -1245,32 +1263,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                       final isCheckup = record['record_type'] == 'checkup';
                       final isUltrasound =
                           record['record_type'] == 'ultrasound';
+                      final isLabTest = record['record_type'] == 'labtest';
 
-                      // Build brief summary for the card
-                      String briefSummary = '';
-                      if (isCheckup) {
-                        final bpSys = _formatValue(record['blood_pressure_systolic']);
-                        final bpDia = _formatValue(record['blood_pressure_diastolic']);
-                        final weight = _formatValue(record['checkup_weight']);
-                        final parts = <String>[];
-                        if (bpSys != '\u2014' && bpDia != '\u2014') {
-                          parts.add('BP $bpSys/$bpDia');
-                        }
-                        if (weight != '\u2014') {
-                          parts.add('${_t('Weight', 'Timbang')} ${weight}kg');
-                        }
-                        briefSummary = parts.join(', ');
-                      } else if (isUltrasound) {
-                        final remarks = record['remarks']?.toString().trim() ?? '';
-                        if (remarks.isNotEmpty && remarks.length > 60) {
-                          briefSummary = '${remarks.substring(0, 57)}...';
-                        } else if (remarks.isNotEmpty) {
-                          briefSummary = remarks;
-                        }
-                      } else {
-                        final labType = _formatValue(record['lab_test_type']);
-                        if (labType != '\u2014') briefSummary = labType;
-                      }
 
                       // Type badge color and label
                       final typeLabel = isCheckup
@@ -1318,7 +1312,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 // Content
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       // Title row with type badge
                                       Row(
@@ -1326,11 +1321,15 @@ class _RecordsScreenState extends State<RecordsScreen>
                                           Expanded(
                                             child: Text(
                                               isCheckup
-                                                  ? _t('Prenatal Checkup', 'Prenatal Checkup')
+                                                  ? _t('Prenatal Checkup',
+                                                      'Prenatal Checkup')
                                                   : isUltrasound
-                                                      ? _t('Ultrasound', 'Ultrasound')
-                                                      : (record['lab_test_type'] ??
-                                                          _t('Lab Test', 'Lab Test')),
+                                                      ? _t('Ultrasound',
+                                                          'Ultrasound')
+                                                      : (record[
+                                                              'lab_test_type'] ??
+                                                          _t('Lab Test',
+                                                              'Lab Test')),
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.w600,
                                                 fontSize: 14,
@@ -1342,8 +1341,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                                             padding: const EdgeInsets.symmetric(
                                                 horizontal: 8, vertical: 3),
                                             decoration: BoxDecoration(
-                                              color: typeColor.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(10),
+                                              color: typeColor.withValues(
+                                                  alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
                                             ),
                                             child: Text(
                                               typeLabel,
@@ -1361,14 +1362,11 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       Row(
                                         children: [
                                           const Icon(Icons.calendar_today,
-                                              size: 12, color: AppColors.textSecondary),
+                                              size: 12,
+                                              color: AppColors.textSecondary),
                                           const SizedBox(width: 4),
                                           Text(
-                                            isCheckup
-                                                ? _formatDateTime(record['checkup_datetime'])
-                                                : _formatDate(isUltrasound
-                                                    ? record['ultrasound_date']
-                                                    : record['lab_test_date']),
+                                            _formatDateTime(record['created_at'] ?? record['createdAt'] ?? record['checkup_datetime']),
                                             style: const TextStyle(
                                               fontSize: 12,
                                               color: AppColors.textSecondary,
@@ -1376,30 +1374,32 @@ class _RecordsScreenState extends State<RecordsScreen>
                                           ),
                                         ],
                                       ),
-                                      // Brief summary
-                                      if (briefSummary.isNotEmpty) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          briefSummary,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.textPrimary,
+                                      if (isUltrasound || isLabTest) ...[
+                                        if (!_isSameDay(
+                                          record['created_at'] ?? record['createdAt'],
+                                          isUltrasound
+                                              ? record['ultrasound_date']
+                                              : record['lab_test_date'],
+                                        )) ...[
+                                          const SizedBox(height: 3),
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.watch_later,
+                                                  size: 12,
+                                                  color: AppColors.textSecondary),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '${_t('Conducted on', 'Isinagawa noong')} ${_formatDate(isUltrasound ? record['ultrasound_date'] : record['lab_test_date'])}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: AppColors.textSecondary,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                        ],
                                       ],
-                                      if (record['health_worker_name'] != null) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '${_t('By', 'Ni')}: ${record['health_worker_name']}',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                      ],
+
                                     ],
                                   ),
                                 ),
@@ -1416,291 +1416,351 @@ class _RecordsScreenState extends State<RecordsScreen>
                             ),
                           ),
                           onTap: () async {
-                            if (isCheckup) {
-                              final bpSys = _formatInputValue(
-                                  record['blood_pressure_systolic']);
-                              final bpDia = _formatInputValue(
-                                  record['blood_pressure_diastolic']);
-                              final checkupId = record['prenatal_checkup_id'];
-                              String? aiAnalysis;
-                              String? riskLevel;
-                              String riskFactors = '';
-                              List<String> riskFactorList = [];
-                              List<String> suggestedActionsList = [];
-                              String medicationPlansSummary = _t('None', 'Wala');
-                              String givenMedicationsSummary = _t('None', 'Wala');
-                              String ferrousSummary =
-                                  _t('Not given', 'Hindi ibinigay');
-                              String calciumSummary =
-                                  _t('Not given', 'Hindi ibinigay');
+                            if (_isOpeningRecord) return;
+                            setState(() => _isOpeningRecord = true);
+                            bool hasClosedLoading = false;
 
-                              if (checkupId is int) {
-                                final checkupDetails =
-                                    await _fetchCheckupDetails(
-                                        checkupId, record['checkup_datetime']);
-                                if (checkupDetails != null) {
-                                  riskLevel =
-                                      checkupDetails['riskLevel'] as String?;
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (context) => const Center(
+                                child: CircularProgressIndicator(
+                                    color: AppColors.brandPrimary),
+                              ),
+                            );
 
-                                  final rf = checkupDetails['riskFactors']
-                                          as String? ??
-                                      '';
-                                  if (rf.trim().isNotEmpty) {
-                                    riskFactors = rf;
-                                    riskFactorList = rf
-                                        .split('; ')
-                                        .where((s) => s.trim().isNotEmpty)
-                                        .toList();
+                            try {
+                              if (isCheckup) {
+                                final bpSys = _formatInputValue(
+                                    record['blood_pressure_systolic']);
+                                final bpDia = _formatInputValue(
+                                    record['blood_pressure_diastolic']);
+                                final checkupId = record['prenatal_checkup_id'];
+                                String? aiAnalysis;
+                                String? riskLevel;
+                                String riskFactors = '';
+                                List<String> riskFactorList = [];
+                                List<String> suggestedActionsList = [];
+                                String medicationPlansSummary =
+                                    _t('None', 'Wala');
+                                String givenMedicationsSummary =
+                                    _t('None', 'Wala');
+                                String ferrousSummary =
+                                    _t('Not given', 'Hindi ibinigay');
+                                String calciumSummary =
+                                    _t('Not given', 'Hindi ibinigay');
+
+                                if (checkupId is int) {
+                                  final checkupDetails =
+                                      await _fetchCheckupDetails(checkupId,
+                                          record['checkup_datetime']);
+                                  if (checkupDetails != null) {
+                                    riskLevel =
+                                        checkupDetails['riskLevel'] as String?;
+
+                                    final rf = checkupDetails['riskFactors']
+                                            as String? ??
+                                        '';
+                                    if (rf.trim().isNotEmpty) {
+                                      riskFactors = rf;
+                                      riskFactorList = rf
+                                          .split('; ')
+                                          .where((s) => s.trim().isNotEmpty)
+                                          .toList();
+                                    }
+
+                                    // PRIMARY SOURCE: Database AI response
+                                    aiAnalysis =
+                                        checkupDetails['aiResponse'] as String?;
+
+                                    // FALLBACK: MotherProfileService
+                                    if (aiAnalysis == null ||
+                                        aiAnalysis!.trim().isEmpty) {
+                                      aiAnalysis = await MotherProfileService
+                                          .getCheckupAIAnalysis(checkupId);
+                                    }
+
+                                    // NO FALLBACK to _generatePrenatalAIInsights
+                                    // If still empty, leave as null (no AI section shown)
+
+                                    medicationPlansSummary =
+                                        checkupDetails['medicationPlans']
+                                            as String;
+                                    givenMedicationsSummary =
+                                        checkupDetails['givenMedications']
+                                            as String;
+                                    ferrousSummary =
+                                        checkupDetails['ferrousQuantity']
+                                            as String;
+                                    calciumSummary =
+                                        checkupDetails['calciumQuantity']
+                                            as String;
                                   }
-
-                                  // PRIMARY SOURCE: Database AI response
-                                  aiAnalysis =
-                                      checkupDetails['aiResponse'] as String?;
-
-                                  // FALLBACK: MotherProfileService
-                                  if (aiAnalysis == null ||
-                                      aiAnalysis!.trim().isEmpty) {
-                                    aiAnalysis = await MotherProfileService
-                                        .getCheckupAIAnalysis(checkupId);
-                                  }
-
-                                  // NO FALLBACK to _generatePrenatalAIInsights
-                                  // If still empty, leave as null (no AI section shown)
-
-                                  medicationPlansSummary =
-                                      checkupDetails['medicationPlans']
-                                          as String;
-                                  givenMedicationsSummary =
-                                      checkupDetails['givenMedications']
-                                          as String;
-                                  ferrousSummary =
-                                      checkupDetails['ferrousQuantity']
-                                          as String;
-                                  calciumSummary =
-                                      checkupDetails['calciumQuantity']
-                                          as String;
                                 }
-                              }
 
-                              final symptomSummary = _checkupSymptomSummaries[
-                                      record['prenatal_checkup_id'] as int? ??
-                                          -1] ??
-                                  _noneRecorded();
-                              final fetalCount = (_pregnancyFetalCounts[
-                                          record['pregnancy_id'] as int? ?? -1]
-                                      ?.toString()) ??
-                                  _notInputted();
-                              final riskLevelValue = (riskLevel != null &&
-                                      riskLevel.trim().isNotEmpty)
-                                  ? riskLevel
-                                  : '';
-                              final riskFactorsValue =
-                                  riskFactors.trim().isNotEmpty
-                                      ? riskFactors
-                                      : '';
+                                final symptomSummary = _checkupSymptomSummaries[
+                                        record['prenatal_checkup_id'] as int? ??
+                                            -1] ??
+                                    _noneRecorded();
+                                final fetalCount = (_pregnancyFetalCounts[
+                                            record['pregnancy_id'] as int? ??
+                                                -1]
+                                        ?.toString()) ??
+                                    _notInputted();
+                                final riskLevelValue = (riskLevel != null &&
+                                        riskLevel.trim().isNotEmpty)
+                                    ? riskLevel
+                                    : '';
+                                final riskFactorsValue =
+                                    riskFactors.trim().isNotEmpty
+                                        ? riskFactors
+                                        : '';
 
-                              _showRecordDetails(
-                                title: _t('Prenatal Checkup', 'Prenatal Checkup'),
-                                subtitle:
-                                    _formatDateTime(record['checkup_datetime']),
-                                icon: Icons.medical_services,
-                                rows: [
-                                  MapEntry(
-                                      _t('Date', 'Petsa'),
-                                      record['checkup_datetime'] == null
-                                          ? _notInputted()
-                                          : _formatDateTime(
-                                              record['checkup_datetime'])),
-                                  MapEntry(
-                                      _t('Fetal Count', 'Bilang ng Sanggol'),
-                                      fetalCount),
-                                  MapEntry(
-                                      _t('Age of Gestation',
-                                          'Edad ng Pagbubuntis'),
-                                      _formatInputValue(
-                                          record['age_of_gestation'])),
-                                  MapEntry(
-                                      _t('Weight (kg)', 'Timbang (kg)'),
-                                      _formatInputValue(
-                                          record['checkup_weight'])),
-                                  MapEntry(
-                                      _t('Blood Pressure', 'Blood Pressure'),
-                                      '$bpSys/$bpDia'),
-                                  MapEntry(
-                                      _t('Fetal Position',
-                                          'Posisyon ng Sanggol'),
-                                      _formatInputValue(
-                                          record['fetal_position'])),
-                                  MapEntry(
-                                      _t('Fetal Heart Tone',
-                                          'Tono ng Tibok ng Sanggol'),
-                                      _formatInputValue(
-                                          record['fetal_heart_tone'])),
-                                  MapEntry(
-                                      _t('Fetal Heart Beat',
-                                          'Tibok ng Puso ng Sanggol'),
-                                      _formatInputValue(
-                                          record['fetal_heart_beat'])),
-                                  MapEntry(_t('Symptoms', 'Mga Sintomas'),
-                                      symptomSummary),
-                                  MapEntry(_t('Medication Plans',
-                                          'Plano sa Gamot'),
-                                      medicationPlansSummary),
-                                  MapEntry(_t('Given Medications',
-                                          'Mga Gamot na Ibinigay'),
-                                      givenMedicationsSummary),
-                                  MapEntry('Ferrous + FA', ferrousSummary),
-                                  MapEntry('Calcium', calciumSummary),
-                                  MapEntry(
-                                      _t('Risk Level', 'Antas ng Panganib'),
-                                      riskLevelValue.isNotEmpty
-                                          ? riskLevelValue
-                                          : _notInputted()),
-                                  MapEntry(
-                                      _t('Risk Factors',
-                                          'Mga Salik ng Panganib'),
-                                      riskFactorsValue.isNotEmpty
-                                          ? riskFactorsValue
-                                          : _notInputted()),
-                                  MapEntry(
-                                      _t('TD Vaccine', 'Bakunang TD'),
-                                      _formatInputValue(
-                                          record['td_vaccine_dose'])),
-                                  MapEntry(_t('Edema', 'Pamamaga'),
-                                      _formatInputValue(record['edema'])),
-                                  MapEntry(_t('Remarks', 'Mga Tala'),
-                                      _formatInputValue(record['remarks'])),
-                                  MapEntry(
-                                      _t('Next Schedule',
-                                          'Susunod na Schedule'),
-                                      record['next_schedule'] == null
-                                          ? _notInputted()
-                                          : _formatDate(
-                                              record['next_schedule'])),
-                                ],
-                                aiAnalysis: aiAnalysis,
-                                useStructuredAiInsights: false,
-                                riskLevel: riskLevel,
-                                riskFactors: riskFactors,
-                                weightGainEval: (record['weight_gain'] as List?)?.isNotEmpty == true
-                                    ? (record['weight_gain'] as List).first as Map<String, dynamic>
-                                    : null,
-                              );
-                            } else if (isUltrasound) {
-                              final imageUrls =
-                                  _parseImageUrls(record['ultrasound_image']);
-                              final split = _splitRemarksAndAi(
-                                  record['remarks']?.toString());
-                              String? aiAnalysis;
-                              final ultrasoundId = record['ultrasound_id'];
-                              if (ultrasoundId is int) {
-                                aiAnalysis = await MotherProfileService
-                                    .getUltrasoundAIAnalysis(
-                                  ultrasoundId,
+                                if (mounted && !hasClosedLoading) {
+                                  Navigator.of(context, rootNavigator: true)
+                                      .pop();
+                                  hasClosedLoading = true;
+                                }
+
+                                _showRecordDetails(
+                                  title: _t(
+                                      'Prenatal Checkup', 'Prenatal Checkup'),
+                                  subtitle: _formatDateTime(
+                                      record['checkup_datetime']),
+                                  icon: Icons.medical_services,
+                                  rows: [
+                                    MapEntry(
+                                        _t('Date', 'Petsa'),
+                                        record['checkup_datetime'] == null
+                                            ? _notInputted()
+                                            : _formatDateTime(
+                                                record['checkup_datetime'])),
+                                    MapEntry(
+                                        _t('Fetal Count', 'Bilang ng Sanggol'),
+                                        fetalCount),
+                                    MapEntry(
+                                        _t('Age of Gestation',
+                                            'Edad ng Pagbubuntis'),
+                                        _formatInputValue(
+                                            record['age_of_gestation'])),
+                                    MapEntry(
+                                        _t('Weight (kg)', 'Timbang (kg)'),
+                                        _formatInputValue(
+                                            record['checkup_weight'])),
+                                    MapEntry(
+                                        _t('Blood Pressure', 'Blood Pressure'),
+                                        '$bpSys/$bpDia'),
+                                    MapEntry(
+                                        _t('Fetal Position',
+                                            'Posisyon ng Sanggol'),
+                                        _formatInputValue(
+                                            record['fetal_position'])),
+                                    MapEntry(
+                                        _t('Fetal Heart Tone',
+                                            'Tono ng Tibok ng Sanggol'),
+                                        _formatInputValue(
+                                            record['fetal_heart_tone'])),
+                                    MapEntry(
+                                        _t('Fetal Heart Beat',
+                                            'Tibok ng Puso ng Sanggol'),
+                                        _formatInputValue(
+                                            record['fetal_heart_beat'])),
+                                    MapEntry(_t('Symptoms', 'Mga Sintomas'),
+                                        symptomSummary),
+                                    MapEntry(
+                                        _t('Medication Plans',
+                                            'Plano sa Gamot'),
+                                        medicationPlansSummary),
+                                    MapEntry(
+                                        _t('Given Medications',
+                                            'Mga Gamot na Ibinigay'),
+                                        givenMedicationsSummary),
+                                    MapEntry('Ferrous + FA', ferrousSummary),
+                                    MapEntry('Calcium', calciumSummary),
+                                    MapEntry(
+                                        _t('Risk Level', 'Antas ng Panganib'),
+                                        riskLevelValue.isNotEmpty
+                                            ? riskLevelValue
+                                            : _notInputted()),
+                                    MapEntry(
+                                        _t('Risk Factors',
+                                            'Mga Salik ng Panganib'),
+                                        riskFactorsValue.isNotEmpty
+                                            ? riskFactorsValue
+                                            : _notInputted()),
+                                    MapEntry(
+                                        _t('TD Vaccine', 'Bakunang TD'),
+                                        _formatInputValue(
+                                            record['td_vaccine_dose'])),
+                                    MapEntry(_t('Edema', 'Pamamaga'),
+                                        _formatInputValue(record['edema'])),
+                                    MapEntry(_t('Remarks', 'Mga Tala'),
+                                        _formatInputValue(record['remarks'])),
+                                    MapEntry(
+                                        _t('Next Schedule',
+                                            'Susunod na Schedule'),
+                                        record['next_schedule'] == null
+                                            ? _notInputted()
+                                            : _formatDate(
+                                                record['next_schedule'])),
+                                  ],
+                                  aiAnalysis: aiAnalysis,
+                                  useStructuredAiInsights: false,
+                                  riskLevel: riskLevel,
+                                  riskFactors: riskFactors,
+                                  weightGainEval: (record['weight_gain']
+                                                  as List?)
+                                              ?.isNotEmpty ==
+                                          true
+                                      ? (record['weight_gain'] as List).first
+                                          as Map<String, dynamic>
+                                      : null,
+                                );
+                              } else if (isUltrasound) {
+                                final imageUrls =
+                                    _parseImageUrls(record['ultrasound_image']);
+                                final split = _splitRemarksAndAi(
+                                    record['remarks']?.toString());
+                                String? aiAnalysis;
+                                final ultrasoundId = record['ultrasound_id'];
+                                if (ultrasoundId is int) {
+                                  aiAnalysis = await MotherProfileService
+                                      .getUltrasoundAIAnalysis(
+                                    ultrasoundId,
+                                  );
+                                }
+
+                                String finalRemarks = split.cleanRemarks;
+                                if (aiAnalysis != null &&
+                                    aiAnalysis.trim() == finalRemarks.trim()) {
+                                  finalRemarks = '';
+                                }
+
+                                aiAnalysis = (aiAnalysis != null &&
+                                        aiAnalysis.trim().isNotEmpty)
+                                    ? aiAnalysis.trim()
+                                    : split.extractedAi ??
+                                        _generateUltrasoundAIInsights(record);
+                                if (mounted && !hasClosedLoading) {
+                                  Navigator.of(context, rootNavigator: true)
+                                      .pop();
+                                  hasClosedLoading = true;
+                                }
+                                final addedDate = _formatDateTime(
+                                    record['created_at'] ??
+                                        record['createdAt']);
+                                _showRecordDetails(
+                                  title: _t('Ultrasound', 'Ultrasound'),
+                                  subtitle:
+                                      '${_t('Added on', 'Inayos noong')} $addedDate',
+                                  icon: Icons.monitor_heart,
+                                  imageUrls:
+                                      imageUrls.isNotEmpty ? imageUrls : null,
+                                  rows: [
+                                    MapEntry(
+                                        _t('Record Added', 'Pinasok Noong'),
+                                        addedDate),
+                                    MapEntry(
+                                        _t('Ultrasound Date',
+                                            'Petsa ng Ultrasound'),
+                                        _formatDate(record['ultrasound_date'])),
+                                    MapEntry(
+                                        _t('Location', 'Lokasyon'),
+                                        _formatValue(
+                                            record['ultrasound_location'])),
+                                    MapEntry(
+                                        _t('Full Name', 'Buong Pangalan'),
+                                        _formatValue(
+                                            record['health_worker_name'])),
+                                    MapEntry(
+                                        _t('Institution', 'Institusyon'),
+                                        _formatValue(record[
+                                            'health_worker_institution'])),
+                                    MapEntry(
+                                        _t('Profession', 'Propesyon'),
+                                        _formatValue(record[
+                                            'health_worker_profession'])),
+                                    MapEntry(_t('Remarks', 'Mga Tala'),
+                                        _formatValue(finalRemarks)),
+                                  ],
+                                  aiAnalysis: aiAnalysis,
+                                  useStructuredAiInsights: aiAnalysis != null &&
+                                      aiAnalysis.isNotEmpty,
+                                );
+                              } else {
+                                final imageUrls =
+                                    _parseImageUrls(record['lab_test_image']);
+                                final split = _splitRemarksAndAi(
+                                    record['remarks']?.toString());
+
+                                String? aiAnalysis;
+                                final labTestId = record['lab_test_id'];
+                                if (labTestId is int) {
+                                  aiAnalysis = await MotherProfileService
+                                      .getLabTestAIAnalysis(
+                                    labTestId,
+                                  );
+                                }
+
+                                aiAnalysis = (aiAnalysis != null &&
+                                        aiAnalysis.trim().isNotEmpty)
+                                    ? aiAnalysis.trim()
+                                    : split.extractedAi;
+                                if (mounted && !hasClosedLoading) {
+                                  Navigator.of(context, rootNavigator: true)
+                                      .pop();
+                                  hasClosedLoading = true;
+                                }
+                                final addedDate = _formatDateTime(
+                                    record['created_at'] ??
+                                        record['createdAt']);
+                                _showRecordDetails(
+                                  title: record['lab_test_type'] ??
+                                      _t('Lab Test', 'Lab Test'),
+                                  subtitle:
+                                      '${_t('Added on', 'Inayos noong')} $addedDate',
+                                  icon: Icons.science,
+                                  imageUrls:
+                                      imageUrls.isNotEmpty ? imageUrls : null,
+                                  rows: [
+                                    MapEntry(
+                                        _t('Record Added', 'Pinasok Noong'),
+                                        addedDate),
+                                    MapEntry(
+                                        _t('Lab Test Type', 'Uri ng Lab Test'),
+                                        _formatValue(record['lab_test_type'])),
+                                    MapEntry(
+                                        _t('Lab Test Date',
+                                            'Petsa ng Lab Test'),
+                                        _formatDate(record['lab_test_date'])),
+                                    MapEntry(
+                                        _t('Full Name', 'Buong Pangalan'),
+                                        _formatValue(
+                                            record['health_worker_name'])),
+                                    MapEntry(
+                                        _t('Institution', 'Institusyon'),
+                                        _formatValue(record[
+                                            'health_worker_institution'])),
+                                    MapEntry(
+                                        _t('Profession', 'Propesyon'),
+                                        _formatValue(record[
+                                            'health_worker_profession'])),
+                                    MapEntry(_t('Notes', 'Mga Tala'),
+                                        _formatValue(split.cleanRemarks)),
+                                  ],
+                                  aiAnalysis: aiAnalysis,
+                                  useStructuredAiInsights: aiAnalysis != null &&
+                                      aiAnalysis.isNotEmpty,
                                 );
                               }
-
-                              String finalRemarks = split.cleanRemarks;
-                              if (aiAnalysis != null &&
-                                  aiAnalysis.trim() == finalRemarks.trim()) {
-                                finalRemarks = '';
+                            } finally {
+                              if (mounted && !hasClosedLoading) {
+                                Navigator.of(context, rootNavigator: true)
+                                    .pop(); // dismiss dialog
                               }
-
-                              aiAnalysis = (aiAnalysis != null &&
-                                      aiAnalysis.trim().isNotEmpty)
-                                  ? aiAnalysis.trim()
-                                  : split.extractedAi ??
-                                      _generateUltrasoundAIInsights(record);
-                              _showRecordDetails(
-                                title: _t('Ultrasound', 'Ultrasound'),
-                                subtitle:
-                                    _formatDate(record['ultrasound_date']),
-                                icon: Icons.monitor_heart,
-                                imageUrls:
-                                    imageUrls.isNotEmpty ? imageUrls : null,
-                                rows: [
-                                  MapEntry(
-                                      _t('Ultrasound Date',
-                                          'Petsa ng Ultrasound'),
-                                      _formatDate(record['ultrasound_date'])),
-                                  MapEntry(
-                                      _t('Location', 'Lokasyon'),
-                                      _formatValue(
-                                          record['ultrasound_location'])),
-                                  MapEntry(
-                                      _t('Full Name', 'Buong Pangalan'),
-                                      _formatValue(
-                                          record['health_worker_name'])),
-                                  MapEntry(
-                                      _t('Institution', 'Institusyon'),
-                                      _formatValue(
-                                          record['health_worker_institution'])),
-                                  MapEntry(
-                                      _t('Profession', 'Propesyon'),
-                                      _formatValue(
-                                          record['health_worker_profession'])),
-                                  MapEntry(_t('Remarks', 'Mga Tala'),
-                                      _formatValue(finalRemarks)),
-                                ],
-                                aiAnalysis: aiAnalysis,
-                                useStructuredAiInsights:
-                                    aiAnalysis != null && aiAnalysis.isNotEmpty,
-                              );
-                            } else {
-                              final imageUrls =
-                                  _parseImageUrls(record['lab_test_image']);
-                              final split = _splitRemarksAndAi(
-                                  record['remarks']?.toString());
-
-                              String? aiAnalysis;
-                              final labTestId = record['lab_test_id'];
-                              if (labTestId is int) {
-                                aiAnalysis = await MotherProfileService
-                                    .getLabTestAIAnalysis(
-                                  labTestId,
-                                );
+                              if (mounted) {
+                                setState(() => _isOpeningRecord = false);
                               }
-
-                              aiAnalysis = (aiAnalysis != null &&
-                                      aiAnalysis.trim().isNotEmpty)
-                                  ? aiAnalysis.trim()
-                                  : split.extractedAi;
-
-                              _showRecordDetails(
-                                title: record['lab_test_type'] ??
-                                    _t('Lab Test', 'Lab Test'),
-                                subtitle: _formatDate(record['lab_test_date']),
-                                icon: Icons.science,
-                                imageUrls:
-                                    imageUrls.isNotEmpty ? imageUrls : null,
-                                rows: [
-                                  MapEntry(
-                                      _t('Lab Test Type',
-                                          'Uri ng Lab Test'),
-                                      _formatValue(record['lab_test_type'])),
-                                  MapEntry(
-                                      _t('Lab Test Date',
-                                          'Petsa ng Lab Test'),
-                                      _formatDate(record['lab_test_date'])),
-                                  MapEntry(
-                                      _t('Full Name', 'Buong Pangalan'),
-                                      _formatValue(
-                                          record['health_worker_name'])),
-                                  MapEntry(
-                                      _t('Institution', 'Institusyon'),
-                                      _formatValue(
-                                          record['health_worker_institution'])),
-                                  MapEntry(
-                                      _t('Profession', 'Propesyon'),
-                                      _formatValue(
-                                          record['health_worker_profession'])),
-                                  MapEntry(_t('Notes', 'Mga Tala'),
-                                      _formatValue(split.cleanRemarks)),
-                                ],
-                                aiAnalysis: aiAnalysis,
-                                useStructuredAiInsights:
-                                    aiAnalysis != null && aiAnalysis.isNotEmpty,
-                              );
                             }
                           },
                         ),

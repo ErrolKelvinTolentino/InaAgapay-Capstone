@@ -4,8 +4,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
 import '../../services/language_service.dart';
@@ -16,8 +16,9 @@ import 'mother_dashboard.dart';
 import 'mother_journal_screen.dart';
 import 'mother_children_screen.dart';
 import 'records_screen.dart';
-import 'mother_profile_page.dart';
+import 'mother_self_profile_page.dart';
 import 'notifications_screen.dart';
+import '../../widgets/main_button.dart';
 
 class MotherDashboardShell extends StatefulWidget {
   const MotherDashboardShell({super.key});
@@ -30,9 +31,10 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
   int _currentIndex = 0;
   String? _profilePictureUrl;
   int? _motherId;
-  final ImagePicker _picker = ImagePicker();
   int _unreadCount = 0;
   RealtimeChannel? _notifChannel;
+  String _riskLevel = '';
+  List<String> _riskFactors = [];
 
   bool _showBHCRequiredDialog = false;
   bool _isOffline = false;
@@ -81,7 +83,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     final count = await NotificationService.getUnreadCount(accountId);
     if (mounted) setState(() => _unreadCount = count);
 
-    _notifChannel = NotificationService.subscribeToNotifications(accountId, (payload) {
+    _notifChannel =
+        NotificationService.subscribeToNotifications(accountId, (payload) {
       if (mounted) setState(() => _unreadCount++);
     });
   }
@@ -109,7 +112,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     try {
       final motherResponse = await SupabaseService.client
           .from('mothers')
-          .select('mother_id, assigned_bhc_id')
+          .select(
+              'mother_id, assigned_bhc_id, pregnancies(status, risk_level, risk_factors)')
           .eq('account_id', accountId)
           .maybeSingle();
 
@@ -120,9 +124,33 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
         }
       } else {
         final motherId = motherResponse['mother_id'] as int;
+
+        String riskLevel = '';
+        List<String> riskFactors = [];
+        final pregnancies = motherResponse['pregnancies'] as List?;
+        if (pregnancies != null && pregnancies.isNotEmpty) {
+          final activePregnancy = pregnancies.firstWhere(
+            (p) => p['status'] == 'active',
+            orElse: () => null,
+          );
+          if (activePregnancy != null) {
+            riskLevel = activePregnancy['risk_level']?.toString() ?? '';
+            final rf = activePregnancy['risk_factors']?.toString() ?? '';
+            if (rf.isNotEmpty) {
+              riskFactors = rf
+                  .split(';')
+                  .map((s) => s.trim())
+                  .where((s) => s.isNotEmpty)
+                  .toList();
+            }
+          }
+        }
+
         await AuthStorage.saveMotherId(motherId);
         setState(() {
           _motherId = motherId;
+          _riskLevel = riskLevel;
+          _riskFactors = riskFactors;
         });
       }
     } catch (e) {
@@ -272,70 +300,143 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    if (_motherId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(LanguageService.translate(
-            'Please complete your account setup with a midwife first.',
-            'Kumpletuhin muna ang pag-setup ng account kasama ang midwife.',
-          )),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
+  Color _getRiskColor(String riskLevel) {
+    switch (riskLevel.toUpperCase().trim()) {
+      case 'HIGH':
+        return AppColors.error;
+      case 'MODERATE':
+        return AppColors.warning;
+      case 'LOW':
+        return AppColors.success;
+      default:
+        return AppColors.textSecondary;
     }
+  }
 
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: source,
-        maxWidth: 500,
-        maxHeight: 500,
-        imageQuality: 85,
-      );
+  void _showRiskSummaryBottomSheet() {
+    final badgeColor = _getRiskColor(_riskLevel);
 
-      if (image != null && _motherId != null) {
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => const Center(
-            child: CircularProgressIndicator(),
-          ),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.68,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          builder: (_, controller) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: ListView(
+                controller: controller,
+                padding: const EdgeInsets.all(24),
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(Icons.shield_outlined,
+                            color: badgeColor, size: 28),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              LanguageService.translate(
+                                  'Prenatal Risk Summary', 'Buod ng Panganib'),
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _riskLevel.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: badgeColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  if (_riskFactors.isNotEmpty) ...[
+                    Text(
+                      LanguageService.translate(
+                          'Risk Factors', 'Mga Salik ng Panganib'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ..._riskFactors.map((f) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Icon(Icons.circle,
+                                    size: 8, color: badgeColor),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  f,
+                                  style: const TextStyle(
+                                      fontSize: 15, height: 1.4),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                  ] else ...[
+                    Text(
+                      LanguageService.translate(
+                          'No active risk factors detected.',
+                          'Walang nakitang aktibong salik ng panganib.'),
+                      style: const TextStyle(
+                          fontSize: 15, color: AppColors.textSecondary),
+                    ),
+                  ],
+                  const SizedBox(height: 32),
+                  MainButton(
+                    label: LanguageService.translate('Close', 'Isara'),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            );
+          },
         );
-
-        final bytes = await image.readAsBytes();
-        final url =
-            await SupabaseService.uploadProfilePicture(_motherId!, bytes);
-
-        if (!mounted) return;
-        Navigator.pop(context);
-
-        if (url != null) {
-          setState(() {
-            _profilePictureUrl = url;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(LanguageService.translate(
-                'Profile picture updated!',
-                'Na-update ang larawan ng profile!',
-              )),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    }
+      },
+    );
   }
 
   void _showProfileMenu(BuildContext context) {
@@ -374,15 +475,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                   mainAxisSize: MainAxisSize.min, // ← FIXED: Use min size
                   children: [
                     _MenuItem(
-                      icon: Icons.photo_camera_outlined,
-                      label: LanguageService.translate(
-                          'Change Photo', 'Palitan ang Larawan'),
-                      onTap: () {
-                        entry.remove();
-                        _showImageSourceDialog(context);
-                      },
-                    ),
-                    _MenuItem(
                       icon: Icons.person_outline,
                       label: LanguageService.translate(
                           'View Profile', 'Tingnan ang Profile'),
@@ -393,7 +485,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                             context,
                             MaterialPageRoute(
                               builder: (context) =>
-                                  MotherProfilePage(motherId: _motherId!, readOnly: true),
+                                  MotherSelfProfilePage(motherId: _motherId!),
                             ),
                           );
                         } else {
@@ -411,6 +503,18 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                         }
                       },
                     ),
+                    if (_riskLevel.isNotEmpty) ...[
+                      _MenuItem(
+                        icon: Icons.shield_outlined,
+                        label: LanguageService.translate(
+                            'Risk Summary', 'Buod ng Panganib'),
+                        iconColor: _getRiskColor(_riskLevel),
+                        onTap: () {
+                          entry.remove();
+                          _showRiskSummaryBottomSheet();
+                        },
+                      ),
+                    ],
                     _MenuItem(
                       icon: Icons.settings_outlined,
                       label:
@@ -425,11 +529,23 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                       label: LanguageService.translate('Help', 'Tulong'),
                       onTap: () {
                         entry.remove();
-                        Navigator.pushNamed(context, '/help');
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              LanguageService.translate(
+                                'Help module is currently under development.',
+                                'Ang Help module ay kasalukuyang ginagawa pa.',
+                              ),
+                            ),
+                            backgroundColor: AppColors.brandPrimary,
+                          ),
+                        );
                       },
                     ),
                     const Divider(
-                        height: 1, thickness: 1, color: AppColors.borderPrimary),
+                        height: 1,
+                        thickness: 1,
+                        color: AppColors.borderPrimary),
                     _MenuItem(
                       icon: Icons.logout_rounded,
                       label: LanguageService.translate('Log out', 'Mag-logout'),
@@ -449,48 +565,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     );
 
     overlay.insert(entry);
-  }
-
-  void _showImageSourceDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
-        title: Text(LanguageService.translate(
-            'Choose Source', 'Piliin ang Pinagmulan')),
-        content: Text(
-          LanguageService.translate('Select where to get your photo from:',
-              'Piliin kung saan kukuha ng larawan:'),
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _pickImage(ImageSource.gallery);
-            },
-            icon: const Icon(Icons.photo_library, size: 18),
-            label: Text(LanguageService.translate('Gallery', 'Gallery')),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.brandPrimary,
-            ),
-          ),
-          TextButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _pickImage(ImageSource.camera);
-            },
-            icon: const Icon(Icons.camera_alt, size: 18),
-            label: Text(LanguageService.translate('Camera', 'Camera')),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.brandPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _confirmLogout(BuildContext context) {
@@ -637,7 +711,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                         onPressed: () async {
                           await Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                            MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen()),
                           );
                           _setupNotifications();
                         },
@@ -705,7 +780,8 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                 if (_isOffline)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                     color: AppColors.error,
                     child: Row(
                       children: const [
@@ -815,8 +891,9 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color =
-        isActive ? AppColors.brandPrimaryOf(context) : AppColors.textSecondaryOf(context);
+    final Color color = isActive
+        ? AppColors.brandPrimaryOf(context)
+        : AppColors.textSecondaryOf(context);
 
     return GestureDetector(
       onTap: onTap,
@@ -859,12 +936,14 @@ class _MenuItem extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool isDanger;
+  final Color? iconColor;
 
   const _MenuItem({
     required this.icon,
     required this.label,
     required this.onTap,
     this.isDanger = false,
+    this.iconColor,
   });
 
   @override
@@ -877,7 +956,7 @@ class _MenuItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: color),
+            Icon(icon, size: 20, color: iconColor ?? color),
             const SizedBox(width: 12),
             Expanded(
               // ← FIXED: Added Expanded to prevent overflow
@@ -921,8 +1000,8 @@ class _HotlinesScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             LanguageService.translate(
-              'Tap to copy the number to your clipboard.',
-              'I-tap para kopyahin ang numero sa clipboard.',
+              'Tap to call the number. Long press to copy to clipboard.',
+              'I-tap para tawagan ang numero. Pindutin nang matagal para kopyahin sa clipboard.',
             ),
             style: TextStyle(
               fontSize: 14,
@@ -931,21 +1010,24 @@ class _HotlinesScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _HotlineButton(
-            label: LanguageService.translate('National Emergency Hotline', 'Pambansang Emergency Hotline'),
+            label: LanguageService.translate(
+                'National Emergency Hotline', 'Pambansang Emergency Hotline'),
             number: '911',
             icon: Icons.local_hospital,
             color: AppColors.error,
           ),
           const SizedBox(height: 12),
           _HotlineButton(
-            label: LanguageService.translate('DOH Health Hotline', 'DOH Health Hotline'),
+            label: LanguageService.translate(
+                'DOH Health Hotline', 'DOH Health Hotline'),
             number: '1555',
             icon: Icons.phone,
             color: AppColors.brandPrimary,
           ),
           const SizedBox(height: 12),
           _HotlineButton(
-            label: LanguageService.translate('Philippine Red Cross', 'Philippine Red Cross'),
+            label: LanguageService.translate(
+                'Philippine Red Cross', 'Philippine Red Cross'),
             number: '143',
             icon: Icons.health_and_safety,
             color: const Color(0xFFD32F2F),
@@ -959,14 +1041,16 @@ class _HotlinesScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _HotlineButton(
-            label: LanguageService.translate('Bureau of Fire Protection', 'Bureau of Fire Protection'),
+            label: LanguageService.translate(
+                'Bureau of Fire Protection', 'Bureau of Fire Protection'),
             number: '160',
             icon: Icons.local_fire_department,
             color: const Color(0xFFE65100),
           ),
           const SizedBox(height: 12),
           _HotlineButton(
-            label: LanguageService.translate('Mental Health Crisis Line', 'Mental Health Crisis Line'),
+            label: LanguageService.translate(
+                'Mental Health Crisis Line', 'Mental Health Crisis Line'),
             number: '1553',
             icon: Icons.psychology,
             color: const Color(0xFF7B1FA2),
@@ -997,7 +1081,24 @@ class _HotlineButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () {
+        onTap: () async {
+          final uri = Uri.parse('tel:$number');
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri);
+          } else {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(LanguageService.translate(
+                      'Could not launch $number',
+                      'Hindi mabuksan ang $number')),
+                  backgroundColor: AppColors.error,
+                ),
+              );
+            }
+          }
+        },
+        onLongPress: () {
           Clipboard.setData(ClipboardData(text: number));
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
