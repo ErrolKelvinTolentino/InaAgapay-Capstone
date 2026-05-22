@@ -12,8 +12,11 @@ import '../../models/weight_gain_models.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
-import '../../widgets/progressive_step_indicator.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/secondary_header.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/app_dropdown_field.dart';
 
 class AddPrenatalCheckupScreen extends StatefulWidget {
   const AddPrenatalCheckupScreen({
@@ -1390,7 +1393,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   String _riskLabel(String riskCategory) {
     switch (riskCategory) {
       case 'danger':
-        return 'Danger';
+        return 'Severe';
       case 'warning':
         return 'Warning';
       default:
@@ -1529,63 +1532,102 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Symptom'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                symptomType.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
+        return Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.brandText),
+                      onPressed: () => Navigator.pop(context, false),
+                    ),
+                    const Expanded(
+                      child: Center(
+                        child: Text(
+                          'Add Symptom',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.brandText,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _riskColor(symptomType.riskCategory)
-                      .withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: _riskColor(symptomType.riskCategory)
-                        .withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Text(
-                  _riskLabel(symptomType.riskCategory),
-                  style: TextStyle(
-                    fontSize: 12,
+                const SizedBox(height: 16),
+                Text(
+                  symptomType.name,
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: _riskColor(symptomType.riskCategory),
+                    fontSize: 16,
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesCtrl,
-                maxLines: 2,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                  hintText: 'Add short clinical note',
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _riskColor(symptomType.riskCategory).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _riskColor(symptomType.riskCategory).withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    _riskLabel(symptomType.riskCategory),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _riskColor(symptomType.riskCategory),
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderPrimary, width: 1.5),
+                  ),
+                  child: TextField(
+                    controller: notesCtrl,
+                    maxLines: 2,
+                    maxLength: 200,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'Notes (optional)',
+                      hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                      counterText: '',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    ),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Add Symptom', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Add'),
-            ),
-          ],
         );
       },
     );
@@ -1613,41 +1655,83 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Symptom Notes'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
+        return Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.brandText),
+                      onPressed: () => Navigator.pop(context, false),
+                    ),
+                    const Expanded(
+                      child: Center(
+                        child: Text(
+                          'Edit Symptom',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.brandText,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: notesCtrl,
-                maxLines: 3,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                  hintText: 'Update short clinical note',
+                const SizedBox(height: 16),
+                Text(
+                  entry.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderPrimary, width: 1.5),
+                  ),
+                  child: TextField(
+                    controller: notesCtrl,
+                    maxLines: 2,
+                    maxLength: 200,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'Notes (optional)',
+                      hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                      counterText: '',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    ),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save'),
-            ),
-          ],
         );
       },
     );
@@ -1734,22 +1818,20 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             runSpacing: 8,
             children: group.map((symptomType) {
               final selected = _isSymptomSelected(symptomType.id);
-              return FilterChip(
-                label: Text(symptomType.name),
-                selected: selected,
-                selectedColor: color.withValues(alpha: 0.18),
-                checkmarkColor: color,
-                side: BorderSide(
-                  color: selected
-                      ? color.withValues(alpha: 0.55)
-                      : color.withValues(alpha: 0.30),
+              return ActionChip(
+                label: Text(
+                  symptomType.name,
+                  style: TextStyle(
+                    color: selected ? Colors.white : color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                labelStyle: TextStyle(
-                  color: selected ? color : AppColors.textPrimary,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                ),
-                onSelected: (picked) {
-                  if (picked) {
+                backgroundColor: selected ? color : Colors.white,
+                side: BorderSide(color: color),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                onPressed: () {
+                  if (!selected) {
                     _openSymptomNotesDialog(symptomType);
                   } else {
                     setState(() => _symptoms.removeWhere(
@@ -1774,9 +1856,32 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         (_nextSchedule != null && _nextSchedule!.isAfter(baseDate))
             ? _nextSchedule!
             : baseDate;
-    // Advance past weekends so the picker opens on a valid day
+    bool isHoliday(DateTime date) {
+      final holidays = <String>[
+        '01-01', // New Year's Day
+        '02-25', // EDSA Revolution Anniversary
+        '04-09', // Araw ng Kagitingan
+        '05-01', // Labor Day
+        '06-12', // Independence Day
+        '08-21', // Ninoy Aquino Day
+        '11-01', // All Saints' Day
+        '11-02', // All Souls' Day
+        '11-30', // Bonifacio Day
+        '12-08', // Feast of the Immaculate Conception
+        '12-24', // Christmas Eve
+        '12-25', // Christmas Day
+        '12-30', // Rizal Day
+        '12-31', // Last Day of the Year
+      ];
+      final monthStr = date.month.toString().padLeft(2, '0');
+      final dayStr = date.day.toString().padLeft(2, '0');
+      return holidays.contains('$monthStr-$dayStr');
+    }
+
+    // Advance past weekends and holidays so the picker opens on a valid day
     while (initialDate.weekday == DateTime.saturday ||
-        initialDate.weekday == DateTime.sunday) {
+        initialDate.weekday == DateTime.sunday ||
+        isHoliday(initialDate)) {
       initialDate = initialDate.add(const Duration(days: 1));
     }
 
@@ -1788,8 +1893,59 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       helpText: 'Must be after ${_prettyDate(_checkupDateTime)}',
       selectableDayPredicate: (date) {
         // Block weekends — BHCs are typically closed on Sat/Sun
-        return date.weekday != DateTime.saturday &&
-            date.weekday != DateTime.sunday;
+        if (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday) return false;
+        // Block Philippine regular holidays
+        if (isHoliday(date)) return false;
+        
+        return true;
+      },
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.brandPrimary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.brandText,
+              secondary: AppColors.brandPrimary,
+              surface: Colors.white,
+            ),
+            dialogTheme: DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 4,
+              surfaceTintColor: Colors.transparent,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              headerBackgroundColor: Colors.white,
+              headerForegroundColor: AppColors.brandText,
+              headerHeadlineStyle: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandText,
+              ),
+              headerHelpStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandPrimary,
+              ),
+              surfaceTintColor: Colors.transparent,
+            ),
+          ),
+          child: child!,
+        );
       },
     );
     if (picked == null) return;
@@ -2208,31 +2364,30 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       'Review and edit AI risk analysis before final save',
     ];
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              labels[_step],
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.brandText,
-              ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            labels[_step],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandText,
             ),
-            const SizedBox(height: 2),
-            Text(
-              subtitles[_step],
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitles[_step],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -2257,6 +2412,9 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   }
 
   Widget _buildStep0() {
+    final motherData = _motherRiskContext?['mother'] as Map<String, dynamic>?;
+    final motherHeight = motherData?['height']?.toString();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2307,6 +2465,15 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   ),
                 ),
             ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          title: 'Height',
+          child: AppInputField(
+            hintText: 'Height (cm)',
+            controller: TextEditingController(text: motherHeight ?? 'Not recorded'),
+            readOnly: true,
           ),
         ),
         const SizedBox(height: 12),
@@ -2371,35 +2538,18 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_fetalCount != null)
-          _sectionCard(
-            title: 'Fetal Count (from ultrasound records)',
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline,
-                    size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: 8),
-                Text(
-                  '$_fetalCount Fetus${_fetalCount! > 1 ? 'es' : ''}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  '(edit via ultrasound records)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ),
+        _sectionCard(
+          title: 'Fetal Count (from ultrasound records)',
+          child: AppInputField(
+            hintText: 'Fetal Count',
+            controller: TextEditingController(
+                text: _fetalCount == null
+                    ? 'Unknown'
+                    : '$_fetalCount Fetus${_fetalCount! > 1 ? 'es' : ''}'),
+            readOnly: true,
           ),
-        if (_fetalCount != null) const SizedBox(height: 12),
+        ),
+        const SizedBox(height: 12),
         _sectionCard(
           title: 'Fetal Heart Rate',
           child: Column(
@@ -2438,22 +2588,70 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
         const SizedBox(height: 12),
         _sectionCard(
           title: 'Fetal Heart Tone',
-          child: DropdownButtonFormField<String>(
-            initialValue: _fetalTone,
-            decoration: const InputDecoration(
-              hintText: 'Select tone',
-              border: InputBorder.none,
-              isDense: true,
-            ),
-            items: _fetalTones
-                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                .toList(),
-            onChanged: (value) => setState(() => _fetalTone = value),
+          child: AppDropdownField<String>(
+            hintText: 'Select tone',
+            value: _fetalTone,
+            options: _fetalTones,
+            displayStringForOption: (t) => t,
+            onSelected: (value) => setState(() => _fetalTone = value),
           ),
         ),
       ],
     );
   }
+
+  Widget _iconAvatar(IconData icon, {Color? color}) => Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+            color: (color ?? AppColors.brandPrimary).withValues(alpha: 0.1),
+            shape: BoxShape.circle),
+        child: Icon(icon, size: 18, color: color ?? AppColors.brandPrimary),
+      );
+
+  Widget _itemCard(
+          {required Widget leading,
+          required String title,
+          required String subtitle,
+          required VoidCallback onDelete,
+          VoidCallback? onEdit}) =>
+      Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2))
+            ]),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          leading: leading,
+          title: Text(title,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          subtitle: Text(subtitle,
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.textSecondary)),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (onEdit != null)
+                IconButton(
+                    icon: const Icon(Icons.edit_outlined,
+                        color: AppColors.brandPrimary, size: 20),
+                    onPressed: onEdit),
+              IconButton(
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      color: AppColors.error, size: 20),
+                  onPressed: onDelete),
+            ],
+          ),
+        ),
+      );
 
   Widget _buildStep2() {
     return Column(
@@ -2530,78 +2728,85 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextField(
+                        AppInputField(
+                          hintText: 'Search symptom name',
                           controller: _symptomSearchCtrl,
+                          leadingIcon: Icons.search,
+                          trailingIcon: _symptomSearchCtrl.text.isEmpty
+                              ? null
+                              : Icons.clear,
+                          onTrailingTap: _symptomSearchCtrl.text.isEmpty
+                              ? null
+                              : () {
+                                  _symptomSearchCtrl.clear();
+                                  setState(() {});
+                                },
                           onChanged: (_) => setState(() {}),
-                          decoration: InputDecoration(
-                            hintText: 'Search symptom name',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _symptomSearchCtrl.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    onPressed: () {
-                                      _symptomSearchCtrl.clear();
-                                      setState(() {});
-                                    },
-                                    icon: const Icon(Icons.clear),
-                                  ),
-                            isDense: true,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
                         ),
                         const SizedBox(height: 12),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              ChoiceChip(
+                              FilterChip(
                                 label: const Text('All'),
                                 selected: _symptomRiskFilter == 'all',
+                                backgroundColor: Colors.white,
+                                selectedColor: AppColors.brandPrimary,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: _symptomRiskFilter == 'all' ? Colors.white : AppColors.brandPrimary,
+                                ),
+                                side: const BorderSide(color: AppColors.brandPrimary),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 onSelected: (_) {
                                   setState(() => _symptomRiskFilter = 'all');
                                 },
                               ),
                               const SizedBox(width: 8),
-                              ChoiceChip(
+                              FilterChip(
                                 label: const Text('Normal'),
                                 selected: _symptomRiskFilter == 'normal',
-                                selectedColor:
-                                    AppColors.success.withValues(alpha: 0.16),
-                                side: BorderSide(
-                                  color:
-                                      AppColors.success.withValues(alpha: 0.35),
+                                backgroundColor: Colors.white,
+                                selectedColor: AppColors.success,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: _symptomRiskFilter == 'normal' ? Colors.white : AppColors.success,
                                 ),
+                                side: const BorderSide(color: AppColors.success),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 onSelected: (_) {
                                   setState(() => _symptomRiskFilter = 'normal');
                                 },
                               ),
                               const SizedBox(width: 8),
-                              ChoiceChip(
+                              FilterChip(
                                 label: const Text('Warning'),
                                 selected: _symptomRiskFilter == 'warning',
-                                selectedColor:
-                                    AppColors.warning.withValues(alpha: 0.16),
-                                side: BorderSide(
-                                  color:
-                                      AppColors.warning.withValues(alpha: 0.35),
+                                backgroundColor: Colors.white,
+                                selectedColor: AppColors.warning,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: _symptomRiskFilter == 'warning' ? Colors.white : AppColors.warning,
                                 ),
+                                side: const BorderSide(color: AppColors.warning),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 onSelected: (_) {
-                                  setState(
-                                      () => _symptomRiskFilter = 'warning');
+                                  setState(() => _symptomRiskFilter = 'warning');
                                 },
                               ),
                               const SizedBox(width: 8),
-                              ChoiceChip(
-                                label: const Text('Danger'),
+                              FilterChip(
+                                label: const Text('Severe'),
                                 selected: _symptomRiskFilter == 'danger',
-                                selectedColor:
-                                    AppColors.error.withValues(alpha: 0.16),
-                                side: BorderSide(
-                                  color:
-                                      AppColors.error.withValues(alpha: 0.35),
+                                backgroundColor: Colors.white,
+                                selectedColor: AppColors.error,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: _symptomRiskFilter == 'danger' ? Colors.white : AppColors.error,
                                 ),
+                                side: const BorderSide(color: AppColors.error),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 onSelected: (_) {
                                   setState(() => _symptomRiskFilter = 'danger');
                                 },
@@ -2619,7 +2824,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                           riskCategory: 'warning',
                         ),
                         _buildSymptomGroup(
-                          title: 'DANGER SIGNS',
+                          title: 'SEVERE SIGNS',
                           riskCategory: 'danger',
                         ),
                       ],
@@ -2670,7 +2875,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '⚠️ $_dangerSymptomCount danger ${_dangerSymptomCount == 1 ? 'symptom' : 'symptoms'} detected. Consider urgent follow-up.',
+                          '⚠️ $_dangerSymptomCount severe ${_dangerSymptomCount == 1 ? 'symptom' : 'symptoms'} detected. Consider urgent follow-up.',
                           style: const TextStyle(
                             color: AppColors.error,
                             fontWeight: FontWeight.w700,
@@ -2693,95 +2898,12 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
                   final index = entry.key;
                   final item = entry.value;
                   final riskColor = _riskColor(item.riskCategory);
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: riskColor.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border:
-                          Border.all(color: riskColor.withValues(alpha: 0.30)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: riskColor,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: [
-                                  Chip(
-                                    visualDensity: VisualDensity.compact,
-                                    label: Text(
-                                      _riskLabel(item.riskCategory),
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: riskColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    backgroundColor:
-                                        riskColor.withValues(alpha: 0.10),
-                                    side: BorderSide(
-                                        color:
-                                            riskColor.withValues(alpha: 0.35)),
-                                  ),
-                                ],
-                              ),
-                              if ((item.notes ?? '').isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  item.notes!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        Column(
-                          children: [
-                            IconButton(
-                              onPressed: () => _editSymptomNotesDialog(index),
-                              icon: const Icon(Icons.edit_outlined,
-                                  color: AppColors.brandPrimary, size: 20),
-                              visualDensity: VisualDensity.compact,
-                              tooltip: 'Edit notes',
-                            ),
-                            IconButton(
-                              onPressed: () =>
-                                  setState(() => _symptoms.removeAt(index)),
-                              icon: const Icon(Icons.delete_outline,
-                                  color: AppColors.error, size: 20),
-                              visualDensity: VisualDensity.compact,
-                              tooltip: 'Remove symptom',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  return _itemCard(
+                    leading: _iconAvatar(Icons.healing_outlined, color: riskColor),
+                    title: item.name,
+                    subtitle: '${_riskLabel(item.riskCategory)}${(item.notes?.isNotEmpty == true) ? ' - ${item.notes}' : ''}',
+                    onEdit: () => _editSymptomNotesDialog(index),
+                    onDelete: () => setState(() => _symptoms.removeAt(index)),
                   );
                 }),
               ],
@@ -2836,18 +2958,12 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: _tdDose,
-                      decoration: const InputDecoration(
-                        hintText: 'Select dose given today',
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
-                      items: _availableTdDoses
-                          .map((dose) =>
-                              DropdownMenuItem(value: dose, child: Text(dose)))
-                          .toList(),
-                      onChanged: (value) => setState(() => _tdDose = value),
+                    AppDropdownField<String>(
+                      hintText: 'Select dose given today',
+                      value: _tdDose,
+                      options: _availableTdDoses,
+                      displayStringForOption: (t) => t,
+                      onSelected: (value) => setState(() => _tdDose = value),
                     ),
                     if (widget.takenTdDoses.isNotEmpty) ...[
                       const SizedBox(height: 6),
@@ -2887,38 +3003,20 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              InkWell(
-                onTap: _pickNextSchedule,
-                borderRadius: BorderRadius.circular(10),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_month,
-                        size: 20, color: AppColors.brandPrimary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _nextSchedule == null
-                            ? 'Tap to set next schedule (optional)'
-                            : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
-                        style: TextStyle(
-                          fontWeight: _nextSchedule != null
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                          color: _nextSchedule != null
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    if (_nextSchedule != null)
-                      IconButton(
-                        onPressed: () => setState(() => _nextSchedule = null),
-                        icon: const Icon(Icons.clear,
-                            size: 18, color: AppColors.textSecondary),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
+              AppInputField(
+                hintText: 'Tap to set next schedule (optional)',
+                controller: TextEditingController(
+                  text: _nextSchedule == null
+                      ? ''
+                      : DateFormat('MMMM d, yyyy').format(_nextSchedule!),
                 ),
+                readOnly: true,
+                onTap: _pickNextSchedule,
+                leadingIcon: Icons.calendar_month,
+                trailingIcon: _nextSchedule != null ? Icons.clear : null,
+                onTrailingTap: _nextSchedule != null
+                    ? () => setState(() => _nextSchedule = null)
+                    : null,
               ),
               const SizedBox(height: 6),
               const Text(
@@ -3860,25 +3958,16 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
   Future<bool> _showSkipCheckupDialog() async {
     final result = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: const Text('Skip Initial Checkup?'),
-        content: const Text(
-          'The initial prenatal checkup is required to complete the '
-          'mother\'s registration. Skipping will leave her record '
-          'incomplete.\n\nAre you sure you want to skip?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Continue Checkup'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Skip'),
-          ),
-        ],
+      builder: (_) => ConfirmationDialogBox(
+        title: 'Skip Initial Checkup?',
+        subtitle:
+            'The initial prenatal checkup is required to complete the '
+            'mother\'s registration. Skipping will leave her record '
+            'incomplete.\n\nAre you sure you want to skip?',
+        cancelText: 'Continue Checkup',
+        confirmText: 'Skip',
+        onCancel: () => Navigator.pop(context, false),
+        onConfirm: () => Navigator.pop(context, true),
       ),
     );
     return result ?? false;
@@ -3888,25 +3977,27 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
     if (!_hasEnteredData) return true;
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Discard changes?'),
-        content: const Text(
-          'You have unsaved prenatal checkup data. Are you sure you want to go back?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Discard'),
-          ),
-        ],
+      builder: (_) => ConfirmationDialogBox(
+        title: 'Discard changes?',
+        subtitle:
+            'You have unsaved prenatal checkup data. Are you sure you want to go back?',
+        cancelText: 'Cancel',
+        confirmText: 'Discard',
+        onCancel: () => Navigator.pop(context, false),
+        onConfirm: () => Navigator.pop(context, true),
       ),
     );
     return result ?? false;
+  }
+
+  void _backOrPop() async {
+    if (widget.isInitialRegistration) {
+      final shouldSkip = await _showSkipCheckupDialog();
+      if (shouldSkip && mounted) Navigator.pop(context);
+    } else {
+      final shouldDiscard = await _showDiscardCheckupDialog();
+      if (shouldDiscard && mounted) Navigator.pop(context);
+    }
   }
 
   @override
@@ -3915,17 +4006,7 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        if (widget.isInitialRegistration) {
-          final shouldSkip = await _showSkipCheckupDialog();
-          if (shouldSkip && mounted) {
-            Navigator.pop(context);
-          }
-        } else {
-          final shouldDiscard = await _showDiscardCheckupDialog();
-          if (shouldDiscard && mounted) {
-            Navigator.pop(context);
-          }
-        }
+        _backOrPop();
       },
       child: Scaffold(
         backgroundColor: AppColors.bgPrimary,
@@ -3934,70 +4015,80 @@ IMPORTANT: Your response must be PLAIN TEXT with NO SECTION HEADERS. Just write 
             children: [
               SecondaryHeader(
                 title: 'Add Prenatal Checkup',
-                onBack: widget.isInitialRegistration ? null : () => Navigator.pop(context),
+                onBack: _backOrPop,
               ),
-              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: (_step + 1) / _totalSteps,
+                backgroundColor: AppColors.borderPrimary,
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                minHeight: 3,
+              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Column(
-                  children: [
-                    ProgressiveStepIndicator(currentStep: _step, totalSteps: _totalSteps),
-                    const SizedBox(height: 10),
-                    _stepTitle(),
-                  ],
-                ),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: _stepTitle(),
               ),
+              const SizedBox(height: 10),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                   child: _buildStepContent(),
                 ),
               ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  children: [
-                    if (_step > 0)
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _submitting ? null : _back,
-                          child: const Text('Back'),
-                        ),
-                      ),
-                    if (_step > 0) const SizedBox(width: 8),
+            ],
+          ),
+        ),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 14,
+                  offset: const Offset(0, -4))
+            ],
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                children: [
+                  if (_step > 0) ...[
                     Expanded(
-                      flex: 2,
-                      child: FilledButton(
-                        onPressed: _submitting
-                            ? null
-                            : (_step == _totalSteps - 1
-                                ? ((_aiResponseApproved || _aiAnalysisSkipped) ? _submit : null)
-                                : _next),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.brandPrimary,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: _submitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Text(_step == _totalSteps - 1
-                                ? ((_aiResponseApproved || _aiAnalysisSkipped)
-                                    ? 'Save Checkup'
-                                    : 'Approve AI to Save')
-                                : 'Next'),
+                      child: MainButton(
+                        label: 'Back',
+                        leftIcon: Icons.arrow_back_ios_new_rounded,
+                        isWhiteVariant: true,
+                        onPressed: _submitting ? null : _back,
                       ),
                     ),
+                    const SizedBox(width: 12),
                   ],
-                ),
+                  Expanded(
+                    flex: (_step > 0) ? 2 : 1,
+                    child: _step == _totalSteps - 1
+                        ? MainButton(
+                            label: (_aiResponseApproved || _aiAnalysisSkipped)
+                                ? 'Save Checkup'
+                                : 'Approve AI to Save',
+                            rightIcon: (_aiResponseApproved || _aiAnalysisSkipped)
+                                ? Icons.check_rounded
+                                : Icons.arrow_forward_ios_rounded,
+                            onPressed: _submitting
+                                ? null
+                                : ((_aiResponseApproved || _aiAnalysisSkipped)
+                                    ? _submit
+                                    : null),
+                          )
+                        : MainButton(
+                            label: 'Next',
+                            rightIcon: Icons.arrow_forward_ios_rounded,
+                            onPressed: _submitting ? null : _next,
+                          ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

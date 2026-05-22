@@ -64,137 +64,82 @@ class _AppDropdownFieldState<T extends Object> extends State<AppDropdownField<T>
   Widget build(BuildContext context) {
     final bool hasError = widget.errorText?.isNotEmpty ?? false;
 
-    return RawAutocomplete<T>(
-      optionsBuilder: (textEditingValue) {
-        if (textEditingValue.text.isEmpty) {
-          return widget.options;
-        }
-        return _filterOptions(textEditingValue.text);
-      },
-      displayStringForOption: widget.displayStringForOption,
-      onSelected: (T selected) {
-        widget.onSelected(selected);
-        _controller.text = widget.displayStringForOption(selected);
-      },
-      fieldViewBuilder: (
-        BuildContext context,
-        TextEditingController fieldTextEditingController,
-        FocusNode fieldFocusNode,
-        VoidCallback onFieldSubmitted,
-      ) {
-        if (fieldTextEditingController.text != _controller.text) {
-          fieldTextEditingController.text = _controller.text;
-          fieldTextEditingController.selection = TextSelection.fromPosition(
-            TextPosition(offset: fieldTextEditingController.text.length),
-          );
-        }
-
-        return CompositedTransformTarget(
-          link: _layerLink,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 56,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: hasError ? AppColors.error : AppColors.borderPrimary,
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(15),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    if (widget.leadingIcon != null) ...[
-                      Icon(widget.leadingIcon, color: AppColors.brandAccent),
-                      const SizedBox(width: 12),
-                    ],
-                    Expanded(
-                      child: TextField(
-                        controller: fieldTextEditingController,
-                        focusNode: fieldFocusNode,
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          hintText: widget.hintText,
-                          hintStyle: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 14,
-                          ),
-                        ),
-                        style: const TextStyle(
-                          color: AppColors.inputText,
-                          fontSize: 16,
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
-                  ],
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: hasError ? AppColors.error : AppColors.borderPrimary,
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(15),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
-              if (hasError)
-                Padding(
-                  padding: const EdgeInsets.only(left: 16, top: 6),
-                  child: Text(
-                    widget.errorText!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.error,
-                    ),
-                  ),
-                ),
             ],
           ),
-        );
-      },
-      optionsViewBuilder: (
-        BuildContext context,
-        AutocompleteOnSelected<T> onSelected,
-        Iterable<T> options,
-      ) {
-        return CompositedTransformFollower(
-          link: _layerLink,
-          showWhenUnlinked: false,
-          offset: const Offset(0, 64),
-          child: Material(
-            color: Colors.white,
-            elevation: 4,
-            borderRadius: BorderRadius.circular(20),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 220, minWidth: 200),
-              child: ListView(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                children: options.map((T option) {
-                  return InkWell(
-                    onTap: () => onSelected(option),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      child: Text(
-                        widget.displayStringForOption(option),
-                        style: const TextStyle(
-                          color: AppColors.inputText,
-                          fontSize: 15,
-                        ),
+          child: Row(
+            children: [
+              if (widget.leadingIcon != null) ...[
+                Icon(widget.leadingIcon, color: AppColors.brandAccent),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<T>(
+                    value: widget.value,
+                    hint: Text(
+                      widget.hintText,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
                       ),
                     ),
-                  );
-                }).toList(),
+                    isExpanded: true,
+                    dropdownColor: Colors.white,
+                    focusColor: Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                    style: const TextStyle(
+                      color: AppColors.inputText,
+                      fontSize: 16,
+                    ),
+                    onChanged: (T? newValue) {
+                      if (newValue != null) {
+                        widget.onSelected(newValue);
+                      }
+                    },
+                    items: widget.options.map((T option) {
+                      return DropdownMenuItem<T>(
+                        value: option,
+                        child: Text(widget.displayStringForOption(option)),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (hasError)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, top: 6),
+            child: Text(
+              widget.errorText!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.error,
               ),
             ),
           ),
-        );
-      },
+      ],
     );
   }
 }

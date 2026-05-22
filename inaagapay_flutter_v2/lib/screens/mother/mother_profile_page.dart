@@ -1871,7 +1871,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       String calciumQuantity = 'Not given';
 
       if (aiRow != null) {
-        final aiResponseId = aiRow['ai_response_id'] as int?;
+        final aiResponseId = aiRow['ai_response_id'] != null ? int.tryParse(aiRow['ai_response_id'].toString()) : null;
         if (aiResponseId != null) {
           final riskRow = await SupabaseService.client
               .from('pregnancy_risk_assessments')
@@ -2280,7 +2280,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   Future<void> _showConcludePregnancyDialog(
       Map<String, dynamic> pregnancy) async {
-    final int fetalCount = pregnancy['fetal_count'] as int? ?? 1;
+    final int fetalCount = int.tryParse(pregnancy['fetal_count']?.toString() ?? '') ?? 1;
     final lmpDate = DateTime.tryParse(pregnancy['last_menstrual_period'] ?? '');
 
     List<String> outcomes = List.filled(fetalCount, 'live_birth');
@@ -4084,14 +4084,19 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 }
 
                 // Fetal count display
-                final fc = pregnancy['fetal_count'] as int? ?? 1;
+                final rawFc = pregnancy['fetal_count']?.toString() ?? '';
                 String fetalLabel;
-                if (fc == 1) {
-                  fetalLabel = 'Singleton';
-                } else if (fc == 2) {
-                  fetalLabel = 'Twins';
+                if (rawFc.toLowerCase() == 'unknown') {
+                  fetalLabel = 'Unknown';
                 } else {
-                  fetalLabel = '$fc (Multiple)';
+                  final fc = int.tryParse(rawFc) ?? 1;
+                  if (fc == 1) {
+                    fetalLabel = 'Singleton';
+                  } else if (fc == 2) {
+                    fetalLabel = 'Twins';
+                  } else {
+                    fetalLabel = '$fc (Multiple)';
+                  }
                 }
 
                 return [
@@ -4125,7 +4130,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       _buildCheckupCard(
                           c,
                           pregnancy['pregnancy_id'] ?? -1,
-                          pregnancy['fetal_count'] ?? 1)),
+                          int.tryParse(pregnancy['fetal_count']?.toString() ?? '') ?? 1)),
                   if (sortedCheckups.length > _checkupDisplayCount)
                     _buildLoadMoreButton(
                       current: _checkupDisplayCount,
@@ -4365,7 +4370,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       ],
                       const Divider(height: 24, color: AppColors.borderPrimary),
                       () {
-                        final pregnancyId = p['pregnancy_id'] as int? ?? -1;
+                        final pregnancyId = int.tryParse(p['pregnancy_id']?.toString() ?? '') ?? -1;
                         final sortedHistCheckups = List<Map<String, dynamic>>.from(
                             checkups.map((c) => c as Map<String, dynamic>))
                           ..sort((a, b) {
@@ -4385,7 +4390,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           children: [
                             ...sortedHistCheckups.take(histCheckupLimit).map((c) =>
                                 _buildCheckupCard(c, pregnancyId,
-                                    p['fetal_count'] as int? ?? 1)),
+                                    int.tryParse(p['fetal_count']?.toString() ?? '') ?? 1)),
                             if (sortedHistCheckups.length > histCheckupLimit)
                               _buildLoadMoreButton(
                                 current: histCheckupLimit,
@@ -4399,7 +4404,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       }(),
                       const SizedBox(height: 8),
                       () {
-                        final pregnancyId = p['pregnancy_id'] as int? ?? -1;
+                        final pregnancyId = int.tryParse(p['pregnancy_id']?.toString() ?? '') ?? -1;
                         final sortedHistUltrasounds = _sortByDate(
                             ultrasounds.cast<Map<String, dynamic>>(),
                             'ultrasound_date', 'desc');
@@ -4428,7 +4433,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       }(),
                       const SizedBox(height: 8),
                       () {
-                        final pregnancyId = p['pregnancy_id'] as int? ?? -1;
+                        final pregnancyId = int.tryParse(p['pregnancy_id']?.toString() ?? '') ?? -1;
                         final sortedHistLabTests = _sortByDate(
                             labTests.cast<Map<String, dynamic>>(),
                             'lab_test_date', 'desc');
