@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../services/language_service.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/supabase_service.dart';
+import 'mother_vitals_page.dart';
 
 class MotherSelfProfilePage extends StatefulWidget {
   final int motherId;
@@ -459,6 +460,43 @@ class _MotherSelfProfilePageState extends State<MotherSelfProfilePage> {
                         prePregnancy),
                   ],
                 ),
+                if (pregnancy != null) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        final pregnancyId = pregnancy['pregnancy_id'] as int;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MotherVitalsPage(
+                              motherId: widget.motherId,
+                              pregnancyId: pregnancyId,
+                              lastMenstrualPeriod: pregnancy['last_menstrual_period']?.toString(),
+                            ),
+                          ),
+                        ).then((_) {
+                          setState(() {
+                            _profileFuture = _fetchProfile();
+                          });
+                        });
+                      },
+                      icon: const Icon(Icons.favorite),
+                      label: Text(_t('My Vitals & Weight Gain', 'Aking Vitals & Timbang')),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.brandPrimary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ],
             ),
           );

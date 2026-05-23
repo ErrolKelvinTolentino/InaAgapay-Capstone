@@ -31,6 +31,7 @@ class _RecordsScreenState extends State<RecordsScreen>
   List<Map<String, dynamic>> _checkups = [];
   List<Map<String, dynamic>> _ultrasounds = [];
   List<Map<String, dynamic>> _labTests = [];
+  List<Map<String, dynamic>> _maternalVitals = [];
   Map<int, int> _pregnancyFetalCounts = {};
   Map<int, String> _checkupSymptomSummaries = {};
 
@@ -160,6 +161,12 @@ class _RecordsScreenState extends State<RecordsScreen>
           .inFilter('pregnancy_id', pregnancyIds)
           .order('lab_test_date', ascending: false);
 
+      final maternalVitalsResponse = await SupabaseService.client
+          .from('maternal_vitals')
+          .select('*')
+          .inFilter('pregnancy_id', pregnancyIds)
+          .order('recorded_at', ascending: false);
+
       final pregnancyResponse = await SupabaseService.client
           .from('pregnancies')
           .select('pregnancy_id, fetal_count')
@@ -217,6 +224,7 @@ class _RecordsScreenState extends State<RecordsScreen>
         _checkups = List<Map<String, dynamic>>.from(checkupsResponse);
         _ultrasounds = List<Map<String, dynamic>>.from(ultrasoundsResponse);
         _labTests = List<Map<String, dynamic>>.from(labTestsResponse);
+        _maternalVitals = List<Map<String, dynamic>>.from(maternalVitalsResponse);
         _pregnancyFetalCounts = fetalCounts;
         _checkupSymptomSummaries = symptomSummaries;
       });
@@ -955,6 +963,14 @@ class _RecordsScreenState extends State<RecordsScreen>
       });
     }
 
+    for (var vital in _maternalVitals) {
+      allRecords.add({
+        ...vital,
+        'record_type': 'maternal_vital',
+        'record_date': vital['recorded_at'],
+      });
+    }
+
     if (_selectedFilter != 'all') {
       allRecords = allRecords
           .where((record) => record['record_type'] == _selectedFilter)
@@ -990,16 +1006,32 @@ class _RecordsScreenState extends State<RecordsScreen>
                   false);
         }
 
-        return _formatDate(record['lab_test_date'])
-                .toLowerCase()
-                .contains(query) ||
-            (record['lab_test_type']
-                    ?.toString()
-                    .toLowerCase()
-                    .contains(query) ??
-                false) ||
-            (record['remarks']?.toString().toLowerCase().contains(query) ??
-                false);
+        if (record['record_type'] == 'labtest') {
+          return _formatDate(record['lab_test_date'])
+                  .toLowerCase()
+                  .contains(query) ||
+              (record['lab_test_type']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains(query) ??
+                  false) ||
+              (record['remarks']?.toString().toLowerCase().contains(query) ??
+                  false);
+        }
+
+        if (record['record_type'] == 'maternal_vital') {
+          return _formatDateTime(record['recorded_at'])
+                  .toLowerCase()
+                  .contains(query) ||
+              (record['notes']?.toString().toLowerCase().contains(query) ??
+                  false) ||
+              (record['weight_kg']?.toString().toLowerCase().contains(query) ??
+                  false) ||
+              (record['height_cm']?.toString().toLowerCase().contains(query) ??
+                  false);
+        }
+
+        return false;
       }).toList();
     }
 
@@ -1196,6 +1228,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                               value: 'labtest',
                               child:
                                   Text(_t('Lab Tests Only', 'Lab Tests Lang'))),
+                          DropdownMenuItem(
+                              value: 'maternal_vital',
+                              child: Text(
+                                  _t('Self-logged Vitals Only', 'Sariling Vitals Lang'))),
                         ],
                         onChanged: (value) {
                           setState(() {
@@ -1340,18 +1376,24 @@ class _RecordsScreenState extends State<RecordsScreen>
                       final isUltrasound =
                           record['record_type'] == 'ultrasound';
                       final isLabTest = record['record_type'] == 'labtest';
+                      final isMaternalVital =
+                          record['record_type'] == 'maternal_vital';
 
                       // Type badge color and label
                       final typeLabel = isCheckup
-                          ? _t('Prenatal', 'Prenatal')
+                          ? _t('Checkup', 'Checkup')
                           : isUltrasound
                               ? _t('Ultrasound', 'Ultrasound')
-                              : _t('Lab Test', 'Lab Test');
+                              : isLabTest
+                                  ? _t('Lab Test', 'Lab Test')
+                                  : _t('Vitals', 'Mga Vital');
                       final typeColor = isCheckup
                           ? AppColors.brandPrimary
                           : isUltrasound
                               ? AppColors.brandAccent
-                              : AppColors.warning;
+                              : isLabTest
+                                  ? AppColors.warning
+                                  : Colors.teal;
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -1378,7 +1420,9 @@ class _RecordsScreenState extends State<RecordsScreen>
                                         ? Icons.medical_services
                                         : isUltrasound
                                             ? Icons.monitor_heart_outlined
-                                            : Icons.science,
+                                            : isLabTest
+                                                ? Icons.science
+                                                : Icons.monitor_weight_outlined,
                                     color: typeColor,
                                     size: 22,
                                   ),
@@ -1401,10 +1445,12 @@ class _RecordsScreenState extends State<RecordsScreen>
                                                   : isUltrasound
                                                       ? _t('Ultrasound',
                                                           'Ultrasound')
-                                                      : (record[
-                                                              'lab_test_type'] ??
-                                                          _t('Lab Test',
-                                                              'Lab Test')),
+                                                      : isLabTest
+                                                          ? (record['lab_test_type'] ??
+                                                              _t('Lab Test',
+                                                                  'Lab Test'))
+                                                          : _t('Self-logged Vitals',
+                                                              'Sariling Vitals'),
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.w600,
                                                 fontSize: 14,
@@ -1442,7 +1488,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                           const SizedBox(width: 4),
                                           Text(
                                             _formatDateTime(
-                                                record['created_at'] ??
+                                                record['recorded_at'] ??
+                                                    record['created_at'] ??
                                                     record['createdAt'] ??
                                                     record['checkup_datetime']),
                                             style: const TextStyle(
@@ -1767,7 +1814,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   useStructuredAiInsights:
                                       aiAnalysis.isNotEmpty,
                                 );
-                              } else {
+                              } else if (isLabTest) {
                                 final imageUrls =
                                     _parseImageUrls(record['lab_test_image']);
                                 final split = _splitRemarksAndAi(
@@ -1831,6 +1878,37 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   aiAnalysis: aiAnalysis,
                                   useStructuredAiInsights: aiAnalysis != null &&
                                       aiAnalysis.isNotEmpty,
+                                );
+                              } else if (isMaternalVital) {
+                                if (mounted && !hasClosedLoading) {
+                                  Navigator.of(context, rootNavigator: true)
+                                      .pop();
+                                  hasClosedLoading = true;
+                                }
+                                final recDate = _formatDateTime(record['recorded_at']);
+                                _showRecordDetails(
+                                  title: _t('Self-logged Vitals', 'Sariling Vitals'),
+                                  subtitle: '${_t('Recorded on', 'Itinala noong')} $recDate',
+                                  icon: Icons.monitor_weight_outlined,
+                                  rows: [
+                                    MapEntry(_t('Date', 'Petsa'), recDate),
+                                    MapEntry(
+                                      _t('Age of Gestation', 'Edad ng Pagbubuntis'),
+                                      _formatInputValue(record['age_of_gestation'] != null ? '${record['age_of_gestation']} wks' : null),
+                                    ),
+                                    MapEntry(
+                                      _t('Weight (kg)', 'Timbang (kg)'),
+                                      _formatInputValue(record['weight_kg'] != null ? '${record['weight_kg']} kg' : null),
+                                    ),
+                                    MapEntry(
+                                      _t('Height (cm)', 'Taas (cm)'),
+                                      _formatInputValue(record['height_cm'] != null ? '${record['height_cm']} cm' : null),
+                                    ),
+                                    MapEntry(
+                                      _t('Notes', 'Mga Tala'),
+                                      _formatInputValue(record['notes']),
+                                    ),
+                                  ],
                                 );
                               }
                             } finally {
@@ -2165,7 +2243,19 @@ class _RecordsScreenState extends State<RecordsScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Expanded(child: SizedBox.shrink()),
+                    Expanded(
+                      child: _buildActionButton(
+                        _t('View Self-logged Vitals', 'Tingnan ang Sariling Vitals'),
+                        Icons.monitor_weight_outlined,
+                        Colors.teal,
+                        () {
+                          setState(() {
+                            _selectedFilter = 'maternal_vital';
+                            _tabController.animateTo(0);
+                          });
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ],

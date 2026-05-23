@@ -266,12 +266,42 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           .from('prenatal_checkups')
           .select(
               'prenatal_checkup_id, checkup_datetime, age_of_gestation, checkup_weight')
-          .eq('pregnancy_id', pregnancyId)
-          .order('checkup_datetime', ascending: true);
+          .eq('pregnancy_id', pregnancyId);
 
-      final checkups = (checkupsRaw as List).cast<Map<String, dynamic>>();
+      // Fetch maternal vitals (quick logs and mother self logs)
+      final vitalsRaw = await SupabaseService.client
+          .from('maternal_vitals')
+          .select(
+              'vital_id, recorded_at, age_of_gestation, weight_kg')
+          .eq('pregnancy_id', pregnancyId);
 
-      if (checkups.isEmpty) {
+      final checkupsList = (checkupsRaw as List).cast<Map<String, dynamic>>();
+      final vitalsList = (vitalsRaw as List).cast<Map<String, dynamic>>();
+
+      final mergedCheckups = [
+        ...checkupsList.map((c) => {
+          'prenatal_checkup_id': c['prenatal_checkup_id'],
+          'checkup_datetime': c['checkup_datetime'],
+          'age_of_gestation': c['age_of_gestation'] != null ? (c['age_of_gestation'] as num).toDouble() : null,
+          'checkup_weight': c['checkup_weight'] != null ? (c['checkup_weight'] as num).toDouble() : null,
+        }),
+        ...vitalsList.where((v) => v['weight_kg'] != null).map((v) => {
+          'prenatal_checkup_id': v['vital_id'],
+          'checkup_datetime': v['recorded_at'],
+          'age_of_gestation': v['age_of_gestation'] != null ? (v['age_of_gestation'] as num).toDouble() : null,
+          'checkup_weight': v['weight_kg'] != null ? (v['weight_kg'] as num).toDouble() : null,
+        }),
+      ];
+
+      // Sort chronological ascending
+      mergedCheckups.sort((a, b) {
+        final da = DateTime.tryParse(a['checkup_datetime']?.toString() ?? '');
+        final db = DateTime.tryParse(b['checkup_datetime']?.toString() ?? '');
+        if (da == null || db == null) return 0;
+        return da.compareTo(db);
+      });
+
+      if (mergedCheckups.isEmpty) {
         if (mounted) {
           setState(() {
             _weightCheckups = [];
@@ -286,7 +316,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       final heightCm = await _getMotherHeight();
 
       // 4. Current weight & AOG from latest checkup
-      final latest = checkups.last;
+      final latest = mergedCheckups.last;
       final currentWeight = (latest['checkup_weight'] as num?)?.toDouble();
       final aogWeeks = (latest['age_of_gestation'] as num?)?.toDouble();
 
@@ -302,7 +332,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       if (currentWeight == null || currentWeight <= 0) {
         if (mounted) {
           setState(() {
-            _weightCheckups = checkups;
+            _weightCheckups = mergedCheckups;
             _weightGainResult = null;
             _loadingWeightGain = false;
           });
@@ -314,14 +344,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       final result = WeightGainEngine.evaluate(
         currentWeight: currentWeight,
         aogWeeks: effectiveAog,
-        allCheckups: checkups,
+        allCheckups: mergedCheckups,
         prePregnancyWeight: prePregnancyWeight,
         heightCm: heightCm,
       );
 
       if (mounted) {
         setState(() {
-          _weightCheckups = checkups;
+          _weightCheckups = mergedCheckups;
           _weightGainResult = result;
           _loadingWeightGain = false;
         });
@@ -847,13 +877,17 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         }
       }
 
-      // Insert minimal prenatal checkup record
-      await SupabaseService.client.from('prenatal_checkups').insert({
+      final heightCm = await _getMotherHeight() ?? 150.0;
+
+      // Insert maternal vitals record
+      await SupabaseService.client.from('maternal_vitals').insert({
         'pregnancy_id': pregnancyId,
-        'checkup_weight': result,
-        'age_of_gestation': aogWeeks?.round(),
-        'checkup_datetime': DateTime.now().toIso8601String(),
-        'remarks': 'Self-reported weight log by mother',
+        'mother_id': widget.motherId,
+        'weight_kg': result,
+        'height_cm': heightCm,
+        'age_of_gestation': aogWeeks != null ? double.parse(aogWeeks.toStringAsFixed(1)) : null,
+        'recorded_at': DateTime.now().toIso8601String(),
+        'notes': 'Self-reported weight log by mother',
       });
 
       if (mounted) {

@@ -73,6 +73,23 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   String? _weeksError;
   String? _daysError;
 
+  // Vitals & Pre-pregnancy Weight
+  final _heightCtrl = TextEditingController();
+  final _weightCtrl = TextEditingController();
+  final _prePregnancyWeightCtrl = TextEditingController();
+  bool _knowsPrePregnancyWeight = true;
+
+  String? _heightError;
+  String? _heightWarning;
+  String? _weightError;
+  String? _weightWarning;
+  String? _prePregnancyWeightError;
+  String? _prePregnancyWeightWarning;
+
+  double? _calculatedBMI;
+  String? _bmiClassification;
+  String? _bmiWarning;
+
   @override
   void initState() {
     super.initState();
@@ -91,12 +108,15 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     _eddDate.dispose();
     _aogWeeks.dispose();
     _aogDays.dispose();
+    _heightCtrl.dispose();
+    _weightCtrl.dispose();
+    _prePregnancyWeightCtrl.dispose();
     _emailTimer?.cancel();
     super.dispose();
   }
 
   void _nextStep() {
-    if (_currentStep < 1) {
+    if (_currentStep < 2) {
       setState(() => _currentStep++);
     }
   }
@@ -357,7 +377,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   Future<void> _handlePrimaryAction() async {
-    if (_currentStep < 1) {
+    if (_currentStep < 2) {
       _nextStep();
       return;
     }
@@ -427,6 +447,34 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       }
     }
 
+    // Vitals validation if not skipped
+    final heightStr = _heightCtrl.text.trim();
+    final weightStr = _weightCtrl.text.trim();
+    final ppwStr = _prePregnancyWeightCtrl.text.trim();
+
+    final hasHeight = heightStr.isNotEmpty;
+    final hasWeight = weightStr.isNotEmpty;
+    final hasPpw = _knowsPrePregnancyWeight && ppwStr.isNotEmpty;
+
+    if (hasHeight || hasWeight || hasPpw) {
+      if (_heightError != null || _weightError != null || _prePregnancyWeightError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please correct measurement errors before saving'), backgroundColor: AppColors.error),
+        );
+        return;
+      }
+      if (!hasHeight || !hasWeight || (_knowsPrePregnancyWeight && !hasPpw)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please fill out all measurements or click "Skip for now"'), backgroundColor: AppColors.error),
+        );
+        return;
+      }
+    }
+
+    final heightVal = double.tryParse(heightStr);
+    final weightVal = double.tryParse(weightStr);
+    final ppwVal = _knowsPrePregnancyWeight ? double.tryParse(ppwStr) : null;
+
     // Prepare profile data
     final profileData = {
       'first_name': _firstName.text.trim(),
@@ -441,6 +489,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           _emailAddress.text.trim().isEmpty ? null : _emailAddress.text.trim(),
       'lmp': _selectedLmp?.toIso8601String().split('T')[0],
       'edd': _selectedEdd?.toIso8601String().split('T')[0],
+      'height': heightVal,
+      'current_weight': weightVal,
+      'pre_pregnancy_weight': ppwVal,
     };
 
     final res =
@@ -570,7 +621,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           const SizedBox(height: 16),
           ProgressiveStepIndicator(
             currentStep: _currentStep,
-            totalSteps: 2,
+            totalSteps: 3,
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -579,6 +630,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               children: [
                 _personalInfoStep(),
                 _gestationStep(),
+                _vitalsStep(),
               ],
             ),
           ),
@@ -587,12 +639,33 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             child: Column(
               children: [
                 MainButton(
-                  label: _currentStep == 1 ? 'Save Profile' : 'Next',
+                  label: _currentStep == 2 ? 'Complete Setup' : 'Next',
                   showIcons: false,
                   onPressed: _currentStep == 0
                       ? (_canProceedFromStep0 ? _handlePrimaryAction : null)
-                      : (_canProceedFromStep1 ? _handlePrimaryAction : null),
+                      : _currentStep == 1
+                          ? (_canProceedFromStep1 ? _handlePrimaryAction : null)
+                          : _handlePrimaryAction,
                 ),
+                if (_currentStep == 2) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      _heightCtrl.clear();
+                      _weightCtrl.clear();
+                      _prePregnancyWeightCtrl.clear();
+                      _saveProfileAndContinue();
+                    },
+                    child: const Text(
+                      'Skip for now',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: AppColors.brandPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -609,10 +682,16 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           leadingIcon: Icons.person,
           trailingIcon: Icons.check,
         );
-      default:
+      case 1:
         return const PageTitle(
           title: 'Pregnancy Details',
           leadingIcon: Icons.pregnant_woman,
+          trailingIcon: Icons.check,
+        );
+      default:
+        return const PageTitle(
+          title: 'Vitals & BMI Info',
+          leadingIcon: Icons.monitor_weight_outlined,
           trailingIcon: Icons.check,
         );
     }
@@ -1030,6 +1109,307 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _validateHeightWeight() {
+    final height = double.tryParse(_heightCtrl.text.trim());
+    final weight = double.tryParse(_weightCtrl.text.trim());
+
+    if (height != null) {
+      if (height < 50 || height > 250) {
+        setState(() {
+          _heightError = 'Must be 50-250 cm';
+          _heightWarning = null;
+        });
+      } else {
+        setState(() {
+          _heightError = null;
+          if (height < 120) {
+            _heightWarning =
+                'Entered measurement is outside expected maternal ranges. Please verify.';
+          } else {
+            _heightWarning = null;
+          }
+        });
+      }
+    } else {
+      setState(() {
+        _heightError =
+            _heightCtrl.text.trim().isEmpty ? null : 'Enter a valid number';
+        _heightWarning = null;
+      });
+    }
+
+    if (weight != null) {
+      if (weight < 10 || weight > 350) {
+        setState(() {
+          _weightError = 'Must be 10-350 kg';
+          _weightWarning = null;
+        });
+      } else {
+        setState(() {
+          _weightError = null;
+          if (weight < 35) {
+            _weightWarning =
+                'Entered measurement is outside expected maternal ranges. Please verify.';
+          } else {
+            _weightWarning = null;
+          }
+        });
+      }
+    } else {
+      setState(() {
+        _weightError =
+            _weightCtrl.text.trim().isEmpty ? null : 'Enter a valid number';
+        _weightWarning = null;
+      });
+    }
+
+    _calculateBMI();
+  }
+
+  void _validatePrePregnancyWeight() {
+    final ppw = double.tryParse(_prePregnancyWeightCtrl.text.trim());
+    if (_prePregnancyWeightCtrl.text.trim().isEmpty) {
+      setState(() {
+        _prePregnancyWeightError = null;
+        _prePregnancyWeightWarning = null;
+      });
+    } else if (ppw == null) {
+      setState(() {
+        _prePregnancyWeightError = 'Enter a valid number';
+        _prePregnancyWeightWarning = null;
+      });
+    } else if (ppw < 10 || ppw > 350) {
+      setState(() {
+        _prePregnancyWeightError = 'Must be 10-350 kg';
+        _prePregnancyWeightWarning = null;
+      });
+    } else if (ppw < 35) {
+      setState(() {
+        _prePregnancyWeightError = null;
+        _prePregnancyWeightWarning =
+            'Entered measurement is outside expected maternal ranges. Please verify.';
+      });
+    } else {
+      setState(() {
+        _prePregnancyWeightError = null;
+        _prePregnancyWeightWarning = null;
+      });
+    }
+    _calculateBMI();
+  }
+
+  void _calculateBMI() {
+    if (!_knowsPrePregnancyWeight) {
+      setState(() {
+        _calculatedBMI = null;
+        _bmiClassification = null;
+        _bmiWarning = null;
+        _prePregnancyWeightWarning = null;
+      });
+      return;
+    }
+
+    final height = double.tryParse(_heightCtrl.text.trim());
+    final ppw = double.tryParse(_prePregnancyWeightCtrl.text.trim());
+
+    if (height != null && ppw != null && height > 0) {
+      final heightM = height / 100;
+      final bmi = ppw / (heightM * heightM);
+      _calculatedBMI = bmi;
+
+      if (bmi < 18.5) {
+        _bmiClassification = 'Underweight';
+      } else if (bmi < 25) {
+        _bmiClassification = 'Normal';
+      } else if (bmi < 30) {
+        _bmiClassification = 'Overweight';
+      } else {
+        _bmiClassification = 'Obese';
+      }
+
+      int weeks = 0;
+      if (_selectedLmp != null) {
+        weeks = DateTime.now().difference(_selectedLmp!).inDays ~/ 7;
+      }
+
+      if (weeks <= 12) {
+        _bmiWarning =
+            'Recommended total weight gain for this week (Week $weeks) is 0.5 - 2.0 kg.';
+      } else {
+        final double minRate;
+        final double maxRate;
+        if (bmi < 18.5) {
+          minRate = 0.44;
+          maxRate = 0.58;
+        } else if (bmi < 25) {
+          minRate = 0.35;
+          maxRate = 0.50;
+        } else if (bmi < 30) {
+          minRate = 0.23;
+          maxRate = 0.33;
+        } else {
+          minRate = 0.17;
+          maxRate = 0.27;
+        }
+        final minGain = 0.5 + (weeks - 12) * minRate;
+        final maxGain = 2.0 + (weeks - 12) * maxRate;
+        _bmiWarning =
+            'Recommended total weight gain for this week (Week $weeks) is ${minGain.toStringAsFixed(1)} - ${maxGain.toStringAsFixed(1)} kg.';
+      }
+    } else {
+      _calculatedBMI = null;
+      _bmiClassification = null;
+      _bmiWarning = null;
+    }
+    setState(() {});
+  }
+
+  Widget _vitalsStep() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Unlock advanced clinical tracking by providing your height and weight. You can skip this step if you don\'t have these measurements right now.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Height (cm)',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 8),
+          AppInputField(
+            hintText: 'e.g. 156.0',
+            controller: _heightCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            leadingIcon: Icons.height,
+            errorText: _heightError,
+            onChanged: (_) => _validateHeightWeight(),
+          ),
+          if (_heightWarning != null) ...[
+            const SizedBox(height: 4),
+            Text(_heightWarning!, style: const TextStyle(color: Colors.orange, fontSize: 11)),
+          ],
+          const SizedBox(height: 16),
+          Text(
+            'Current Weight (kg)',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 8),
+          AppInputField(
+            hintText: 'e.g. 62.5',
+            controller: _weightCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            leadingIcon: Icons.monitor_weight_outlined,
+            errorText: _weightError,
+            onChanged: (_) => _validateHeightWeight(),
+          ),
+          if (_weightWarning != null) ...[
+            const SizedBox(height: 4),
+            Text(_weightWarning!, style: const TextStyle(color: Colors.orange, fontSize: 11)),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Checkbox(
+                value: _knowsPrePregnancyWeight,
+                activeColor: AppColors.brandPrimary,
+                onChanged: (val) {
+                  setState(() {
+                    _knowsPrePregnancyWeight = val ?? true;
+                    if (!_knowsPrePregnancyWeight) {
+                      _prePregnancyWeightCtrl.clear();
+                      _prePregnancyWeightError = null;
+                      _prePregnancyWeightWarning = null;
+                    }
+                    _calculateBMI();
+                  });
+                },
+              ),
+              const Expanded(
+                child: Text(
+                  'I know my pre-pregnancy weight',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_knowsPrePregnancyWeight) ...[
+            Text(
+              'Pre-pregnancy Weight (kg)',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 8),
+            AppInputField(
+              hintText: 'e.g. 58.0',
+              controller: _prePregnancyWeightCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              leadingIcon: Icons.monitor_weight_outlined,
+              errorText: _prePregnancyWeightError,
+              onChanged: (_) => _validatePrePregnancyWeight(),
+            ),
+            if (_prePregnancyWeightWarning != null) ...[
+              const SizedBox(height: 4),
+              Text(_prePregnancyWeightWarning!, style: const TextStyle(color: Colors.orange, fontSize: 11)),
+            ],
+            const SizedBox(height: 16),
+          ],
+          if (_calculatedBMI != null && _bmiClassification != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Calculated BMI: ${_calculatedBMI!.toStringAsFixed(1)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _bmiClassification!,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.brandPrimary),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_bmiWarning != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _bmiWarning!,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.4),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 32),
+        ],
+      ),
     );
   }
 }

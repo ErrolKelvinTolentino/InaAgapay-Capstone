@@ -8,7 +8,6 @@ import '../../widgets/app_input_field.dart';
 import '../../services/supabase_service.dart';
 import '../mother/mother_profile_page.dart';
 import 'midwife_add_mother_screen.dart';
-import 'quick_vitals_screen.dart';
 
 class MidwifeMothersScreen extends StatefulWidget {
   const MidwifeMothersScreen({super.key});
@@ -1014,34 +1013,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                               });
                                             }
                                           : null,
-                                      onQuickVitals: (motherId != null &&
-                                              mother['pregnancy_id'] != null)
-                                          ? () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      QuickVitalsScreen(
-                                                    motherId: motherId,
-                                                    pregnancyId:
-                                                        mother['pregnancy_id']
-                                                            as int,
-                                                    motherName:
-                                                        mother['full_name']
-                                                                ?.toString() ??
-                                                            'Unknown Mother',
-                                                    lastMenstrualPeriod: mother[
-                                                            'last_menstrual_period']
-                                                        as String?,
-                                                  ),
-                                                ),
-                                              ).then((saved) {
-                                                if (saved == true && mounted) {
-                                                  _refreshMothers();
-                                                }
-                                              });
-                                            }
-                                          : null,
                                     ),
                                   );
                                 },
@@ -1091,7 +1062,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 class _MotherCard extends StatelessWidget {
   final Map<String, dynamic> mother;
   final VoidCallback? onTap;
-  final VoidCallback? onQuickVitals;
   final Color riskColor;
   final String riskLabel;
   final String? dueDateText;
@@ -1106,7 +1076,6 @@ class _MotherCard extends StatelessWidget {
     this.profilePictureUrl,
     required this.barangay,
     this.onTap,
-    this.onQuickVitals,
   });
 
   String _getInitials(String fullName) {
@@ -1312,16 +1281,6 @@ class _MotherCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (onQuickVitals != null)
-                  IconButton(
-                    icon: const Icon(Icons.speed_rounded, size: 22),
-                    color: AppColors.brandAccent,
-                    tooltip: 'Quick Vitals',
-                    onPressed: onQuickVitals,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                  ),
                 const Icon(
                   Icons.chevron_right,
                   color: AppColors.brandPrimary,
