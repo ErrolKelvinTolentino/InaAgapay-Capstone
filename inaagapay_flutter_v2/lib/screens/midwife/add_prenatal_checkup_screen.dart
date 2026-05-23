@@ -198,6 +198,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   final _aiFilipinoCtrl = TextEditingController();
   final _aiEnglishCtrl = TextEditingController();
   String _selectedLanguage = 'filipino';
+  String _activeRiskTab = 'pregnancy';
   String _backupFilipino = '';
   String _backupEnglish = '';
   final _symptomSearchCtrl = TextEditingController();
@@ -252,6 +253,7 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
   bool _aiResponseApproved = false;
   bool _isEditingAiAssessment = false;
   String _editableRiskLevel = 'low';
+  String _pregnancyRiskLevel = 'low';
   List<_RiskFactorItem> _editableRiskFactors = [];
   List<String> _editableSuggestedActions = [];
 
@@ -543,6 +545,10 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           'past_pregnancy_outcomes': pastPregnancyOutcomes,
           'previous_checkups': previousCheckups,
         };
+        final pregLevel = pregnancy?['pregnancy_risk_level']?.toString().toLowerCase();
+        if (pregLevel != null) {
+          _pregnancyRiskLevel = pregLevel;
+        }
       });
     } catch (e, st) {
       debugPrint('Error loading mother risk context: $e\n$st');
@@ -2345,7 +2351,7 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
 
     await client
         .from('pregnancies')
-        .update({'pregnancy_risk_level': finalRiskLevel}).eq(
+        .update({'pregnancy_risk_level': _pregnancyRiskLevel}).eq(
             'pregnancy_id', widget.pregnancyId);
   }
 
@@ -3876,96 +3882,7 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                         ),
                       ),
 
-                    // Risk Level (read-only pill or dropdown when editing)
-                    Row(
-                      children: [
-                        const Text(
-                          'Risk Level',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(width: 10),
-                        if (_isEditingAiAssessment)
-                          Expanded(
-                            child: AppDropdownField<String>(
-                              value: _editableRiskLevel,
-                              options: const ['low', 'high'],
-                              displayStringForOption: (val) => val == 'low' ? 'Low Risk' : 'High Risk',
-                              onSelected: (val) {
-                                setState(() {
-                                  _editableRiskLevel = val;
-                                  _aiResponseApproved = false;
-                                });
-                              },
-                              hintText: 'Select Risk',
-                              leadingIcon: Icons.flag_rounded,
-                            ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: _editableRiskLevel == 'high'
-                                  ? AppColors.error.withValues(alpha: 0.1)
-                                  : AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              _editableRiskLevel == 'high' ? 'High Risk' : 'Low Risk',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: _editableRiskLevel == 'high'
-                                    ? AppColors.error
-                                    : AppColors.success,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Risk Factors (always read-only)
-                    if (_editableRiskFactors.isNotEmpty) ...[
-                      const Text(
-                        'Based on',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: _editableRiskFactors.map((f) {
-                          final isHigh = f.influence == 'high';
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: isHigh
-                                  ? AppColors.error.withValues(alpha: 0.06)
-                                  : AppColors.brandPrimary.withValues(alpha: 0.06),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isHigh
-                                    ? AppColors.error.withValues(alpha: 0.15)
-                                    : AppColors.brandPrimary.withValues(alpha: 0.15),
-                              ),
-                            ),
-                            child: Text(
-                              f.factor,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: isHigh ? AppColors.error : AppColors.textPrimary,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-
-                    const Divider(color: AppColors.borderPrimary, height: 1),
-                    const SizedBox(height: 14),
-
-                    // B. Bilingual Translation Switcher Toggle
+                    // Tab Switcher
                     Align(
                       alignment: Alignment.center,
                       child: Container(
@@ -3974,7 +3891,8 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                         decoration: BoxDecoration(
                           color: AppColors.bgPrimary,
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: AppColors.borderPrimary, width: 1.5),
+                          border: Border.all(
+                              color: AppColors.borderPrimary, width: 1.5),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -3982,21 +3900,28 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                             GestureDetector(
                               onTap: () {
                                 setState(() {
-                                  _selectedLanguage = 'filipino';
+                                  _activeRiskTab = 'pregnancy';
                                 });
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                  color: _activeRiskTab == 'pregnancy'
+                                      ? AppColors.brandPrimary
+                                      : Colors.transparent,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  'Filipino (Conversational)',
+                                  'Pregnancy Risk',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
-                                    color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
+                                    fontWeight: _activeRiskTab == 'pregnancy'
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    color: _activeRiskTab == 'pregnancy'
+                                        ? Colors.white
+                                        : AppColors.textSecondary,
                                   ),
                                 ),
                               ),
@@ -4004,21 +3929,28 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                             GestureDetector(
                               onTap: () {
                                 setState(() {
-                                  _selectedLanguage = 'english';
+                                  _activeRiskTab = 'insight';
                                 });
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                  color: _activeRiskTab == 'insight'
+                                      ? AppColors.brandPrimary
+                                      : Colors.transparent,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  'English',
+                                  'Care Insight',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
-                                    color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                    fontWeight: _activeRiskTab == 'insight'
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    color: _activeRiskTab == 'insight'
+                                        ? Colors.white
+                                        : AppColors.textSecondary,
                                   ),
                                 ),
                               ),
@@ -4028,43 +3960,264 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                       ),
                     ),
 
-                    // C. AI Insight Text (Color is AppColors.inputText)
-                    if (!_isEditingAiAssessment)
-                      Text(
-                        content,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: activeInsight.isEmpty ? AppColors.textSecondary : AppColors.inputText,
-                          height: 1.65,
-                          fontStyle: activeInsight.isEmpty ? FontStyle.italic : FontStyle.normal,
-                        ),
-                      )
-                    else
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.faintWhite,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.borderPrimary),
-                        ),
-                        child: TextField(
-                          controller: _selectedLanguage == 'filipino' ? _aiFilipinoCtrl : _aiEnglishCtrl,
-                          minLines: editorLines,
-                          maxLines: editorLines,
-                          decoration: InputDecoration(
-                            hintText: _selectedLanguage == 'filipino'
-                                ? 'Isulat ang care message para sa ina (Filipino)...'
-                                : 'Write the care message for the mother (English)...',
-                            hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.all(14),
+                    if (_activeRiskTab == 'pregnancy') ...[
+                      // Pregnancy Risk Override
+                      Row(
+                        children: [
+                          const Text(
+                            'Pregnancy Risk Override',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary),
                           ),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.inputText,
-                            height: 1.65,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: AppDropdownField<String>(
+                              value: _pregnancyRiskLevel,
+                              options: const ['low', 'high'],
+                              displayStringForOption: (val) => val == 'low' ? 'Low Risk' : 'High Risk',
+                              onSelected: (val) {
+                                setState(() {
+                                  _pregnancyRiskLevel = val;
+                                });
+                              },
+                              hintText: 'Select Pregnancy Risk',
+                              leadingIcon: Icons.flag_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Risk Factors (always read-only)
+                      if (_editableRiskFactors.isNotEmpty) ...[
+                        const Text(
+                          'Based on',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: _editableRiskFactors.map((f) {
+                            final isHigh = f.influence == 'high';
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isHigh
+                                    ? AppColors.error.withValues(alpha: 0.06)
+                                    : AppColors.brandPrimary
+                                        .withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isHigh
+                                      ? AppColors.error.withValues(alpha: 0.15)
+                                      : AppColors.brandPrimary
+                                          .withValues(alpha: 0.15),
+                                ),
+                              ),
+                              child: Text(
+                                f.factor,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isHigh
+                                      ? AppColors.error
+                                      : AppColors.textPrimary,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+                    ] else ...[
+                      // Checkup Assessment (Within Expected Monitoring Range or Requires Closer Monitoring)
+                      Row(
+                        children: [
+                          const Text(
+                            'Checkup Assessment',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(width: 10),
+                          if (_isEditingAiAssessment)
+                            Expanded(
+                              child: AppDropdownField<String>(
+                                value: _editableRiskLevel,
+                                options: const ['low', 'high'],
+                                displayStringForOption: (val) => val == 'low'
+                                    ? 'Within Expected Monitoring Range'
+                                    : 'Requires Closer Monitoring',
+                                onSelected: (val) {
+                                  setState(() {
+                                    _editableRiskLevel = val;
+                                    _aiResponseApproved = false;
+                                  });
+                                },
+                                hintText: 'Select Assessment',
+                                leadingIcon: Icons.monitor_heart_outlined,
+                              ),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: _editableRiskLevel == 'high'
+                                    ? AppColors.error.withValues(alpha: 0.1)
+                                    : AppColors.success.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                _editableRiskLevel == 'high'
+                                    ? 'Requires Closer Monitoring'
+                                    : 'Within Expected Monitoring Range',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _editableRiskLevel == 'high'
+                                      ? AppColors.error
+                                      : AppColors.success,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      const Divider(color: AppColors.borderPrimary, height: 1),
+                      const SizedBox(height: 14),
+
+                      // B. Bilingual Translation Switcher Toggle
+                      Align(
+                        alignment: Alignment.center,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgPrimary,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                                color: AppColors.borderPrimary, width: 1.5),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedLanguage = 'filipino';
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: _selectedLanguage == 'filipino'
+                                        ? AppColors.brandPrimary
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    'Filipino (Conversational)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: _selectedLanguage == 'filipino'
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                      color: _selectedLanguage == 'filipino'
+                                          ? Colors.white
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedLanguage = 'english';
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: _selectedLanguage == 'english'
+                                        ? AppColors.brandPrimary
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    'English',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: _selectedLanguage == 'english'
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                      color: _selectedLanguage == 'english'
+                                          ? Colors.white
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
+
+                      // C. AI Insight Text (Color is AppColors.inputText)
+                      if (!_isEditingAiAssessment)
+                        Text(
+                          content,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: activeInsight.isEmpty
+                                ? AppColors.textSecondary
+                                : AppColors.inputText,
+                            height: 1.65,
+                            fontStyle: activeInsight.isEmpty
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.faintWhite,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderPrimary),
+                          ),
+                          child: TextField(
+                            controller: _selectedLanguage == 'filipino'
+                                ? _aiFilipinoCtrl
+                                : _aiEnglishCtrl,
+                            minLines: editorLines,
+                            maxLines: editorLines,
+                            decoration: InputDecoration(
+                              hintText: _selectedLanguage == 'filipino'
+                                  ? 'Isulat ang care message para sa ina (Filipino)...'
+                                  : 'Write the care message for the mother (English)...',
+                              hintStyle: const TextStyle(
+                                  color: AppColors.textSecondary, fontSize: 13),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.all(14),
+                            ),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.inputText,
+                              height: 1.65,
+                            ),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -4075,174 +4228,190 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
         const SizedBox(height: 16),
 
         // E. Redesigned Action Buttons (Friction-Free Override Flow)
-        if (_isEditingAiAssessment) ...[
-          // Case 3: In Edit Mode
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      // Revert controllers to backup
-                      _aiFilipinoCtrl.text = _backupFilipino;
-                      _aiEnglishCtrl.text = _backupEnglish;
-                      _isEditingAiAssessment = false;
-                    });
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    side: const BorderSide(color: AppColors.borderPrimary),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text('Cancel'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: FilledButton(
-                  onPressed: () {
-                    final nextFilText = _aiFilipinoCtrl.text.trim();
-                    final nextEngText = _aiEnglishCtrl.text.trim();
-                    if (nextFilText.isEmpty || nextEngText.isEmpty) {
-                      _showMessage('Both Filipino and English insights are required.');
-                      return;
-                    }
-                    setState(() {
-                      // Save changes to primary _aiAssessmentCtrl combined text
-                      _aiAssessmentCtrl.text = '=== FILIPINO ===\n$nextFilText\n\n=== ENGLISH ===\n$nextEngText';
-                      _aiAssessmentEdited = _aiAssessmentCtrl.text.trim() != (_aiOriginalAssessment ?? '').trim();
-                      _aiResponseApproved = false;
-                      _isEditingAiAssessment = false;
-                    });
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text('Save Changes'),
-                ),
-              ),
-            ],
-          ),
-        ] else if (_aiResponseApproved) ...[
-          // Case 2: When Care Insight IS approved
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
-            ),
-            child: Row(
+        if (_activeRiskTab == 'insight') ...[
+          if (_isEditingAiAssessment) ...[
+            // Case 3: In Edit Mode
+            Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Care insight approved! This insight is ready and will be saved when you submit the checkup.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w500,
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        // Revert controllers to backup
+                        _aiFilipinoCtrl.text = _backupFilipino;
+                        _aiEnglishCtrl.text = _backupEnglish;
+                        _isEditingAiAssessment = false;
+                      });
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: AppColors.borderPrimary),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
+                    child: const Text('Cancel'),
                   ),
                 ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _aiResponseApproved = false;
-                    });
-                  },
-                  child: const Text(
-                    'Re-edit',
-                    style: TextStyle(
-                      color: AppColors.brandPrimary,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    onPressed: () {
+                      final nextFilText = _aiFilipinoCtrl.text.trim();
+                      final nextEngText = _aiEnglishCtrl.text.trim();
+                      if (nextFilText.isEmpty || nextEngText.isEmpty) {
+                        _showMessage(
+                            'Both Filipino and English insights are required.');
+                        return;
+                      }
+                      setState(() {
+                        // Save changes to primary _aiAssessmentCtrl combined text
+                        _aiAssessmentCtrl.text =
+                            '=== FILIPINO ===\n$nextFilText\n\n=== ENGLISH ===\n$nextEngText';
+                        _aiAssessmentEdited = _aiAssessmentCtrl.text.trim() !=
+                            (_aiOriginalAssessment ?? '').trim();
+                        _aiResponseApproved = false;
+                        _isEditingAiAssessment = false;
+                      });
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
+                    child: const Text('Save Changes'),
                   ),
                 ),
               ],
             ),
-          ),
-        ] else ...[
-          // Case 1: When Care Insight is NOT approved
-          Column(
-            children: [
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: (content.isEmpty || activeInsight.isEmpty)
-                      ? null
-                      : () {
-                          setState(() {
-                            _aiResponseApproved = true;
-                          });
-                          _showMessage('Insight approved! You can now save the checkup.');
-                        },
-                  icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                  label: const Text('Approve Care Insight'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brandPrimary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
+          ] else if (_aiResponseApproved) ...[
+            // Case 2: When Care Insight IS approved
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(16),
+                border:
+                    Border.all(color: AppColors.success.withValues(alpha: 0.35)),
               ),
-              const SizedBox(height: 12),
-              Row(
+              child: Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          // Copy current texts to backup
-                          _backupFilipino = _aiFilipinoCtrl.text;
-                          _backupEnglish = _aiEnglishCtrl.text;
-                          _isEditingAiAssessment = true;
-                          _aiResponseApproved = false;
-                        });
-                      },
-                      icon: const Icon(Icons.edit_outlined, size: 16),
-                      label: const Text('Edit Insight'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textPrimary,
-                        side: const BorderSide(color: AppColors.borderPrimary),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                  const Icon(Icons.check_circle_rounded,
+                      color: AppColors.success, size: 24),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Care insight approved! This insight is ready and will be saved when you submit the checkup.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _aiAnalysisSkipped = true;
-                          final ruleSnapshot = _buildRuleBasedRiskSnapshot();
-                          _syncEditableRiskState(ruleSnapshot, ruleSnapshot.aiAssessment);
-                          _riskSnapshot = ruleSnapshot;
-                        });
-                      },
-                      icon: const Icon(Icons.settings_backup_restore_rounded, size: 16),
-                      label: const Text('Use Default'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textPrimary,
-                        side: const BorderSide(color: AppColors.borderPrimary),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _aiResponseApproved = false;
+                      });
+                    },
+                    child: const Text(
+                      'Re-edit',
+                      style: TextStyle(
+                        color: AppColors.brandPrimary,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
                       ),
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ] else ...[
+            // Case 1: When Care Insight is NOT approved
+            Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: (content.isEmpty || activeInsight.isEmpty)
+                        ? null
+                        : () {
+                            setState(() {
+                              _aiResponseApproved = true;
+                            });
+                            _showMessage(
+                                'Insight approved! You can now save the checkup.');
+                          },
+                    icon:
+                        const Icon(Icons.check_circle_outline_rounded, size: 18),
+                    label: const Text('Approve Care Insight'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            // Copy current texts to backup
+                            _backupFilipino = _aiFilipinoCtrl.text;
+                            _backupEnglish = _aiEnglishCtrl.text;
+                            _isEditingAiAssessment = true;
+                            _aiResponseApproved = false;
+                          });
+                        },
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: const Text('Edit Insight'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textPrimary,
+                          side: const BorderSide(color: AppColors.borderPrimary),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _aiAnalysisSkipped = true;
+                            final ruleSnapshot = _buildRuleBasedRiskSnapshot();
+                            _syncEditableRiskState(
+                                ruleSnapshot, ruleSnapshot.aiAssessment);
+                            _riskSnapshot = ruleSnapshot;
+                          });
+                        },
+                        icon: const Icon(Icons.settings_backup_restore_rounded,
+                            size: 16),
+                        label: const Text('Use Default'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textPrimary,
+                          side: const BorderSide(color: AppColors.borderPrimary),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ],
       ],
     );

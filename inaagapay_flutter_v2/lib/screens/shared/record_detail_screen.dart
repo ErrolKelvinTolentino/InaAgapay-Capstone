@@ -2253,6 +2253,16 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     return AppColors.brandPrimary;
   }
 
+  String _checkupAssessmentLabel(String val) {
+    final lower = val.toLowerCase().trim();
+    if (lower == 'low') {
+      return _t('Within Expected Monitoring Range', 'Nasa Inaasahang Saklaw');
+    } else if (lower == 'high') {
+      return _t('Requires Closer Monitoring', 'Kailangan ng Masusing Pagsubaybay');
+    }
+    return val.toUpperCase();
+  }
+
   Widget _buildPrenatalRiskSummaryCard() {
     final riskLevel = widget.riskLevel ?? '';
     final riskFactors = widget.riskFactors ?? [];
@@ -2311,12 +2321,12 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           // Risk Level Section
           if (riskLevel.isNotEmpty) ...[
             _buildRiskSubSection(
-              title: _t('Risk Level', 'Antas ng Panganib'),
+              title: _t('Checkup Assessment', 'Pagsusuri ng Checkup'),
               icon: Icons.flag_outlined,
               child: Row(
                 children: [
                   _buildRiskChip(
-                    label: riskLevel.toUpperCase(),
+                    label: _checkupAssessmentLabel(riskLevel),
                     color: _riskLevelBadgeColor(riskLevel),
                   ),
                 ],
