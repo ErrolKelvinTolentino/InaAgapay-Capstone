@@ -363,6 +363,15 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
 
   Future<void> _loadFetalCount() async {
     try {
+      // Check if there are any saved ultrasound records for this pregnancy
+      final ultrasoundRes = await Supabase.instance.client
+          .from('ultrasounds')
+          .select('ultrasound_id')
+          .eq('pregnancy_id', widget.pregnancyId)
+          .limit(1);
+
+      final hasUltrasound = ultrasoundRes != null && ultrasoundRes.isNotEmpty;
+
       final res = await Supabase.instance.client
           .from('pregnancies')
           .select('fetal_count')
@@ -370,10 +379,11 @@ class _AddPrenatalCheckupScreenState extends State<AddPrenatalCheckupScreen> {
           .maybeSingle(); // ← FIXED: Changed from .single()
 
       if (res != null && mounted) {
-        final dbFetalCount = res['fetal_count'] as int?;
+        final dbFetalCount = int.tryParse(res['fetal_count']?.toString() ?? '');
         setState(() {
           _originalFetalCount = dbFetalCount;
-          _fetalCount = dbFetalCount;
+          // Only reflect fetal count if there are ultrasound records; otherwise display Unknown
+          _fetalCount = hasUltrasound ? dbFetalCount : null;
           _loadingFetalCount = false;
         });
       } else {
@@ -2386,7 +2396,7 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
       final heightCm = _wgeToDouble(motherData?['height']);
       final prePregnancyWeight =
           _wgeToDouble(pregnancyData?['pre_pregnancy_weight']);
-      final fetalCount = (pregnancyData?['fetal_count'] as num?)?.toInt() ?? 1;
+      final fetalCount = int.tryParse(pregnancyData?['fetal_count']?.toString() ?? '') ?? 1;
 
       // Fetch all checkups for this pregnancy (ascending order)
       final rawCheckups = await client

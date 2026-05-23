@@ -2,6 +2,7 @@
 
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -222,6 +223,15 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             if (response['expected_date_of_delivery'] != null) {
               _pregnancyEdd = DateTime.parse(response['expected_date_of_delivery'].toString());
             }
+            
+            // Fallback back-calculations if one is missing but the other exists
+            if (_pregnancyLmp == null && _pregnancyEdd != null) {
+              _pregnancyLmp = _pregnancyEdd!.subtract(const Duration(days: 280));
+            }
+            if (_pregnancyEdd == null && _pregnancyLmp != null) {
+              _pregnancyEdd = _pregnancyLmp!.add(const Duration(days: 280));
+            }
+
             if (response['pregnancy_risk_level'] != null) {
               _pregnancyRiskLevel = response['pregnancy_risk_level'].toString().toLowerCase();
             }
@@ -288,10 +298,20 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   int? _calculateExpectedWeeksAtUltrasound() {
-    if (_pregnancyLmp == null || _ultrasoundDate == null) return null;
-    final diffInDays = _ultrasoundDate!.difference(_pregnancyLmp!).inDays;
-    if (diffInDays < 0) return 0;
-    return (diffInDays / 7).floor();
+    if (_pregnancyLmp != null && _ultrasoundDate != null) {
+      final diffInDays = _ultrasoundDate!.difference(_pregnancyLmp!).inDays;
+      if (diffInDays < 0) return 0;
+      return (diffInDays / 7).floor();
+    }
+    if (_pregnancyEdd != null && _ultrasoundDate != null) {
+      // EDD is 40 weeks (280 days) after LMP.
+      // So expected gestational age = 40 weeks - (EDD - ultrasoundDate) in weeks.
+      final diffToEdd = _pregnancyEdd!.difference(_ultrasoundDate!).inDays;
+      final gestationalDays = 280 - diffToEdd;
+      if (gestationalDays < 0) return 0;
+      return (gestationalDays / 7).floor();
+    }
+    return null;
   }
 
   int? _calculateMaternalAge() {
@@ -307,15 +327,29 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   int? _extractWeeksFromAiText(String? ageText) {
     if (ageText == null || ageText.isEmpty) return null;
+    
+    // 1. Explicitly check for week pattern first (e.g. "34 weeks", "34 wks", "34w")
     final regExp = RegExp(r'(\d+)\s*(?:weeks?|wks?|w\b)', caseSensitive: false);
     final match = regExp.firstMatch(ageText);
     if (match != null) {
       return int.tryParse(match.group(1)!);
     }
-    final numRegExp = RegExp(r'\b(\d+)\b');
-    final numMatch = numRegExp.firstMatch(ageText);
-    if (numMatch != null) {
-      return int.tryParse(numMatch.group(1)!);
+    
+    // 2. Look for any number in the sensible gestational range (4 to 42)
+    // to avoid matching small numbers like 1, 2, 3 (from "3rd trimester" etc.)
+    final numRegExp = RegExp(r'\b\d+\b');
+    final matches = numRegExp.allMatches(ageText);
+    for (final m in matches) {
+      final val = int.tryParse(m.group(0)!);
+      if (val != null && val >= 4 && val <= 42) {
+        return val;
+      }
+    }
+    
+    // 3. Fall back to first number found
+    final fallbackMatch = numRegExp.firstMatch(ageText);
+    if (fallbackMatch != null) {
+      return int.tryParse(fallbackMatch.group(0)!);
     }
     return null;
   }
@@ -533,13 +567,29 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
 
+  int? _detectFetalCountFromAiText(String? description) {
+    if (description == null || description.isEmpty) return null;
+    final text = description.toLowerCase();
+    if (text.contains('twin') || text.contains('multiple') || text.contains('dalawa') || text.contains('kambal')) {
+      return 2;
+    }
+    if (text.contains('triplet') || text.contains('tatlo')) {
+      return 3;
+    }
+    if (text.contains('singleton') || text.contains('single fetus') || text.contains('isa') || text.contains('solo')) {
+      return 1;
+    }
+    return null;
+  }
+
   String _getFetalCount() {
     if (_pregnancyFetalCount != null) {
       return _pregnancyFetalCount == 1 ? 'Singleton' : '$_pregnancyFetalCount babies';
     }
-    final text = (_combinedResponse?.description ?? '').toLowerCase();
-    if (text.contains('twin') || text.contains('multiple')) return 'Twins';
-    if (text.contains('triplet')) return 'Triplets';
+    final detected = _detectFetalCountFromAiText(_combinedResponse?.description);
+    if (detected != null) {
+      return detected == 1 ? 'Singleton' : '$detected babies';
+    }
     return 'Singleton';
   }
 
@@ -547,10 +597,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     if (_pregnancyFetalCount != null) {
       return _pregnancyFetalCount!;
     }
-    final text = (_combinedResponse?.description ?? '').toLowerCase();
-    if (text.contains('twin') || text.contains('multiple')) return 2;
-    if (text.contains('triplet')) return 3;
-    return 1;
+    return _detectFetalCountFromAiText(_combinedResponse?.description) ?? 1;
   }
 
   String _safeStatusLabel(String status, String language) {
@@ -822,11 +869,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         ], // end Row children
       ), // end Row
 
-      // Monitoring Classification chip — shown only after AI analysis
-      if (_combinedResponse != null) ...[
-        const SizedBox(height: 10),
-        _buildMonitoringClassificationChip(_monitoringClassification),
-      ],
     ], // end Column children
     ), // end Column (card body)
     ); // end Container
@@ -855,43 +897,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       case MonitoringClassification.followUpRecommended:
         return Icons.warning_amber_rounded;
     }
-  }
-
-  Widget _buildMonitoringClassificationChip(
-      MonitoringClassification classification) {
-    // Reference: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014)
-    //            WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
-    final chipColor = _monitoringChipColor(classification);
-    final chipIcon = _monitoringChipIcon(classification);
-    final label = UltrasoundInterpretationEngine.classificationLabel(
-        classification, _selectedLanguage);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: chipColor.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: chipColor.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(chipIcon, size: 15, color: chipColor),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: chipColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
 
@@ -1219,17 +1224,16 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
       try {
         final bytes = await image.readAsBytes();
-        final decoded = img.decodeImage(bytes);
-        if (decoded == null) {
-          return 'Image ${i + 1} could not be decoded. Please upload JPG, PNG, WEBP, or another convertible image.';
-        }
+        final codec = await ui.instantiateImageCodec(bytes);
+        final frame = await codec.getNextFrame();
+        final decoded = frame.image;
         final shortestSide =
             decoded.width < decoded.height ? decoded.width : decoded.height;
         if (shortestSide < 400) {
           return 'Image ${i + 1} resolution is too low (minimum 400px on the shortest side). Retake in better lighting and closer framing.';
         }
       } catch (_) {
-        return 'Image ${i + 1} could not be read. Please re-upload a clear image.';
+        return 'Image ${i + 1} could not be decoded. Please upload JPG, PNG, WEBP, or another convertible image.';
       }
     }
 
@@ -1430,6 +1434,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       setState(() {
         _combinedResponse = result;
         _monitoringClassification = computed;
+
+        // Auto-detect and update fetal count from scan text if detected
+        final detectedFetalCount = _detectFetalCountFromAiText(result.description);
+        if (detectedFetalCount != null) {
+          _pregnancyFetalCount = detectedFetalCount;
+        }
 
         if (result.description.isNotEmpty) {
           _healthSummaryController.text = result.description;

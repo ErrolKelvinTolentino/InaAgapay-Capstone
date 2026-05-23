@@ -1,6 +1,7 @@
 // lib/screens/midwife/lab_test_analyzer_screen.dart
 
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -238,12 +239,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     }
   }
 
-  bool _validateForm() {
-    if (!_validateStep1()) return false;
-    if (!_validateStep2()) return false;
-    if (!_validateStep3()) return false;
-    return true;
-  }
 
   bool _validateStep1() {
     if (_labTestDate == null) {
@@ -361,17 +356,16 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
       try {
         final bytes = await image.readAsBytes();
-        final decoded = img.decodeImage(bytes);
-        if (decoded == null) {
-          return 'Image ${i + 1} could not be decoded. Please upload JPG, PNG, WEBP, or another convertible image.';
-        }
+        final codec = await ui.instantiateImageCodec(bytes);
+        final frame = await codec.getNextFrame();
+        final decoded = frame.image;
         final shortestSide =
             decoded.width < decoded.height ? decoded.width : decoded.height;
         if (shortestSide < 400) {
           return 'Image ${i + 1} resolution is too low (minimum 400px on the shortest side). Retake in better lighting and closer framing.';
         }
       } catch (_) {
-        return 'Image ${i + 1} could not be read. Please re-upload a clear image.';
+        return 'Image ${i + 1} could not be decoded. Please upload JPG, PNG, WEBP, or another convertible image.';
       }
     }
 
