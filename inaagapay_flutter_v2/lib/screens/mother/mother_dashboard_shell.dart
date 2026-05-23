@@ -79,8 +79,23 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     final accountId = await AuthStorage.getUserId();
     if (accountId == null || !mounted) return;
 
+    final motherId = await AuthStorage.getMotherId();
+    bool unlinked = false;
+    if (motherId != null) {
+      final motherResponse = await SupabaseService.client
+          .from('mothers')
+          .select('assigned_bhc_id')
+          .eq('mother_id', motherId)
+          .maybeSingle();
+      unlinked = motherResponse == null || motherResponse['assigned_bhc_id'] == null;
+    }
+
     final count = await NotificationService.getUnreadCount(accountId);
-    if (mounted) setState(() => _unreadCount = count);
+    if (mounted) {
+      setState(() {
+        _unreadCount = count + (unlinked ? 1 : 0);
+      });
+    }
 
     _notifChannel =
         NotificationService.subscribeToNotifications(accountId, (payload) {

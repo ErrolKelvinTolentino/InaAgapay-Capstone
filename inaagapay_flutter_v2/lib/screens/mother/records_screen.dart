@@ -26,6 +26,7 @@ class _RecordsScreenState extends State<RecordsScreen>
   String? _errorMessage;
   int? _motherId;
   bool _isUnlinked = false;
+  bool _isUnlinkedBannerDismissed = false;
 
   List<Map<String, dynamic>> _checkups = [];
   List<Map<String, dynamic>> _ultrasounds = [];
@@ -1091,7 +1092,7 @@ class _RecordsScreenState extends State<RecordsScreen>
   Widget _buildRecordsTab(List<Map<String, dynamic>> allRecords) {
     return Column(
       children: [
-        if (_isUnlinked)
+        if (_isUnlinked && !_isUnlinkedBannerDismissed)
           Container(
             width: double.infinity,
             margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -1123,6 +1124,17 @@ class _RecordsScreenState extends State<RecordsScreen>
                       height: 1.3,
                     ),
                   ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary),
+                  onPressed: () {
+                    setState(() {
+                      _isUnlinkedBannerDismissed = true;
+                    });
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),

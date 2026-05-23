@@ -30,6 +30,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
   bool _isLoading = true;
   String? _errorMessage;
   bool _isUnlinked = false;
+  bool _isUnlinkedBannerDismissed = false;
 
   // Dashboard data
   int _week = 0;
@@ -1106,6 +1107,16 @@ class _MotherDashboardState extends State<MotherDashboard> {
                   ),
                 ),
               ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary),
+                onPressed: () {
+                  setState(() {
+                    _isUnlinkedBannerDismissed = true;
+                  });
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1539,7 +1550,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
                               ),
                             ),
 
-                            if (_isUnlinked) ...[
+                            if (_isUnlinked && !_isUnlinkedBannerDismissed) ...[
                               const SizedBox(height: 16),
                               _buildUnlinkedBhcBanner(),
                             ],
