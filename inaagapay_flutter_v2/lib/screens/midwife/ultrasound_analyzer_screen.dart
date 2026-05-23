@@ -14,7 +14,9 @@ import '../../services/auth_storage.dart';
 import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
-import '../../widgets/progressive_step_indicator.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/secondary_header.dart';
+import '../../widgets/main_button.dart';
 
 class UltrasoundAnalyzerScreen extends StatefulWidget {
   final int motherId;
@@ -42,7 +44,15 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   String? _errorMessage;
 
   int _step = 0;
-  static const int _totalSteps = 3;
+  static const int _totalSteps = 2;
+  static const List<String> _stepTitles = [
+    'Ultrasound Details',
+    'Attach Images and Notes',
+  ];
+  static const List<String> _stepSubtitles = [
+    'Set the date and enter study details.',
+    'Attach ultrasound images, add optional notes, and run AI analysis.',
+  ];
   bool _analysisApproved = false;
   bool _showAdvancedAiDetails = false;
   bool _loadingOverlayVisible = false;
@@ -71,6 +81,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   late int _motherId;
   late int _pregnancyId;
+  String _motherName = '';
+  DateTime? _pregnancyLmp;
+  DateTime? _pregnancyEdd;
+  bool _datesUpdated = false;
 
   final List<String> _uploadedImageUrls = [];
 
@@ -93,8 +107,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
     _motherId = widget.motherId;
     _pregnancyId = widget.pregnancyId;
+    _motherName = 'Mother #$_motherId';
 
     _loadUserContext();
+    _loadMotherName();
+    _loadPregnancyDetails();
   }
 
   @override
@@ -118,6 +135,158 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       await AuthStorage.getUserRole();
     } catch (e) {
       if (kDebugMode) print('Error loading user context: $e');
+    }
+  }
+
+  Future<void> _loadMotherName() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('mothers')
+          .select('account:account_id (first_name, last_name)')
+          .eq('mother_id', _motherId)
+          .maybeSingle();
+
+      if (response != null && response['account'] != null) {
+        final account = response['account'] as Map<String, dynamic>;
+        final first = account['first_name']?.toString() ?? '';
+        final last = account['last_name']?.toString() ?? '';
+        final full = '$first $last'.trim();
+        if (mounted && full.isNotEmpty) {
+          setState(() {
+            _motherName = full;
+          });
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error loading mother name: $e');
+    }
+  }
+
+  Future<void> _loadPregnancyDetails() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('pregnancies')
+          .select('last_menstrual_period, expected_date_of_delivery')
+          .eq('pregnancy_id', _pregnancyId)
+          .maybeSingle();
+
+      if (response != null) {
+        if (mounted) {
+          setState(() {
+            if (response['last_menstrual_period'] != null) {
+              _pregnancyLmp = DateTime.parse(response['last_menstrual_period'].toString());
+            }
+            if (response['expected_date_of_delivery'] != null) {
+              _pregnancyEdd = DateTime.parse(response['expected_date_of_delivery'].toString());
+            }
+          });
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error loading pregnancy details: $e');
+    }
+  }
+
+  int? _calculateExpectedWeeksAtUltrasound() {
+    if (_pregnancyLmp == null || _ultrasoundDate == null) return null;
+    final diffInDays = _ultrasoundDate!.difference(_pregnancyLmp!).inDays;
+    if (diffInDays < 0) return 0;
+    return (diffInDays / 7).floor();
+  }
+
+  int? _extractWeeksFromAiText(String? ageText) {
+    if (ageText == null || ageText.isEmpty) return null;
+    final regExp = RegExp(r'(\d+)\s*(?:weeks?|wks?|w\b)', caseSensitive: false);
+    final match = regExp.firstMatch(ageText);
+    if (match != null) {
+      return int.tryParse(match.group(1)!);
+    }
+    final numRegExp = RegExp(r'\b(\d+)\b');
+    final numMatch = numRegExp.firstMatch(ageText);
+    if (numMatch != null) {
+      return int.tryParse(numMatch.group(1)!);
+    }
+    return null;
+  }
+
+  int _extractDaysFromAiText(String? ageText) {
+    if (ageText == null || ageText.isEmpty) return 0;
+    final regExp = RegExp(r'(\d+)\s*(?:days?|d\b)', caseSensitive: false);
+    final match = regExp.firstMatch(ageText);
+    if (match != null) {
+      return int.tryParse(match.group(1)!) ?? 0;
+    }
+    return 0;
+  }
+
+  bool _hasGestationalAgeDiscrepancy() {
+    final expected = _calculateExpectedWeeksAtUltrasound();
+    final aiWeeks = _extractWeeksFromAiText(_combinedResponse?.gestationalAge);
+    if (expected == null || aiWeeks == null) return false;
+    return (expected - aiWeeks).abs() >= 2;
+  }
+
+  bool _isNameMismatch() {
+    final extracted = _combinedResponse?.extractedPatientName;
+    if (extracted == null || extracted.trim().isEmpty) return false;
+
+    final cleanExtracted = extracted.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
+    final cleanMother = _motherName.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
+
+    final tokensExt = cleanExtracted.split(RegExp(r'\s+')).where((t) => t.length > 2).toList();
+    final tokensMoth = cleanMother.split(RegExp(r'\s+')).where((t) => t.length > 2).toList();
+
+    if (tokensExt.isEmpty || tokensMoth.isEmpty) return false;
+
+    for (final t in tokensExt) {
+      if (tokensMoth.contains(t)) return false;
+    }
+    return true;
+  }
+
+  Future<void> _reDatePregnancy() async {
+    final aiWeeks = _extractWeeksFromAiText(_combinedResponse?.gestationalAge);
+    final aiDays = _extractDaysFromAiText(_combinedResponse?.gestationalAge);
+
+    if (aiWeeks == null || _ultrasoundDate == null) {
+      _showMessage('Unable to re-date pregnancy without valid AI gestational age.', type: AppSnackType.warning);
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final totalDays = (aiWeeks * 7) + aiDays;
+      final newLmp = _ultrasoundDate!.subtract(Duration(days: totalDays));
+      final newEdd = newLmp.add(const Duration(days: 280));
+
+      await Supabase.instance.client
+          .from('pregnancies')
+          .update({
+            'last_menstrual_period': newLmp.toIso8601String().split('T')[0],
+            'expected_date_of_delivery': newEdd.toIso8601String().split('T')[0],
+          })
+          .eq('pregnancy_id', _pregnancyId);
+
+      setState(() {
+        _pregnancyLmp = newLmp;
+        _pregnancyEdd = newEdd;
+        _datesUpdated = true;
+      });
+
+      _showMessage(
+        'Pregnancy re-dated successfully! LMP set to ${DateFormat('MMM d, yyyy').format(newLmp)}, EDD set to ${DateFormat('MMM d, yyyy').format(newEdd)}.',
+        type: AppSnackType.success,
+      );
+    } catch (e) {
+      if (kDebugMode) print('Error re-dating pregnancy: $e');
+      _showMessage('Error re-dating pregnancy: $e', type: AppSnackType.error);
+    } finally {
+      setState(() {
+        _isSaving = false;
+      });
     }
   }
 
@@ -213,6 +382,54 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       initialDate: _ultrasoundDate ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.brandPrimary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.brandText,
+              secondary: AppColors.brandPrimary,
+              surface: Colors.white,
+            ),
+            dialogTheme: DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 4,
+              surfaceTintColor: Colors.transparent,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              headerBackgroundColor: Colors.white,
+              headerForegroundColor: AppColors.brandText,
+              headerHeadlineStyle: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandText,
+              ),
+              headerHelpStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandPrimary,
+              ),
+              surfaceTintColor: Colors.transparent,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
@@ -233,12 +450,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   bool _validateStep2() {
-    // Health worker metadata is optional (Task 3.1).
-    // Only validate "Other (specify)" consistency when a profession is chosen.
-    final selected = _effectiveSelectedProfession();
-    if (selected == _otherProfessionOption &&
-        _healthWorkerProfessionController.text.trim().isEmpty) {
-      _showMessage('You selected "Other" \u2014 please specify the profession or clear the selection.',
+    if (_selectedImages.isEmpty) {
+      _showMessage('Please attach at least one ultrasound image.',
           type: AppSnackType.warning);
       return false;
     }
@@ -257,15 +470,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     if (text.isEmpty) return null;
     if (_ultrasoundProfessions.contains(text)) return text;
     return _otherProfessionOption;
-  }
-
-  bool _validateStep3() {
-    if (_selectedImages.isEmpty) {
-      _showMessage('Please attach at least one ultrasound image.',
-          type: AppSnackType.warning);
-      return false;
-    }
-    return true;
   }
 
   bool _isAiResultUnrelated(String text) {
@@ -435,7 +639,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   Future<void> _analyzeImages() async {
-    if (!_validateStep1() || !_validateStep3()) return;
+    if (!_validateStep1() || !_validateStep2()) return;
 
     _setLoadingState(
       'Checking image quality',
@@ -517,7 +721,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         }
       });
 
-      await _showInsightsModal();
+      _showMessage('AI analysis completed successfully!', type: AppSnackType.success);
     } catch (e) {
       if (!mounted || _cancelledRunIds.contains(runId)) return;
       _closeLoadingOverlayIfNeeded();
@@ -533,7 +737,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   Future<void> _saveToDatabase() async {
     // Only images + AI analysis result are strictly required (Task 3.4).
-    if (!_validateStep1() || !_validateStep3()) return;
+    if (!_validateStep1() || !_validateStep2()) return;
     final aiGenerated = _combinedResponse != null;
     if (!aiGenerated) {
       _showMessage('Please run AI analysis before saving.',
@@ -1482,156 +1686,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     _loadingOverlayVisible = false;
   }
 
-  Future<void> _showInsightsModal() async {
-    if (_combinedResponse == null) return;
-    final summaryDraft =
-        TextEditingController(text: _healthSummaryController.text);
 
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return WillPopScope(
-              onWillPop: () async => false,
-              child: Dialog(
-                insetPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18)),
-                child: SizedBox(
-                  width: double.maxFinite,
-                  height: MediaQuery.of(context).size.height * 0.84,
-                  child: Column(
-                    children: [
-                      const LinearProgressIndicator(
-                        minHeight: 4,
-                        value: 1,
-                        color: AppColors.brandPrimary,
-                        backgroundColor: AppColors.borderPrimary,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                        child: Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'AI Analysis',
-                                style: TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        child: Row(
-                          children: [
-                            TextButton.icon(
-                              onPressed: () async {
-                                final updated =
-                                    await Navigator.of(context).push<String>(
-                                  MaterialPageRoute(
-                                    builder: (_) => _AiInsightsEditorPage(
-                                      initialText: summaryDraft.text,
-                                    ),
-                                  ),
-                                );
-                                if (updated == null) return;
-                                setModalState(() {
-                                  summaryDraft.text = updated;
-                                });
-                              },
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text('Open Editor'),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton.icon(
-                              onPressed: () {
-                                final txt = summaryDraft.text.trim();
-                                if (txt.isEmpty) {
-                                  _showMessage('AI analysis cannot be empty.');
-                                  return;
-                                }
-                                setState(() {
-                                  _healthSummaryController.text = txt;
-                                });
-                                _showMessage('Draft saved.',
-                                    type: AppSnackType.success);
-                              },
-                              icon: const Icon(Icons.save_outlined),
-                              label: const Text('Save'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.brandPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(16),
-                          child: _buildStructuredInsights(
-                            summaryDraft.text,
-                            onInteraction: () => setModalState(() {}),
-                          ),
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                },
-                                child: const Text('Close'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: () {
-                                  final txt = summaryDraft.text.trim();
-                                  if (txt.isEmpty) {
-                                    _showMessage(
-                                        'AI analysis cannot be empty.');
-                                    return;
-                                  }
-                                  setState(() {
-                                    _healthSummaryController.text = txt;
-                                    _analysisApproved = true;
-                                  });
-                                  Navigator.pop(context);
-                                },
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.brandPrimary,
-                                ),
-                                child: const Text('Approve'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    summaryDraft.dispose();
-  }
 
   String _getHealthStatus() {
     if (_combinedResponse == null) return 'Assessment Complete';
@@ -1674,72 +1729,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _stepHeader(
-          title: 'Step 1: Ultrasound Details',
-          subtitle: 'Set the date and enter study details.',
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Study Date',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: _selectDate,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today,
-                          size: 20, color: AppColors.brandPrimary),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Ultrasound Date',
-                              style: TextStyle(
-                                  fontSize: 12, color: AppColors.textSecondary),
-                            ),
-                            Text(
-                              _dateController.text,
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+        _sectionLabel('Ultrasound Date'),
+        AppInputField(
+          hintText: 'Select Ultrasound Date',
+          controller: _dateController,
+          isRequired: true,
+          leadingIcon: Icons.calendar_today_outlined,
+          readOnly: true,
+          onTap: _selectDate,
         ),
       ],
     );
@@ -1824,113 +1821,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     );
   }
 
-  Widget _buildStep2() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _stepHeader(
-          title: 'Step 2: Health Worker Information',
-          subtitle:
-              'Optional \u2014 AI analysis is the primary output.',
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Health Worker Information',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Optional \u2014 AI analysis is the primary output',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _healthWorkerNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  hintText: 'Optional',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _healthWorkerInstitutionController,
-                decoration: const InputDecoration(
-                  labelText: 'Institution/Clinic',
-                  hintText: 'Optional',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Builder(
-                builder: (context) {
-                  final effectiveSelected = _effectiveSelectedProfession();
-                  final dropdownValue =
-                      (_ultrasoundProfessions.contains(effectiveSelected) ||
-                              effectiveSelected == _otherProfessionOption)
-                          ? effectiveSelected
-                          : null;
-
-                  final dropdownItems = [
-                    ..._ultrasoundProfessions,
-                  ];
-
-                  return DropdownButtonFormField<String>(
-                    initialValue: dropdownValue,
-                    decoration: const InputDecoration(
-                      labelText: 'Profession',
-                      hintText: 'Optional',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: dropdownItems
-                        .map((profession) => DropdownMenuItem<String>(
-                              value: profession,
-                              child: Text(profession),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedHealthWorkerProfession = value;
-                        if (value != null && value != _otherProfessionOption) {
-                          _healthWorkerProfessionController.text = value;
-                        }
-                      });
-                    },
-                  );
-                },
-              ),
-              if (_effectiveSelectedProfession() == _otherProfessionOption) ...[
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _healthWorkerProfessionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Specify Profession',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 
   String _buildReportText() {
     final buffer = StringBuffer();
@@ -1971,283 +1861,443 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     _showMessage('Report copied to clipboard!', type: AppSnackType.success);
   }
 
-  Widget _buildStep3() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _stepHeader(
-          title: 'Step 3: Attach Images and Notes',
-          subtitle:
-              'Attach ultrasound images, add notes, then run and review AI analysis.',
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Image Layout',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              const Text(
-                'Required: Add at least one ultrasound image',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              _buildImageBox(),
-              const SizedBox(height: 16),
-              const Text('Notes',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              const Text(
-                'Optional context. AI uses this during analysis if provided.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _notesController,
-                minLines: 4,
-                maxLines: 8,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: _analyzeImages,
-                  icon: const Icon(Icons.auto_awesome, size: 18),
-                  label: const Text('Run AI Analysis'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 38),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    backgroundColor: AppColors.brandPrimary,
-                    foregroundColor: Colors.white,
+  Widget _buildNameMismatchWarning() {
+    if (!_isNameMismatch()) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.person_search_rounded, color: AppColors.error, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Patient Name Mismatch Detected',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.error,
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              if (_combinedResponse != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _showInsightsModal,
-                            icon: const Icon(Icons.article_outlined),
-                            label: const Text('Open AI Insights'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        if (_analysisApproved)
-                          const Chip(
-                            label: Text('Approved'),
-                            avatar: Icon(Icons.check_circle,
-                                color: AppColors.success, size: 18),
-                          ),
-                      ],
+                const SizedBox(height: 6),
+                Text(
+                  'The uploaded ultrasound image contains the patient name "${_combinedResponse?.extractedPatientName}" which does not align with the registered mother "$_motherName".',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Please double check if you uploaded the correct ultrasound scan for this mother.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiscrepancyWarning() {
+    if (!_hasGestationalAgeDiscrepancy()) return const SizedBox.shrink();
+
+    final expected = _calculateExpectedWeeksAtUltrasound();
+    final aiWeeks = _extractWeeksFromAiText(_combinedResponse?.gestationalAge);
+    final lmpFormatted = _pregnancyLmp != null ? _dateFormat.format(_pregnancyLmp!) : 'N/A';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Gestational Age Discrepancy',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.warning,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Expected Gestational Age on ultrasound date is $expected weeks (calculated from registered LMP: $lmpFormatted). However, the scan analysis indicates a gestational age of $aiWeeks weeks.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (!_datesUpdated) ...[
+                  const Text(
+                    'Would you like to re-date the mother\'s pregnancy using the ultrasound\'s gestational age measurements?',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
                     ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _copyReportToClipboard,
-                        icon: const Icon(Icons.copy, size: 18),
-                        label: const Text('Copy Report to Clipboard'),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: _reDatePregnancy,
+                    icon: const Icon(Icons.calendar_month, size: 16),
+                    label: const Text('Re-date Pregnancy (LMP & EDD)'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      minimumSize: const Size(0, 36),
+                    ),
+                  ),
+                ] else ...[
+                  Row(
+                    children: const [
+                      Icon(Icons.check_circle, color: AppColors.success, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        'Pregnancy successfully re-dated!',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClinicalInsightsCard() {
+    if (_combinedResponse == null) return const SizedBox.shrink();
+
+    final healthStatus = _getHealthStatus();
+    final statusColor = _getHealthStatusColor();
+    final statusIcon = _getHealthStatusIcon();
+
+    return Container(
+      width: double.infinity,
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary.withValues(alpha: 0.08),
+              border: const Border(bottom: BorderSide(color: AppColors.borderPrimary)),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.auto_awesome, color: AppColors.brandPrimary, size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'AI Ultrasound Assessment',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brandPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Health status badge
+                Row(
+                  children: [
+                    const Text(
+                      'Assessment Status',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(width: 10),
                     Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: _getHealthStatusColor().withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color:
-                                _getHealthStatusColor().withValues(alpha: 0.3)),
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(_getHealthStatusIcon(),
-                              color: _getHealthStatusColor()),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _getHealthStatus(),
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: _getHealthStatusColor(),
-                              ),
+                          Icon(statusIcon, size: 14, color: statusColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            healthStatus,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    InkWell(
-                      onTap: () => setState(() =>
-                          _showAdvancedAiDetails = !_showAdvancedAiDetails),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.borderPrimary),
-                          color: AppColors.bgSecondary,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _showAdvancedAiDetails
-                                  ? Icons.expand_less
-                                  : Icons.expand_more,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _showAdvancedAiDetails
-                                  ? 'Hide Advanced AI Details'
-                                  : 'Show Advanced AI Details',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (_showAdvancedAiDetails) ...[
-                      const SizedBox(height: 10),
-                      _buildEditableSection(),
-                    ],
                   ],
                 ),
-            ],
+
+                const SizedBox(height: 16),
+                const Divider(color: AppColors.borderPrimary, height: 1),
+                const SizedBox(height: 16),
+
+                // Inline Edit toggler
+                if (!_isEditing) ...[
+                  _buildStructuredInsights(_healthSummaryController.text),
+                  const SizedBox(height: 16),
+                  const Divider(color: AppColors.borderPrimary, height: 1),
+                  const SizedBox(height: 16),
+
+                  // Interactive actions for read mode
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _healthSummaryBeforeEdit = _healthSummaryController.text;
+                              _isEditing = true;
+                            });
+                          },
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text('Edit Findings'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textPrimary,
+                            side: const BorderSide(color: AppColors.borderPrimary),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _copyReportToClipboard,
+                          icon: const Icon(Icons.copy, size: 16),
+                          label: const Text('Copy Report'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textPrimary,
+                            side: const BorderSide(color: AppColors.borderPrimary),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _analysisApproved
+                          ? null
+                          : () {
+                              setState(() {
+                                _analysisApproved = true;
+                              });
+                              _showMessage('Ultrasound AI analysis approved!', type: AppSnackType.success);
+                            },
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                      label: Text(_analysisApproved ? 'Analysis Approved ✓' : 'Approve AI Assessment'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _analysisApproved ? AppColors.success : AppColors.brandPrimary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  // Edit mode
+                  const Text(
+                    'Edit Clinical Assessment Draft',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSecondary.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderPrimary),
+                    ),
+                    child: TextField(
+                      controller: _healthSummaryController,
+                      minLines: 8,
+                      maxLines: 20,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter clinical assessment findings...',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(14),
+                      ),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textPrimary,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            setState(() {
+                              _healthSummaryController.text = _healthSummaryBeforeEdit;
+                              _isEditing = false;
+                            });
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textPrimary,
+                            side: const BorderSide(color: AppColors.borderPrimary),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () {
+                            final text = _healthSummaryController.text.trim();
+                            if (text.isEmpty) {
+                              _showMessage('Clinical assessment findings cannot be empty.');
+                              return;
+                            }
+                            setState(() {
+                              _isEditing = false;
+                              _analysisApproved = false; // Mark for re-approval upon change
+                            });
+                            _showMessage('Assessment changes draft updated.', type: AppSnackType.success);
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.brandPrimary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text('Save Draft'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildEditableSection() {
-    if (_combinedResponse == null) return const SizedBox.shrink();
-
+  Widget _buildStep2() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            if (!_isEditing)
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    _healthSummaryBeforeEdit = _healthSummaryController.text;
-                    _isEditing = true;
-                  });
-                },
-                icon: Icon(Icons.edit, color: AppColors.brandPrimary),
-                tooltip: 'Edit notes',
-              )
-            else
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      setState(() {
-                        _isEditing = false;
-                      });
-                    },
-                    icon: Icon(Icons.save, color: AppColors.success),
-                    tooltip: 'Save changes',
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      setState(() {
-                        _healthSummaryController.text =
-                            _healthSummaryBeforeEdit;
-                        _isEditing = false;
-                      });
-                    },
-                    icon: Icon(Icons.close, color: AppColors.error),
-                    tooltip: 'Cancel',
-                  ),
-                ],
-              ),
-          ],
-        ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.borderPrimary, width: 1.5),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.health_and_safety,
-                        color: AppColors.brandPrimary, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Clinical Assessment',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (!_isEditing)
-                _buildStructuredInsights(_healthSummaryController.text)
-              else
-                TextField(
-                  controller: _healthSummaryController,
-                  maxLines: 10,
-                  decoration: InputDecoration(
-                    hintText: 'Enter clinical assessment...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.all(16),
-                  ),
-                  style: const TextStyle(fontSize: 14, height: 1.5),
-                ),
-            ],
+        _sectionLabel('Attached Images'),
+        const SizedBox(height: 8),
+        _buildImageBox(),
+        const SizedBox(height: 24),
+        _sectionLabel('Notes'),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _notesController,
+          minLines: 4,
+          maxLines: 8,
+          decoration: const InputDecoration(
+            hintText: 'Optional context. AI uses this during analysis if provided.',
+            border: OutlineInputBorder(),
           ),
         ),
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: _analyzeImages,
+            icon: const Icon(Icons.auto_awesome, size: 18),
+            label: const Text('Run AI Analysis'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 38),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              backgroundColor: AppColors.brandPrimary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ),
+        if (_combinedResponse != null) ...[
+          const SizedBox(height: 24),
+          _sectionLabel('AI Assessment & Clinical Review'),
+          const SizedBox(height: 12),
+          _buildNameMismatchWarning(),
+          _buildDiscrepancyWarning(),
+          _buildClinicalInsightsCard(),
+        ],
       ],
     );
   }
@@ -2257,230 +2307,185 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back,
-                          color: AppColors.textPrimary),
-                      onPressed: _confirmDiscardAndPop,
-                      constraints:
-                          const BoxConstraints(minWidth: 40, minHeight: 40),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Ultrasound Assessment',
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.brandText),
-                    ),
-                  ),
-                  if (_selectedImages.isNotEmpty)
-                    IconButton(
+            SecondaryHeader(
+              title: 'Ultrasound Assessment',
+              onBack: _confirmDiscardAndPop,
+              trailing: _selectedImages.isNotEmpty
+                  ? IconButton(
                       icon: Icon(Icons.delete_sweep, color: AppColors.error),
                       onPressed: _clearAll,
                       tooltip: 'Clear all images',
-                    ),
+                    )
+                  : null,
+            ),
+            LinearProgressIndicator(
+              value: (_step + 1) / _totalSteps,
+              backgroundColor: AppColors.borderPrimary,
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+              minHeight: 3,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                children: [
+                  Text(
+                    _stepTitles[_step],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandPrimary),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _stepSubtitles[_step],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary),
+                  ),
                 ],
               ),
             ),
             Expanded(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal.shade200),
+                      ),
+                      child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.teal.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.teal.shade200),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(Icons.person,
-                                      size: 20, color: Colors.teal.shade700),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Mother #$_motherId',
-                                        style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.teal),
-                                      ),
-                                      Text(
-                                        'Pregnancy ID: $_pregnancyId',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.teal.shade700),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          ProgressiveStepIndicator(
-                            currentStep: _step,
-                            totalSteps: _totalSteps,
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border:
-                                  Border.all(color: AppColors.borderPrimary),
+                              borderRadius: BorderRadius.circular(8),
                             ),
+                            child: Icon(Icons.person,
+                                size: 20, color: Colors.teal.shade700),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
                             child: Text(
-                              _step == 0
-                                  ? 'Complete ultrasound details first, then continue.'
-                                  : _step == 1
-                                      ? 'Health worker details are optional. You may skip ahead.'
-                                      : 'Attach images, run AI analysis, and approve before saving.',
+                              _motherName,
                               style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                  fontWeight: FontWeight.w500),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.teal),
                             ),
                           ),
-                          const SizedBox(height: 14),
-                          _step == 0
-                              ? _buildStep1()
-                              : _step == 1
-                                  ? _buildStep2()
-                                  : _buildStep3(),
                         ],
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-                    child: Row(
-                      children: [
-                        if (_step > 0)
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: _isSaving ? null : _prevStep,
-                              child: const Text('Back'),
-                            ),
-                          ),
-                        if (_step > 0) const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: _step == _totalSteps - 1
-                              ? (_isSaving
-                                  ? const Center(
-                                      child: Padding(
-                                        padding: EdgeInsets.all(8),
-                                        child: CircularProgressIndicator(
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                  AppColors.success),
-                                        ),
-                                      ),
-                                    )
-                                  : FilledButton.icon(
-                                      onPressed: _saveToDatabase,
-                                      icon: const Icon(Icons.save_outlined),
-                                      label: const Text('Save to Records'),
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: AppColors.brandPrimary,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                    ))
-                              : FilledButton(
-                                  onPressed: _nextStep,
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: AppColors.brandPrimary,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: const Text('Next'),
-                                ),
-                        ),
-                      ],
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border:
+                            Border.all(color: AppColors.borderPrimary),
+                      ),
+                      child: Text(
+                        _step == 0
+                            ? 'Complete ultrasound details first, then continue.'
+                            : 'Attach images, run AI analysis, and approve before saving.',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500),
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    _step == 0
+                        ? _buildStep1()
+                        : _buildStep2(),
+                  ],
+                ),
               ),
             ),
           ],
         ),
       ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.07),
+                blurRadius: 14,
+                offset: const Offset(0, -4))
+          ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(
+              children: [
+                if (_step > 0) ...[
+                  Expanded(
+                    child: MainButton(
+                      label: 'Back',
+                      leftIcon: Icons.arrow_back_ios_new_rounded,
+                      isWhiteVariant: true,
+                      onPressed: _isSaving ? null : _prevStep,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: _step < _totalSteps - 1
+                      ? MainButton(
+                          label: 'Next',
+                          rightIcon: Icons.arrow_forward_ios_rounded,
+                          onPressed: _isSaving ? null : _nextStep,
+                        )
+                      : MainButton(
+                          label: _isSaving ? 'Saving...' : 'Save to Records',
+                          rightIcon: _isSaving ? null : Icons.check_rounded,
+                          onPressed: _isSaving ? null : _saveToDatabase,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _stepHeader({required String title, required String subtitle}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.bgSecondary,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderPrimary),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppColors.brandText),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style:
-                const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _sectionLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Container(
+                width: 3,
+                height: 12,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                    color: AppColors.brandPrimary,
+                    borderRadius: BorderRadius.circular(2))),
+            Text(text.toUpperCase(),
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 1.3)),
+          ],
+        ),
+      );
 }
 
 class _StatusLine extends StatelessWidget {
