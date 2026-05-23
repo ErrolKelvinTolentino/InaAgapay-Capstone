@@ -50,6 +50,9 @@ class GroqService {
   Future<GroqResponse> analyzeUltrasoundImages(
     List<XFile> imageFiles, {
     String? clinicalContext,
+    int? aogWeeks,
+    String? trimesterLabel,
+    String? relevantCategories,
   }) async {
     _validateImageInput(imageFiles);
 
@@ -62,6 +65,8 @@ class GroqService {
     final String extractionPrompt = _buildUltrasoundExtractionPrompt(
       imageCount: imageFiles.length,
       clinicalContext: normalizedContext,
+      aogWeeks: aogWeeks,
+      trimesterLabel: trimesterLabel,
     );
 
     final String rawExtraction = await _sendVisionRequest(
@@ -89,6 +94,9 @@ class GroqService {
       rawExtraction: rawExtraction,
       imageCount: imageFiles.length,
       clinicalContext: normalizedContext,
+      aogWeeks: aogWeeks,
+      trimesterLabel: trimesterLabel,
+      relevantCategories: relevantCategories,
     );
 
     final result = await _sendReasoningRequest(
@@ -301,7 +309,13 @@ Rules:
   String _buildUltrasoundExtractionPrompt({
     required int imageCount,
     required String clinicalContext,
+    int? aogWeeks,
+    String? trimesterLabel,
   }) {
+    final trimesterNote = (aogWeeks != null && trimesterLabel != null)
+        ? '\nTrimester context: $trimesterLabel ($aogWeeks weeks). Focus measurement observations on biometrics relevant to this trimester.'
+        : '';
+
     return """
 You are a medical imaging observer. Your ONLY job is to describe EXACTLY what you see in these ultrasound images.
 Do NOT interpret, diagnose, or make recommendations.
@@ -310,7 +324,7 @@ Just list EVERY visible feature, measurement, structure, and text annotation you
 CRITICAL: Pay special attention to ANY abnormalities, unusual findings, or annotations marked with flags, arrows, or measurements that appear outside normal ranges. Report EVERYTHING you observe, even subtle details.
 
 I am providing $imageCount ultrasound image(s) of the same pregnancy.
-Clinical context: ${clinicalContext.isEmpty ? 'Not provided' : clinicalContext}
+Clinical context: ${clinicalContext.isEmpty ? 'Not provided' : clinicalContext}$trimesterNote
 
 Return ONLY valid JSON (no markdown, no explanation outside the JSON):
 {
@@ -347,9 +361,38 @@ CRITICAL:
     required String rawExtraction,
     required int imageCount,
     required String clinicalContext,
+    int? aogWeeks,
+    String? trimesterLabel,
+    String? relevantCategories,
   }) {
     // Clean the extraction but preserve its content
     final cleaned = _stripMarkdownFences(rawExtraction);
+
+    // Build trimester-aware measurement guidance block
+    // Based on: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014)
+    //           WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+    final trimesterGuidance = (aogWeeks != null && trimesterLabel != null)
+        ? '''
+--------------------------------------------------
+TRIMESTER CONTEXT (from clinical records)
+--------------------------------------------------
+
+Gestational Age at Scan: $aogWeeks weeks
+Trimester: $trimesterLabel
+
+Clinically Relevant Measurement Categories for This Trimester:
+${relevantCategories ?? 'Not specified'}
+
+Reference Standards Applied:
+- INTERGROWTH-21st: Papageorghiou AT et al., The Lancet, 2014. https://intergrowth21.tghn.org
+- WHO Fetal Growth Charts: Kiserud T et al., PLOS Medicine, 2017.
+  https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1002220
+
+IMPORTANT — Only assess measurements clinically relevant for $trimesterLabel ($aogWeeks weeks).
+Do NOT score or flag measurements that are not listed above as relevant for this trimester.
+This reduces irrelevant findings and prevents AI misinterpretation.
+'''
+        : '';
 
     return """SYSTEM CONTEXT — ULTRASOUND AI-ASSISTED INTERPRETATION
 
@@ -558,6 +601,7 @@ RECOMMENDED OUTPUT STRUCTURE
 
 5. Disclaimer: "This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation."
 
+$trimesterGuidance
 --------------------------------------------------
 INPUT DATA FOR CURRENT STUDY
 --------------------------------------------------
@@ -571,6 +615,17 @@ $cleaned
 First do a relevance check. If images are unrelated, unreadable, or not suitable for interpretation, set relevance_check to UNRELATED and explain briefly in relevance_reason.
 
 --------------------------------------------------
+MONITORING CLASSIFICATION RULES
+--------------------------------------------------
+
+After analyzing the findings, determine the overall monitoring classification:
+- If measurements mostly align with gestational-age expectations → "WITHIN_EXPECTED_RANGE"
+- If mild deviations or borderline findings exist → "REQUIRES_CLOSER_MONITORING"
+- If notable findings or multiple concerning deviations → "FOLLOW_UP_RECOMMENDED"
+
+This classification is grounded in INTERGROWTH-21st and WHO Fetal Growth Chart reference standards.
+
+--------------------------------------------------
 OUTPUT JSON STRUCTURE
 --------------------------------------------------
 
@@ -579,6 +634,7 @@ Return ONLY valid JSON in this exact schema (no markdown formatting outside the 
   "relevance_check": "RELATED|UNRELATED",
   "relevance_reason": "string",
   "overall_health_status": "HEALTHY_NORMAL|REQUIRES_MONITORING|CONSULT_SPECIALIST|INSUFFICIENT_DATA",
+  "monitoring_classification": "WITHIN_EXPECTED_RANGE|REQUIRES_CLOSER_MONITORING|FOLLOW_UP_RECOMMENDED",
   "summary": "Warm, conversational message explaining pregnancy progression, growth monitoring summary, monitoring notes (if any), and encouragement, strictly matching the PREFERRED OUTPUT STYLE and RECOMMENDED OUTPUT STRUCTURE guidelines.",
   "measurements": [
    {

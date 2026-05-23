@@ -185,6 +185,11 @@ CREATE TABLE ultrasounds (
     health_worker_name VARCHAR(255),
     health_worker_institution VARCHAR(255),
     health_worker_profession VARCHAR(100),
+    -- Trimester-aware 3-tier monitoring classification (AI-assisted)
+    -- Values: within_expected_range | requires_closer_monitoring | follow_up_recommended
+    -- Reference: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014)
+    --            WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+    monitoring_classification VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE lab_tests (

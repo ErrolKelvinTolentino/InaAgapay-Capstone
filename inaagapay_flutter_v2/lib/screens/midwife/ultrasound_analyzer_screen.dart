@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/groq_service.dart';
 import '../../services/auth_storage.dart';
+import '../../services/ultrasound_interpretation_engine.dart';
 import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
@@ -65,6 +66,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   final Set<int> _cancelledRunIds = <int>{};
   final Set<String> _expandedAspects = <String>{};
   String? _lastAiPrompt;
+
+  // Trimester-aware monitoring classification (computed by UltrasoundInterpretationEngine)
+  // Reference: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014);
+  //            WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+  MonitoringClassification _monitoringClassification =
+      MonitoringClassification.withinExpectedRange;
 
   final TextEditingController _notesController = TextEditingController();
 
@@ -328,6 +335,34 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     final aiWeeks = _extractWeeksFromAiText(_combinedResponse?.gestationalAge);
     if (expected == null || aiWeeks == null) return false;
     return (expected - aiWeeks).abs() >= 2;
+  }
+
+  /// Deterministically computes the overall monitoring classification from
+  /// the AI response. First checks the AI's explicit `monitoring_classification`
+  /// field; falls back to deriving it from per-measurement statuses.
+  ///
+  /// Reference standards:
+  ///   INTERGROWTH-21st (Papageorghiou et al., The Lancet, 2014)
+  ///   WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine, 2017)
+  MonitoringClassification _computeMonitoringClassification(GroqResponse result) {
+    // Prefer the AI-provided field if present
+    if (result.monitoringClassification != null &&
+        result.monitoringClassification!.isNotEmpty) {
+      return UltrasoundInterpretationEngine.classifyFromAiString(
+          result.monitoringClassification);
+    }
+
+    // Fallback: derive from per-measurement statuses
+    final statuses = <String>[];
+    if (result.measurements != null) {
+      for (final m in result.measurements!) {
+        final bracketMatch = RegExp(r'\[([A-Z_]+)\]').firstMatch(m);
+        if (bracketMatch != null) {
+          statuses.add(bracketMatch.group(1)!);
+        }
+      }
+    }
+    return UltrasoundInterpretationEngine.classifyMonitoring(statuses);
   }
 
   bool _isNameMismatch() {
@@ -682,8 +717,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.teal.shade200.withValues(alpha: 0.6)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
           // Fetal Count
           Expanded(
             child: Column(
@@ -781,8 +819,173 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               ],
             ),
           ),
+        ], // end Row children
+      ), // end Row
+
+      // Monitoring Classification chip — shown only after AI analysis
+      if (_combinedResponse != null) ...[
+        const SizedBox(height: 10),
+        _buildMonitoringClassificationChip(_monitoringClassification),
+      ],
+    ], // end Column children
+    ), // end Column (card body)
+    ); // end Container
+  }
+
+  // ── Shared helpers for monitoring classification color/icon ────────────────
+  // Used by BOTH the header badge AND the pregnancy card chip so they are
+  // always in sync with the same single source of truth.
+  Color _monitoringChipColor(MonitoringClassification classification) {
+    switch (classification) {
+      case MonitoringClassification.withinExpectedRange:
+        return AppColors.success;
+      case MonitoringClassification.requiresCloserMonitoring:
+        return AppColors.warning;
+      case MonitoringClassification.followUpRecommended:
+        return AppColors.error;
+    }
+  }
+
+  IconData _monitoringChipIcon(MonitoringClassification classification) {
+    switch (classification) {
+      case MonitoringClassification.withinExpectedRange:
+        return Icons.check_circle_outline_rounded;
+      case MonitoringClassification.requiresCloserMonitoring:
+        return Icons.info_outline_rounded;
+      case MonitoringClassification.followUpRecommended:
+        return Icons.warning_amber_rounded;
+    }
+  }
+
+  Widget _buildMonitoringClassificationChip(
+      MonitoringClassification classification) {
+    // Reference: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014)
+    //            WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+    final chipColor = _monitoringChipColor(classification);
+    final chipIcon = _monitoringChipIcon(classification);
+    final label = UltrasoundInterpretationEngine.classificationLabel(
+        classification, _selectedLanguage);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: chipColor.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: chipColor.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(chipIcon, size: 15, color: chipColor),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: chipColor,
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+
+  /// Subtle expandable panel showing clinical references for the
+  /// monitoring classification (INTERGROWTH-21st; WHO Fetal Growth Charts).
+  Widget _buildClinicalReferenceTile() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.borderPrimary.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          leading: Icon(
+            Icons.menu_book_outlined,
+            size: 15,
+            color: AppColors.textSecondary.withValues(alpha: 0.6),
+          ),
+          title: Text(
+            _selectedLanguage == 'filipino'
+                ? 'Batayan ng Klinikal na Interpretasyon'
+                : 'Clinical Reference Basis',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary.withValues(alpha: 0.7),
+            ),
+          ),
+          iconColor: AppColors.textSecondary.withValues(alpha: 0.5),
+          collapsedIconColor: AppColors.textSecondary.withValues(alpha: 0.4),
+          children: [
+            _buildCitationRow(
+              authors: UltrasoundInterpretationEngine.citation1Authors,
+              full: UltrasoundInterpretationEngine.citation1Full,
+              url: UltrasoundInterpretationEngine.citation1Url,
+            ),
+            const SizedBox(height: 8),
+            _buildCitationRow(
+              authors: UltrasoundInterpretationEngine.citation2Authors,
+              full: UltrasoundInterpretationEngine.citation2Full,
+              url: UltrasoundInterpretationEngine.citation2Url,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedLanguage == 'filipino'
+                  ? 'Para lamang sa pagsubaybay ng kalusugan at hindi kapalit ng medikal na konsultasyon.'
+                  : 'For health monitoring support only. Does not replace professional medical consultation.',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary.withValues(alpha: 0.55),
+                fontStyle: FontStyle.italic,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCitationRow({
+    required String authors,
+    required String full,
+    required String url,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$authors $full',
+          style: TextStyle(
+            fontSize: 10,
+            color: AppColors.textSecondary.withValues(alpha: 0.65),
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          url,
+          style: TextStyle(
+            fontSize: 10,
+            color: AppColors.brandPrimary.withValues(alpha: 0.6),
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1163,14 +1366,30 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     });
 
     try {
-      _lastAiPrompt = [
-        'Ultrasound AI analysis request',
-        'Health worker name: ${_healthWorkerNameController.text.trim().isEmpty ? 'Not specified' : _healthWorkerNameController.text.trim()}',
-        'Health worker institution: ${_healthWorkerInstitutionController.text.trim().isEmpty ? 'Not specified' : _healthWorkerInstitutionController.text.trim()}',
-        'Health worker profession: ${_effectiveSelectedProfession() ?? 'Not specified'}',
-        'Notes: ${_notesController.text.trim().isEmpty ? 'None provided' : _notesController.text.trim()}',
-        'Image count: ${_selectedImages.length}',
-      ].join('\n');
+      // ── Build enriched clinical context using UltrasoundInterpretationEngine ──
+      // Determines trimester from AOG and filters to relevant measurement categories.
+      // Reference: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014)
+      //            WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+      final aogWeeks = _calculateExpectedWeeksAtUltrasound() ?? 0;
+      final trimester = UltrasoundInterpretationEngine.getTrimester(aogWeeks);
+      final relevantCategories =
+          UltrasoundInterpretationEngine.getRelevantCategories(trimester);
+      final trimesterLabel = UltrasoundInterpretationEngine.getTrimesterLabel(
+          trimester,
+          language: _selectedLanguage);
+      final categoriesLabel =
+          relevantCategories.map((c) => c.displayName).join(', ');
+
+      _lastAiPrompt = UltrasoundInterpretationEngine.buildAiClinicalContext(
+        aogWeeks: aogWeeks,
+        trimester: trimester,
+        relevantCategories: relevantCategories,
+        healthWorkerName: _healthWorkerNameController.text.trim(),
+        institution: _healthWorkerInstitutionController.text.trim(),
+        profession: _effectiveSelectedProfession(),
+        notes: _notesController.text.trim(),
+        imageCount: _selectedImages.length,
+      );
 
       _setLoadingState(
         'Reading ultrasound images',
@@ -1180,6 +1399,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       final result = await _groqService.analyzeUltrasoundImages(
         _selectedImages,
         clinicalContext: _lastAiPrompt,
+        aogWeeks: aogWeeks,
+        trimesterLabel: trimesterLabel,
+        relevantCategories: categoriesLabel,
       );
       if (!mounted || _cancelledRunIds.contains(runId)) return;
 
@@ -1199,8 +1421,15 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
       _closeLoadingOverlayIfNeeded();
 
+      // ── Compute monitoring classification deterministically from AI result ──
+      // Uses UltrasoundInterpretationEngine which applies:
+      //   INTERGROWTH-21st (Papageorghiou et al., Lancet 2014)
+      //   WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+      final computed = _computeMonitoringClassification(result);
+
       setState(() {
         _combinedResponse = result;
+        _monitoringClassification = computed;
 
         if (result.description.isNotEmpty) {
           _healthSummaryController.text = result.description;
@@ -1372,6 +1601,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     ? ''
                     : _healthWorkerInstitutionController.text.trim(),
             'health_worker_profession': finalProfession,
+            // Monitoring classification — trimester-aware 3-tier result
+            // Reference: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014)
+            //            WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+            'monitoring_classification': aiGenerated
+                ? UltrasoundInterpretationEngine.classificationToString(
+                    _monitoringClassification)
+                : null,
             'created_at': DateTime.now().toIso8601String(),
           })
           .select('ultrasound_id')
@@ -2806,21 +3042,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     return reasons;
   }
 
-  Color _getHealthStatusColor() {
-    final status = _getHealthStatus();
-    if (status.contains('HEALTHY')) return AppColors.success;
-    if (status.contains('MONITORING')) return AppColors.warning;
-    if (status.contains('REVIEW')) return AppColors.error;
-    return AppColors.brandPrimary;
-  }
 
-  IconData _getHealthStatusIcon() {
-    final status = _getHealthStatus();
-    if (status.contains('HEALTHY')) return Icons.check_circle;
-    if (status.contains('MONITORING')) return Icons.warning;
-    if (status.contains('REVIEW')) return Icons.warning_amber_rounded;
-    return Icons.info;
-  }
 
   Widget _buildStep1() {
     return Column(
@@ -3153,11 +3375,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   Widget _buildUltrasoundAssessmentCard() {
     if (_combinedResponse == null) return const SizedBox.shrink();
 
-    final healthStatus = _getHealthStatus();
-    final statusColor = _getHealthStatusColor();
-    final statusIcon = _getHealthStatusIcon();
-
-    final displayStatusText = (healthStatus == 'HEALTHY PREGNANCY' || healthStatus == 'ASSESSMENT COMPLETE')
+    final displayStatusText = _monitoringClassification == MonitoringClassification.withinExpectedRange
         ? 'Within Expected Monitoring Range'
         : 'Requires Closer Monitoring';
 
@@ -3204,20 +3422,25 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
+                    color: _monitoringChipColor(_monitoringClassification).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(statusIcon, size: 14, color: statusColor),
+                      Icon(
+                        _monitoringChipIcon(_monitoringClassification),
+                        size: 14,
+                        color: _monitoringChipColor(_monitoringClassification),
+                      ),
                       const SizedBox(width: 4),
                       Text(
-                        displayStatusText,
+                        UltrasoundInterpretationEngine.classificationLabel(
+                            _monitoringClassification, _selectedLanguage),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: statusColor,
+                          color: _monitoringChipColor(_monitoringClassification),
                         ),
                       ),
                     ],
@@ -3417,6 +3640,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
                   // D. Pregnancy Progression Card
                   _buildPregnancyProgressionCard(),
+
+                  // Clinical Reference Basis — subtle expandable panel
+                  // Shown only after AI analysis so midwife can cite references.
+                  if (_combinedResponse != null)
+                    _buildClinicalReferenceTile(),
                   const SizedBox(height: 16),
 
                   // E. Clinical Assessment findings Editor / Viewer

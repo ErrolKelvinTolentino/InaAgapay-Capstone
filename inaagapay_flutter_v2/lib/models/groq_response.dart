@@ -14,6 +14,12 @@ class GroqResponse {
   final String? fetalWeight;
   final String? heartRate;
 
+  // Trimester-aware monitoring classification
+  // Values: 'WITHIN_EXPECTED_RANGE' | 'REQUIRES_CLOSER_MONITORING' | 'FOLLOW_UP_RECOMMENDED'
+  // Reference: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014);
+  //            WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+  final String? monitoringClassification;
+
   // Fields for lab test assessment
   final List<LabResult>? labResults;
   final String? overallAssessment;
@@ -37,6 +43,7 @@ class GroqResponse {
     this.gestationalAge,
     this.fetalWeight,
     this.heartRate,
+    this.monitoringClassification,
     this.labResults,
     this.overallAssessment,
     this.abnormalFindings,
@@ -210,6 +217,10 @@ class GroqResponse {
     final gestationalAge = _safeText(json['gestational_age_assessment']);
     final overallAssessment = _safeText(json['overall_assessment']);
 
+    // Parse trimester-aware monitoring classification
+    // Reference: INTERGROWTH-21st; WHO Fetal Growth Charts
+    final monitoringClassification = _safeText(json['monitoring_classification']).toUpperCase();
+
     final patientInfo = json['patient_info_visible'] as Map<String, dynamic>?;
     final extractedPatientName = _safeText(patientInfo?['patient_name'] ?? patientInfo?['name']);
     final extractedClinicLocation = _safeText(patientInfo?['clinic_location'] ?? patientInfo?['lab_name']);
@@ -243,6 +254,7 @@ class GroqResponse {
       gestationalAge: gestationalAge.isEmpty ? null : gestationalAge,
       fetalWeight: fetalWeight,
       heartRate: heartRate,
+      monitoringClassification: monitoringClassification.isEmpty ? null : monitoringClassification,
       labResults: labResults.isEmpty ? null : labResults,
       overallAssessment: overallAssessment.isEmpty ? null : overallAssessment,
       abnormalFindings:
@@ -368,6 +380,7 @@ class GroqResponse {
           : measurements.firstWhere(
               (m) => RegExp(r'heart', caseSensitive: false).hasMatch(m),
             ),
+      monitoringClassification: null, // Free-text fallback; engine will compute from screen
       labResults: labResults.isEmpty ? null : labResults,
       overallAssessment: overallAssessment.isEmpty ? null : overallAssessment,
       abnormalFindings: abnormalFindings.isEmpty ? null : abnormalFindings,
