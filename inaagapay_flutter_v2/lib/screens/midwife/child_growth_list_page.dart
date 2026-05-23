@@ -11,7 +11,6 @@ import '../../services/groq_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ai_analytics_card.dart';
 import '../../widgets/chart_card.dart';
-import '../../widgets/growth_line_chart.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/hero_card.dart';
 import 'growth_history_screen.dart';
@@ -544,14 +543,17 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
     List<Map<String, dynamic>>? monthlyData;
 
     if (metric == 'weight') {
-      weeklyData =
-          isBoy ? GrowthReferenceData.weightBoysData : GrowthReferenceData.weightGirlsData;
-      monthlyData =
-          isBoy ? GrowthReferenceData.weightBoysMonthlyData : GrowthReferenceData.weightGirlsMonthlyData;
+      weeklyData = isBoy
+          ? GrowthReferenceData.weightBoysData
+          : GrowthReferenceData.weightGirlsData;
+      monthlyData = isBoy
+          ? GrowthReferenceData.weightBoysMonthlyData
+          : GrowthReferenceData.weightGirlsMonthlyData;
     } else {
       // height
-      weeklyData =
-          isBoy ? GrowthReferenceData.heightBoysData : GrowthReferenceData.heightGirlsData;
+      weeklyData = isBoy
+          ? GrowthReferenceData.heightBoysData
+          : GrowthReferenceData.heightGirlsData;
       monthlyData = null; // no monthly height data available
     }
 
@@ -572,16 +574,16 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
       if (ageWeeks <= 13) {
         // Use weekly data
         refEntry = weeklyData.cast<Map<String, dynamic>?>().firstWhere(
-          (e) => e!['week'] == ageWeeks,
-          orElse: () => null,
-        );
+              (e) => e!['week'] == ageWeeks,
+              orElse: () => null,
+            );
       } else if (monthlyData != null) {
         // Convert weeks to months and look up monthly data
         final ageMonths = (ageWeeks / 4.345).round();
         refEntry = monthlyData.cast<Map<String, dynamic>?>().firstWhere(
-          (e) => e!['month'] == ageMonths,
-          orElse: () => null,
-        );
+              (e) => e!['month'] == ageMonths,
+              orElse: () => null,
+            );
       }
 
       if (refEntry == null) continue;

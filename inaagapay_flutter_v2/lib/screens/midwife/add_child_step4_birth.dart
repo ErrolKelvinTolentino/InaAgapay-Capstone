@@ -10,7 +10,6 @@ import '../../widgets/dialog_box.dart';
 import '../../widgets/app_input_field.dart';
 import 'add_child_step3_child.dart';
 import 'child_profile_page.dart';
-import 'midwife_children_screen.dart';
 
 class AddChildStep4Birth extends StatefulWidget {
   final ChildParentMode mode;
@@ -451,15 +450,19 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                             ),
                             if (_birthWeightWarning != null)
                               Padding(
-                                padding: const EdgeInsets.only(top: 6, left: 12, bottom: 4),
+                                padding: const EdgeInsets.only(
+                                    top: 6, left: 12, bottom: 4),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
+                                    const Icon(Icons.warning_amber_rounded,
+                                        size: 16, color: AppColors.warning),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         _birthWeightWarning!,
-                                        style: const TextStyle(fontSize: 12, color: AppColors.warning),
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.warning),
                                       ),
                                     ),
                                   ],
@@ -475,15 +478,19 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                             ),
                             if (_birthLengthWarning != null)
                               Padding(
-                                padding: const EdgeInsets.only(top: 6, left: 12, bottom: 4),
+                                padding: const EdgeInsets.only(
+                                    top: 6, left: 12, bottom: 4),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
+                                    const Icon(Icons.warning_amber_rounded,
+                                        size: 16, color: AppColors.warning),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         _birthLengthWarning!,
-                                        style: const TextStyle(fontSize: 12, color: AppColors.warning),
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.warning),
                                       ),
                                     ),
                                   ],

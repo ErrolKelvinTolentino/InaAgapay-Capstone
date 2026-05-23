@@ -611,13 +611,17 @@ class SupabaseService {
     Map<String, dynamic> profileData,
   ) async {
     try {
-      await client.from('accounts').update({
+      final updateMap = {
         'first_name': profileData['first_name'],
         'middle_name': profileData['middle_name'],
         'last_name': profileData['last_name'],
         'extension_name': profileData['extension_name'],
         'phone_number': profileData['contact_number'],
-      }).eq('account_id', accountId);
+      };
+      if (profileData.containsKey('email_address')) {
+        updateMap['email_address'] = profileData['email_address'];
+      }
+      await client.from('accounts').update(updateMap).eq('account_id', accountId);
 
       final existingMother = await client
           .from('mothers')
@@ -714,7 +718,18 @@ class SupabaseService {
         }
       }
 
-      return {'success': true, 'message': 'Profile completed successfully'};
+      final finalMother = await client
+          .from('mothers')
+          .select('mother_id')
+          .eq('account_id', accountId)
+          .maybeSingle();
+      final finalMotherId = finalMother?['mother_id'] as int?;
+
+      return {
+        'success': true,
+        'message': 'Profile completed successfully',
+        'mother_id': finalMotherId,
+      };
     } catch (e) {
       if (kDebugMode) debugPrint('Profile completion error: $e');
       return {

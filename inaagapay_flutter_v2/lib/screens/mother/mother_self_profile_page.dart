@@ -262,7 +262,7 @@ class _MotherSelfProfilePageState extends State<MotherSelfProfilePage> {
             );
           }
 
-          final profile = snapshot.data as Map<String, dynamic>? ?? {};
+          final profile = snapshot.data ?? {};
           final fullName = _formatValue(profile['full_name']);
           final email = _formatValue(profile['email_address']);
           final phone = _formatValue(profile['phone_number']);
@@ -274,7 +274,7 @@ class _MotherSelfProfilePageState extends State<MotherSelfProfilePage> {
             profile['barangay']?.toString().trim(),
             profile['city_municipality']?.toString().trim(),
             profile['province']?.toString().trim(),
-          ].where((part) => part != null && part!.isNotEmpty).join(', ');
+          ].where((part) => part != null && part.isNotEmpty).join(', ');
           final height = _formatValue(profile['height']);
           final weight = _formatValue(profile['weight']);
           final bloodType = _formatValue(profile['blood_type']);

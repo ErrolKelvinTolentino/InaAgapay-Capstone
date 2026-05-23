@@ -1,7 +1,6 @@
 // lib/screens/mother/mother_dashboard_shell.dart
 
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -36,7 +35,7 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
   String _riskLevel = '';
   List<String> _riskFactors = [];
 
-  bool _showBHCRequiredDialog = false;
+  final bool _showBHCRequiredDialog = false;
   bool _isOffline = false;
   Timer? _connectivityTimer;
 
@@ -117,13 +116,9 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
           .eq('account_id', accountId)
           .maybeSingle();
 
-      if (motherResponse == null || motherResponse['assigned_bhc_id'] == null) {
-        _showBHCRequiredDialog = true;
-        if (mounted) {
-          await _showBHCRequiredMessage();
-        }
-      } else {
+      if (motherResponse != null) {
         final motherId = motherResponse['mother_id'] as int;
+        await AuthStorage.saveMotherId(motherId);
 
         String riskLevel = '';
         List<String> riskFactors = [];
@@ -146,7 +141,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
           }
         }
 
-        await AuthStorage.saveMotherId(motherId);
         setState(() {
           _motherId = motherId;
           _riskLevel = riskLevel;
@@ -156,141 +150,6 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
     } catch (e) {
       debugPrint('Error checking mother record: $e');
     }
-  }
-
-  Future<void> _showBHCRequiredMessage() async {
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.info_outline_rounded,
-                  size: 48,
-                  color: AppColors.warning,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                LanguageService.translate(
-                  'Account Setup Incomplete',
-                  'Hindi pa kumpleto ang pag-set up ng account',
-                ),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                LanguageService.translate(
-                  'Your account has been created but needs to be linked to a Barangay Health Center (BHC) before you can fully access the system.',
-                  'Nagawa na ang iyong account ngunit kailangan itong i-link sa isang Barangay Health Center (BHC) bago mo lubos na ma-access ang sistema.',
-                ),
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                  height: 1.4,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.brandPrimary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.medical_services_outlined,
-                      size: 20,
-                      color: AppColors.brandPrimary,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        LanguageService.translate(
-                          'Please visit your Barangay Health Center (BHC) and ask a midwife to complete your account registration.',
-                          'Pumunta sa iyong Barangay Health Center (BHC) at humingi ng midwife para tapusin ang pagpaparehistro ng iyong account.',
-                        ),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.brandPrimary,
-                          height: 1.3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () async {
-                        Navigator.pop(ctx);
-                        await _logout();
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        side: const BorderSide(color: AppColors.borderPrimary),
-                      ),
-                      child: Text(
-                        LanguageService.translate('Logout', 'Mag-logout'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandPrimary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ),
-                      child: Text(
-                        LanguageService.translate('Continue', 'Magpatuloy'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _logout() async {

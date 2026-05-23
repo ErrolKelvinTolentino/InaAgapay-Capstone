@@ -25,6 +25,7 @@ class _RecordsScreenState extends State<RecordsScreen>
   bool _isOpeningRecord = false;
   String? _errorMessage;
   int? _motherId;
+  bool _isUnlinked = false;
 
   List<Map<String, dynamic>> _checkups = [];
   List<Map<String, dynamic>> _ultrasounds = [];
@@ -100,6 +101,14 @@ class _RecordsScreenState extends State<RecordsScreen>
         throw Exception('Mother ID not found');
       }
 
+      final motherResponse = await SupabaseService.client
+          .from('mothers')
+          .select('assigned_bhc_id')
+          .eq('mother_id', _motherId!)
+          .maybeSingle();
+      _isUnlinked =
+          motherResponse == null || motherResponse['assigned_bhc_id'] == null;
+
       final pregnanciesResponse = await SupabaseService.client
           .from('pregnancies')
           .select('pregnancy_id')
@@ -112,7 +121,8 @@ class _RecordsScreenState extends State<RecordsScreen>
         });
       } else {
         final pregnancyIds = pregnanciesResponse
-            .map<int>((p) => p['pregnancy_id'] as int)
+            .map<int?>((p) => _toInt(p['pregnancy_id']))
+            .whereType<int>()
             .toList();
         await _loadRecordsForPregnancies(pregnancyIds);
       }
@@ -155,7 +165,7 @@ class _RecordsScreenState extends State<RecordsScreen>
           .inFilter('pregnancy_id', pregnancyIds);
 
       final checkupIds = (checkupsResponse as List)
-          .map<int?>((c) => c['prenatal_checkup_id'] as int?)
+          .map<int?>((c) => _toInt(c['prenatal_checkup_id']))
           .whereType<int>()
           .toList();
 
@@ -169,7 +179,7 @@ class _RecordsScreenState extends State<RecordsScreen>
 
         for (final symbol
             in (symptomRows as List).cast<Map<String, dynamic>>()) {
-          final checkupId = symbol['prenatal_checkup_id'] as int?;
+          final checkupId = _toInt(symbol['prenatal_checkup_id']);
           if (checkupId == null) continue;
           final symptomType = symbol['symptom_type'] as Map<String, dynamic>?;
           final name = symptomType?['symptom_name']?.toString() ??
@@ -195,8 +205,8 @@ class _RecordsScreenState extends State<RecordsScreen>
       final fetalCounts = <int, int>{};
       for (final pregnancy
           in (pregnancyResponse as List).cast<Map<String, dynamic>>()) {
-        final id = pregnancy['pregnancy_id'] as int?;
-        final count = pregnancy['fetal_count'] as int?;
+        final id = _toInt(pregnancy['pregnancy_id']);
+        final count = _toInt(pregnancy['fetal_count']);
         if (id != null && count != null) {
           fetalCounts[id] = count;
         }
@@ -355,7 +365,6 @@ class _RecordsScreenState extends State<RecordsScreen>
     String? subtitle,
     List<String>? imageUrls,
     String? aiAnalysis,
-    bool useStructuredAiInsights = false,
   }) {
     showModalBottomSheet(
       context: context,
@@ -749,6 +758,13 @@ class _RecordsScreenState extends State<RecordsScreen>
     return double.tryParse(value.toString());
   }
 
+  int? _toInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
   // REMOVED: _generatePrenatalAIInsights - this was the culprit generating fake AI text
 
   String _generateUltrasoundAIInsights(Map<String, dynamic> ultrasound) {
@@ -808,7 +824,7 @@ class _RecordsScreenState extends State<RecordsScreen>
       String calciumQuantity = _t('Not given', 'Hindi ibinigay');
 
       if (aiRow != null) {
-        final aiResponseId = aiRow['ai_response_id'] as int?;
+        final aiResponseId = _toInt(aiRow['ai_response_id']);
         if (aiResponseId != null) {
           final riskRow = await SupabaseService.client
               .from('pregnancy_risk_assessments')
@@ -1075,6 +1091,42 @@ class _RecordsScreenState extends State<RecordsScreen>
   Widget _buildRecordsTab(List<Map<String, dynamic>> allRecords) {
     return Column(
       children: [
+        if (_isUnlinked)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.warning.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: AppColors.warning,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _t(
+                      'Individual Mode: Clinical records uploaded by midwives (checkups, lab tests, ultrasounds) are only available when linked to a BHC.',
+                      'Indibidwal na Mode: Ang mga klinikal na record (checkup, lab test, ultrasound) na in-upload ng midwife ay magagamit lamang kapag naka-link sa BHC.',
+                    ),
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textPrimary,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Container(
           padding: const EdgeInsets.all(16),
           color: Colors.white,
@@ -1190,8 +1242,11 @@ class _RecordsScreenState extends State<RecordsScreen>
                         _searchQuery.isNotEmpty
                             ? _t('No matching records found',
                                 'Walang record na tumugma')
-                            : _t('No records available',
-                                'Walang available na records'),
+                            : (_isUnlinked
+                                ? _t('Individual Mode (Unlinked)',
+                                    'Indibidwal na Mode (Hindi Naka-link)')
+                                : _t('No records available',
+                                    'Walang available na records')),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -1199,14 +1254,23 @@ class _RecordsScreenState extends State<RecordsScreen>
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        _searchQuery.isNotEmpty
-                            ? _t('Try adjusting your search or filters',
-                                'Subukang baguhin ang paghahanap o filter')
-                            : _t('Your medical records will appear here',
-                                'Lalabas dito ang iyong medical records'),
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          _searchQuery.isNotEmpty
+                              ? _t('Try adjusting your search or filters',
+                                  'Subukang baguhin ang paghahanap o filter')
+                              : (_isUnlinked
+                                  ? _t(
+                                      'To receive clinical midwife checkups, lab results, and ultrasound records, link your account to a Barangay Health Center (BHC). You can still log journals and add child records here.',
+                                      'Upang makatanggap ng klinikal na checkup, lab test at ultrasound, i-link ang iyong account sa BHC. Maaari ka pa ring mag-tala ng journals at anak dito.')
+                                  : _t('Your medical records will appear here',
+                                      'Lalabas dito ang iyong medical records')),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            height: 1.3,
+                          ),
                         ),
                       ),
                     ],
@@ -1264,7 +1328,6 @@ class _RecordsScreenState extends State<RecordsScreen>
                       final isUltrasound =
                           record['record_type'] == 'ultrasound';
                       final isLabTest = record['record_type'] == 'labtest';
-
 
                       // Type badge color and label
                       final typeLabel = isCheckup
@@ -1366,7 +1429,10 @@ class _RecordsScreenState extends State<RecordsScreen>
                                               color: AppColors.textSecondary),
                                           const SizedBox(width: 4),
                                           Text(
-                                            _formatDateTime(record['created_at'] ?? record['createdAt'] ?? record['checkup_datetime']),
+                                            _formatDateTime(
+                                                record['created_at'] ??
+                                                    record['createdAt'] ??
+                                                    record['checkup_datetime']),
                                             style: const TextStyle(
                                               fontSize: 12,
                                               color: AppColors.textSecondary,
@@ -1376,7 +1442,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                                       ),
                                       if (isUltrasound || isLabTest) ...[
                                         if (!_isSameDay(
-                                          record['created_at'] ?? record['createdAt'],
+                                          record['created_at'] ??
+                                              record['createdAt'],
                                           isUltrasound
                                               ? record['ultrasound_date']
                                               : record['lab_test_date'],
@@ -1386,20 +1453,21 @@ class _RecordsScreenState extends State<RecordsScreen>
                                             children: [
                                               const Icon(Icons.watch_later,
                                                   size: 12,
-                                                  color: AppColors.textSecondary),
+                                                  color:
+                                                      AppColors.textSecondary),
                                               const SizedBox(width: 4),
                                               Text(
                                                 '${_t('Conducted on', 'Isinagawa noong')} ${_formatDate(isUltrasound ? record['ultrasound_date'] : record['lab_test_date'])}',
                                                 style: const TextStyle(
                                                   fontSize: 11,
-                                                  color: AppColors.textSecondary,
+                                                  color:
+                                                      AppColors.textSecondary,
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ],
                                       ],
-
                                     ],
                                   ),
                                 ),
@@ -1475,7 +1543,7 @@ class _RecordsScreenState extends State<RecordsScreen>
 
                                     // FALLBACK: MotherProfileService
                                     if (aiAnalysis == null ||
-                                        aiAnalysis!.trim().isEmpty) {
+                                        aiAnalysis.trim().isEmpty) {
                                       aiAnalysis = await MotherProfileService
                                           .getCheckupAIAnalysis(checkupId);
                                     }
@@ -1499,11 +1567,11 @@ class _RecordsScreenState extends State<RecordsScreen>
                                 }
 
                                 final symptomSummary = _checkupSymptomSummaries[
-                                        record['prenatal_checkup_id'] as int? ??
+                                        _toInt(record['prenatal_checkup_id']) ??
                                             -1] ??
                                     _noneRecorded();
                                 final fetalCount = (_pregnancyFetalCounts[
-                                            record['pregnancy_id'] as int? ??
+                                            _toInt(record['pregnancy_id']) ??
                                                 -1]
                                         ?.toString()) ??
                                     _notInputted();
@@ -1684,7 +1752,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                         _formatValue(finalRemarks)),
                                   ],
                                   aiAnalysis: aiAnalysis,
-                                  useStructuredAiInsights: aiAnalysis != null &&
+                                  useStructuredAiInsights:
                                       aiAnalysis.isNotEmpty,
                                 );
                               } else {

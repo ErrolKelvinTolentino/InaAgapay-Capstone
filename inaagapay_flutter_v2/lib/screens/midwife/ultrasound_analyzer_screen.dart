@@ -1,7 +1,6 @@
 // lib/screens/midwife/ultrasound_analyzer_screen.dart
 
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -238,7 +237,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     final selected = _effectiveSelectedProfession();
     if (selected == _otherProfessionOption &&
         _healthWorkerProfessionController.text.trim().isEmpty) {
-      _showMessage('You selected "Other" \u2014 please specify the profession or clear the selection.',
+      _showMessage(
+          'You selected "Other" \u2014 please specify the profession or clear the selection.',
           type: AppSnackType.warning);
       return false;
     }
@@ -509,11 +509,16 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         }
 
         // Populate extracted admin fields if available
-        if (result.extractedProfessional != null && result.extractedProfessional!.isNotEmpty && _healthWorkerNameController.text.trim().isEmpty) {
+        if (result.extractedProfessional != null &&
+            result.extractedProfessional!.isNotEmpty &&
+            _healthWorkerNameController.text.trim().isEmpty) {
           _healthWorkerNameController.text = result.extractedProfessional!;
         }
-        if (result.extractedClinicLocation != null && result.extractedClinicLocation!.isNotEmpty && _healthWorkerInstitutionController.text.trim().isEmpty) {
-          _healthWorkerInstitutionController.text = result.extractedClinicLocation!;
+        if (result.extractedClinicLocation != null &&
+            result.extractedClinicLocation!.isNotEmpty &&
+            _healthWorkerInstitutionController.text.trim().isEmpty) {
+          _healthWorkerInstitutionController.text =
+              result.extractedClinicLocation!;
         }
       });
 
@@ -783,8 +788,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   end: Alignment.centerRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
-                border:
-                    Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.2)),
+                border: Border.all(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.2)),
               ),
               child: Text(
                 line,
@@ -847,7 +852,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             decoration: BoxDecoration(
               color: AppColors.success.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+              border:
+                  Border.all(color: AppColors.success.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -879,7 +885,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             decoration: BoxDecoration(
               color: AppColors.warning.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+              border:
+                  Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -974,14 +981,18 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   Color _statusChipBackground(String status) {
-    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.08);
-    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.08);
+    if (_isConcerningStatus(status))
+      return AppColors.error.withValues(alpha: 0.08);
+    if (_isCautionStatus(status))
+      return AppColors.warning.withValues(alpha: 0.08);
     return AppColors.success.withValues(alpha: 0.08);
   }
 
   Color _statusChipBorder(String status) {
-    if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.25);
-    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.25);
+    if (_isConcerningStatus(status))
+      return AppColors.error.withValues(alpha: 0.25);
+    if (_isCautionStatus(status))
+      return AppColors.warning.withValues(alpha: 0.25);
     return AppColors.success.withValues(alpha: 0.25);
   }
 
@@ -1225,7 +1236,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       final isMeasurements = entry.key == 'DETAILED MEASUREMENTS ASSESSMENT';
       final isAnatomical = entry.key == 'ANATOMICAL ASSESSMENT';
       final isAbnormal = entry.key == 'ABNORMAL FINDINGS';
-      final isRecommendation = entry.key.contains('RECOMMENDED') || entry.key.contains('RECOMMENDATION');
+      final isRecommendation = entry.key.contains('RECOMMENDED') ||
+          entry.key.contains('RECOMMENDATION');
 
       Color accentColor;
       IconData icon;
@@ -1256,10 +1268,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: isRecommendation ? 0.10 : 0.08),
+            color:
+                accentColor.withValues(alpha: isRecommendation ? 0.10 : 0.08),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: accentColor.withValues(alpha: isRecommendation ? 0.45 : 0.3),
+              color:
+                  accentColor.withValues(alpha: isRecommendation ? 0.45 : 0.3),
               width: isRecommendation ? 1.5 : 1.0,
             ),
           ),
@@ -1830,8 +1844,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       children: [
         _stepHeader(
           title: 'Step 2: Health Worker Information',
-          subtitle:
-              'Optional \u2014 AI analysis is the primary output.',
+          subtitle: 'Optional \u2014 AI analysis is the primary output.',
         ),
         const SizedBox(height: 10),
         Container(
@@ -1938,16 +1951,21 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     buffer.writeln('Date: ${_dateController.text}');
     buffer.writeln();
     if (_healthWorkerNameController.text.trim().isNotEmpty) {
-      buffer.writeln('Health Worker: ${_healthWorkerNameController.text.trim()}');
+      buffer
+          .writeln('Health Worker: ${_healthWorkerNameController.text.trim()}');
     }
     if (_healthWorkerInstitutionController.text.trim().isNotEmpty) {
-      buffer.writeln('Institution: ${_healthWorkerInstitutionController.text.trim()}');
+      buffer.writeln(
+          'Institution: ${_healthWorkerInstitutionController.text.trim()}');
     }
     final profession = _effectiveSelectedProfession();
-    if (profession != null && profession.isNotEmpty && profession != _otherProfessionOption) {
+    if (profession != null &&
+        profession.isNotEmpty &&
+        profession != _otherProfessionOption) {
       buffer.writeln('Profession: $profession');
     } else if (_healthWorkerProfessionController.text.trim().isNotEmpty) {
-      buffer.writeln('Profession: ${_healthWorkerProfessionController.text.trim()}');
+      buffer.writeln(
+          'Profession: ${_healthWorkerProfessionController.text.trim()}');
     }
     buffer.writeln();
     buffer.writeln('--- AI ANALYSIS ---');

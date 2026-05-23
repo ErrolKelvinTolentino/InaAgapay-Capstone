@@ -23,7 +23,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadDarkMode() async {
     final dm = await AuthStorage.isDarkMode();
-    if (mounted) setState(() { _darkMode = dm; _loaded = true; });
+    if (mounted)
+      setState(() {
+        _darkMode = dm;
+        _loaded = true;
+      });
   }
 
   Future<void> _toggleDarkMode(bool value) async {
@@ -67,7 +71,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.dark_mode_outlined, color: AppColors.textSecondaryOf(context)),
+                  Icon(Icons.dark_mode_outlined,
+                      color: AppColors.textSecondaryOf(context)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -80,13 +85,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   if (!_loaded)
                     const SizedBox(
-                      width: 24, height: 24,
+                      width: 24,
+                      height: 24,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   else
                     Switch(
                       value: _darkMode,
-                      activeColor: AppColors.brandPrimary,
+                      activeThumbColor: AppColors.brandPrimary,
                       onChanged: _toggleDarkMode,
                     ),
                 ],
@@ -95,7 +101,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 8),
             Text(
               'Dark mode preference will apply on next app restart.',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondaryOf(context)),
+              style: TextStyle(
+                  fontSize: 12, color: AppColors.textSecondaryOf(context)),
             ),
 
             const SizedBox(height: 24),

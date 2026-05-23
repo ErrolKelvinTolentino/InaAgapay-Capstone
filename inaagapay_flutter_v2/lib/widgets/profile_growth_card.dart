@@ -142,7 +142,7 @@ class ProfileGrowthCard extends StatelessWidget {
                   icon: Icons.calculate_outlined,
                   label: 'BMI',
                   value: data['bmi'] != null
-                      ? '${(data['bmi'] as double).toStringAsFixed(1)}'
+                      ? (data['bmi'] as double).toStringAsFixed(1)
                       : 'N/A',
                   subtitle: data['bmi'] != null ? bmiStatusStr : null,
                   color: bmiStatusColor,

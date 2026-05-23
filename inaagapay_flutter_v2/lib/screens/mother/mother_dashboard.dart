@@ -29,6 +29,7 @@ class MotherDashboard extends StatefulWidget {
 class _MotherDashboardState extends State<MotherDashboard> {
   bool _isLoading = true;
   String? _errorMessage;
+  bool _isUnlinked = false;
 
   // Dashboard data
   int _week = 0;
@@ -167,6 +168,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
     _eddDate = null;
     _riskFactors = null;
     _suggestedActions = null;
+    _isUnlinked = false;
   }
 
   bool _requiresDeliveryDetails(String outcome) {
@@ -206,6 +208,15 @@ class _MotherDashboardState extends State<MotherDashboard> {
         throw Exception(
             'Mother ID not found. Please log out and log in again.');
       }
+
+      // Check if mother is linked to a BHC
+      final motherResponse = await SupabaseService.client
+          .from('mothers')
+          .select('assigned_bhc_id')
+          .eq('mother_id', motherId)
+          .maybeSingle();
+      _isUnlinked =
+          motherResponse == null || motherResponse['assigned_bhc_id'] == null;
 
       // Get account info for name
       final accountId = await AuthStorage.getUserId();
@@ -590,7 +601,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: DropdownButtonFormField<String>(
-                                value: outcomes[i],
+                                initialValue: outcomes[i],
                                 decoration: InputDecoration(
                                   labelText: _t('Outcome', 'Kinalabasan'),
                                   border: InputBorder.none,
@@ -731,7 +742,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: DropdownButtonFormField<String>(
-                                  value: deliveryMethods[i],
+                                  initialValue: deliveryMethods[i],
                                   decoration: InputDecoration(
                                     labelText: _t('Delivery Method',
                                         'Paraan ng Panganganak'),
@@ -1056,6 +1067,214 @@ class _MotherDashboardState extends State<MotherDashboard> {
     );
   }
 
+  Widget _buildUnlinkedBhcBanner() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.warning.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.info_outline_rounded,
+                  color: AppColors.warning,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _t('Individual Mode (Unlinked)',
+                      'Indibidwal na Mode (Hindi Naka-link)'),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _t(
+              'Your account is currently not linked to a Barangay Health Center (BHC). To schedule checkups and receive clinical care from a midwife, please link your account.',
+              'Ang iyong account ay kasalukuyang hindi naka-link sa isang Barangay Health Center (BHC). Upang mag-iskedyul ng checkup at makatanggap ng klinikal na pangangalaga mula sa midwife, mangyaring i-link ang iyong account.',
+            ),
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () => _showHowToLinkDialog(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _t('How to link your account',
+                      'Paano i-link ang iyong account'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandText,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.arrow_forward,
+                  size: 14,
+                  color: AppColors.brandText,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHowToLinkDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.medical_services_outlined,
+                      color: AppColors.brandPrimary,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _t('How to Link to a BHC', 'Paano I-link sa BHC'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _t(
+                  'To link your account to a Barangay Health Center (BHC) and begin official midwife monitoring, follow these steps:',
+                  'Upang i-link ang iyong account sa isang Barangay Health Center (BHC) at magsimula ng opisyal na pagsubaybay ng midwife, sundin ang mga hakbang na ito:',
+                ),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildStepRow(
+                  '1',
+                  _t('Visit your nearest Barangay Health Center (BHC).',
+                      'Pumunta sa iyong pinakamalapit na Barangay Health Center (BHC).')),
+              const SizedBox(height: 12),
+              _buildStepRow(
+                  '2',
+                  _t('Provide the midwife with your registered email address or phone number.',
+                      'Ibigay sa midwife ang iyong rehistradong email address o numero ng telepono.')),
+              const SizedBox(height: 12),
+              _buildStepRow(
+                  '3',
+                  _t('The midwife will complete your linking process in the system, and your record will update automatically.',
+                      'Tatapusin ng midwife ang proseso ng pag-link sa system, at awtomatikong mag-a-update ang iyong tala.')),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(_t('Got it!', 'Nakuha ko!')),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepRow(String number, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: AppColors.bgSecondary,
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            number,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandText,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: AppColors.textPrimary,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCountdownCard() {
     final now = DateTime.now();
     final edd = _eddDate!;
@@ -1319,6 +1538,11 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                 ],
                               ),
                             ),
+
+                            if (_isUnlinked) ...[
+                              const SizedBox(height: 16),
+                              _buildUnlinkedBhcBanner(),
+                            ],
 
                             const SizedBox(height: 20),
 
