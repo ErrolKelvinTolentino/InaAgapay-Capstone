@@ -17,6 +17,7 @@ import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_input_field.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/main_button.dart';
+import '../../widgets/app_dropdown_field.dart';
 
 class UltrasoundAnalyzerScreen extends StatefulWidget {
   final int motherId;
@@ -85,6 +86,13 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   DateTime? _pregnancyLmp;
   DateTime? _pregnancyEdd;
   bool _datesUpdated = false;
+  String _pregnancyRiskLevel = 'low';
+  String _selectedLanguage = 'filipino';
+  List<String> _maternalActiveConditions = [];
+  List<String> _maternalAllergies = [];
+  double? _maternalHeight;
+  double? _maternalPrePregWeight;
+  int? _pregnancyFetalCount;
 
   final List<String> _uploadedImageUrls = [];
 
@@ -166,7 +174,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     try {
       final response = await Supabase.instance.client
           .from('pregnancies')
-          .select('last_menstrual_period, expected_date_of_delivery')
+          .select('last_menstrual_period, expected_date_of_delivery, pregnancy_risk_level, fetal_count, pre_pregnancy_weight')
           .eq('pregnancy_id', _pregnancyId)
           .maybeSingle();
 
@@ -179,9 +187,61 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             if (response['expected_date_of_delivery'] != null) {
               _pregnancyEdd = DateTime.parse(response['expected_date_of_delivery'].toString());
             }
+            if (response['pregnancy_risk_level'] != null) {
+              _pregnancyRiskLevel = response['pregnancy_risk_level'].toString().toLowerCase();
+            }
+            if (response['fetal_count'] != null) {
+              _pregnancyFetalCount = int.tryParse(response['fetal_count'].toString());
+            }
+            if (response['pre_pregnancy_weight'] != null) {
+              _maternalPrePregWeight = double.tryParse(response['pre_pregnancy_weight'].toString());
+            }
           });
         }
       }
+
+      // Load mother profile details (height)
+      final motherRes = await Supabase.instance.client
+          .from('mothers')
+          .select('height')
+          .eq('mother_id', _motherId)
+          .maybeSingle();
+      if (motherRes != null && motherRes['height'] != null) {
+        if (mounted) {
+          setState(() {
+            _maternalHeight = double.tryParse(motherRes['height'].toString());
+          });
+        }
+      }
+
+      // Load active medical conditions
+      final List conditionsRes = await Supabase.instance.client
+          .from('medical_conditions')
+          .select('condition_name')
+          .eq('mother_id', _motherId)
+          .eq('status', 'active');
+      if (mounted) {
+        setState(() {
+          _maternalActiveConditions = conditionsRes
+              .map((c) => c['condition_name'].toString())
+              .toList();
+        });
+      }
+
+      // Load allergies
+      final List allergiesRes = await Supabase.instance.client
+          .from('allergies')
+          .select('allergen')
+          .eq('mother_id', _motherId)
+          .eq('status', 'active');
+      if (mounted) {
+        setState(() {
+          _maternalAllergies = allergiesRes
+              .map((a) => a['allergen'].toString())
+              .toList();
+        });
+      }
+
     } catch (e) {
       if (kDebugMode) print('Error loading pregnancy details: $e');
     }
@@ -288,6 +348,378 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         _isSaving = false;
       });
     }
+  }
+
+  double? _calculatePrePregnancyBmi() {
+    if (_maternalPrePregWeight == null || _maternalHeight == null || _maternalHeight! <= 0) return null;
+    final heightInMeters = _maternalHeight! / 100.0;
+    return _maternalPrePregWeight! / (heightInMeters * heightInMeters);
+  }
+
+  List<Widget> _buildRiskFactorsPills() {
+    final List<Widget> pills = [];
+
+    // BMI Warning Pill
+    final bmi = _calculatePrePregnancyBmi();
+    if (bmi != null) {
+      if (bmi < 18.5) {
+        pills.add(_buildRiskPill('Underweight BMI (${bmi.toStringAsFixed(1)})', isSevere: false));
+      } else if (bmi >= 25.0 && bmi < 30.0) {
+        pills.add(_buildRiskPill('Overweight BMI (${bmi.toStringAsFixed(1)})', isSevere: false));
+      } else if (bmi >= 30.0) {
+        pills.add(_buildRiskPill('Obese BMI (${bmi.toStringAsFixed(1)})', isSevere: true));
+      }
+    }
+
+    // Multiple pregnancy pill
+    if (_pregnancyFetalCount != null && _pregnancyFetalCount! > 1) {
+      pills.add(_buildRiskPill('Multiple Pregnancy (${_pregnancyFetalCount} babies)', isSevere: true));
+    }
+
+    // Medical conditions
+    for (final cond in _maternalActiveConditions) {
+      pills.add(_buildRiskPill('Medical: $cond', isSevere: true));
+    }
+
+    // Allergies
+    for (final allerg in _maternalAllergies) {
+      pills.add(_buildRiskPill('Allergy: $allerg', isSevere: false));
+    }
+
+    // Gestational age discrepancy
+    if (_hasGestationalAgeDiscrepancy()) {
+      pills.add(_buildRiskPill('AOG Discrepancy (LMP vs AI)', isSevere: false));
+    }
+
+    // Patient name mismatch
+    if (_isNameMismatch()) {
+      pills.add(_buildRiskPill('Patient Name Mismatch', isSevere: true));
+    }
+
+    if (pills.isEmpty) {
+      pills.add(_buildRiskPill('No high-risk complications detected', isSevere: false, isSuccess: true));
+    }
+
+    return pills;
+  }
+
+  Widget _buildRiskPill(String label, {required bool isSevere, bool isSuccess = false}) {
+    final Color bgColor = isSuccess
+        ? AppColors.success.withValues(alpha: 0.08)
+        : (isSevere ? AppColors.error.withValues(alpha: 0.08) : AppColors.warning.withValues(alpha: 0.08));
+    final Color borderColor = isSuccess
+        ? AppColors.success.withValues(alpha: 0.3)
+        : (isSevere ? AppColors.error.withValues(alpha: 0.3) : AppColors.warning.withValues(alpha: 0.3));
+    final Color textColor = isSuccess
+        ? AppColors.success
+        : (isSevere ? AppColors.error : AppColors.warning);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isSuccess ? Icons.check_circle : Icons.error_outline,
+            size: 12,
+            color: textColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  String _getFetalCount() {
+    if (_pregnancyFetalCount != null) {
+      return _pregnancyFetalCount == 1 ? 'Singleton' : '$_pregnancyFetalCount babies';
+    }
+    final text = (_combinedResponse?.description ?? '').toLowerCase();
+    if (text.contains('twin') || text.contains('multiple')) return 'Twins';
+    if (text.contains('triplet')) return 'Triplets';
+    return 'Singleton';
+  }
+
+  String _safeStatusLabel(String status, String language) {
+    final s = status.toUpperCase();
+    if (s == 'NORMAL' || s == 'SUCCESS') {
+      return language == 'filipino' ? 'Nasa Inaasahang Saklaw' : 'Within Expected Range';
+    } else if (s == 'ABNORMAL' || s == 'CONCERNING' || s == 'REVIEW') {
+      return language == 'filipino' ? 'Kailangan ng Masusing Pagsubaybay' : 'Requires Closer Monitoring';
+    } else if (s == 'BORDERLINE' || s == 'MONITOR' || s == 'OBSERVE') {
+      return language == 'filipino' ? 'Inirerekomenda ang Pagsubaybay' : 'Monitoring Recommended';
+    }
+    return status;
+  }
+
+  String _getTrimester(int weeks, String language) {
+    if (weeks <= 13) {
+      return language == 'filipino' ? 'Unang Trimester' : 'First Trimester';
+    } else if (weeks <= 27) {
+      return language == 'filipino' ? 'Ikalawang Trimester' : 'Second Trimester';
+    } else {
+      return language == 'filipino' ? 'Ikatlong Trimester' : 'Third Trimester';
+    }
+  }
+
+  Widget _buildGroupedAnatomicalAssessment(List<String> lines) {
+    final List<({String structure, String status, String note})> flaggedStructures = [];
+
+    for (final line in lines) {
+      final parsed = _parseUltrasoundMetricLine(line);
+      if (parsed.testName.isEmpty) continue;
+
+      if (parsed.status != 'NORMAL' && parsed.status != 'SUCCESS' && parsed.status != 'UNKNOWN') {
+        flaggedStructures.add((
+          structure: parsed.testName,
+          status: parsed.status,
+          note: parsed.remark.isNotEmpty ? parsed.remark : parsed.value,
+        ));
+      }
+    }
+
+    if (flaggedStructures.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _selectedLanguage == 'filipino'
+              ? '🔍 Mga Pambihirang Obserbasyon (Notable Findings)'
+              : '🔍 Notable Findings',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: AppColors.warning,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Column(
+          children: flaggedStructures.map((item) {
+            final isConcerning = item.status == 'ABNORMAL' || item.status == 'CONCERNING' || item.status == 'REVIEW';
+            final color = isConcerning ? AppColors.error : _cautionBlue;
+            final safeLabelText = _safeStatusLabel(item.status, _selectedLanguage);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: color.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top row: icon + title + pill
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isConcerning ? Icons.warning_rounded : Icons.info_outline,
+                        size: 16,
+                        color: color,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          item.structure,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: color.withValues(alpha: 0.2)),
+                        ),
+                        child: Text(
+                          safeLabelText,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (item.note.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      item.note,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textPrimary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _selectedLanguage == 'filipino'
+                          ? 'Ang obserbasyon na ito ay maaaring mangailangan ng karagdagang pagsusuri. Iminumungkahi ang pagkonsulta sa iyong doktor o komadrona.'
+                          : 'This finding may require further evaluation. Consultation with your healthcare provider is recommended.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: color.withValues(alpha: 0.75),
+                        height: 1.4,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPregnancyProgressionCard() {
+    final fetalCount = _getFetalCount();
+    final aogWeeks = _extractWeeksFromAiText(_combinedResponse?.gestationalAge) ?? _calculateExpectedWeeksAtUltrasound() ?? 0;
+    final trimester = _getTrimester(aogWeeks, _selectedLanguage);
+
+    final String fetalCountLabel = _selectedLanguage == 'filipino' ? 'Bilang ng Fetus' : 'Fetal Count';
+    final String aogLabel = _selectedLanguage == 'filipino' ? 'Edad ng Pagbubuntis' : 'Gestational Age';
+    final String trimesterLabel = _selectedLanguage == 'filipino' ? 'Trimester' : 'Trimester';
+
+    final String translatedFetalCount = _selectedLanguage == 'filipino' 
+        ? (fetalCount.toLowerCase().contains('singleton') ? 'Isa (Singleton)' : 'Kambal (Twins)')
+        : fetalCount;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.teal.shade50.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.teal.shade200.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        children: [
+          // Fetal Count
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(Icons.child_care_rounded, size: 18, color: Colors.teal.shade600),
+                const SizedBox(height: 4),
+                Text(
+                  fetalCountLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  translatedFetalCount,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 1,
+            height: 40,
+            color: Colors.teal.shade200.withValues(alpha: 0.6),
+          ),
+          // AOG
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(Icons.calendar_month_rounded, size: 18, color: Colors.teal.shade600),
+                const SizedBox(height: 4),
+                Text(
+                  aogLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$aogWeeks ${_selectedLanguage == 'filipino' ? 'Linggo' : 'Weeks'}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 1,
+            height: 40,
+            color: Colors.teal.shade200.withValues(alpha: 0.6),
+          ),
+          // Trimester
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(Icons.pregnant_woman_rounded, size: 18, color: Colors.teal.shade600),
+                const SizedBox(height: 4),
+                Text(
+                  trimesterLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  trimester,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _pickImages() async {
@@ -826,6 +1258,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           ? _healthWorkerProfessionController.text.trim()
           : profession ?? '';
 
+      // Update pregnancy risk level if overridden by midwife
+      await Supabase.instance.client
+          .from('pregnancies')
+          .update({
+            'pregnancy_risk_level': _pregnancyRiskLevel,
+          })
+          .eq('pregnancy_id', _pregnancyId);
+
       final ultrasoundResponse = await Supabase.instance.client
           .from('ultrasounds')
           .insert({
@@ -1072,29 +1512,61 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           ),
         );
       }
-      // Warning messages
-      else if (line.contains('⚠️') ||
-          line.contains('MONITORING') ||
-          line.contains('CONCERN')) {
+      // Medical Condition messages
+      else if (line.contains('🩺') || line.contains('medical_condition')) {
         sections.add(
           Container(
             margin: const EdgeInsets.symmetric(vertical: 4),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: 0.1),
+              color: Colors.blue.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
             ),
             child: Row(
               children: [
-                Icon(Icons.warning, color: AppColors.warning, size: 18),
+                const Icon(Icons.medical_services_outlined, color: Colors.blue, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     line,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: AppColors.warning,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      // Warning messages
+      else if (line.contains('⚠️') ||
+          line.contains('MONITORING') ||
+          line.contains('CONCERN') ||
+          line.contains('Mag-ingat') ||
+          line.contains('Caution')) {
+        sections.add(
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    line,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -1177,21 +1649,24 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     return s == 'OBSERVE' || s == 'BORDERLINE' || s == 'MONITOR';
   }
 
+  // Caution statuses use blue instead of yellow for readability
+  static const Color _cautionBlue = Color(0xFF3B82F6);
+
   Color _statusChipBackground(String status) {
     if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.08);
-    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.08);
+    if (_isCautionStatus(status)) return Colors.white;
     return AppColors.success.withValues(alpha: 0.08);
   }
 
   Color _statusChipBorder(String status) {
     if (_isConcerningStatus(status)) return AppColors.error.withValues(alpha: 0.25);
-    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.25);
+    if (_isCautionStatus(status)) return AppColors.warning.withValues(alpha: 0.35);
     return AppColors.success.withValues(alpha: 0.25);
   }
 
   Color _statusChipTextColor(String status) {
     if (_isConcerningStatus(status)) return AppColors.error;
-    if (_isCautionStatus(status)) return AppColors.warning;
+    if (_isCautionStatus(status)) return AppColors.textSecondary;
     return AppColors.success;
   }
 
@@ -1312,27 +1787,39 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: rows.map((row) {
+        final bool isNonExpected = _isConcerningStatus(row.status) || _isCautionStatus(row.status);
+        final bool isCaution = _isCautionStatus(row.status);
+        final statusColor = _statusChipTextColor(row.status);
+
+        final borderColor = isNonExpected
+            ? (isCaution ? AppColors.warning.withValues(alpha: 0.25) : statusColor.withValues(alpha: 0.25))
+            : AppColors.borderPrimary;
+        final cardBgColor = isNonExpected
+            ? (isCaution ? AppColors.warning.withValues(alpha: 0.04) : statusColor.withValues(alpha: 0.04))
+            : Colors.white;
+
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.borderPrimary),
-            color: Colors.white,
+            border: Border.all(color: borderColor),
+            color: cardBgColor,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                row.testName,
-                style:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
+              // Title row with status pill on the right
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  Expanded(
+                    child: Text(
+                      row.testName,
+                      style:
+                          const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ),
                   if (row.status != 'UNKNOWN' && row.status != 'INFO')
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -1344,44 +1831,86 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                             Border.all(color: _statusChipBorder(row.status)),
                       ),
                       child: Text(
-                        row.status,
+                        _safeStatusLabel(row.status, _selectedLanguage),
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: _statusChipTextColor(row.status),
-                        ),
-                      ),
-                    ),
-                  if (row.value.isNotEmpty &&
-                      row.value != 'Present / Normal' &&
-                      row.value != 'Absent / Abnormal')
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        row.value,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w600,
+                          color: statusColor,
                         ),
                       ),
                     ),
                 ],
               ),
-              if (row.remark.isNotEmpty) ...[
+              if (row.value.isNotEmpty &&
+                  row.value != 'Present / Normal' &&
+                  row.value != 'Absent / Abnormal') ...[
                 const SizedBox(height: 6),
-                Text(
-                  row.remark,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                    height: 1.35,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSecondary,
+                    borderRadius: BorderRadius.circular(999),
                   ),
+                  child: Text(
+                    row.value,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+              if (row.remark.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      row.status == 'ABNORMAL' ? Icons.warning_amber_rounded : Icons.info_outline,
+                      size: 14,
+                      color: row.status == 'ABNORMAL' ? AppColors.error : AppColors.warning,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        row.remark,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: row.status == 'ABNORMAL' ? AppColors.error.withValues(alpha: 0.85) : AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              // Auto-generate brief explanation for non-expected measurements
+              if (isNonExpected && row.remark.isEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      row.status == 'ABNORMAL' ? Icons.warning_amber_rounded : Icons.info_outline,
+                      size: 14,
+                      color: row.status == 'ABNORMAL' ? AppColors.error : AppColors.warning,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _selectedLanguage == 'filipino'
+                            ? 'Ang sukat na ito ay bahagyang lumihis sa karaniwang inaasahang saklaw. Iminumungkahi ang pagkonsulta sa iyong doktor o komadrona para sa karagdagang pagsusuri.'
+                            : 'This measurement is slightly outside the commonly expected range. Consultation with your healthcare provider is recommended for further evaluation.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: row.status == 'ABNORMAL' ? AppColors.error.withValues(alpha: 0.85) : AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ],
@@ -1389,6 +1918,69 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         );
       }).toList(),
     );
+  }
+
+  String _translateLine(String line, String lang) {
+    var result = line;
+
+    // Apply clinical softening for polyhydramnios first for both languages
+    if (lang == 'filipino') {
+      final polyReg = RegExp(r'\bmild\s+polyhydramnios\b|\bpolyhydramnios\b', caseSensitive: false);
+      result = result.replaceAll(polyReg, 'Ang naitalang sukat ng amniotic fluid ay mukhang mas mataas nang bahagya sa karaniwang inaasahang saklaw at maaaring makinabang sa patuloy na pagsubaybay.');
+    } else {
+      final polyReg = RegExp(r'\bmild\s+polyhydramnios\b|\bpolyhydramnios\b', caseSensitive: false);
+      result = result.replaceAll(polyReg, 'The recorded amniotic fluid measurement appears slightly higher than the commonly expected range and may benefit from continued prenatal monitoring.');
+    }
+
+    if (lang == 'english') return result;
+
+    final translations = {
+      'recorded fetal measurements appear generally consistent for this stage':
+          'ang mga naitalang sukat ng baby ay pangkalahatang tugma para sa yugtong ito',
+      'recorded fetal measurements appear generally consistent':
+          'ang mga naitalang sukat ng baby ay pangkalahatang tugma',
+      'recorded measurements appear generally consistent for this stage':
+          'ang mga naitalang sukat ay pangkalahatang tugma para sa yugtong ito',
+      'recorded measurements appear generally consistent':
+          'ang mga naitalang sukat ay pangkalahatang tugma',
+      'pregnancy monitoring measurements':
+          'mga sukat sa pagsubaybay ng pagbubuntis',
+      'growth measurements appear generally consistent for this stage':
+          'ang mga sukat ng paglaki ng baby ay pangkalahatang tugma para sa yugtong ito',
+      'continued healthcare monitoring may help support pregnancy health':
+          'ang patuloy na pagsubaybay sa kalusugan ay makakatulong sa iyong pagbubuntis',
+      'This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation.':
+          'Ang AI-assisted na interpretasyong ito ay suporta lamang sa pagsubaybay at hindi pumapalit sa propesyonal na payong medikal.',
+      'Continued prenatal checkups and healthcare consultation may help support pregnancy health':
+          'Ang patuloy na prenatal checkup at konsultasyon sa doktor ay makakatulong upang maging ligtas ang iyong pagbubuntis.',
+      'skull': 'ulo / bungo',
+      'brain': 'utak',
+      'face': 'mukha',
+      'heart': 'puso',
+      'spine': 'gulugod / spine',
+      'limbs': 'mga braso at binti',
+      'hands': 'mga kamay',
+      'feet': 'mga paa',
+      'stomach': 'tiyan',
+      'bladder': 'pantog',
+      'kidneys': 'bato / kidneys',
+      'cervix': 'sipit-sipitan / cervix',
+      'placenta': 'plasenta / inunan',
+      'Underweight BMI': 'Mababa ang BMI (Underweight)',
+      'Overweight BMI': 'Mataas ang BMI (Overweight)',
+      'Obese BMI': 'Sobrang Taas ng BMI (Obese)',
+      'Multiple Pregnancy': 'Kambal o Higit Pa (Multiple Pregnancy)',
+      'AOG Discrepancy (LMP vs AI)': 'May Pagkakaiba sa Edad ng Baby (AOG Discrepancy)',
+      'Patient Name Mismatch': 'Hindi Tugma ang Pangalan sa Ultrasound',
+      'No high-risk complications detected': 'Walang nakitang kumplikasyon o mataas na panganib',
+    };
+
+    translations.forEach((eng, fil) {
+      final reg = RegExp(RegExp.escape(eng), caseSensitive: false);
+      result = result.replaceAll(reg, fil);
+    });
+
+    return result;
   }
 
   Widget _buildStructuredInsights(String text, {VoidCallback? onInteraction}) {
@@ -1422,7 +2014,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
     final widgets = <Widget>[];
     for (final entry in orderedEntries) {
-      if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON') {
+      if (entry.key == 'RELEVANCE CHECK' ||
+          entry.key == 'RELEVANCE REASON' ||
+          entry.key == 'OVERALL HEALTH STATUS' ||
+          entry.key == 'GESTATIONAL AGE ASSESSMENT') {
         continue;
       }
 
@@ -1453,6 +2048,35 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       } else {
         accentColor = AppColors.brandPrimary;
         icon = Icons.article_outlined;
+      }
+
+      var lines = List<String>.from(entry.value).map((line) => _translateLine(line, _selectedLanguage)).toList();
+      
+      if (isRecommendation) {
+        lines = _selectedLanguage == 'filipino' ? [
+          '• Ipagpatuloy ang regular na prenatal checkup at konsultasyon sa iyong doktor o komadrona.',
+          '• Ipaalam at talakayin ang mga naitalang obserbasyon sa iyong ultrasound sa iyong doktor o komadrona.',
+          '• Maaaring imungkahi ang susunod na ultrasound upang masubaybayan ang paglaki ng baby sa paglipas ng panahon.',
+        ] : [
+          '• Continue regular prenatal visits and healthcare consultation.',
+          '• Discuss the recorded ultrasound findings with your healthcare provider or midwife.',
+          '• Follow-up ultrasound monitoring may help observe how the findings progress over time.',
+        ];
+
+        if (_maternalAllergies.isNotEmpty) {
+          if (_selectedLanguage == 'filipino') {
+            lines.add('⚠️ Mag-ingat dahil may naitalang allergy si Mommy: ${_maternalAllergies.join(", ")}. Ipaalam ito sa doktor bago uminom ng anumang gamot o supplement.');
+          } else {
+            lines.add('⚠️ Caution: The mother has recorded allergies to: ${_maternalAllergies.join(", ")}. Inform the doctor before taking any medication or supplements.');
+          }
+        }
+        if (_maternalActiveConditions.isNotEmpty) {
+          if (_selectedLanguage == 'filipino') {
+            lines.add('🩺 Dahil sa naitalang kondisyong medikal (${_maternalActiveConditions.join(", ")}), iminumungkahi ang patuloy at masusing pagsubaybay kasama ang iyong doktor o komadrona.');
+          } else {
+            lines.add('🩺 Due to active medical conditions (${_maternalActiveConditions.join(", ")}), continued and close monitoring with your doctor or midwife is recommended.');
+          }
+        }
       }
 
       widgets.add(
@@ -1487,12 +2111,79 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              if (isMeasurements || isAnatomical || isAbnormal)
-                _buildMetricsList(entry.value)
+              if (isMeasurements) ...[
+                Text(
+                  _selectedLanguage == 'filipino'
+                      ? 'Ang naitalang sukat sa paglaki ng baby ay pangkalahatang tugma sa expected monitoring range para sa humigit-kumulang ${_extractWeeksFromAiText(_combinedResponse?.gestationalAge) ?? 20} linggo ng pagbubuntis.'
+                      : 'The recorded fetal growth measurements generally appear consistent with the expected monitoring range for approximately ${_extractWeeksFromAiText(_combinedResponse?.gestationalAge) ?? 20} weeks of pregnancy.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    title: Text(
+                      _selectedLanguage == 'filipino'
+                          ? 'Tingnan ang Detalyadong Sukat (Para sa Midwife)'
+                          : 'View Detailed Measurements (Healthcare Personnel)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: accentColor,
+                      ),
+                    ),
+                    iconColor: accentColor,
+                    collapsedIconColor: accentColor,
+                    childrenPadding: const EdgeInsets.only(top: 8),
+                    children: [
+                      _buildMetricsList(lines),
+                    ],
+                  ),
+                ),
+              ] else if (isAnatomical) ...[
+                Text(
+                  _selectedLanguage == 'filipino'
+                      ? 'Ang mga naitalang obserbasyon sa ultrasound ay pangkalahatang tugma sa inaasahang pagsubaybay para sa yugtong ito ng pagbubuntis.'
+                      : 'The recorded ultrasound findings generally appear consistent with the expected monitoring range for this stage of pregnancy.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+                ...() {
+                  final flagged = lines.where((line) {
+                    final parsed = _parseUltrasoundMetricLine(line);
+                    return parsed.status != 'NORMAL' && parsed.status != 'SUCCESS';
+                  }).toList();
+
+                  if (flagged.isNotEmpty) {
+                    return [
+                      const SizedBox(height: 12),
+                      _buildGroupedAnatomicalAssessment(lines),
+                    ];
+                  }
+                  return <Widget>[];
+                }(),
+              ] else if (isAbnormal)
+                _buildMetricsList(lines)
               else
-                ...entry.value.map((line) {
+                ...lines.map((line) {
                   final cleaned =
                       line.replaceFirst(RegExp(r'^[•\-*]\s*'), '').trim();
+                  
+                  final isAlert = cleaned.contains('⚠️') || cleaned.contains('🩺') || cleaned.contains('✅');
+                  if (isAlert) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _buildFormattedText(cleaned),
+                    );
+                  }
+
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
@@ -1518,11 +2209,68 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       );
     }
 
+    final disclaimerWidget = Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8, bottom: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _selectedLanguage == 'filipino'
+                  ? 'Paunawa: Ang AI-assisted na interpretasyong ito ay suporta lamang sa pagsubaybay at hindi pumapalit sa propesyonal na payong medikal ng doktor o komadrona.'
+                  : 'Disclaimer: This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation.',
+              style: const TextStyle(
+                fontSize: 10.5,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    widgets.add(disclaimerWidget);
+
     return Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
   }
 
   String _friendlySectionTitle(String title) {
+    final friendly = _friendlySectionTitleRaw(title);
+    if (_selectedLanguage == 'filipino') {
+      switch (friendly) {
+        case 'Health Status':
+          return 'Kalagayan ng Kalusugan';
+        case 'Overall Assessment':
+          return 'Pangkalahatang Pagsusuri';
+        case 'Gestational Age':
+          return 'Gulang ng Pagbubuntis (AOG)';
+        case 'Baby Growth Monitoring':
+          return 'Pagsubaybay sa Paglaki ng Baby';
+        case 'Pregnancy Monitoring Summary':
+          return 'Buod ng Pagsubaybay sa Pagbubuntis';
+        case 'Abnormal Findings / Concerns':
+          return 'Mga Flagged na Obserbasyon';
+        case 'Recommended Next Steps':
+          return 'Mga Mungkahing Hakbang';
+        default:
+          return friendly;
+      }
+    }
+    return friendly;
+  }
+
+  String _friendlySectionTitleRaw(String title) {
     switch (title) {
       case 'OVERALL HEALTH STATUS':
         return 'Health Status';
@@ -1531,15 +2279,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       case 'GESTATIONAL AGE ASSESSMENT':
         return 'Gestational Age';
       case 'DETAILED MEASUREMENTS ASSESSMENT':
-        return 'Measurements';
+        return 'Baby Growth Monitoring';
       case 'ANATOMICAL ASSESSMENT':
-        return 'Anatomical Findings';
+        return 'Pregnancy Monitoring Summary';
       case 'ABNORMAL FINDINGS':
         return 'Abnormal Findings / Concerns';
       case 'RECOMMENDED NEXT ACTIONS':
-        return 'Recommended Actions';
       case 'RECOMMENDATIONS':
-        return 'Recommendations';
+        return 'Recommended Next Steps';
       default:
         return title
             .split(' ')
@@ -1612,53 +2359,70 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => WillPopScope(
-        onWillPop: () async => false,
+      barrierColor: AppColors.textPrimary.withValues(alpha: 0.35),
+      builder: (context) => PopScope(
+        canPop: false,
         child: Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+            decoration: BoxDecoration(
+              color: AppColors.faintWhite,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.textPrimary.withValues(alpha: 0.12),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _loadingTitle,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
+                // Circular container with loading spinner
                 Container(
-                  width: double.infinity,
+                  width: 64,
+                  height: 64,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
-                    borderRadius: BorderRadius.circular(12),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.brandPrimary, width: 3),
                   ),
-                  child: _StatusLine(
-                    icon: Icons.auto_awesome_outlined,
-                    text: _loadingDetail,
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
                   ),
                 ),
-                const SizedBox(height: 14),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
+                const SizedBox(height: 20),
+                // Title
+                Text(
+                  _loadingTitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Detail subtitle
+                Text(
+                  _loadingDetail,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                // Cancel button
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton(
                     onPressed: () {
                       _cancelledRunIds.add(runId);
                       Navigator.of(context).pop();
@@ -1666,8 +2430,24 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       _showMessage('AI analysis canceled.',
                           type: AppSnackType.info);
                     },
-                    icon: const Icon(Icons.close_rounded),
-                    label: const Text('Cancel'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      side: const BorderSide(
+                        color: AppColors.borderPrimary,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1707,6 +2487,71 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     if (abnormal.isNotEmpty) return 'REVIEW FLAGGED FINDINGS';
 
     return 'ASSESSMENT COMPLETE';
+  }
+
+  List<String> _getCloserMonitoringReasons() {
+    final List<String> reasons = [];
+    final lang = _selectedLanguage;
+
+    if (_pregnancyFetalCount != null && _pregnancyFetalCount! > 1) {
+      reasons.add(lang == 'filipino'
+          ? 'Kambal o maramihang pagbubuntis (Multiple pregnancy)'
+          : 'Multiple pregnancy (twins/triplets)');
+    }
+
+    final bmi = _calculatePrePregnancyBmi();
+    if (bmi != null && bmi >= 30.0) {
+      reasons.add(lang == 'filipino'
+          ? 'Mataas na pre-pregnancy BMI (Obese)'
+          : 'High pre-pregnancy BMI (Obese)');
+    }
+
+    for (final cond in _maternalActiveConditions) {
+      reasons.add(lang == 'filipino'
+          ? 'Aktibong kondisyong medikal: $cond'
+          : 'Active medical condition: $cond');
+    }
+
+    if (_hasGestationalAgeDiscrepancy()) {
+      reasons.add(lang == 'filipino'
+          ? 'Pagkakaiba sa Edad ng Pagbubuntis (AOG Discrepancy)'
+          : 'Gestational age discrepancy (2+ weeks difference)');
+    }
+
+    if (_isNameMismatch()) {
+      reasons.add(lang == 'filipino'
+          ? 'Hindi tugmang pangalan sa ultrasound record'
+          : 'Patient name mismatch on the uploaded scan');
+    }
+
+    if (_combinedResponse != null) {
+      final rawText = _healthSummaryController.text;
+      final sections = _extractInsightSections(rawText);
+
+      final measurements = sections['DETAILED MEASUREMENTS ASSESSMENT'] ?? [];
+      for (final line in measurements) {
+        final parsed = _parseUltrasoundMetricLine(line);
+        if (parsed.testName.isNotEmpty &&
+            (parsed.status == 'ABNORMAL' || parsed.status == 'CONCERNING' || parsed.status == 'REVIEW' || parsed.status == 'BORDERLINE' || parsed.status == 'MONITOR')) {
+          reasons.add(lang == 'filipino'
+              ? 'Sukat ng ${parsed.testName}: ${parsed.remark.isNotEmpty ? parsed.remark : parsed.value}'
+              : 'Measurement of ${parsed.testName}: ${parsed.remark.isNotEmpty ? parsed.remark : parsed.value}');
+        }
+      }
+
+      final anatomy = sections['ANATOMICAL ASSESSMENT'] ?? [];
+      for (final line in anatomy) {
+        final parsed = _parseUltrasoundMetricLine(line);
+        if (parsed.testName.isNotEmpty &&
+            (parsed.status == 'ABNORMAL' || parsed.status == 'CONCERNING' || parsed.status == 'REVIEW' || parsed.status == 'BORDERLINE' || parsed.status == 'MONITOR')) {
+          reasons.add(lang == 'filipino'
+              ? 'Obserbasyon sa ${parsed.testName}: ${parsed.remark.isNotEmpty ? parsed.remark : parsed.value}'
+              : 'Anatomical finding on ${parsed.testName}: ${parsed.remark.isNotEmpty ? parsed.remark : parsed.value}');
+        }
+      }
+    }
+
+    return reasons;
   }
 
   Color _getHealthStatusColor() {
@@ -1928,14 +2773,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.08),
+        color: AppColors.info.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.35)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 24),
+          Icon(Icons.info_outline, color: AppColors.info, size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1946,7 +2791,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.warning,
+                    color: AppColors.info,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -2004,12 +2849,8 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     );
   }
 
-  Widget _buildClinicalInsightsCard() {
+  Widget _buildOverallPregnancyRiskCard() {
     if (_combinedResponse == null) return const SizedBox.shrink();
-
-    final healthStatus = _getHealthStatus();
-    final statusColor = _getHealthStatusColor();
-    final statusIcon = _getHealthStatusIcon();
 
     return Container(
       width: double.infinity,
@@ -2029,7 +2870,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -2039,11 +2879,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
             ),
             child: Row(
               children: const [
-                Icon(Icons.auto_awesome, color: AppColors.brandPrimary, size: 20),
+                Icon(Icons.shield_outlined, color: AppColors.brandPrimary, size: 20),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'AI Ultrasound Assessment',
+                    'Overall Pregnancy Risk Assessment',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -2054,17 +2894,15 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               ],
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Health status badge
                 Row(
                   children: [
                     const Text(
-                      'Assessment Status',
+                      'Pregnancy Risk Override',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -2072,43 +2910,286 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    Expanded(
+                      child: AppDropdownField<String>(
+                        value: _pregnancyRiskLevel,
+                        options: const ['low', 'high'],
+                        displayStringForOption: (val) => val == 'low' ? 'Low Risk' : 'High Risk',
+                        onSelected: (val) {
+                          setState(() {
+                            _pregnancyRiskLevel = val;
+                          });
+                        },
+                        hintText: 'Select Pregnancy Risk',
+                        leadingIcon: Icons.flag_rounded,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(color: AppColors.borderPrimary, height: 1),
+                const SizedBox(height: 16),
+                const Text(
+                  'Pregnancy Risk Factors & Insights',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _buildRiskFactorsPills(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUltrasoundAssessmentCard() {
+    if (_combinedResponse == null) return const SizedBox.shrink();
+
+    final healthStatus = _getHealthStatus();
+    final statusColor = _getHealthStatusColor();
+    final statusIcon = _getHealthStatusIcon();
+
+    final displayStatusText = (healthStatus == 'HEALTHY PREGNANCY' || healthStatus == 'ASSESSMENT COMPLETE')
+        ? 'Within Expected Monitoring Range'
+        : 'Requires Closer Monitoring';
+
+    return Container(
+      width: double.infinity,
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.08),
+              border: const Border(bottom: BorderSide(color: AppColors.borderPrimary)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.child_care_outlined, color: statusColor, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Ultrasound AI-Assisted Assessment',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brandText,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 14, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        displayStatusText,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+           Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.18)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, size: 16, color: AppColors.brandPrimary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '💝 Paalala: Ang AI assessment na ito ay ang mismong makikita ni Mommy sa kanyang InaAgapay app para maging gabay at suporta sa kanyang pagbubuntis.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.brandPrimary,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (displayStatusText == 'Requires Closer Monitoring') ...[
+                  Builder(
+                    builder: (context) {
+                      final reasons = _getCloserMonitoringReasons();
+                      if (reasons.isEmpty) return const SizedBox.shrink();
+                      return Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.info.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.info.withValues(alpha: 0.25)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.summarize_outlined, color: AppColors.info, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _selectedLanguage == 'filipino'
+                                      ? 'Buod ng Kailangan ng Masusing Pagsubaybay'
+                                      : 'Why Closer Monitoring is Required',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.info,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            ...reasons.map((reason) => Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 6, right: 8),
+                                    width: 5,
+                                    height: 5,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.info,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      reason,
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        color: AppColors.textPrimary,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                if (!_isEditing) ...[
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
+                        color: AppColors.bgSecondary,
                         borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.borderPrimary),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(statusIcon, size: 14, color: statusColor),
-                          const SizedBox(width: 4),
-                          Text(
-                            healthStatus,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: statusColor,
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedLanguage = 'filipino';
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                'Filipino (Conversational)',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
+                                  color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedLanguage = 'english';
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                'English',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
+                                  color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-                const Divider(color: AppColors.borderPrimary, height: 1),
-                const SizedBox(height: 16),
-
-                // Inline Edit toggler
-                if (!_isEditing) ...[
+                  ),
+                  const SizedBox(height: 16),
+                  _buildPregnancyProgressionCard(),
                   _buildStructuredInsights(_healthSummaryController.text),
                   const SizedBox(height: 16),
-                  const Divider(color: AppColors.borderPrimary, height: 1),
-                  const SizedBox(height: 16),
-
-                  // Interactive actions for read mode
                   Row(
                     children: [
                       Expanded(
@@ -2145,34 +3226,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _analysisApproved
-                          ? null
-                          : () {
-                              setState(() {
-                                _analysisApproved = true;
-                              });
-                              _showMessage('Ultrasound AI analysis approved!', type: AppSnackType.success);
-                            },
-                      icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                      label: Text(_analysisApproved ? 'Analysis Approved ✓' : 'Approve AI Assessment'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _analysisApproved ? AppColors.success : AppColors.brandPrimary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
                 ] else ...[
-                  // Edit mode
                   const Text(
-                    'Edit Clinical Assessment Draft',
+                    'Clinical Assessment Findings',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
                     ),
@@ -2180,27 +3238,27 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: AppColors.bgSecondary.withValues(alpha: 0.35),
+                      color: AppColors.bgSecondary.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppColors.borderPrimary),
                     ),
                     child: TextField(
                       controller: _healthSummaryController,
                       minLines: 8,
-                      maxLines: 20,
-                      decoration: const InputDecoration(
-                        hintText: 'Enter clinical assessment findings...',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(14),
-                      ),
+                      maxLines: 15,
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.textPrimary,
                         height: 1.5,
                       ),
+                      decoration: const InputDecoration(
+                        hintText: 'Edit clinical findings summary...',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(14),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
                       Expanded(
@@ -2231,7 +3289,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                             }
                             setState(() {
                               _isEditing = false;
-                              _analysisApproved = false; // Mark for re-approval upon change
+                              _analysisApproved = false;
                             });
                             _showMessage('Assessment changes draft updated.', type: AppSnackType.success);
                           },
@@ -2246,6 +3304,40 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     ],
                   ),
                 ],
+                const SizedBox(height: 16),
+                const Divider(color: AppColors.borderPrimary, height: 1),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _analysisApproved,
+                      activeColor: AppColors.brandPrimary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      onChanged: (val) {
+                        setState(() {
+                          _analysisApproved = val ?? false;
+                        });
+                      },
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _analysisApproved = !_analysisApproved;
+                          });
+                        },
+                        child: const Text(
+                          'I have reviewed and approved this clinical assessment',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -2296,7 +3388,9 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           const SizedBox(height: 12),
           _buildNameMismatchWarning(),
           _buildDiscrepancyWarning(),
-          _buildClinicalInsightsCard(),
+          _buildOverallPregnancyRiskCard(),
+          const SizedBox(height: 20),
+          _buildUltrasoundAssessmentCard(),
         ],
       ],
     );
@@ -2488,31 +3582,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       );
 }
 
-class _StatusLine extends StatelessWidget {
-  const _StatusLine({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: AppColors.brandPrimary),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w500),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _AiInsightsEditorPage extends StatefulWidget {
   const _AiInsightsEditorPage({required this.initialText});
