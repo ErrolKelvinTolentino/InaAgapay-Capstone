@@ -144,10 +144,12 @@ class GroqResponse {
         final name = _safeText(item['name']);
         final value = _safeText(item['value']);
         final status = _safeText(item['status']).toUpperCase();
+        final evidence = _safeText(item['evidence']);
         if (name.isEmpty && value.isEmpty) continue;
 
-        final summary =
+        final base =
             '${name.isEmpty ? 'Measurement' : name}: ${value.isEmpty ? 'n/a' : value} [$status]';
+        final summary = evidence.isNotEmpty ? '$base ($evidence)' : base;
         measurements.add(summary);
 
         if (name.toLowerCase().contains('weight') && value.isNotEmpty) {
