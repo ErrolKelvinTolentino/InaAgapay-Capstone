@@ -15,6 +15,25 @@ class GroqService {
   static const String _visionModel =
       'meta-llama/llama-4-scout-17b-16e-instruct';
   static const String _reasoningModel = 'openai/gpt-oss-120b';
+  static const String _firstFallbackReasoningModel = 'openai/gpt-oss-20b';
+  static const String _secondFallbackReasoningModel = 'qwen/qwen3-32b';
+
+  static const String childGrowthSystemPrompt =
+      'You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. '
+      'Write as if you are a trusted ate (older sister) sitting beside the mother, gently explaining things.\n\n'
+      'CRITICAL GROWTH TRANSLATION RULES:\n'
+      '- You must provide the response in both English and Filipino/Tagalog translations.\n'
+      '- Your response must use the exact format requested in the prompt, featuring the headers "## English" and "## Filipino" respectively.\n'
+      '- Under "## English", write the entire summary and sections in English.\n'
+      '- Under "## Filipino", write the entire summary and sections in warm, comforting, and simple conversational Filipino/Tagalog.\n'
+      '- Use simple, everyday, colloquial Tagalog (mild Taglish is fine) as spoken in typical Filipino homes. Avoid deep, formal, poetic, or archaic words.\n'
+      '- Do not write English under the Filipino section, and do not write Filipino under the English section.\n'
+      '- Tone must be simple, gentle, comforting, and encouraging. Never be cold or clinical. Do not use medical jargon or z-scores.';
+
+  static const String _sttModelPrimary = 'whisper-large-v3-turbo';
+  static const String _sttModelFallback = 'whisper-large-v3';
+  static const String _audioTranscriptionUrl =
+      'https://api.groq.com/openai/v1/audio/transcriptions';
 
   // ── API Constraints ─────────────────────────────────────────────────────
 
@@ -163,35 +182,253 @@ class GroqService {
 
   Future<String> generateTextInsight({
     required String prompt,
+    String? systemPrompt,
     double temperature = 0.2,
     int maxOutputTokens = 2048,
   }) async {
     final apiKey = _getApiKey();
     _log('💬 Generating text insight...');
 
+    final sysContent = systemPrompt ??
+        'You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. '
+            'Write as if you are a trusted ate (older sister) sitting beside the mother, gently explaining things. '
+            'Celebrate good news warmly. When something needs attention, be honest but gentle and always offer practical next steps. '
+            'Use simple Filipino-context language. Explain medical terms by what they mean for the mother and baby. '
+            'Give culturally relevant advice (e.g., local foods like malunggay, kangkong, dilis for nutrition). '
+            'Never be cold or clinical. Always end with encouragement.\n\n'
+            'MATERNAL WEIGHT INTERPRETATION RULES (apply when weight/BMI data is present):\n'
+            '- You are NOT responsible for computing BMI or weight gain formulas — the system provides those.\n'
+            '- You translate maternal monitoring information into understandable explanations.\n'
+            '- NEVER use words like "ideal weight", "perfect weight", "required weight", or "normal pregnancy weight".\n'
+            '- Use softer wording: "commonly expected range", "estimated expected range", "appears within range", "appears slightly lower/higher than expected".\n'
+            '- NEVER present exact target weights, guaranteed healthy weights, or rigid expectations.\n'
+            '- If pre-pregnancy weight is unavailable, do NOT display BMI classifications or overweight/obese labels to the mother. Include disclaimer: "Pre-pregnancy weight information was not provided. Current insights are partially estimated and may have limited BMI-based interpretation."\n'
+            '- For FIRST TRIMESTER: note that small weight changes are common in early pregnancy. Do NOT apply weekly rate references yet.\n'
+            '- Every weight interpretation must end with: "This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation."';
+
     return _sendChatCompletion(
       messages: [
         {
           'role': 'system',
-          'content':
-              'You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. '
-              'Write as if you are a trusted ate (older sister) sitting beside the mother, gently explaining things. '
-              'Celebrate good news warmly. When something needs attention, be honest but gentle and always offer practical next steps. '
-              'Use simple Filipino-context language. Explain medical terms by what they mean for the mother and baby. '
-              'Give culturally relevant advice (e.g., local foods like malunggay, kangkong, dilis for nutrition). '
-              'Never be cold or clinical. Always end with encouragement.\n\n'
-              'MATERNAL WEIGHT INTERPRETATION RULES (apply when weight/BMI data is present):\n'
-              '- You are NOT responsible for computing BMI or weight gain formulas — the system provides those.\n'
-              '- You translate maternal monitoring information into understandable explanations.\n'
-              '- NEVER use words like "ideal weight", "perfect weight", "required weight", or "normal pregnancy weight".\n'
-              '- Use softer wording: "commonly expected range", "estimated expected range", "appears within range", "appears slightly lower/higher than expected".\n'
-              '- NEVER present exact target weights, guaranteed healthy weights, or rigid expectations.\n'
-              '- If pre-pregnancy weight is unavailable, do NOT display BMI classifications or overweight/obese labels to the mother. Include disclaimer: "Pre-pregnancy weight information was not provided. Current insights are partially estimated and may have limited BMI-based interpretation."\n'
-              '- For FIRST TRIMESTER: note that small weight changes are common in early pregnancy. Do NOT apply weekly rate references yet.\n'
-              '- Every weight interpretation must end with: "This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation."'
+          'content': sysContent,
         },
         {'role': 'user', 'content': prompt}
       ],
+      apiKey: apiKey,
+      model: _reasoningModel,
+      temperature: temperature,
+      maxOutputTokens: maxOutputTokens,
+    );
+  }
+
+  // ── TTS API ─────────────────────────────────────────────────────────────
+  /// Calls the Groq text-to-speech endpoint and returns concatenated WAV bytes.
+  /// Uses canopylabs/orpheus-v1-english with "diana" voice.
+  /// Handles the 200-char limit by splitting into sentence chunks automatically.
+  static const int _ttsMaxChunkChars = 190; // safely under the 200-char limit
+  static const int _wavHeaderSize = 44; // standard WAV header bytes
+
+  Future<List<int>> speakWithGroqTts(String text) async {
+    final apiKey = _getApiKey();
+
+    // 1. Sanitise markdown
+    final clean = text
+        .replaceAll(RegExp(r'\*{1,2}'), '')
+        .replaceAll(RegExp(r'#{1,6} ?'), '')
+        .replaceAll(RegExp(r'-{3,}'), '')
+        .replaceAll(RegExp(r'[_`]'), '')
+        .replaceAll(RegExp(r'\n{2,}'), '. ')
+        .replaceAll('\n', ' ')
+        .trim();
+
+    // 2. Split into ≤190-char chunks on sentence boundaries
+    final chunks = _splitIntoTtsChunks(clean);
+    _log('🔊 Groq TTS: ${clean.length} chars → ${chunks.length} chunk(s)');
+
+    // 3. Fetch each chunk sequentially and combine the audio
+    List<int> combinedAudio = [];
+
+    for (int i = 0; i < chunks.length; i++) {
+      final chunk = chunks[i];
+      if (chunk.trim().isEmpty) continue;
+
+      _log(
+          '   Chunk ${i + 1}/${chunks.length}: "${chunk.substring(0, chunk.length.clamp(0, 50))}..." (${chunk.length} chars)');
+
+      final response = await http
+          .post(
+            Uri.parse('https://api.groq.com/openai/v1/audio/speech'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $apiKey',
+            },
+            body: jsonEncode({
+              'model': 'canopylabs/orpheus-v1-english',
+              'input': '[cheerful] $chunk',
+              'voice': 'autumn',
+              'response_format': 'wav',
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
+
+      if (response.statusCode != 200) {
+        String errMsg;
+        try {
+          final errData = jsonDecode(response.body);
+          errMsg = errData['error']?['message'] ?? response.body;
+        } catch (_) {
+          errMsg = response.body;
+        }
+        _log('❌ Groq TTS chunk $i failed (${response.statusCode}): $errMsg');
+        throw Exception('Groq TTS Error (${response.statusCode}): $errMsg');
+      }
+
+      final bytes = response.bodyBytes;
+      _log('   ✅ Chunk ${i + 1}: ${bytes.length} bytes received');
+
+      if (i == 0) {
+        // First chunk: keep the full WAV including header
+        combinedAudio.addAll(bytes);
+      } else {
+        // Subsequent chunks: skip the 44-byte WAV header to avoid duplicates
+        if (bytes.length > _wavHeaderSize) {
+          combinedAudio.addAll(bytes.sublist(_wavHeaderSize));
+        }
+      }
+    }
+
+    _log('✅ Groq TTS complete: ${combinedAudio.length} total bytes');
+    return combinedAudio;
+  }
+
+  /// Splits text into chunks of at most [_ttsMaxChunkChars] characters,
+  /// preferring to break on sentence-ending punctuation (. ! ?) or commas.
+  List<String> _splitIntoTtsChunks(String text) {
+    if (text.length <= _ttsMaxChunkChars) return [text];
+
+    final chunks = <String>[];
+    int start = 0;
+
+    while (start < text.length) {
+      int end = (start + _ttsMaxChunkChars).clamp(0, text.length);
+      if (end == text.length) {
+        chunks.add(text.substring(start).trim());
+        break;
+      }
+
+      // Walk back to find a good break point: ". ", "! ", "? ", ", "
+      int breakAt = -1;
+      for (int j = end; j > start + 30; j--) {
+        final ch = text[j];
+        if ((ch == '.' || ch == '!' || ch == '?') &&
+            j + 1 < text.length &&
+            text[j + 1] == ' ') {
+          breakAt = j + 1; // include the punctuation, break after it
+          break;
+        }
+        if (ch == ',' && j + 1 < text.length && text[j + 1] == ' ') {
+          breakAt = j + 1;
+          // don't break yet — prefer sentence-ending punctuation
+        }
+      }
+
+      if (breakAt == -1) {
+        // No good punct found — fall back to last space
+        breakAt = text.lastIndexOf(' ', end);
+        if (breakAt <= start) breakAt = end; // hard cut
+      }
+
+      chunks.add(text.substring(start, breakAt).trim());
+      start = breakAt;
+      while (start < text.length && text[start] == ' ') {
+        start++;
+      }
+    }
+
+    return chunks.where((c) => c.isNotEmpty).toList();
+  }
+
+  Future<String> transcribeAudio({
+    required Uint8List audioBytes,
+    required String fileName,
+    String? language,
+  }) async {
+    final apiKey = _getApiKey();
+    final models = [_sttModelPrimary, _sttModelFallback];
+    String? lastError;
+
+    for (final model in models) {
+      try {
+        return await _sendAudioTranscription(
+          audioBytes: audioBytes,
+          fileName: fileName,
+          apiKey: apiKey,
+          model: model,
+          language: language,
+        );
+      } catch (e) {
+        lastError = e.toString();
+        _log('⚠️ STT model ${model.split('/').last} failed: $e');
+      }
+    }
+
+    throw Exception(
+        'Speech transcription failed: ${lastError ?? 'Unknown error'}');
+  }
+
+  Future<String> _sendAudioTranscription({
+    required Uint8List audioBytes,
+    required String fileName,
+    required String apiKey,
+    required String model,
+    String? language,
+  }) async {
+    final request =
+        http.MultipartRequest('POST', Uri.parse(_audioTranscriptionUrl));
+    request.headers['Authorization'] = 'Bearer $apiKey';
+    request.fields['model'] = model;
+    if (language != null && language.isNotEmpty) {
+      request.fields['language'] = language;
+    }
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        audioBytes,
+        filename: fileName,
+      ),
+    );
+
+    final streamedResponse =
+        await request.send().timeout(const Duration(seconds: 120));
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode != 200) {
+      String errorMessage = response.body;
+      try {
+        final errorData = jsonDecode(response.body);
+        errorMessage = errorData['error']?['message'] ?? response.body;
+      } catch (_) {}
+      throw Exception('Groq STT Error (${response.statusCode}): $errorMessage');
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final text = data['text'] as String?;
+    if (text == null || text.trim().isEmpty) {
+      throw Exception('Groq STT returned empty transcription');
+    }
+    return text.trim();
+  }
+
+  Future<String> getChatResponse({
+    required List<Map<String, dynamic>> chatHistory,
+    double temperature = 0.5,
+    int maxOutputTokens = 2048,
+  }) async {
+    final apiKey = _getApiKey();
+    _log('💬 Generating chat response...');
+
+    return _sendChatCompletion(
+      messages: chatHistory,
       apiKey: apiKey,
       model: _reasoningModel,
       temperature: temperature,
@@ -996,6 +1233,7 @@ Rules:
     required double temperature,
     required int maxOutputTokens,
     bool forceJsonMode = false,
+    bool allowModelFallback = true,
   }) async {
     final bool useJsonMode = forceJsonMode || _detectJsonMode(messages);
 
@@ -1025,8 +1263,29 @@ Rules:
           .timeout(const Duration(seconds: 120));
 
       if (response.statusCode != 200) {
-        final errorData = jsonDecode(response.body);
-        final errorMessage = errorData['error']?['message'] ?? response.body;
+        String errorMessage = response.body;
+        try {
+          final errorData = jsonDecode(response.body);
+          errorMessage = errorData['error']?['message'] ?? response.body;
+        } catch (_) {}
+
+        if (allowModelFallback && _isTokenLimitError(errorMessage)) {
+          final nextModel = _nextReasoningFallbackModel(model);
+          if (nextModel != null) {
+            _log(
+                '⚠️ ${model.split('/').last} token limit reached; retrying with ${nextModel.split('/').last}');
+            return _sendChatCompletion(
+              messages: messages,
+              apiKey: apiKey,
+              model: nextModel,
+              temperature: temperature,
+              maxOutputTokens: maxOutputTokens,
+              forceJsonMode: forceJsonMode,
+              allowModelFallback: true,
+            );
+          }
+        }
+
         throw Exception('API Error (${response.statusCode}): $errorMessage');
       }
 
@@ -1038,6 +1297,27 @@ Rules:
     } on FormatException catch (e) {
       throw Exception('Invalid response format from Groq API: $e');
     }
+  }
+
+  bool _isTokenLimitError(String message) {
+    final normalized = message.toLowerCase();
+    return (normalized.contains('token') || normalized.contains('context')) &&
+        (normalized.contains('limit') ||
+            normalized.contains('maximum') ||
+            normalized.contains('exceeded') ||
+            normalized.contains('too long') ||
+            normalized.contains('max tokens') ||
+            normalized.contains('context length'));
+  }
+
+  String? _nextReasoningFallbackModel(String currentModel) {
+    if (currentModel == _reasoningModel) {
+      return _firstFallbackReasoningModel;
+    }
+    if (currentModel == _firstFallbackReasoningModel) {
+      return _secondFallbackReasoningModel;
+    }
+    return null;
   }
 
   bool _detectJsonMode(List<Map<String, dynamic>> messages) {

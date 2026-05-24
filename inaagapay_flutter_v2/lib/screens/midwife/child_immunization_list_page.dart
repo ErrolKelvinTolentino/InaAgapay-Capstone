@@ -126,19 +126,38 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
 
     try {
       final now = DateTime.now();
-
       int years = now.year - birthdate!.year;
       int months = now.month - birthdate!.month;
+      int days = now.day - birthdate!.day;
 
+      if (days < 0) {
+        months -= 1;
+        final prevMonthDate = DateTime(now.year, now.month, 0);
+        days += prevMonthDate.day;
+      }
       if (months < 0) {
-        years--;
+        years -= 1;
         months += 12;
       }
 
-      if (years <= 0) {
-        return '$months month${months != 1 ? 's' : ''} old';
+      if (years > 0) {
+        final monthPart = months > 0 ? ', $months month${months != 1 ? 's' : ''}' : '';
+        return '$years year${years != 1 ? 's' : ''}$monthPart old';
+      } else if (months > 0) {
+        final weeks = days ~/ 7;
+        final weekPart = weeks > 0 ? ', $weeks week${weeks != 1 ? 's' : ''}' : '';
+        return '$months month${months != 1 ? 's' : ''}$weekPart old';
       } else {
-        return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'.trim();
+        if (days >= 7) {
+          final weeks = days ~/ 7;
+          final remainingDays = days % 7;
+          final dayPart = remainingDays > 0 ? ', $remainingDays day${remainingDays != 1 ? 's' : ''}' : '';
+          return '$weeks week${weeks != 1 ? 's' : ''}$dayPart old';
+        } else if (days > 0) {
+          return '$days day${days != 1 ? 's' : ''} old';
+        } else {
+          return 'Newborn';
+        }
       }
     } catch (e) {
       return 'Unknown age';
@@ -175,14 +194,19 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
                     color: AppColors.brandPrimary,
                   ),
                 )
-              : Column(
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 24),
                   children: [
-                    HeroCard(
-                      image: null,
-                      title: getChildName(),
-                      subtitle: calculateAge(),
-                      showWeekBadge: false,
-                      showHeartRow: false,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: HeroCard(
+                        image: null,
+                        title: getChildName(),
+                        subtitle: calculateAge(),
+                        sex: childData?['sex']?.toString(),
+                        showWeekBadge: false,
+                        showHeartRow: false,
+                      ),
                     ),
                     const SizedBox(height: 16),
 
@@ -214,9 +238,10 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
                     ),
                     const SizedBox(height: 8),
 
-                    Expanded(
-                      child: records.isEmpty
-                          ? Center(
+                    records.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 32),
+                            child: Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -254,30 +279,32 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
                                   ),
                                 ],
                               ),
-                            )
-                          : ListView.separated(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                              itemCount: records.length,
-                              separatorBuilder: (context, index) => const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final record = records[index];
-                                final vaccine = record['vaccine'] as Map<String, dynamic>?;
-                                final vaccineName = vaccine?['vaccine_name']?.toString() ?? 'Unknown Vaccine';
-                                final doseNumber = vaccine?['dose_number']?.toString() ?? '';
-                                final notes = vaccine?['notes']?.toString() ?? '';
-                                final date = record['vaccination_date']?.toString() ?? '';
-                                final remarks = record['remarks']?.toString() ?? '';
-
-                                return ImmunizationRecordCard(
-                                  vaccineName: vaccineName,
-                                  doseNumber: doseNumber,
-                                  notes: notes,
-                                  date: formatDate(date),
-                                  remarks: remarks,
-                                );
-                              },
                             ),
-                    ),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            itemCount: records.length,
+                            separatorBuilder: (context, index) => const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final record = records[index];
+                              final vaccine = record['vaccine'] as Map<String, dynamic>?;
+                              final vaccineName = vaccine?['vaccine_name']?.toString() ?? 'Unknown Vaccine';
+                              final doseNumber = vaccine?['dose_number']?.toString() ?? '';
+                              final notes = vaccine?['notes']?.toString() ?? '';
+                              final date = record['vaccination_date']?.toString() ?? '';
+                              final remarks = record['remarks']?.toString() ?? '';
+
+                              return ImmunizationRecordCard(
+                                vaccineName: vaccineName,
+                                doseNumber: doseNumber,
+                                notes: notes,
+                                date: formatDate(date),
+                                remarks: remarks,
+                              );
+                            },
+                          ),
                   ],
                 ),
         ),
@@ -378,12 +405,12 @@ class _ChildImmunizationListPageState extends State<ChildImmunizationListPage> {
           ),
         ),
         const SizedBox(height: 4),
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
           children: [
             _legendDot(AppColors.success, 'Given'),
-            const SizedBox(width: 12),
             _legendDot(AppColors.warning, 'Recommended'),
-            const SizedBox(width: 12),
             _legendDot(AppColors.textSecondary, 'Not due yet'),
           ],
         ),

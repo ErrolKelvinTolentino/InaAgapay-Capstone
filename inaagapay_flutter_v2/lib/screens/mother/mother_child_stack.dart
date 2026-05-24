@@ -63,6 +63,7 @@ class _MotherChildStackState extends State<MotherChildStack> {
           childId: widget.childId,
           childName: widget.childName,
           childAge: widget.childAge,
+          childGender: widget.childGender,
         ),
       ],
     );

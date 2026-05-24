@@ -28,6 +28,21 @@ class _AiAnalyticsCardState extends State<AiAnalyticsCard> {
     super.initState();
     // Default to the app's current language setting
     _showFilipino = LanguageService.isFilipino;
+    LanguageService.selectedLanguage.addListener(_onLanguageChanged);
+  }
+
+  @override
+  void dispose() {
+    LanguageService.selectedLanguage.removeListener(_onLanguageChanged);
+    super.dispose();
+  }
+
+  void _onLanguageChanged() {
+    if (mounted) {
+      setState(() {
+        _showFilipino = LanguageService.isFilipino;
+      });
+    }
   }
 
   @override
@@ -35,32 +50,36 @@ class _AiAnalyticsCardState extends State<AiAnalyticsCard> {
     super.didUpdateWidget(oldWidget);
     if (widget.text != oldWidget.text) {
       _isExpanded = false;
-      _showFilipino = false;
     }
   }
 
   String _extractLanguageSection(String fullText, bool filipino) {
-    final englishMatch = RegExp(
-      r'## English\s*([\s\S]*?)(?=(## Filipino|\z))',
+    final normalized = fullText.replaceAll('\r\n', '\n');
+
+    final englishRegex = RegExp(
+      r'(?:^|\n)(?:#+\s*|\*+|\[)?English(?:#+\s*|\*+|\])?:?\s*?\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?(?:Filipino|Tagalog)(?:#+\s*|\*+|\[)?:?|$)',
       caseSensitive: false,
-    ).firstMatch(fullText);
-    final filipinoMatch = RegExp(
-      r'## Filipino\s*([\s\S]*?)(?=(## English|\z))',
+    );
+    final filipinoRegex = RegExp(
+      r'(?:^|\n)(?:#+\s*|\*+|\[)?(?:Filipino|Tagalog)(?:#+\s*|\*+|\[)?:?\s*?\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?English(?:#+\s*|\*+|\[)?:?|$)',
       caseSensitive: false,
-    ).firstMatch(fullText);
+    );
+
+    final englishMatch = englishRegex.firstMatch(normalized);
+    final filipinoMatch = filipinoRegex.firstMatch(normalized);
 
     final englishText = englishMatch?.group(1)?.trim();
     final filipinoText = filipinoMatch?.group(1)?.trim();
 
     if (filipino) {
-      return filipinoText ?? englishText ?? fullText.trim();
+      return filipinoText ?? englishText ?? normalized.trim();
     }
-    return englishText ?? filipinoText ?? fullText.trim();
+    return englishText ?? filipinoText ?? normalized.trim();
   }
 
   String _selectedText(String fullText) {
     final text = _extractLanguageSection(fullText, _showFilipino);
-    return text.isEmpty ? fullText.trim() : text;
+    return text.isEmpty ? fullText.replaceAll('\r\n', '\n').trim() : text;
   }
 
   String _getSummary(String fullText) {
@@ -103,7 +122,6 @@ class _AiAnalyticsCardState extends State<AiAnalyticsCard> {
       onPressed: () {
         setState(() {
           _showFilipino = label == 'Filipino';
-          _isExpanded = false;
         });
       },
       style: TextButton.styleFrom(

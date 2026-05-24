@@ -12,7 +12,6 @@ class ChildModel {
   final DateTime? birthdate;
   final double? birthWeight;
   final double? birthLength;
-  final double? headCircumference;
   final String? birthplaceCity;
   final String? birthplaceProvince;
 
@@ -28,7 +27,6 @@ class ChildModel {
     this.birthdate,
     this.birthWeight,
     this.birthLength,
-    this.headCircumference,
     this.birthplaceCity,
     this.birthplaceProvince,
   });
@@ -46,16 +44,36 @@ class ChildModel {
     final now = DateTime.now();
     int years = now.year - birthdate!.year;
     int months = now.month - birthdate!.month;
-    
+    int days = now.day - birthdate!.day;
+
+    if (days < 0) {
+      months -= 1;
+      final prevMonthDate = DateTime(now.year, now.month, 0);
+      days += prevMonthDate.day;
+    }
     if (months < 0) {
-      years--;
+      years -= 1;
       months += 12;
     }
-    
-    if (years <= 0) {
-      return '$months month${months != 1 ? 's' : ''} old';
+
+    if (years > 0) {
+      final monthPart = months > 0 ? ', $months month${months != 1 ? 's' : ''}' : '';
+      return '$years year${years != 1 ? 's' : ''}$monthPart old';
+    } else if (months > 0) {
+      final weeks = days ~/ 7;
+      final weekPart = weeks > 0 ? ', $weeks week${weeks != 1 ? 's' : ''}' : '';
+      return '$months month${months != 1 ? 's' : ''}$weekPart old';
     } else {
-      return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'.trim();
+      if (days >= 7) {
+        final weeks = days ~/ 7;
+        final remainingDays = days % 7;
+        final dayPart = remainingDays > 0 ? ', $remainingDays day${remainingDays != 1 ? 's' : ''}' : '';
+        return '$weeks week${weeks != 1 ? 's' : ''}$dayPart old';
+      } else if (days > 0) {
+        return '$days day${days != 1 ? 's' : ''} old';
+      } else {
+        return 'Newborn';
+      }
     }
   }
 
@@ -77,7 +95,6 @@ class ChildModel {
       birthdate: json['birthdate'] != null ? DateTime.parse(json['birthdate']) : null,
       birthWeight: (json['birth_weight'] as num?)?.toDouble(),
       birthLength: (json['birth_length'] as num?)?.toDouble(),
-      headCircumference: (json['head_circumference'] as num?)?.toDouble(),
       birthplaceCity: json['birthplace_city_municipality'] as String?,
       birthplaceProvince: json['birthplace_province'] as String?,
     );

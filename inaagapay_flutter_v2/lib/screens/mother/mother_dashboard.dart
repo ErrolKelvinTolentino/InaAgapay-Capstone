@@ -1,6 +1,7 @@
 // lib/screens/mother/mother_dashboard.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/headline.dart';
@@ -8,15 +9,18 @@ import '../../widgets/small_description.dart';
 import '../../widgets/hero_card.dart';
 import '../../widgets/small_info_box.dart';
 import '../../widgets/long_info_box.dart';
-import '../../widgets/comparison_card.dart';
 import '../../widgets/main_button.dart';
-import '../../widgets/secondary_button.dart';
+import '../../widgets/app_input_field.dart';
 import '../../models/baby_growth_model.dart';
+import '../../models/weight_gain_models.dart';
 import '../../services/auth_storage.dart';
 import '../../services/language_service.dart';
 import '../../services/mother_profile_service.dart';
 import '../../services/supabase_service.dart';
+import '../../services/weight_gain_engine.dart';
 import 'mother_pregnancy_detail_page.dart';
+import 'mother_chatbot_page.dart';
+import 'mother_vitals_page.dart';
 
 class MotherDashboard extends StatefulWidget {
   const MotherDashboard({super.key});
@@ -28,6 +32,10 @@ class MotherDashboard extends StatefulWidget {
 class _MotherDashboardState extends State<MotherDashboard> {
   bool _isLoading = true;
   String? _errorMessage;
+  bool _isUnlinked = false;
+  bool _isUnlinkedBannerDismissed = false;
+  bool _isVitalsIncomplete = false;
+  bool _isVitalsBannerDismissed = false;
 
   // Dashboard data
   int _week = 0;
@@ -46,9 +54,18 @@ class _MotherDashboardState extends State<MotherDashboard> {
   List<String>? _riskFactors;
   List<String>? _suggestedActions;
 
+  // Latest vitals tracking variables
+  double? _latestWeight;
+  String? _latestBp;
+  DateTime? _latestVitalsDate;
+  String? _latestVitalsSource;
+  WeightGainResult? _weightGainResult;
+  double? _prePregnancyWeight;
+  double? _heightCm;
+
   static const Map<int, Map<String, String>> _babySizeByWeek = {
-    4: {'fruit': 'Poppy seed', 'image': 'pea.png'},
-    5: {'fruit': 'Sesame seed', 'image': 'pea.png'},
+    4: {'fruit': 'Poppy seed', 'image': 'poppy.png'},
+    5: {'fruit': 'Sesame seed', 'image': 'sesame.png'},
     6: {'fruit': 'Pea', 'image': 'pea.png'},
     7: {'fruit': 'Blueberry', 'image': 'blueberry.png'},
     8: {'fruit': 'Raspberry', 'image': 'raspberry.png'},
@@ -166,6 +183,16 @@ class _MotherDashboardState extends State<MotherDashboard> {
     _eddDate = null;
     _riskFactors = null;
     _suggestedActions = null;
+    _isUnlinked = false;
+    _isVitalsIncomplete = false;
+    _isVitalsBannerDismissed = false;
+    _latestWeight = null;
+    _latestBp = null;
+    _latestVitalsDate = null;
+    _latestVitalsSource = null;
+    _weightGainResult = null;
+    _prePregnancyWeight = null;
+    _heightCm = null;
   }
 
   bool _requiresDeliveryDetails(String outcome) {
@@ -206,6 +233,18 @@ class _MotherDashboardState extends State<MotherDashboard> {
             'Mother ID not found. Please log out and log in again.');
       }
 
+      // Check if mother is linked to a BHC and fetch height
+      final motherResponse = await SupabaseService.client
+          .from('mothers')
+          .select('assigned_bhc_id, height')
+          .eq('mother_id', motherId)
+          .maybeSingle();
+      _isUnlinked =
+          motherResponse == null || motherResponse['assigned_bhc_id'] == null;
+      final double? motherHeight = motherResponse != null && motherResponse['height'] != null
+          ? (motherResponse['height'] as num).toDouble()
+          : null;
+
       // Get account info for name
       final accountId = await AuthStorage.getUserId();
       debugPrint('Account ID: $accountId');
@@ -241,6 +280,14 @@ class _MotherDashboardState extends State<MotherDashboard> {
             pregnancyResponse.first as Map<String, dynamic>;
         _hasPregnancy = true;
         _pregnancyId = _parseInt(pregnancy['pregnancy_id']);
+
+        final double? ppw = pregnancy['pre_pregnancy_weight'] != null
+            ? (pregnancy['pre_pregnancy_weight'] as num).toDouble()
+            : null;
+        
+        _heightCm = motherHeight;
+        _prePregnancyWeight = ppw;
+        _isVitalsIncomplete = (motherHeight == null || ppw == null);
 
         final String? lmpStr = pregnancy['last_menstrual_period'] as String?;
         final String? eddStr =
@@ -285,6 +332,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
 
           // Fetch risk factors and suggested actions for the detail page
           await _loadRiskData();
+          await _loadLatestVitals();
         }
       }
 
@@ -351,6 +399,142 @@ class _MotherDashboardState extends State<MotherDashboard> {
     }
   }
 
+  Future<void> _loadLatestVitals() async {
+    try {
+      // 1. Fetch latest prenatal checkup
+      final latestCheckup = await SupabaseService.client
+          .from('prenatal_checkups')
+          .select('checkup_weight, blood_pressure_systolic, blood_pressure_diastolic, checkup_datetime')
+          .eq('pregnancy_id', _pregnancyId)
+          .order('checkup_datetime', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      // 2. Fetch latest maternal vitals
+      final latestMaternal = await SupabaseService.client
+          .from('maternal_vitals')
+          .select('weight_kg, height_cm, recorded_at')
+          .eq('pregnancy_id', _pregnancyId)
+          .order('recorded_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      final checkup = latestCheckup;
+      final maternal = latestMaternal;
+
+      DateTime? checkupTime;
+      if (checkup != null && checkup['checkup_datetime'] != null) {
+        checkupTime = DateTime.tryParse(checkup['checkup_datetime'].toString());
+      }
+
+      DateTime? vitalTime;
+      if (maternal != null && maternal['recorded_at'] != null) {
+        vitalTime = DateTime.tryParse(maternal['recorded_at'].toString());
+      }
+
+      if (checkupTime != null && checkup != null && (vitalTime == null || checkupTime.isAfter(vitalTime))) {
+        // Use checkup vitals
+        _latestWeight = checkup['checkup_weight'] != null
+            ? (checkup['checkup_weight'] as num).toDouble()
+            : null;
+        final sys = checkup['blood_pressure_systolic'];
+        final dia = checkup['blood_pressure_diastolic'];
+        _latestBp = (sys != null && dia != null) ? '$sys/$dia' : null;
+        _latestVitalsDate = checkupTime;
+        _latestVitalsSource = 'prenatal_checkup';
+      } else if (vitalTime != null && maternal != null) {
+        // Use maternal vitals
+        _latestWeight = maternal['weight_kg'] != null
+            ? (maternal['weight_kg'] as num).toDouble()
+            : null;
+        _latestBp = null; // No BP in self-logged vitals
+        _latestVitalsDate = vitalTime;
+        _latestVitalsSource = 'mother_self';
+      }
+
+      // 3. Fetch checkups for weight gain engine
+      final checkupsRaw = await SupabaseService.client
+          .from('prenatal_checkups')
+          .select('checkup_datetime, age_of_gestation, checkup_weight')
+          .eq('pregnancy_id', _pregnancyId);
+
+      // 4. Fetch maternal vitals for weight gain engine
+      final vitalsRaw = await SupabaseService.client
+          .from('maternal_vitals')
+          .select('recorded_at, age_of_gestation, weight_kg, height_cm')
+          .eq('pregnancy_id', _pregnancyId);
+
+      final checkupsList = (checkupsRaw as List).cast<Map<String, dynamic>>();
+      final vitalsList = (vitalsRaw as List).cast<Map<String, dynamic>>();
+
+      // Extract the latest non-null height from maternal vitals logs
+      double? latestVitalHeight;
+      final sortedVitals = List<Map<String, dynamic>>.from(vitalsList);
+      sortedVitals.sort((a, b) {
+        final da = DateTime.tryParse(a['recorded_at']?.toString() ?? '') ?? DateTime.now();
+        final db = DateTime.tryParse(b['recorded_at']?.toString() ?? '') ?? DateTime.now();
+        return db.compareTo(da);
+      });
+
+      for (final v in sortedVitals) {
+        if (v['height_cm'] != null) {
+          latestVitalHeight = (v['height_cm'] as num).toDouble();
+          break;
+        }
+      }
+
+      if (latestVitalHeight != null) {
+        _heightCm = latestVitalHeight;
+      }
+
+      final List<Map<String, dynamic>> weightReadings = [
+        ...checkupsList.map((c) => {
+              'checkup_weight': c['checkup_weight'] != null ? (c['checkup_weight'] as num).toDouble() : null,
+              'age_of_gestation': c['age_of_gestation'] != null ? (c['age_of_gestation'] as num).toDouble() : null,
+              'checkup_datetime': c['checkup_datetime'],
+            }),
+        ...vitalsList.map((v) => {
+              'checkup_weight': v['weight_kg'] != null ? (v['weight_kg'] as num).toDouble() : null,
+              'age_of_gestation': v['age_of_gestation'] != null ? (v['age_of_gestation'] as num).toDouble() : null,
+              'checkup_datetime': v['recorded_at'],
+            }),
+      ];
+
+      final weightReadingsAsc = weightReadings
+          .where((v) => v['checkup_weight'] != null)
+          .toList();
+
+      weightReadingsAsc.sort((a, b) {
+        final da = DateTime.tryParse(a['checkup_datetime']?.toString() ?? '') ?? DateTime.now();
+        final db = DateTime.tryParse(b['checkup_datetime']?.toString() ?? '') ?? DateTime.now();
+        return da.compareTo(db);
+      });
+
+      if (weightReadingsAsc.isNotEmpty) {
+        final latest = weightReadingsAsc.last;
+        final currentWeight = (latest['checkup_weight'] as num).toDouble();
+
+        double effectiveAog = (latest['age_of_gestation'] as num?)?.toDouble() ?? 0;
+        if (effectiveAog == 0 && _lmpDate != null) {
+          effectiveAog = DateTime.now().difference(_lmpDate!).inDays / 7.0;
+        }
+
+        _weightGainResult = WeightGainEngine.evaluate(
+          currentWeight: currentWeight,
+          aogWeeks: effectiveAog,
+          allCheckups: weightReadingsAsc,
+          prePregnancyWeight: _prePregnancyWeight,
+          heightCm: _heightCm,
+          fetalCount: _fetalCount,
+        );
+      } else {
+        _weightGainResult = null;
+      }
+    } catch (e) {
+      debugPrint('Error loading latest vitals/evaluation: $e');
+    }
+  }
+
   Future<void> _showConcludePregnancyDialog() async {
     if (!_hasPregnancy || _pregnancyId == 0) {
       _showSnackBar(_t('No active pregnancy to conclude.',
@@ -360,8 +544,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
 
     final lmpDate = _lmpDate;
     if (lmpDate == null) {
-      _showSnackBar(_t(
-          'Cannot conclude pregnancy because the LMP is missing.',
+      _showSnackBar(_t('Cannot conclude pregnancy because the LMP is missing.',
           'Hindi matatapos ang pagbubuntis dahil nawawala ang LMP.'));
       return;
     }
@@ -376,7 +559,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
 
     final fetalCount = _fetalCount < 1 ? 1 : _fetalCount;
     final outcomes = List<String>.filled(fetalCount, 'live_birth');
-    final outcomeDates = List<DateTime>.filled(fetalCount, DateUtils.dateOnly(today));
+    final outcomeDates =
+        List<DateTime>.filled(fetalCount, DateUtils.dateOnly(today));
     final deliveryDates =
         List<DateTime?>.filled(fetalCount, DateUtils.dateOnly(today));
     final deliveryMethods = List<String?>.filled(fetalCount, null);
@@ -395,55 +579,49 @@ class _MotherDashboardState extends State<MotherDashboard> {
       final dateOnlyToday = DateUtils.dateOnly(DateTime.now());
 
       for (int i = 0; i < fetalCount; i++) {
-        final fetusLabel =
-            fetalCount > 1 ? _t('Fetus ${i + 1}', 'Sanggol ${i + 1}') : _t('the pregnancy', 'ang pagbubuntis');
+        final fetusLabel = fetalCount > 1
+            ? _t('Fetus ${i + 1}', 'Sanggol ${i + 1}')
+            : _t('the pregnancy', 'ang pagbubuntis');
         final outcomeDate = DateUtils.dateOnly(outcomeDates[i]);
 
         if (outcomeDate.isBefore(dateOnlyLmp)) {
-          return _t(
-              'Outcome date for $fetusLabel cannot be before the LMP.',
+          return _t('Outcome date for $fetusLabel cannot be before the LMP.',
               'Ang petsa ng kinalabasan para sa $fetusLabel ay hindi maaaring mauna sa LMP.');
         }
 
         if (outcomeDate.isAfter(dateOnlyToday)) {
-          return _t(
-              'Outcome date for $fetusLabel cannot be in the future.',
+          return _t('Outcome date for $fetusLabel cannot be in the future.',
               'Ang petsa ng kinalabasan para sa $fetusLabel ay hindi maaaring nasa hinaharap.');
         }
 
         if (_requiresDeliveryDetails(outcomes[i])) {
           final place = placeControllers[i].text.trim();
           if (place.isEmpty) {
-            return _t(
-                'Please enter the place of delivery for $fetusLabel.',
+            return _t('Please enter the place of delivery for $fetusLabel.',
                 'Pakilagay ang lugar ng panganganak para sa $fetusLabel.');
           }
 
           if (deliveryMethods[i] == null) {
-            return _t(
-                'Please select the delivery method for $fetusLabel.',
+            return _t('Please select the delivery method for $fetusLabel.',
                 'Pakipili ang paraan ng panganganak para sa $fetusLabel.');
           }
 
           final deliveryDate = deliveryDates[i] ?? outcomeDates[i];
           final dateOnlyDelivery = DateUtils.dateOnly(deliveryDate);
           if (dateOnlyDelivery.isBefore(dateOnlyLmp)) {
-            return _t(
-                'Delivery date for $fetusLabel cannot be before the LMP.',
+            return _t('Delivery date for $fetusLabel cannot be before the LMP.',
                 'Ang petsa ng panganganak para sa $fetusLabel ay hindi maaaring mauna sa LMP.');
           }
 
           if (dateOnlyDelivery.isAfter(dateOnlyToday)) {
-            return _t(
-                'Delivery date for $fetusLabel cannot be in the future.',
+            return _t('Delivery date for $fetusLabel cannot be in the future.',
                 'Ang petsa ng panganganak para sa $fetusLabel ay hindi maaaring nasa hinaharap.');
           }
         }
       }
 
       if (computeGestAge() == null) {
-        return _t(
-            'Gestational age cannot be computed from the selected dates.',
+        return _t('Gestational age cannot be computed from the selected dates.',
             'Hindi makuwenta ang edad ng pagbubuntis mula sa napiling mga petsa.');
       }
 
@@ -465,7 +643,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
               height: MediaQuery.of(context).size.height * 0.85,
               decoration: BoxDecoration(
                 color: AppColors.cardColorOf(context),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
                 children: [
@@ -494,7 +673,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.error.withValues(alpha: 0.08),
+                                  color:
+                                      AppColors.error.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: const Icon(
@@ -515,8 +695,9 @@ class _MotherDashboardState extends State<MotherDashboard> {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.close),
-                                onPressed:
-                                    isSubmitting ? null : () => Navigator.pop(ctx),
+                                onPressed: isSubmitting
+                                    ? null
+                                    : () => Navigator.pop(ctx),
                               ),
                             ],
                           ),
@@ -592,7 +773,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: DropdownButtonFormField<String>(
-                                value: outcomes[i],
+                                initialValue: outcomes[i],
                                 decoration: InputDecoration(
                                   labelText: _t('Outcome', 'Kinalabasan'),
                                   border: InputBorder.none,
@@ -600,16 +781,18 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                 items: [
                                   DropdownMenuItem(
                                     value: 'live_birth',
-                                    child:
-                                        Text(_t('Live Birth', 'Buhay na Sanggol')),
+                                    child: Text(
+                                        _t('Live Birth', 'Buhay na Sanggol')),
                                   ),
                                   DropdownMenuItem(
                                     value: 'stillbirth',
-                                    child: Text(_t('Stillbirth', 'Patay na Sanggol')),
+                                    child: Text(
+                                        _t('Stillbirth', 'Patay na Sanggol')),
                                   ),
                                   DropdownMenuItem(
                                     value: 'miscarriage',
-                                    child: Text(_t('Miscarriage', 'Pagkalaglag')),
+                                    child:
+                                        Text(_t('Miscarriage', 'Pagkalaglag')),
                                   ),
                                   DropdownMenuItem(
                                     value: 'abortion',
@@ -713,8 +896,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                 controller: placeControllers[i],
                                 enabled: !isSubmitting,
                                 decoration: InputDecoration(
-                                  labelText:
-                                      _t('Place of Delivery', 'Lugar ng Panganganak'),
+                                  labelText: _t('Place of Delivery',
+                                      'Lugar ng Panganganak'),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -731,28 +914,28 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: DropdownButtonFormField<String>(
-                                  value: deliveryMethods[i],
+                                  initialValue: deliveryMethods[i],
                                   decoration: InputDecoration(
-                                    labelText: _t(
-                                        'Delivery Method', 'Paraan ng Panganganak'),
+                                    labelText: _t('Delivery Method',
+                                        'Paraan ng Panganganak'),
                                     border: InputBorder.none,
                                   ),
                                   items: [
                                     DropdownMenuItem(
                                       value: 'NSD',
-                                      child:
-                                          Text(_t('Normal Spontaneous Delivery',
-                                              'Normal na Panganganak')),
+                                      child: Text(_t(
+                                          'Normal Spontaneous Delivery',
+                                          'Normal na Panganganak')),
                                     ),
                                     DropdownMenuItem(
                                       value: 'CS',
-                                      child:
-                                          Text(_t('Cesarean Section', 'Cesarean Section')),
+                                      child: Text(_t('Cesarean Section',
+                                          'Cesarean Section')),
                                     ),
                                     DropdownMenuItem(
                                       value: 'Instrumental',
-                                      child: Text(_t('Instrumental',
-                                          'Instrumental')),
+                                      child: Text(
+                                          _t('Instrumental', 'Instrumental')),
                                     ),
                                   ],
                                   onChanged: isSubmitting
@@ -837,8 +1020,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: Text(
-                              _t(
-                                  'Auto-computed from LMP and outcome date',
+                              _t('Auto-computed from LMP and outcome date',
                                   'Awtomatikong kinuha mula sa LMP at petsa ng kinalabasan'),
                               style: const TextStyle(
                                 fontSize: 11,
@@ -883,9 +1065,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                     }
 
                                     setModal(() => isSubmitting = true);
-                                    final success =
-                                        await MotherProfileService
-                                            .concludePregnancy(
+                                    final success = await MotherProfileService
+                                        .concludePregnancy(
                                       _pregnancyId,
                                       gestAgeAtEnd,
                                       fetalOutcomes,
@@ -894,15 +1075,15 @@ class _MotherDashboardState extends State<MotherDashboard> {
                                     if (!mounted) return;
                                     if (success) {
                                       Navigator.pop(ctx);
-                                      _showSnackBar(
-                                          _t('Pregnancy concluded successfully.',
-                                              'Matagumpay na natapos ang pagbubuntis.'));
+                                      _showSnackBar(_t(
+                                          'Pregnancy concluded successfully.',
+                                          'Matagumpay na natapos ang pagbubuntis.'));
                                       await _loadDashboardData();
                                     } else {
                                       setModal(() => isSubmitting = false);
-                                      _showSnackBar(
-                                          _t('Failed to conclude pregnancy.',
-                                              'Hindi natapos ang pagbubuntis.'));
+                                      _showSnackBar(_t(
+                                          'Failed to conclude pregnancy.',
+                                          'Hindi natapos ang pagbubuntis.'));
                                     }
                                   },
                           ),
@@ -921,6 +1102,46 @@ class _MotherDashboardState extends State<MotherDashboard> {
     for (final controller in placeControllers) {
       controller.dispose();
     }
+  }
+
+  String _localizedFruitName(String name) {
+    const filipinoNames = {
+      'Poppy seed': 'Buto ng Poppy',
+      'Sesame seed': 'Linga',
+      'Pea': 'Berdeng Gisantes',
+      'Blueberry': 'Blueberry',
+      'Raspberry': 'Raspberry',
+      'Cherry': 'Cherry',
+      'Strawberry': 'Strawberry',
+      'Lime': 'Dayap',
+      'Plum': 'Plum',
+      'Lemon': 'Lemon',
+      'Peach': 'Peach',
+      'Orange': 'Kahel',
+      'Avocado': 'Abukado',
+      'Pear': 'Peras',
+      'Pepper': 'Bell Pepper',
+      'Mango': 'Mangga',
+      'Banana': 'Saging',
+      'Carrot': 'Karot',
+      'Corn': 'Mais',
+      'Eggplant': 'Talong',
+      'Cucumber': 'Pipino',
+      'Cauliflower': 'Cauliflower',
+      'Lettuce': 'Litsugas',
+      'Cabbage': 'Repolyo',
+      'Coconut': 'Niyog',
+      'Kabocha': 'Kalabasa',
+      'Squash': 'Kalabasa',
+      'Pineapple': 'Pinya',
+      'Melon': 'Melon',
+      'Honeydew melon': 'Honeydew melon',
+      'Pomelo': 'Suha',
+      'Romaine lettuce': 'Litsugas',
+      'Pumpkin': 'Kalabasa',
+      'Watermelon': 'Pakwan',
+    };
+    return LanguageService.isFilipino ? (filipinoNames[name] ?? name) : name;
   }
 
   Widget _buildBabySizeCard() {
@@ -948,8 +1169,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
       child: Row(
         children: [
           Container(
-            width: 80,
-            height: 80,
+            width: 100,
+            height: 100,
             decoration: BoxDecoration(
               color: AppColors.brandPrimary.withValues(alpha: 0.08),
               shape: BoxShape.circle,
@@ -957,7 +1178,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
             child: hasMapping
                 ? ClipOval(
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(8),
                       child: Image.asset(
                         'assets/images/$imageName',
                         fit: BoxFit.contain,
@@ -992,7 +1213,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
                 const SizedBox(height: 4),
                 Text(
                   hasMapping
-                      ? '${_t('Your baby is about the size of a', 'Ang iyong sanggol ay kasinlaki ng isang')} $fruitName!'
+                      ? '${_t('Your baby is about the size of a', 'Ang iyong sanggol ay kasinlaki ng isang')} ${_localizedFruitName(fruitName)}!'
                       : _t('Your baby is growing!',
                           'Lumalaki ang iyong sanggol!'),
                   style: const TextStyle(
@@ -1015,6 +1236,732 @@ class _MotherDashboardState extends State<MotherDashboard> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildUnlinkedBhcBanner() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.warning.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.info_outline_rounded,
+                  color: AppColors.warning,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _t('Individual Mode (Unlinked)',
+                      'Indibidwal na Mode (Hindi Naka-link)'),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary),
+                onPressed: () {
+                  setState(() {
+                    _isUnlinkedBannerDismissed = true;
+                  });
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _t(
+              'Your account is currently not linked to a Barangay Health Center (BHC). To schedule checkups and receive clinical care from a midwife, please link your account.',
+              'Ang iyong account ay kasalukuyang hindi naka-link sa isang Barangay Health Center (BHC). Upang mag-iskedyul ng checkup at makatanggap ng klinikal na pangangalaga mula sa midwife, mangyaring i-link ang iyong account.',
+            ),
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () => _showHowToLinkDialog(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _t('How to link your account',
+                      'Paano i-link ang iyong account'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandText,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.arrow_forward,
+                  size: 14,
+                  color: AppColors.brandText,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHowToLinkDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.medical_services_outlined,
+                      color: AppColors.brandPrimary,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _t('How to Link to a BHC', 'Paano I-link sa BHC'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _t(
+                  'To link your account to a Barangay Health Center (BHC) and begin official midwife monitoring, follow these steps:',
+                  'Upang i-link ang iyong account sa isang Barangay Health Center (BHC) at magsimula ng opisyal na pagsubaybay ng midwife, sundin ang mga hakbang na ito:',
+                ),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildStepRow(
+                  '1',
+                  _t('Visit your nearest Barangay Health Center (BHC).',
+                      'Pumunta sa iyong pinakamalapit na Barangay Health Center (BHC).')),
+              const SizedBox(height: 12),
+              _buildStepRow(
+                  '2',
+                  _t('Provide the midwife with your registered email address or phone number.',
+                      'Ibigay sa midwife ang iyong rehistradong email address o numero ng telepono.')),
+              const SizedBox(height: 12),
+              _buildStepRow(
+                  '3',
+                  _t('The midwife will complete your linking process in the system, and your record will update automatically.',
+                      'Tatapusin ng midwife ang proseso ng pag-link sa system, at awtomatikong mag-a-update ang iyong tala.')),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(_t('Got it!', 'Nakuha ko!')),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVitalsIncompleteBanner() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.warning.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.monitor_weight_outlined,
+                  color: AppColors.warning,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _t('Action Required: Complete Vitals Setup',
+                      'Kailangang Aksyon: Kumpletuhin ang Vitals Setup'),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary),
+                onPressed: () {
+                  setState(() {
+                    _isVitalsBannerDismissed = true;
+                  });
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _t(
+              'Please provide your height, current weight, and pre-pregnancy weight to unlock weight gain tracking and advanced clinical analysis features.',
+              'Mangyaring ilagay ang iyong taas, kasalukuyang timbang, at timbang bago mabuntis upang ma-unlock ang weight gain tracking at iba pang advanced clinical features.',
+            ),
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () => _showSetupVitalsBottomSheet(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _t('Complete Vitals Setup',
+                      'Kumpletuhin ang Vitals Setup'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandText,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.arrow_forward,
+                  size: 14,
+                  color: AppColors.brandText,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSetupVitalsBottomSheet() {
+    final heightCtrl = TextEditingController();
+    final weightCtrl = TextEditingController();
+    final ppwCtrl = TextEditingController();
+
+    String? heightError;
+    String? heightWarning;
+    String? weightError;
+    String? weightWarning;
+    String? ppwError;
+    String? ppwWarning;
+
+    double? calculatedBMI;
+    String? bmiClassification;
+    String? bmiWarning;
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          void calculateBMI() {
+            final height = double.tryParse(heightCtrl.text.trim());
+            final ppw = double.tryParse(ppwCtrl.text.trim());
+
+            if (height != null && ppw != null && height > 0) {
+              final heightM = height / 100;
+              final bmi = ppw / (heightM * heightM);
+              calculatedBMI = bmi;
+
+              if (bmi < 18.5) {
+                bmiClassification = _t('Underweight', 'Kulang sa Timbang');
+              } else if (bmi < 25) {
+                bmiClassification = _t('Normal', 'Normal');
+              } else if (bmi < 30) {
+                bmiClassification = _t('Overweight', 'Sobra sa Timbang');
+              } else {
+                bmiClassification = _t('Obese', 'Obese');
+              }
+
+              // Gestational weight gain recommendations based on BMI
+              if (_week <= 12) {
+                bmiWarning = _t(
+                  'Recommended total weight gain for this week (Week $_week) is 0.5 - 2.0 kg.',
+                  'Ang inirerekomendang kabuuang dagdag-timbang para sa linggong ito (Linggo $_week) ay 0.5 - 2.0 kg.',
+                );
+              } else {
+                final double minRate;
+                final double maxRate;
+                if (bmi < 18.5) {
+                  minRate = 0.44;
+                  maxRate = 0.58;
+                } else if (bmi < 25) {
+                  minRate = 0.35;
+                  maxRate = 0.50;
+                } else if (bmi < 30) {
+                  minRate = 0.23;
+                  maxRate = 0.33;
+                } else {
+                  minRate = 0.17;
+                  maxRate = 0.27;
+                }
+                final minGain = 0.5 + (_week - 12) * minRate;
+                final maxGain = 2.0 + (_week - 12) * maxRate;
+                bmiWarning = _t(
+                  'Recommended total weight gain for this week (Week $_week) is ${minGain.toStringAsFixed(1)} - ${maxGain.toStringAsFixed(1)} kg.',
+                  'Ang inirerekomendang kabuuang dagdag-timbang para sa linggong ito (Linggo $_week) ay ${minGain.toStringAsFixed(1)} - ${maxGain.toStringAsFixed(1)} kg.',
+                );
+              }
+            } else {
+              calculatedBMI = null;
+              bmiClassification = null;
+              bmiWarning = null;
+            }
+          }
+
+          void validateInputs() {
+            final height = double.tryParse(heightCtrl.text.trim());
+            final weight = double.tryParse(weightCtrl.text.trim());
+            final ppw = double.tryParse(ppwCtrl.text.trim());
+
+            setModalState(() {
+              // Height validation
+              if (heightCtrl.text.trim().isEmpty) {
+                heightError = _t('Height is required', 'Kailangan ang taas');
+                heightWarning = null;
+              } else if (height == null) {
+                heightError = _t('Enter a valid number', 'Maglayag ng wastong numero');
+                heightWarning = null;
+              } else if (height < 50 || height > 250) {
+                heightError = _t('Must be 50-250 cm', 'Dapat ay 50-250 cm');
+                heightWarning = null;
+              } else {
+                heightError = null;
+                if (height < 120) {
+                  heightWarning = _t(
+                    'Entered measurement is outside expected maternal ranges. Please verify.',
+                    'Ang inilagay na sukat ay labas sa inaasahang maternal range. Mangyaring i-verify.',
+                  );
+                } else {
+                  heightWarning = null;
+                }
+              }
+
+              // Weight validation
+              if (weightCtrl.text.trim().isEmpty) {
+                weightError = _t('Weight is required', 'Kailangan ang timbang');
+                weightWarning = null;
+              } else if (weight == null) {
+                weightError = _t('Enter a valid number', 'Maglayag ng wastong numero');
+                weightWarning = null;
+              } else if (weight < 10 || weight > 350) {
+                weightError = _t('Must be 10-350 kg', 'Dapat ay 10-350 kg');
+                weightWarning = null;
+              } else {
+                weightError = null;
+                if (weight < 35) {
+                  weightWarning = _t(
+                    'Entered measurement is outside expected maternal ranges. Please verify.',
+                    'Ang inilagay na sukat ay labas sa inaasahang maternal range. Mangyaring i-verify.',
+                  );
+                } else {
+                  weightWarning = null;
+                }
+              }
+
+              // Pre-pregnancy weight validation
+              if (ppwCtrl.text.trim().isEmpty) {
+                ppwError = _t('Pre-pregnancy weight is required', 'Kailangan ang timbang bago mabuntis');
+                ppwWarning = null;
+              } else if (ppw == null) {
+                ppwError = _t('Enter a valid number', 'Maglayag ng wastong numero');
+                ppwWarning = null;
+              } else if (ppw < 10 || ppw > 350) {
+                ppwError = _t('Must be 10-350 kg', 'Dapat ay 10-350 kg');
+                ppwWarning = null;
+              } else {
+                ppwError = null;
+                if (ppw < 35) {
+                  ppwWarning = _t(
+                    'Entered measurement is outside expected maternal ranges. Please verify.',
+                    'Ang inilagay na sukat ay labas sa inaasahang maternal range. Mangyaring i-verify.',
+                  );
+                } else {
+                  ppwWarning = null;
+                }
+              }
+
+              calculateBMI();
+            });
+          }
+
+          Future<void> saveVitals() async {
+            validateInputs();
+            if (heightError != null || weightError != null || ppwError != null) return;
+
+            final height = double.parse(heightCtrl.text.trim());
+            final weight = double.parse(weightCtrl.text.trim());
+            final ppw = double.parse(ppwCtrl.text.trim());
+
+            setModalState(() => isSaving = true);
+
+            try {
+              final motherId = await AuthStorage.getMotherId();
+              if (motherId == null) throw Exception('Mother ID not found');
+
+              // Update mothers table
+              await SupabaseService.client
+                  .from('mothers')
+                  .update({'height': height})
+                  .eq('mother_id', motherId);
+
+              // Update pregnancies table
+              await SupabaseService.client
+                  .from('pregnancies')
+                  .update({'pre_pregnancy_weight': ppw})
+                  .eq('pregnancy_id', _pregnancyId);
+
+              // Insert into maternal_vitals table
+              double? aogWeeks;
+              if (_lmpDate != null) {
+                aogWeeks = DateTime.now().difference(_lmpDate!).inDays / 7.0;
+              }
+              await SupabaseService.client.from('maternal_vitals').insert({
+                'pregnancy_id': _pregnancyId,
+                'mother_id': motherId,
+                'weight_kg': weight,
+                'height_cm': height,
+                'age_of_gestation': aogWeeks != null ? double.parse(aogWeeks.toStringAsFixed(1)) : null,
+                'notes': 'Vitals entered during dashboard profile completion alert',
+                'recorded_at': DateTime.now().toIso8601String(),
+              });
+
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(_t('Vitals setup completed successfully!', 'Matagumpay na nakumpleto ang pag-setup ng vitals!')),
+                    backgroundColor: AppColors.success,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+              if (mounted) {
+                // Reload dashboard data
+                _loadDashboardData();
+              }
+            } catch (e) {
+              setModalState(() => isSaving = false);
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(_t('Error saving vitals: ', 'Kamalian sa pag-save ng vitals: ') + e.toString()),
+                    backgroundColor: AppColors.error,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _t('Complete Vitals Setup', 'Kumpletuhin ang Vitals Setup'),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _t(
+                      'Please provide your measurements to unlock advanced weight gain tracking and insights.',
+                      'Mangyaring ibigay ang iyong mga sukat upang ma-unlock ang advanced weight gain tracking at mga insight.',
+                    ),
+                    style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Height Input
+                  Text(
+                    _t('Height (cm)', 'Taas (cm)'),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  AppInputField(
+                    hintText: 'e.g. 156.0',
+                    controller: heightCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                    ],
+                    leadingIcon: Icons.height,
+                    errorText: heightError,
+                    onChanged: (_) => validateInputs(),
+                  ),
+                  if (heightWarning != null) ...[
+                    const SizedBox(height: 4),
+                    Text(heightWarning!, style: const TextStyle(color: Colors.orange, fontSize: 11)),
+                  ],
+                  const SizedBox(height: 16),
+
+                  // Current Weight Input
+                  Text(
+                    _t('Current Weight (kg)', 'Kasalukuyang Timbang (kg)'),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  AppInputField(
+                    hintText: 'e.g. 62.5',
+                    controller: weightCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                    ],
+                    leadingIcon: Icons.monitor_weight_outlined,
+                    errorText: weightError,
+                    onChanged: (_) => validateInputs(),
+                  ),
+                  if (weightWarning != null) ...[
+                    const SizedBox(height: 4),
+                    Text(weightWarning!, style: const TextStyle(color: Colors.orange, fontSize: 11)),
+                  ],
+                  const SizedBox(height: 16),
+
+                  // Pre-pregnancy Weight Input
+                  Text(
+                    _t('Pre-pregnancy Weight (kg)', 'Timbang bago mabuntis (kg)'),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  AppInputField(
+                    hintText: 'e.g. 58.0',
+                    controller: ppwCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                    ],
+                    leadingIcon: Icons.monitor_weight_outlined,
+                    errorText: ppwError,
+                    onChanged: (_) => validateInputs(),
+                  ),
+                  if (ppwWarning != null) ...[
+                    const SizedBox(height: 4),
+                    Text(ppwWarning!, style: const TextStyle(color: Colors.orange, fontSize: 11)),
+                  ],
+                  const SizedBox(height: 20),
+
+                  // BMI Display Card
+                  if (calculatedBMI != null && bmiClassification != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.brandPrimary.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _t('Calculated BMI: ${calculatedBMI!.toStringAsFixed(1)}',
+                                   'Kinalkulang BMI: ${calculatedBMI!.toStringAsFixed(1)}'),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  bmiClassification!,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.brandPrimary),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (bmiWarning != null) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              bmiWarning!,
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.4),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Save Button
+                  ElevatedButton(
+                    onPressed: isSaving ? null : saveVitals,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _t('Save Vitals', 'I-save ang Vitals'),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStepRow(String number, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: AppColors.bgSecondary,
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            number,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandText,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: AppColors.textPrimary,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1105,8 +2052,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
               value: progress,
               minHeight: 10,
               backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppColors.brandPrimary),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
             ),
           ),
           const SizedBox(height: 8),
@@ -1242,212 +2189,699 @@ class _MotherDashboardState extends State<MotherDashboard> {
         return Scaffold(
           backgroundColor: AppColors.bgPrimaryOf(context),
           body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: AppColors.brandPrimary,
-              ),
-            )
-          : _errorMessage != null
-              ? _buildErrorView()
-              : RefreshIndicator(
-                  onRefresh: _loadDashboardData,
-                  color: AppColors.brandPrimary,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        // Welcome Card
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.bgSecondary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            children: [
-                              Headline(
-                                text:
-                                    '${_t('Welcome', 'Maligayang pagdating')}, ${_firstName.isNotEmpty ? _firstName.split(' ').first : 'Nanay'}! 🌸',
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.brandPrimary,
+                  ),
+                )
+              : _errorMessage != null
+                  ? _buildErrorView()
+                  : RefreshIndicator(
+                      onRefresh: _loadDashboardData,
+                      color: AppColors.brandPrimary,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            // Welcome Card
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppColors.bgSecondary,
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              const SizedBox(height: 8),
-                              SmallDescription(
-                                icon: Icons.calendar_today,
-                                text: _hasPregnancy && _week > 0
-                                    ? '${_t('Week', 'Linggo')} $_week • ${_localizedTrimester()}'
-                                    : _t('No active pregnancy',
-                                        'Walang aktibong pagbubuntis'),
+                              child: Column(
+                                children: [
+                                  Headline(
+                                    text:
+                                        '${_t('Welcome', 'Maligayang pagdating')}, ${_firstName.isNotEmpty ? _firstName.split(' ').first : 'Nanay'}! 🌸',
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SmallDescription(
+                                    icon: Icons.calendar_today,
+                                    text: _hasPregnancy && _week > 0
+                                        ? '${_t('Week', 'Linggo')} $_week • ${_localizedTrimester()}'
+                                        : _t('No active pregnancy',
+                                            'Walang aktibong pagbubuntis'),
+                                  ),
+                                ],
                               ),
+                            ),
+
+                            if (_isUnlinked && !_isUnlinkedBannerDismissed) ...[
+                              const SizedBox(height: 16),
+                              _buildUnlinkedBhcBanner(),
                             ],
-                          ),
+
+                            if (_isVitalsIncomplete && !_isVitalsBannerDismissed) ...[
+                              const SizedBox(height: 16),
+                              _buildVitalsIncompleteBanner(),
+                            ],
+
+                            const SizedBox(height: 20),
+
+                            HeroCard(
+                              image: const AssetImage(
+                                  'assets/images/pregnant1.png'),
+                              week: _hasPregnancy && _week > 0 ? _week : null,
+                              showWeekBadge: _hasPregnancy && _week > 0,
+                              showHeartRow: _hasPregnancy && _week > 0,
+                            ),
+
+                            // Baby Size Comparison Card
+                            if (_hasPregnancy && _week > 0) ...[
+                              const SizedBox(height: 16),
+                              _buildBabySizeCard(),
+                            ],
+
+                            // Tip of the Week
+                            if (_hasPregnancy && _week > 0) ...[
+                              const SizedBox(height: 16),
+                              _buildWeeklyTipCard(),
+                            ],
+
+                            // Pregnancy Countdown Card
+                            if (_hasPregnancy &&
+                                _week > 0 &&
+                                _eddDate != null) ...[
+                              const SizedBox(height: 16),
+                              _buildCountdownCard(),
+                            ],
+
+                            // My Vitals Card
+                            if (_hasPregnancy) ...[
+                              const SizedBox(height: 16),
+                              _buildVitalsCard(),
+                            ],
+
+                            // Weight Gain Analysis Card
+                            if (_hasPregnancy && _weightGainResult != null) ...[
+                              const SizedBox(height: 16),
+                              _buildWeightGainAnalysisCard(),
+                            ],
+
+                            const SizedBox(height: 20),
+
+                            // Baby Growth Info
+                            if (_hasPregnancy && _week > 0) ...[
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: SmallInfoBox(
+                                      icon: Icons.straighten,
+                                      title: _t('Estimated Baby Size',
+                                          'Inaasahang Sukat ng Sanggol'),
+                                      value: _babySize,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: SmallInfoBox(
+                                      icon: Icons.monitor_weight,
+                                      title: _t('Estimated Baby Weight',
+                                          'Inaasahang Timbang ng Sanggol'),
+                                      value: _babyWeight,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+
+                            // Due Date Info
+                            LongInfoBox(
+                              icon: Icons.calendar_month,
+                              text: [
+                                TextSpan(
+                                  text: '${_t('Due Date', 'Takdang Araw')}: ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: _hasPregnancy && _dueDate != '—'
+                                      ? '$_dueDate\n'
+                                      : '${_t('Not set', 'Hindi nakatakda')}\n',
+                                  style: const TextStyle(
+                                      color: AppColors.textSecondary),
+                                ),
+                                if (_hasPregnancy && _week > 0) ...[
+                                  TextSpan(
+                                    text: '${_t('You are', 'Ikaw ay')} ',
+                                    style: const TextStyle(
+                                        color: AppColors.textSecondary),
+                                  ),
+                                  TextSpan(
+                                    text:
+                                        '$_weeksLeft ${_t('weeks away', 'linggo na lang')}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.brandPrimary,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text:
+                                        _t(' from meeting!', ' bago magkita!'),
+                                    style: const TextStyle(
+                                        color: AppColors.textSecondary),
+                                  ),
+                                ] else if (!_hasPregnancy) ...[
+                                  TextSpan(
+                                    text: _t('No active pregnancy',
+                                        'Walang aktibong pagbubuntis'),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.warning,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // Action Buttons
+                            MainButton(
+                              label: _t('More Info', 'Karagdagang Impormasyon'),
+                              showIcons: true,
+                              leftIcon: Icons.info_outline,
+                              onPressed: () {
+                                if (!_hasPregnancy ||
+                                    _week == 0 ||
+                                    _pregnancyId == 0) {
+                                  _showSnackBar(_t(
+                                      'No active pregnancy to show details for.',
+                                      'Walang aktibong pagbubuntis na maaaring tingnan.'));
+                                  return;
+                                }
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => PregnancyDetailPage(
+                                      week: _week,
+                                      trimester: _trimester,
+                                      dueDate: _dueDate,
+                                      weeksLeft: _weeksLeft,
+                                      babySize: _babySize,
+                                      babyWeight: _babyWeight,
+                                      firstName: _firstName,
+                                      riskLevel: _riskLevel,
+                                      fetalCount: _fetalCount,
+                                      pregnancyId: _pregnancyId,
+                                      riskFactors: _riskFactors,
+                                      suggestedActions: _suggestedActions,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                          ],
                         ),
+                      ),
+                    ),
+          floatingActionButton: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MotherChatbotPage(
+                        firstName: _firstName,
+                        week: _week,
+                        trimester: _trimester,
+                        riskLevel: _riskLevel,
+                        riskFactors: _riskFactors,
+                        suggestedActions: _suggestedActions,
+                        hasPregnancy: _hasPregnancy,
+                      ),
+                    ),
+                  );
+                },
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: Image.asset(
+                    'assets/images/chatbot_icon.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-                        const SizedBox(height: 20),
+  Widget _buildVitalsCard() {
+    final hasVitals = _latestWeight != null || _latestBp != null;
 
-                        HeroCard(
-                          image:
-                              const AssetImage('assets/images/pregnant1.png'),
-                          week: _hasPregnancy && _week > 0 ? _week : null,
-                          showWeekBadge: _hasPregnancy && _week > 0,
-                          showHeartRow: _hasPregnancy && _week > 0,
+    String getSourceLabel(String? src) {
+      switch (src) {
+        case 'prenatal_checkup':
+          return _t('Official Checkup', 'Opisyal na Checkup');
+        case 'midwife_quick':
+          return _t('Midwife Log', 'Tala ng Midwife');
+        case 'mother_self':
+        default:
+          return _t('Self-logged', 'Sariling Tala');
+      }
+    }
+
+    Color getSourceColor(String? src) {
+      switch (src) {
+        case 'prenatal_checkup':
+          return const Color(0xFF0369A1);
+        case 'midwife_quick':
+          return const Color(0xFF7E22CE);
+        case 'mother_self':
+        default:
+          return const Color(0xFFB45309);
+      }
+    }
+
+    Color getSourceBg(String? src) {
+      switch (src) {
+        case 'prenatal_checkup':
+          return const Color(0xFFE0F2FE);
+        case 'midwife_quick':
+          return const Color(0xFFF3E8FF);
+        case 'mother_self':
+        default:
+          return const Color(0xFFFEF3C7);
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () async {
+            final motherId = await AuthStorage.getMotherId();
+            if (motherId == null || !mounted) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MotherVitalsPage(
+                  motherId: motherId,
+                  pregnancyId: _pregnancyId,
+                  lastMenstrualPeriod: _lmpDate != null ? _dateIso(_lmpDate!) : null,
+                ),
+              ),
+            ).then((_) => _loadDashboardData());
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.favorite,
+                    color: AppColors.brandPrimary,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _t('My Vitals & Weight Gain', 'Aking Vitals & Timbang'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
                         ),
-
-                        // Baby Size Comparison Card
-                        if (_hasPregnancy && _week > 0) ...[
-                          const SizedBox(height: 16),
-                          _buildBabySizeCard(),
-                        ],
-
-                        // Tip of the Week
-                        if (_hasPregnancy && _week > 0) ...[
-                          const SizedBox(height: 16),
-                          _buildWeeklyTipCard(),
-                        ],
-
-                        // Pregnancy Countdown Card
-                        if (_hasPregnancy && _week > 0 && _eddDate != null) ...[
-                          const SizedBox(height: 16),
-                          _buildCountdownCard(),
-                        ],
-
-                        const SizedBox(height: 20),
-
-                        // Baby Growth Info
-                        if (_hasPregnancy && _week > 0) ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: SmallInfoBox(
-                                  icon: Icons.straighten,
-                                  title: _t(
-                                      'Ideal Baby Size', 'Inaasahang Sukat ng Sanggol'),
-                                  value: _babySize,
+                      ),
+                      const SizedBox(height: 6),
+                      if (hasVitals) ...[
+                        Row(
+                          children: [
+                            if (_latestWeight != null) ...[
+                              const Icon(Icons.monitor_weight_outlined, size: 14, color: AppColors.brandAccent),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${_latestWeight!.toStringAsFixed(1)} kg',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.inputText,
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              Expanded(
-                                child: SmallInfoBox(
-                                  icon: Icons.monitor_weight,
-                                  title: _t('Ideal Baby Weight',
-                                      'Inaasahang Timbang ng Sanggol'),
-                                  value: _babyWeight,
-                                ),
-                              ),
                             ],
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Due Date Info
-                        LongInfoBox(
-                          icon: Icons.calendar_month,
-                          text: [
-                            TextSpan(
-                              text: '${_t('Due Date', 'Takdang Araw')}: ',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            TextSpan(
-                              text: _hasPregnancy && _dueDate != '—'
-                                  ? '$_dueDate\n'
-                                  : '${_t('Not set', 'Hindi nakatakda')}\n',
-                              style: const TextStyle(
-                                  color: AppColors.textSecondary),
-                            ),
-                            if (_hasPregnancy && _week > 0) ...[
-                              TextSpan(
-                                text: '${_t('You are', 'Ikaw ay')} ',
+                            if (_latestBp != null) ...[
+                              const Icon(Icons.favorite_border, size: 14, color: AppColors.brandAccent),
+                              const SizedBox(width: 4),
+                              Text(
+                                _latestBp!,
                                 style: const TextStyle(
-                                    color: AppColors.textSecondary),
-                              ),
-                              TextSpan(
-                                text:
-                                    '$_weeksLeft ${_t('weeks away', 'linggo na lang')}',
-                                style: const TextStyle(
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.brandPrimary,
-                                ),
-                              ),
-                              TextSpan(
-                                text: _t(' from meeting!', ' bago magkita!'),
-                                style: const TextStyle(
-                                    color: AppColors.textSecondary),
-                              ),
-                            ] else if (!_hasPregnancy) ...[
-                              TextSpan(
-                                text: _t('No active pregnancy',
-                                    'Walang aktibong pagbubuntis'),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.warning,
+                                  color: AppColors.inputText,
                                 ),
                               ),
                             ],
                           ],
                         ),
-
-                        const SizedBox(height: 16),
-
-                        // Comparison Card
-                        if (_hasPregnancy && _week > 0)
-                          ComparisonCard(week: _week),
-
-                        const SizedBox(height: 24),
-
-                        // Action Buttons
-                        MainButton(
-                          label: _t('More Info', 'Karagdagang Impormasyon'),
-                          showIcons: true,
-                          leftIcon: Icons.info_outline,
-                          onPressed: () {
-                            if (!_hasPregnancy ||
-                                _week == 0 ||
-                                _pregnancyId == 0) {
-                              _showSnackBar(_t(
-                                  'No active pregnancy to show details for.',
-                                  'Walang aktibong pagbubuntis na maaaring tingnan.'));
-                              return;
-                            }
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => PregnancyDetailPage(
-                                  week: _week,
-                                  trimester: _trimester,
-                                  dueDate: _dueDate,
-                                  weeksLeft: _weeksLeft,
-                                  babySize: _babySize,
-                                  babyWeight: _babyWeight,
-                                  firstName: _firstName,
-                                  riskLevel: _riskLevel,
-                                  fetalCount: _fetalCount,
-                                  pregnancyId: _pregnancyId,
-                                  riskFactors: _riskFactors,
-                                  suggestedActions: _suggestedActions,
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: getSourceBg(_latestVitalsSource),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                getSourceLabel(_latestVitalsSource),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: getSourceColor(_latestVitalsSource),
                                 ),
                               ),
-                            );
-                          },
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${_t('on', 'noong')} ${DateFormat('MMM d, yyyy').format(_latestVitalsDate!)}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-
-                        SecondaryButton(
-                          label: _t('Conclude Pregnancy',
-                              'Tapusin ang Pagbubuntis'),
-                          showIcons: true,
-                          leadingIcon: Icons.check,
-                          onPressed: _showConcludePregnancyDialog,
+                      ] else ...[
+                        Text(
+                          _t('No vitals logged yet. Tap to start tracking!', 
+                             'Wala pang naitalang vitals. Tapikin upang magsimula!'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
-
-                        const SizedBox(height: 20),
                       ],
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeightGainAnalysisCard() {
+    final result = _weightGainResult;
+    if (result == null) return const SizedBox.shrink();
+
+    Color statusColor;
+    switch (result.status) {
+      case WeightGainStatus.normal:
+        statusColor = AppColors.success;
+        break;
+      case WeightGainStatus.low:
+        statusColor = AppColors.warning;
+        break;
+      case WeightGainStatus.high:
+        statusColor = AppColors.error;
+        break;
+      case WeightGainStatus.insufficient:
+        statusColor = AppColors.textSecondary;
+        break;
+    }
+
+    Color bmiColor;
+    switch (result.bmiCategory) {
+      case 'Underweight':
+        bmiColor = Colors.blue;
+        break;
+      case 'Normal':
+        bmiColor = AppColors.success;
+        break;
+      case 'Overweight':
+        bmiColor = AppColors.warning;
+        break;
+      case 'Obese':
+        bmiColor = AppColors.error;
+        break;
+      default:
+        bmiColor = AppColors.textSecondary;
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.monitor_weight_outlined,
+                  color: AppColors.error,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _t('Weight Gain Analysis', 'Pagsusuri sa Timbang'),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () async {
+                  final motherId = await AuthStorage.getMotherId();
+                  if (motherId == null || !mounted) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MotherVitalsPage(
+                        motherId: motherId,
+                        pregnancyId: _pregnancyId,
+                        lastMenstrualPeriod: _lmpDate != null ? _dateIso(_lmpDate!) : null,
+                      ),
+                    ),
+                  ).then((_) => _loadDashboardData());
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _t('Full Analysis', 'Buong Pagsusuri'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
                     ),
                   ),
                 ),
-        );
-      },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Badges Row
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: bmiColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: bmiColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  _t(result.bmiCategory, result.bmiCategory),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: bmiColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildStatusBadge(result.status),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Detail rows
+          _weightInfoRow(_t('Current Weight', 'Kasalukuyang Timbang'), '${result.currentWeight.toStringAsFixed(1)} kg'),
+          if (result.baselineWeight != null)
+            _weightInfoRow(
+              result.mode == WeightGainMode.full
+                  ? _t('Pre-Pregnancy Weight', 'Timbang Bago Mabuntis')
+                  : _t('Baseline Weight', 'Baseline na Timbang'),
+              '${result.baselineWeight!.toStringAsFixed(1)} kg',
+            ),
+          if (result.actualGain != null)
+            _weightInfoRow(
+              _t('Actual Gain', 'Aktwal na Dagdag'),
+              '${result.actualGain! >= 0 ? '+' : ''}${result.actualGain!.toStringAsFixed(1)} kg',
+            ),
+          if (result.expectedGain != null)
+            _weightInfoRow(
+              _t('Expected Gain', 'Inaasahang Dagdag'),
+              '${result.expectedGain!.toStringAsFixed(1)} kg',
+            ),
+          if (result.weeklyGain != null)
+            _weightInfoRow(
+              _t('Weekly Gain Rate', 'Antas ng Lingguhang Dagdag'),
+              '${result.weeklyGain!.toStringAsFixed(3)} kg/wk',
+            ),
+
+          const SizedBox(height: 14),
+
+          // Advisory message box
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Text(
+              result.message,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(WeightGainStatus status) {
+    Color fg;
+    String label;
+
+    switch (status) {
+      case WeightGainStatus.normal:
+        fg = AppColors.success;
+        label = _t('NORMAL', 'NORMAL');
+        break;
+      case WeightGainStatus.low:
+        fg = AppColors.warning;
+        label = _t('LOW', 'MABABA');
+        break;
+      case WeightGainStatus.high:
+        fg = AppColors.error;
+        label = _t('HIGH', 'MATAAS');
+        break;
+      case WeightGainStatus.insufficient:
+        fg = Colors.grey.shade600;
+        label = _t('INSUFFICIENT', 'KULANG');
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: fg.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: fg.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: fg,
+        ),
+      ),
+    );
+  }
+
+  Widget _weightInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          ),
+        ],
+      ),
     );
   }
 

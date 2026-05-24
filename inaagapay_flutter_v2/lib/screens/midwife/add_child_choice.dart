@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
 import 'add_child_step3_child.dart';
+import 'add_child_select_mother.dart';
 
 class AddChildChoicePage extends StatelessWidget {
-  const AddChildChoicePage({super.key});
+  final int? assignedBhcId;
+
+  const AddChildChoicePage({
+    super.key,
+    this.assignedBhcId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -18,137 +24,116 @@ class AddChildChoicePage extends StatelessWidget {
         ),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              const SizedBox(height: 40),
-              
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const SizedBox(height: 40),
+                
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.child_care,
+                    size: 60,
+                    color: AppColors.brandPrimary,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.child_care,
-                  size: 60,
+                
+                const SizedBox(height: 24),
+                
+                const Text(
+                  'Add New Child',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brandText,
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                const Text(
+                  'Choose how you want to link this child to a parent/guardian',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                
+                const SizedBox(height: 40),
+                
+                // Option 1: Registered Mother
+                _buildChoiceCard(
+                  context: context,
+                  icon: Icons.pregnant_woman,
+                  title: 'Registered Mother',
+                  description: 'Register child for an existing mother in the system',
                   color: AppColors.brandPrimary,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AddChildSelectMotherPage(
+                          assignedBhcId: assignedBhcId,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ),
-              
-              const SizedBox(height: 24),
-              
-              const Text(
-                'Add New Child',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandText,
+                
+                const SizedBox(height: 20),
+                
+                // Option 2: New Guardian
+                _buildChoiceCard(
+                  context: context,
+                  icon: Icons.person_add,
+                  title: 'New Guardian',
+                  description: 'Register child with a new guardian (not linked to existing mother)',
+                  color: AppColors.success,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AddChildStep3Child(
+                          mode: ChildParentMode.newGuardian,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ),
-              
-              const SizedBox(height: 12),
-              
-              const Text(
-                'Choose how you want to link this child to a parent/guardian',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              
-              const SizedBox(height: 40),
-              
-              // Option 1: Registered Mother
-              _buildChoiceCard(
-                context: context,
-                icon: Icons.pregnant_woman,
-                title: 'Existing Mother',
-                description: 'Register child for an existing mother in the system',
-                color: AppColors.brandPrimary,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AddChildStep3Child(
-                        mode: ChildParentMode.registeredMother,
+                
+                const SizedBox(height: 32),
+  
+                // Cancel button
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
                       ),
                     ),
-                  );
-                },
-              ),
-              
-              const SizedBox(height: 20),
-              
-              // Option 2: New Guardian
-              _buildChoiceCard(
-                context: context,
-                icon: Icons.person_add,
-                title: 'New Guardian',
-                description: 'Register child with a new guardian (not linked to existing mother)',
-                color: AppColors.success,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AddChildStep3Child(
-                        mode: ChildParentMode.newGuardian,
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
                       ),
-                    ),
-                  );
-                },
-              ),
-              
-              const SizedBox(height: 40),
-              
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.info.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: AppColors.info, size: 18),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Guardians are separate from mother accounts. A guardian can be a father, grandparent, or any caregiver.',
-                        style: TextStyle(fontSize: 12, color: AppColors.info),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Cancel button
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.5)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

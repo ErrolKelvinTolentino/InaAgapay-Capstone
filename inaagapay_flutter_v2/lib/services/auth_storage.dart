@@ -107,6 +107,36 @@ class AuthStorage {
     return value == 'true';
   }
 
+  // AI Privacy Settings
+  static Future<void> saveHiddenAllergies(List<String> list) async {
+    await _storage.write(key: 'hidden_allergies', value: list.join('|||'));
+  }
+
+  static Future<List<String>> getHiddenAllergies() async {
+    final val = await _storage.read(key: 'hidden_allergies');
+    if (val == null || val.isEmpty) return [];
+    return val.split('|||');
+  }
+
+  static Future<void> saveHiddenMedicalConditions(List<String> list) async {
+    await _storage.write(key: 'hidden_medical_conditions', value: list.join('|||'));
+  }
+
+  static Future<List<String>> getHiddenMedicalConditions() async {
+    final val = await _storage.read(key: 'hidden_medical_conditions');
+    if (val == null || val.isEmpty) return [];
+    return val.split('|||');
+  }
+
+  static Future<void> saveHiddenPregnancyInfo(bool hide) async {
+    await _storage.write(key: 'hidden_pregnancy_info', value: hide.toString());
+  }
+
+  static Future<bool> getHiddenPregnancyInfo() async {
+    final val = await _storage.read(key: 'hidden_pregnancy_info');
+    return val == 'true';
+  }
+
   // Clear All
   static Future<void> clearAll() async {
     await _storage.deleteAll();

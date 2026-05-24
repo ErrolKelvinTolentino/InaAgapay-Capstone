@@ -71,7 +71,6 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
               birthdate,
               birth_weight,
               birth_length,
-              head_circumference,
               birthplace_city_municipality,
               birthplace_province
             )
@@ -95,8 +94,6 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
               : null,
           birthWeight: (birthDetails?['birth_weight'] as num?)?.toDouble(),
           birthLength: (birthDetails?['birth_length'] as num?)?.toDouble(),
-          headCircumference:
-              (birthDetails?['head_circumference'] as num?)?.toDouble(),
           birthplaceCity:
               birthDetails?['birthplace_city_municipality'] as String?,
           birthplaceProvince: birthDetails?['birthplace_province'] as String?,
@@ -148,18 +145,38 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
     final now = DateTime.now();
     int years = now.year - birthdate.year;
     int months = now.month - birthdate.month;
+    int days = now.day - birthdate.day;
 
+    if (days < 0) {
+      months -= 1;
+      final prevMonthDate = DateTime(now.year, now.month, 0);
+      days += prevMonthDate.day;
+    }
     if (months < 0) {
-      years--;
+      years -= 1;
       months += 12;
     }
 
     if (LanguageService.isFilipino) {
-      if (years <= 0) {
-        return '$months ${months == 1 ? 'buwan' : 'buwan'} gulang';
+      if (years > 0) {
+        final monthPart = months > 0 ? ' at $months buwan' : '';
+        return '$years taon$monthPart gulang';
+      } else if (months > 0) {
+        final weeks = days ~/ 7;
+        final weekPart = weeks > 0 ? ' at $weeks linggo' : '';
+        return '$months buwan$weekPart gulang';
+      } else {
+        if (days >= 7) {
+          final weeks = days ~/ 7;
+          final remainingDays = days % 7;
+          final dayPart = remainingDays > 0 ? ' at $remainingDays araw' : '';
+          return '$weeks linggo$dayPart gulang';
+        } else if (days > 0) {
+          return '$days araw gulang';
+        } else {
+          return 'Bagong Silang';
+        }
       }
-      final monthPart = months > 0 ? ' $months buwan' : '';
-      return '$years ${years == 1 ? 'taon' : 'taon'}$monthPart gulang';
     }
 
     return child.ageText;
@@ -240,7 +257,7 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
+                            color: Colors.white,
                           ),
                         ),
                         Text(
@@ -248,7 +265,7 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
                           style: const TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.brandPrimary,
+                            color: Colors.white,
                           ),
                         ),
                       ],

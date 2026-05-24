@@ -6,10 +6,9 @@ import 'package:flutter/foundation.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../services/supabase_service.dart';
-import '../../services/auth_storage.dart';
 import '../mother/mother_profile_page.dart';
 import 'midwife_add_mother_screen.dart';
-import 'quick_vitals_screen.dart';
+import '../../services/auth_storage.dart';
 
 class MidwifeMothersScreen extends StatefulWidget {
   const MidwifeMothersScreen({super.key});
@@ -24,10 +23,11 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
   List<Map<String, dynamic>> _filteredMothers = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
-  bool _hasMoreData = true;
-  int _currentPage = 0;
-  static const int _pageSize = 10;
+  bool _hasMoreData = false; // Always false to disable pagination loaders
   String? _error;
+
+  static List<Map<String, dynamic>>? _mothersCache;
+  int? _assignedBhcId;
 
   // Search and Filter
   final TextEditingController _searchController = TextEditingController();
@@ -169,144 +169,222 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
     });
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      if (!_isLoadingMore &&
-          _hasMoreData &&
-          !_isLoading &&
-          _searchQuery.isEmpty &&
-          _selectedRiskFilter == 'All' &&
-          _selectedBarangayFilter == 'All') {
-        _loadMoreMothers();
-      }
-    }
-  }
+  void _onScroll() {}
 
-  Future<void> _loadMoreMothers() async {
-    if (_isLoadingMore || !_hasMoreData) return;
-
-    setState(() {
-      _isLoadingMore = true;
-    });
-
-    _currentPage++;
-    await _loadMothers(reset: false);
-
-    if (mounted) {
-      setState(() {
-        _isLoadingMore = false;
-      });
-    }
-  }
-
-  Future<void> _loadMothers({bool reset = true}) async {
+  Future<void> _loadMothers({bool reset = false}) async {
     if (!mounted) return;
 
     if (reset) {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-        _currentPage = 0;
-        _allMothers = [];
-        _filteredMothers = [];
-        _profilePictureCache.clear();
-      });
+      _mothersCache = null;
     }
 
+    if (_mothersCache != null) {
+      setState(() {
+        _allMothers = List<Map<String, dynamic>>.from(_mothersCache!);
+        _applyFilters();
+        _isLoading = false;
+        _error = null;
+      });
+      _revalidateMothers();
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
     try {
-      final int offset = _currentPage * _pageSize;
-
-      var query = SupabaseService.client
-          .from('accounts')
-          .select(
-              'account_id, first_name, last_name, phone_number, email_address')
-          .eq('account_type', 'mother')
-          .eq('is_verified', true);
-
-      if (_searchQuery.isNotEmpty && reset) {
-        query = query.or('first_name.ilike.%$_searchQuery%,'
-            'last_name.ilike.%$_searchQuery%,'
-            'email_address.ilike.%$_searchQuery%');
+      await _fetchAndCacheMothers();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error loading mothers: $e');
       }
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
-      final List<dynamic> allResults = await query;
-      final int totalCount = allResults.length;
+  Future<void> _fetchAndCacheMothers() async {
+    if (_assignedBhcId == null) {
+      final accountId = await AuthStorage.getUserId();
+      if (accountId == null) throw Exception('Not authenticated');
+      
+      final result = await SupabaseService.client
+          .from('midwives')
+          .select('assigned_bhc_id')
+          .eq('account_id', accountId)
+          .single();
+      
+      _assignedBhcId = result['assigned_bhc_id'] as int?;
+    }
 
-      final List<dynamic> accountsResponse = await query
-          .order('first_name', ascending: true)
-          .range(offset, offset + _pageSize - 1);
+    if (_assignedBhcId == null) {
+      throw Exception('No Barangay Health Center assigned to this midwife.');
+    }
 
-      if (!mounted) return;
+    final response = await SupabaseService.client.from('mothers').select('''
+          mother_id,
+          account_id,
+          birthdate,
+          barangay,
+          city_municipality,
+          province,
+          height,
+          weight,
+          blood_type,
+          accounts!inner (
+            first_name,
+            last_name,
+            phone_number,
+            email_address
+          ),
+          pregnancies (
+            pregnancy_id,
+            last_menstrual_period,
+            pregnancy_risk_level,
+            expected_date_of_delivery,
+            status
+          )
+        ''').eq('assigned_bhc_id', _assignedBhcId!);
 
-      _hasMoreData = (offset + _pageSize) < totalCount;
+    final List<dynamic> rawMothers = response;
+    final List<Map<String, dynamic>> parsedMothers = [];
 
-      final List<int> accountIds = [];
-      for (var account in accountsResponse) {
-        if (account is Map<String, dynamic>) {
-          accountIds.add(account['account_id'] as int);
+    for (var raw in rawMothers) {
+      final int motherId = raw['mother_id'] as int;
+      final int accountId = raw['account_id'] as int;
+      final account = raw['accounts'] as Map<String, dynamic>?;
+      if (account == null) continue;
+
+      final String firstName = account['first_name']?.toString() ?? '';
+      final String lastName = account['last_name']?.toString() ?? '';
+      final String fullName = '$firstName $lastName'.trim();
+
+      int age = 0;
+      final String? birthdateStr = raw['birthdate']?.toString();
+      if (birthdateStr != null && birthdateStr.isNotEmpty) {
+        final DateTime? birthdate = DateTime.tryParse(birthdateStr);
+        if (birthdate != null) {
+          age = DateTime.now().difference(birthdate).inDays ~/ 365;
         }
       }
 
-      List<Map<String, dynamic>> mothersData = [];
-      if (accountIds.isNotEmpty) {
-        final mothersResponse = await SupabaseService.client
-            .from('mothers')
-            .select(
-                'mother_id, account_id, birthdate, barangay, city_municipality, province, height, weight, blood_type')
-            .inFilter('account_id', accountIds);
+      final pregnancies = raw['pregnancies'] as List?;
+      final ongoingPregnancy = pregnancies?.firstWhere(
+        (p) => p['status'] == 'ongoing',
+        orElse: () => null,
+      ) as Map<String, dynamic>?;
 
-        mothersData = List<Map<String, dynamic>>.from(mothersResponse);
-      }
-
-      final List<int> motherIds = [];
-      for (var mother in mothersData) {
-        final int? mid = mother['mother_id'] as int?;
-        if (mid != null) {
-          motherIds.add(mid);
-        }
-      }
-
-      Map<int, Map<String, dynamic>> pregnancyMap = {};
-      if (motherIds.isNotEmpty) {
-        final pregnanciesResponse = await SupabaseService.client
-            .from('pregnancies')
-            .select(
-                'pregnancy_id, mother_id, last_menstrual_period, pregnancy_risk_level, expected_date_of_delivery')
-            .eq('status', 'ongoing')
-            .inFilter('mother_id', motherIds);
-
-        for (var pregnancy in pregnanciesResponse) {
-          final int? mid = pregnancy['mother_id'] as int?;
-          if (mid != null) {
-            pregnancyMap[mid] = pregnancy;
+      int gestWeeks = 0;
+      String riskLevel = 'low';
+      String? expectedDueDate;
+      if (ongoingPregnancy != null) {
+        riskLevel = ongoingPregnancy['pregnancy_risk_level'] as String? ?? 'low';
+        expectedDueDate = ongoingPregnancy['expected_date_of_delivery'] as String?;
+        final String? lmpString = ongoingPregnancy['last_menstrual_period'] as String?;
+        if (lmpString != null && lmpString.isNotEmpty) {
+          final DateTime? lmpDate = DateTime.tryParse(lmpString);
+          if (lmpDate != null) {
+            gestWeeks = DateTime.now().difference(lmpDate).inDays ~/ 7;
           }
         }
       }
 
-      final Map<int, Map<String, dynamic>> motherMap = {};
-      for (var mother in mothersData) {
-        final int? aid = mother['account_id'] as int?;
-        if (aid != null) {
-          motherMap[aid] = mother;
-        }
+      String? profilePictureUrl = await _loadProfilePicture(motherId);
+
+      parsedMothers.add({
+        'account_id': accountId,
+        'first_name': firstName,
+        'last_name': lastName,
+        'full_name': fullName.isEmpty ? 'Unknown Mother' : fullName,
+        'phone_number': account['phone_number']?.toString() ?? '',
+        'email_address': account['email_address']?.toString() ?? '',
+        'mother_id': motherId,
+        'age': age,
+        'gest_weeks': gestWeeks,
+        'risk_level': riskLevel,
+        'expected_due_date': expectedDueDate,
+        'has_pregnancy': ongoingPregnancy != null,
+        'barangay': raw['barangay']?.toString() ?? '',
+        'profile_picture': profilePictureUrl,
+        'pregnancy_id': ongoingPregnancy?['pregnancy_id'] as int?,
+        'last_menstrual_period': ongoingPregnancy?['last_menstrual_period'] as String?,
+      });
+    }
+
+    _mothersCache = parsedMothers;
+
+    if (mounted) {
+      setState(() {
+        _allMothers = List<Map<String, dynamic>>.from(parsedMothers);
+        _applyFilters();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _revalidateMothers() async {
+    try {
+      if (_assignedBhcId == null) {
+        final accountId = await AuthStorage.getUserId();
+        if (accountId == null) return;
+        
+        final result = await SupabaseService.client
+            .from('midwives')
+            .select('assigned_bhc_id')
+            .eq('account_id', accountId)
+            .single();
+        
+        _assignedBhcId = result['assigned_bhc_id'] as int?;
       }
 
-      final List<Map<String, dynamic>> newMothers = [];
+      if (_assignedBhcId == null) return;
 
-      for (var account in accountsResponse) {
-        if (account is! Map<String, dynamic>) continue;
+      final response = await SupabaseService.client.from('mothers').select('''
+            mother_id,
+            account_id,
+            birthdate,
+            barangay,
+            city_municipality,
+            province,
+            height,
+            weight,
+            blood_type,
+            accounts!inner (
+              first_name,
+              last_name,
+              phone_number,
+              email_address
+            ),
+            pregnancies (
+              pregnancy_id,
+              last_menstrual_period,
+              pregnancy_risk_level,
+              expected_date_of_delivery,
+              status
+            )
+          ''').eq('assigned_bhc_id', _assignedBhcId!);
 
-        final int accountId = account['account_id'] as int;
-        final Map<String, dynamic>? motherInfo = motherMap[accountId];
-        final int? motherId = motherInfo?['mother_id'] as int?;
+      final List<dynamic> rawMothers = response;
+      final List<Map<String, dynamic>> parsedMothers = [];
+
+      for (var raw in rawMothers) {
+        final int motherId = raw['mother_id'] as int;
+        final int accountId = raw['account_id'] as int;
+        final account = raw['accounts'] as Map<String, dynamic>?;
+        if (account == null) continue;
 
         final String firstName = account['first_name']?.toString() ?? '';
         final String lastName = account['last_name']?.toString() ?? '';
         final String fullName = '$firstName $lastName'.trim();
 
         int age = 0;
-        final String? birthdateStr = motherInfo?['birthdate']?.toString();
+        final String? birthdateStr = raw['birthdate']?.toString();
         if (birthdateStr != null && birthdateStr.isNotEmpty) {
           final DateTime? birthdate = DateTime.tryParse(birthdateStr);
           if (birthdate != null) {
@@ -314,15 +392,19 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           }
         }
 
+        final pregnancies = raw['pregnancies'] as List?;
+        final ongoingPregnancy = pregnancies?.firstWhere(
+          (p) => p['status'] == 'ongoing',
+          orElse: () => null,
+        ) as Map<String, dynamic>?;
+
         int gestWeeks = 0;
         String riskLevel = 'low';
         String? expectedDueDate;
-        if (motherId != null) {
-          final Map<String, dynamic>? pregnancy = pregnancyMap[motherId];
-          riskLevel = pregnancy?['pregnancy_risk_level'] as String? ?? 'low';
-          expectedDueDate = pregnancy?['expected_date_of_delivery'] as String?;
-          final String? lmpString =
-              pregnancy?['last_menstrual_period'] as String?;
+        if (ongoingPregnancy != null) {
+          riskLevel = ongoingPregnancy['pregnancy_risk_level'] as String? ?? 'low';
+          expectedDueDate = ongoingPregnancy['expected_date_of_delivery'] as String?;
+          final String? lmpString = ongoingPregnancy['last_menstrual_period'] as String?;
           if (lmpString != null && lmpString.isNotEmpty) {
             final DateTime? lmpDate = DateTime.tryParse(lmpString);
             if (lmpDate != null) {
@@ -331,13 +413,9 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           }
         }
 
-        String? profilePictureUrl;
-        if (motherId != null) {
-          profilePictureUrl = await _loadProfilePicture(motherId);
-        }
+        String? profilePictureUrl = _profilePictureCache[motherId];
 
-        final pregnancy = motherId != null ? pregnancyMap[motherId] : null;
-        newMothers.add({
+        parsedMothers.add({
           'account_id': accountId,
           'first_name': firstName,
           'last_name': lastName,
@@ -349,46 +427,48 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
           'gest_weeks': gestWeeks,
           'risk_level': riskLevel,
           'expected_due_date': expectedDueDate,
-          'has_pregnancy':
-              motherId != null && pregnancyMap.containsKey(motherId),
-          'barangay': motherInfo?['barangay']?.toString() ?? '',
+          'has_pregnancy': ongoingPregnancy != null,
+          'barangay': raw['barangay']?.toString() ?? '',
           'profile_picture': profilePictureUrl,
-          'pregnancy_id': pregnancy?['pregnancy_id'] as int?,
-          'last_menstrual_period':
-              pregnancy?['last_menstrual_period'] as String?,
+          'pregnancy_id': ongoingPregnancy?['pregnancy_id'] as int?,
+          'last_menstrual_period': ongoingPregnancy?['last_menstrual_period'] as String?,
         });
       }
 
-      if (mounted) {
-        setState(() {
-          if (reset) {
-            _allMothers = newMothers;
-          } else {
-            _allMothers.addAll(newMothers);
+      bool hasChanges = false;
+      if (_mothersCache == null || _mothersCache!.length != parsedMothers.length) {
+        hasChanges = true;
+      } else {
+        for (int i = 0; i < parsedMothers.length; i++) {
+          final m1 = parsedMothers[i];
+          final m2 = _mothersCache!.firstWhere(
+            (m) => m['mother_id'] == m1['mother_id'],
+            orElse: () => {},
+          );
+          if (m2.isEmpty ||
+              m1['full_name'] != m2['full_name'] ||
+              m1['risk_level'] != m2['risk_level'] ||
+              m1['gest_weeks'] != m2['gest_weeks']) {
+            hasChanges = true;
+            break;
           }
+        }
+      }
+
+      if (hasChanges && mounted) {
+        _mothersCache = parsedMothers;
+        setState(() {
+          _allMothers = List<Map<String, dynamic>>.from(parsedMothers);
           _applyFilters();
-          _isLoading = false;
         });
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Error loading mothers: $e');
-      }
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-          _isLoadingMore = false;
-        });
-      }
+      debugPrint('Error revalidating mothers: $e');
     }
   }
 
   Future<void> _refreshMothers() async {
-    _currentPage = 0;
-    _allMothers = [];
-    _filteredMothers = [];
-    _hasMoreData = true;
+    _mothersCache = null;
     _profilePictureCache.clear();
     await _loadMothers(reset: true);
   }
@@ -686,7 +766,7 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'There are',
+                          'Showing',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
@@ -694,23 +774,13 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                           ),
                         ),
                         Text(
-                          '${_filteredMothers.length} Mothers',
+                          '${_filteredMothers.length}/${_allMothers.length} Mothers',
                           style: const TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
                             color: AppColors.brandPrimary,
                           ),
                         ),
-                        if (_searchQuery.isNotEmpty ||
-                            _selectedRiskFilter != 'All' ||
-                            _selectedBarangayFilter != 'All')
-                          Text(
-                            '(from ${_allMothers.length} total)',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -1015,34 +1085,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
                                               });
                                             }
                                           : null,
-                                      onQuickVitals: (motherId != null &&
-                                              mother['pregnancy_id'] != null)
-                                          ? () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      QuickVitalsScreen(
-                                                    motherId: motherId,
-                                                    pregnancyId:
-                                                        mother['pregnancy_id']
-                                                            as int,
-                                                    motherName:
-                                                        mother['full_name']
-                                                                ?.toString() ??
-                                                            'Unknown Mother',
-                                                    lastMenstrualPeriod: mother[
-                                                            'last_menstrual_period']
-                                                        as String?,
-                                                  ),
-                                                ),
-                                              ).then((saved) {
-                                                if (saved == true && mounted) {
-                                                  _refreshMothers();
-                                                }
-                                              });
-                                            }
-                                          : null,
                                     ),
                                   );
                                 },
@@ -1092,7 +1134,6 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
 class _MotherCard extends StatelessWidget {
   final Map<String, dynamic> mother;
   final VoidCallback? onTap;
-  final VoidCallback? onQuickVitals;
   final Color riskColor;
   final String riskLabel;
   final String? dueDateText;
@@ -1107,7 +1148,6 @@ class _MotherCard extends StatelessWidget {
     this.profilePictureUrl,
     required this.barangay,
     this.onTap,
-    this.onQuickVitals,
   });
 
   String _getInitials(String fullName) {
@@ -1313,16 +1353,6 @@ class _MotherCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (onQuickVitals != null)
-                  IconButton(
-                    icon: const Icon(Icons.speed_rounded, size: 22),
-                    color: AppColors.brandAccent,
-                    tooltip: 'Quick Vitals',
-                    onPressed: onQuickVitals,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                  ),
                 const Icon(
                   Icons.chevron_right,
                   color: AppColors.brandPrimary,

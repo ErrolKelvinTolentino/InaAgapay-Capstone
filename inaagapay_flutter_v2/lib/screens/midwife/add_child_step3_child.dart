@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
@@ -44,6 +45,10 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
   String _selectedExtension = '';
   String sex = 'male';
 
+  // Child validation error state
+  String? _firstNameError;
+  String? _lastNameError;
+
   // For REGISTERED MOTHER mode - list of ALL mothers in database
   List<Map<String, dynamic>> _allMothers = [];
   Map<String, dynamic>? _selectedMother;
@@ -59,6 +64,11 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
   final guardianPhoneCtrl = TextEditingController();
   final guardianAddressCtrl = TextEditingController();
   String _guardianRelationship = 'Guardian';
+
+  // Guardian validation error state
+  String? _guardianFirstNameError;
+  String? _guardianLastNameError;
+  String? _guardianPhoneError;
 
   final List<String> _relationshipOptions = [
     'Mother',
@@ -423,16 +433,52 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
     );
   }
 
+  void _validateChildFields() {
+    setState(() {
+      _firstNameError = firstNameCtrl.text.trim().isEmpty
+          ? 'First name is required'
+          : null;
+      _lastNameError = lastNameCtrl.text.trim().isEmpty
+          ? 'Last name is required'
+          : null;
+    });
+  }
+
+  void _validateGuardianFields() {
+    final phone = guardianPhoneCtrl.text.trim();
+    final normalized = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    final isPhoneValid = RegExp(r'^(\+?63|0)9\d{9}$').hasMatch(normalized);
+
+    setState(() {
+      _guardianFirstNameError = guardianFirstNameCtrl.text.trim().isEmpty
+          ? 'First name is required'
+          : null;
+      _guardianLastNameError = guardianLastNameCtrl.text.trim().isEmpty
+          ? 'Last name is required'
+          : null;
+      _guardianPhoneError = phone.isEmpty
+          ? 'Phone number is required'
+          : (isPhoneValid ? null : 'Enter a valid PH number');
+    });
+  }
+
   bool get isFormValid {
-    if (firstNameCtrl.text.trim().isEmpty) return false;
-    if (lastNameCtrl.text.trim().isEmpty) return false;
+    final childValid = firstNameCtrl.text.trim().isNotEmpty &&
+        _firstNameError == null &&
+        lastNameCtrl.text.trim().isNotEmpty &&
+        _lastNameError == null;
+    if (!childValid) return false;
 
     if (widget.mode == ChildParentMode.registeredMother) {
       return _selectedMother != null;
     } else {
-      return guardianFirstNameCtrl.text.trim().isNotEmpty &&
-             guardianLastNameCtrl.text.trim().isNotEmpty &&
-             guardianPhoneCtrl.text.trim().isNotEmpty;
+      final guardianValid = guardianFirstNameCtrl.text.trim().isNotEmpty &&
+          _guardianFirstNameError == null &&
+          guardianLastNameCtrl.text.trim().isNotEmpty &&
+          _guardianLastNameError == null &&
+          guardianPhoneCtrl.text.trim().isNotEmpty &&
+          _guardianPhoneError == null;
+      return guardianValid;
     }
   }
 
@@ -516,6 +562,11 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                 ),
                 const SizedBox(height: 24),
 
+                if (isRegisteredMode) ...[
+                  _buildRegisteredMotherSection(),
+                  const SizedBox(height: 24),
+                ],
+
                 // Child Information Card
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -533,24 +584,38 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                   child: Column(
                     children: [
                       AppInputField(
-                        hintText: 'First Name *',
+                        hintText: 'First Name',
                         controller: firstNameCtrl,
                         isRequired: true,
-                        onChanged: (_) => setState(() {}),
+                        errorText: _firstNameError,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")),
+                          LengthLimitingTextInputFormatter(100),
+                        ],
+                        onChanged: (_) => _validateChildFields(),
                       ),
                       const SizedBox(height: 16),
 
                       AppInputField(
-                        hintText: 'Last Name *',
+                        hintText: 'Last Name',
                         controller: lastNameCtrl,
                         isRequired: true,
-                        onChanged: (_) => setState(() {}),
+                        errorText: _lastNameError,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")),
+                          LengthLimitingTextInputFormatter(100),
+                        ],
+                        onChanged: (_) => _validateChildFields(),
                       ),
                       const SizedBox(height: 16),
 
                       AppInputField(
                         hintText: 'Middle Name (Optional)',
                         controller: middleNameCtrl,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")),
+                          LengthLimitingTextInputFormatter(100),
+                        ],
                       ),
                       const SizedBox(height: 16),
 
@@ -571,9 +636,9 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                             Text(
                               'Sex *',
                               style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -671,12 +736,10 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
                   ),
                 ),
 
-                const SizedBox(height: 24),
-
-                if (isRegisteredMode)
-                  _buildRegisteredMotherSection()
-                else
+                if (!isRegisteredMode) ...[
+                  const SizedBox(height: 24),
                   _buildNewGuardianSection(),
+                ],
 
                 const SizedBox(height: 32),
 
@@ -801,63 +864,36 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
     // If motherId was provided and we already have selected mother, show info
     if (widget.motherId != null && _selectedMother != null) {
       return Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.success.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Icon(Icons.pregnant_woman, color: AppColors.brandPrimary, size: 22),
-                const SizedBox(width: 8),
-                const Text(
-                  'Selected Mother',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.brandText,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-              ),
-              child: Row(
+            const Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.check_circle, color: AppColors.success),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  RichText(
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
                       children: [
-                        Text(
-                          'Selected: ${_selectedMother!['display_name']}',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                        if (_selectedMother!['phone_number'] != null && _selectedMother!['phone_number'].isNotEmpty)
-                          Text(
-                            _selectedMother!['phone_number'],
-                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                          ),
+                        const TextSpan(text: 'Linked Mother: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        TextSpan(text: '${_selectedMother!['display_name']}'),
                       ],
                     ),
                   ),
+                  if (_selectedMother!['phone_number'] != null && _selectedMother!['phone_number'].isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Phone: ${_selectedMother!['phone_number']}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1023,20 +1059,33 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
           const SizedBox(height: 16),
 
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: AppInputField(
-                  hintText: 'First Name *',
+                  hintText: 'First Name',
                   controller: guardianFirstNameCtrl,
                   isRequired: true,
+                  errorText: _guardianFirstNameError,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")),
+                    LengthLimitingTextInputFormatter(100),
+                  ],
+                  onChanged: (_) => _validateGuardianFields(),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: AppInputField(
-                  hintText: 'Last Name *',
+                  hintText: 'Last Name',
                   controller: guardianLastNameCtrl,
                   isRequired: true,
+                  errorText: _guardianLastNameError,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")),
+                    LengthLimitingTextInputFormatter(100),
+                  ],
+                  onChanged: (_) => _validateGuardianFields(),
                 ),
               ),
             ],
@@ -1046,6 +1095,10 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
           AppInputField(
             hintText: 'Middle Name (Optional)',
             controller: guardianMiddleNameCtrl,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-'’]")),
+              LengthLimitingTextInputFormatter(100),
+            ],
           ),
           const SizedBox(height: 12),
           
@@ -1053,11 +1106,16 @@ class _AddChildStep3ChildState extends State<AddChildStep3Child> {
           const SizedBox(height: 12),
           
           AppInputField(
-            hintText: 'Phone Number *',
+            hintText: 'Phone Number',
             controller: guardianPhoneCtrl,
             isRequired: true,
             keyboardType: TextInputType.phone,
-            onChanged: (_) => setState(() {}),
+            errorText: _guardianPhoneError,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+              LengthLimitingTextInputFormatter(12),
+            ],
+            onChanged: (_) => _validateGuardianFields(),
           ),
           const SizedBox(height: 12),
           

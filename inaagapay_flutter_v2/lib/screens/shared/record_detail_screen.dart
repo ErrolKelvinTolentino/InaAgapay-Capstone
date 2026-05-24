@@ -1040,14 +1040,15 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   /// If the text has ## English / ## Filipino sections, returns the appropriate one.
   /// Otherwise returns the full text.
   String _getAiTextForLanguage(String fullText) {
+    final normalized = fullText.replaceAll('\r\n', '\n');
     final englishMatch = RegExp(
-      r'## English\s*([\s\S]*?)(?=(## Filipino|\z))',
+      r'## English\s*([\s\S]*?)(?=(## Filipino|$))',
       caseSensitive: false,
-    ).firstMatch(fullText);
+    ).firstMatch(normalized);
     final filipinoMatch = RegExp(
-      r'## Filipino\s*([\s\S]*?)(?=(## English|\z))',
+      r'## Filipino\s*([\s\S]*?)(?=(## English|$))',
       caseSensitive: false,
-    ).firstMatch(fullText);
+    ).firstMatch(normalized);
 
     final englishText = englishMatch?.group(1)?.trim();
     final filipinoText = filipinoMatch?.group(1)?.trim();

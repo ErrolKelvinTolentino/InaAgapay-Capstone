@@ -26,7 +26,6 @@ class ChildService {
               birthdate,
               birth_weight,
               birth_length,
-              head_circumference,
               birthplace_city_municipality,
               birthplace_province
             )
@@ -50,8 +49,6 @@ class ChildService {
               : null,
           birthWeight: (birthDetails?['birth_weight'] as num?)?.toDouble(),
           birthLength: (birthDetails?['birth_length'] as num?)?.toDouble(),
-          headCircumference:
-              (birthDetails?['head_circumference'] as num?)?.toDouble(),
           birthplaceCity:
               birthDetails?['birthplace_city_municipality'] as String?,
           birthplaceProvince: birthDetails?['birthplace_province'] as String?,
@@ -74,10 +71,8 @@ class ChildService {
               birthdate,
               birth_weight,
               birth_length,
-              head_circumference,
               birthplace_city_municipality,
-              birthplace_province,
-              birth_complications
+              birthplace_province
             )
           ''').eq('child_id', childId).eq('mother_id', motherId).maybeSingle();
 
@@ -121,8 +116,6 @@ class ChildService {
             : null,
         birthWeight: (birthDetails?['birth_weight'] as num?)?.toDouble(),
         birthLength: (birthDetails?['birth_length'] as num?)?.toDouble(),
-        headCircumference:
-            (birthDetails?['head_circumference'] as num?)?.toDouble(),
         birthplaceCity:
             birthDetails?['birthplace_city_municipality'] as String?,
         birthplaceProvince: birthDetails?['birthplace_province'] as String?,

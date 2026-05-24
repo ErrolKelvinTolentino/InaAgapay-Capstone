@@ -4,7 +4,23 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../services/language_service.dart';
 import 'profile_helpers.dart';
+
+// Helper for date comparison
+bool _isSameDay(dynamic dateVal1, dynamic dateVal2) {
+  if (dateVal1 == null || dateVal2 == null) return false;
+  try {
+    var d1 = DateTime.tryParse(dateVal1.toString());
+    var d2 = DateTime.tryParse(dateVal2.toString());
+    if (d1 == null || d2 == null) return false;
+    d1 = d1.toLocal();
+    d2 = d2.toLocal();
+    return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
+  } catch (_) {
+    return false;
+  }
+}
 
 // ── Checkup Card ──────────────────────────────────────────────────────────
 
@@ -20,27 +36,15 @@ class CheckupRecordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final date = formatProfileDateTime(checkup['checkup_datetime']);
-    final bpSys = formatValue(checkup['blood_pressure_systolic']);
-    final bpDia = formatValue(checkup['blood_pressure_diastolic']);
-    final aog = formatValue(checkup['age_of_gestation']);
-
-    final wgeList = checkup['weight_gain'] as List?;
-    final wge = (wgeList != null && wgeList.isNotEmpty) ? wgeList.first as Map<String, dynamic> : null;
-    final wgeStatus = wge?['status']?.toString();
+    final dateCreated = formatProfileDateTime(
+        checkup['created_at'] ?? checkup['createdAt'] ?? checkup['checkup_datetime']);
 
     return _RecordCardShell(
       accentColor: AppColors.brandPrimary,
       icon: Icons.medical_services_outlined,
       title: 'Prenatal Checkup',
-      subtitle: date,
-      badges: [
-        if (aog != '-') _Badge(label: '$aog wks', color: AppColors.brandPrimary),
-        if (bpSys != '-' && bpDia != '-')
-          _Badge(label: 'BP $bpSys/$bpDia', color: AppColors.textSecondary),
-        if (wgeStatus == 'HIGH' || wgeStatus == 'LOW')
-          _Badge(label: 'Weight Gain: $wgeStatus', color: AppColors.warning),
-      ],
+      subtitle: dateCreated,
+      badges: const [],
       onTap: onTap,
     );
   }
@@ -51,27 +55,39 @@ class CheckupRecordCard extends StatelessWidget {
 class UltrasoundRecordCard extends StatelessWidget {
   final Map<String, dynamic> ultrasound;
   final VoidCallback onTap;
+  final String? addedDate;
 
   const UltrasoundRecordCard({
     super.key,
     required this.ultrasound,
     required this.onTap,
+    this.addedDate,
   });
 
   @override
   Widget build(BuildContext context) {
-    final date = formatProfileDate(ultrasound['ultrasound_date']);
-    final location = ultrasound['ultrasound_location']?.toString();
+    final dateCreated = formatProfileDateTime(ultrasound['created_at'] ?? ultrasound['createdAt']);
+    final dateConducted = formatProfileDate(ultrasound['ultrasound_date']);
+
+    final sameDay = _isSameDay(
+      ultrasound['created_at'] ?? ultrasound['createdAt'],
+      ultrasound['ultrasound_date'],
+    );
+
+    final String? secondaryText = sameDay
+        ? null
+        : LanguageService.translate(
+            'Conducted on $dateConducted',
+            'Isinagawa noong $dateConducted',
+          );
 
     return _RecordCardShell(
       accentColor: AppColors.brandAccent,
       icon: Icons.monitor_heart_outlined,
       title: 'Ultrasound',
-      subtitle: date,
-      badges: [
-        if (location != null && location.isNotEmpty)
-          _Badge(label: location, color: AppColors.brandAccent),
-      ],
+      subtitle: dateCreated,
+      secondarySubtitle: secondaryText,
+      badges: const [],
       onTap: onTap,
     );
   }
@@ -82,23 +98,39 @@ class UltrasoundRecordCard extends StatelessWidget {
 class LabTestRecordCard extends StatelessWidget {
   final Map<String, dynamic> labTest;
   final VoidCallback onTap;
+  final String? addedDate;
 
   const LabTestRecordCard({
     super.key,
     required this.labTest,
     required this.onTap,
+    this.addedDate,
   });
 
   @override
   Widget build(BuildContext context) {
-    final date = formatProfileDate(labTest['lab_test_date']);
+    final dateCreated = formatProfileDateTime(labTest['created_at'] ?? labTest['createdAt']);
+    final dateConducted = formatProfileDate(labTest['lab_test_date']);
     final type = labTest['lab_test_type']?.toString() ?? 'Lab Test';
+
+    final sameDay = _isSameDay(
+      labTest['created_at'] ?? labTest['createdAt'],
+      labTest['lab_test_date'],
+    );
+
+    final String? secondaryText = sameDay
+        ? null
+        : LanguageService.translate(
+            'Conducted on $dateConducted',
+            'Isinagawa noong $dateConducted',
+          );
 
     return _RecordCardShell(
       accentColor: AppColors.warning,
       icon: Icons.science_outlined,
       title: type,
-      subtitle: date,
+      subtitle: dateCreated,
+      secondarySubtitle: secondaryText,
       badges: const [],
       onTap: onTap,
     );
@@ -112,6 +144,7 @@ class _RecordCardShell extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final String? secondarySubtitle;
   final List<_Badge> badges;
   final VoidCallback onTap;
 
@@ -120,6 +153,7 @@ class _RecordCardShell extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.secondarySubtitle,
     required this.badges,
     required this.onTap,
   });
@@ -193,6 +227,16 @@ class _RecordCardShell extends StatelessWidget {
                               color: AppColors.textSecondary,
                             ),
                           ),
+                          if (secondarySubtitle != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              secondarySubtitle!,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                           if (badges.isNotEmpty) ...[
                             const SizedBox(height: 6),
                             Wrap(
@@ -332,8 +376,7 @@ class RecordLoadMoreButton extends StatelessWidget {
           icon: const Icon(Icons.expand_more, size: 18),
           label: Text(
             'Load More ($nextBatch of $remaining remaining)',
-            style:
-                const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
           ),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.brandPrimary,
@@ -381,8 +424,7 @@ class HistoryRecordSection extends StatelessWidget {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
           leading: Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
@@ -398,8 +440,7 @@ class HistoryRecordSection extends StatelessWidget {
                       fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: count > 0
                       ? color.withValues(alpha: 0.15)

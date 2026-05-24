@@ -611,13 +611,17 @@ class SupabaseService {
     Map<String, dynamic> profileData,
   ) async {
     try {
-      await client.from('accounts').update({
+      final updateMap = {
         'first_name': profileData['first_name'],
         'middle_name': profileData['middle_name'],
         'last_name': profileData['last_name'],
         'extension_name': profileData['extension_name'],
         'phone_number': profileData['contact_number'],
-      }).eq('account_id', accountId);
+      };
+      if (profileData.containsKey('email_address')) {
+        updateMap['email_address'] = profileData['email_address'];
+      }
+      await client.from('accounts').update(updateMap).eq('account_id', accountId);
 
       final existingMother = await client
           .from('mothers')
@@ -660,11 +664,15 @@ class SupabaseService {
       }
 
       if (existingMother == null) {
-        await client.from('mothers').insert({
+        final motherInsert = <String, dynamic>{
           'account_id': accountId,
           'birthdate': birthDateStr,
           'status': 'active',
-        });
+        };
+        if (profileData['height'] != null) {
+          motherInsert['height'] = profileData['height'];
+        }
+        await client.from('mothers').insert(motherInsert);
 
         if (lmp != null && edd != null) {
           final motherRecord = await client
@@ -676,17 +684,40 @@ class SupabaseService {
           if (motherRecord != null) {
             final motherId = motherRecord['mother_id'] as int;
 
-            await client.from('pregnancies').insert({
+            final pregnancyInsert = <String, dynamic>{
               'mother_id': motherId,
               'last_menstrual_period': lmp.toIso8601String().split('T')[0],
               'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
               'status': 'ongoing',
-            });
+            };
+            if (profileData['pre_pregnancy_weight'] != null) {
+              pregnancyInsert['pre_pregnancy_weight'] = profileData['pre_pregnancy_weight'];
+            }
+
+            final pregnancyRecord = await client.from('pregnancies').insert(pregnancyInsert).select('pregnancy_id').maybeSingle();
+
+            if (pregnancyRecord != null && profileData['current_weight'] != null && profileData['height'] != null) {
+              final pregnancyId = pregnancyRecord['pregnancy_id'] as int;
+              double? aogWeeks;
+              if (lmp != null) {
+                aogWeeks = DateTime.now().difference(lmp).inDays / 7.0;
+              }
+              await client.from('maternal_vitals').insert({
+                'pregnancy_id': pregnancyId,
+                'mother_id': motherId,
+                'weight_kg': profileData['current_weight'],
+                'height_cm': profileData['height'],
+                'age_of_gestation': aogWeeks != null ? double.parse(aogWeeks.toStringAsFixed(1)) : null,
+                'notes': 'Initial vitals entered during profile setup',
+                'recorded_at': DateTime.now().toIso8601String(),
+              });
+            }
           }
         }
       } else {
         final updateData = <String, dynamic>{};
         if (birthDateStr != null) updateData['birthdate'] = birthDateStr;
+        if (profileData['height'] != null) updateData['height'] = profileData['height'];
 
         if (updateData.isNotEmpty) {
           await client
@@ -703,18 +734,62 @@ class SupabaseService {
               .eq('status', 'ongoing')
               .maybeSingle();
 
+          final motherId = existingMother['mother_id'] as int;
+          int? pregnancyId;
+
           if (existingPregnancy == null) {
-            await client.from('pregnancies').insert({
-              'mother_id': existingMother['mother_id'],
+            final pregnancyInsert = <String, dynamic>{
+              'mother_id': motherId,
               'last_menstrual_period': lmp.toIso8601String().split('T')[0],
               'expected_date_of_delivery': edd.toIso8601String().split('T')[0],
               'status': 'ongoing',
+            };
+            if (profileData['pre_pregnancy_weight'] != null) {
+              pregnancyInsert['pre_pregnancy_weight'] = profileData['pre_pregnancy_weight'];
+            }
+            final pregnancyRecord = await client.from('pregnancies').insert(pregnancyInsert).select('pregnancy_id').maybeSingle();
+            if (pregnancyRecord != null) {
+              pregnancyId = pregnancyRecord['pregnancy_id'] as int;
+            }
+          } else {
+            pregnancyId = existingPregnancy['pregnancy_id'] as int;
+            if (profileData['pre_pregnancy_weight'] != null) {
+              await client.from('pregnancies').update({
+                'pre_pregnancy_weight': profileData['pre_pregnancy_weight'],
+              }).eq('pregnancy_id', pregnancyId);
+            }
+          }
+
+          if (pregnancyId != null && profileData['current_weight'] != null && profileData['height'] != null) {
+            double? aogWeeks;
+            if (lmp != null) {
+              aogWeeks = DateTime.now().difference(lmp).inDays / 7.0;
+            }
+            await client.from('maternal_vitals').insert({
+              'pregnancy_id': pregnancyId,
+              'mother_id': motherId,
+              'weight_kg': profileData['current_weight'],
+              'height_cm': profileData['height'],
+              'age_of_gestation': aogWeeks != null ? double.parse(aogWeeks.toStringAsFixed(1)) : null,
+              'notes': 'Initial vitals entered during profile setup',
+              'recorded_at': DateTime.now().toIso8601String(),
             });
           }
         }
       }
 
-      return {'success': true, 'message': 'Profile completed successfully'};
+      final finalMother = await client
+          .from('mothers')
+          .select('mother_id')
+          .eq('account_id', accountId)
+          .maybeSingle();
+      final finalMotherId = finalMother?['mother_id'] as int?;
+
+      return {
+        'success': true,
+        'message': 'Profile completed successfully',
+        'mother_id': finalMotherId,
+      };
     } catch (e) {
       if (kDebugMode) debugPrint('Profile completion error: $e');
       return {
@@ -1272,14 +1347,30 @@ class SupabaseService {
       }
 
       final isInternalEmail = email.endsWith('@inaagapay.internal');
-      final emailSent = isInternalEmail
-          ? false
-          : await EmailService.sendAccountCredentials(
-              email: email,
-              password: generatedPassword,
-              firstName: firstName,
-              lastName: lastName,
-            );
+      bool credentialsSent = false;
+      String sentMethod = '';
+
+      // Try sending via email first if not internal
+      if (!isInternalEmail) {
+        credentialsSent = await EmailService.sendAccountCredentials(
+          email: email,
+          password: generatedPassword,
+          firstName: firstName,
+          lastName: lastName,
+        );
+        if (credentialsSent) sentMethod = 'email';
+      }
+
+      // If email not sent and phone is available, try SMS
+      if (!credentialsSent && phone.isNotEmpty) {
+        credentialsSent = await EmailService.sendAccountCredentialsViaSms(
+          phoneNumber: phone,
+          password: generatedPassword,
+          firstName: firstName,
+          lastName: lastName,
+        );
+        if (credentialsSent) sentMethod = 'sms';
+      }
 
       return {
         'success': true,
@@ -1287,10 +1378,12 @@ class SupabaseService {
         'pregnancy_id': pregnancyId,
         'account_id': accountId,
         'generated_password': generatedPassword,
-        'email_sent': emailSent,
-        'message': emailSent
-            ? 'Mother account created. Credentials sent to $email'
-            : 'Mother account created but email failed to send. Please provide the password manually.',
+        'email_sent': credentialsSent && sentMethod == 'email',
+        'sms_sent': credentialsSent && sentMethod == 'sms',
+        'credentials_delivery_method': sentMethod,
+        'message': credentialsSent
+            ? 'Mother account created. Credentials sent via ${sentMethod.toUpperCase()}.'
+            : 'Mother account created but failed to send credentials. Please provide the password manually.',
       };
     } catch (e) {
       if (kDebugMode) debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');

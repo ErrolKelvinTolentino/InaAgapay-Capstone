@@ -410,7 +410,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         setState(() {
           _heightError = null;
           if (height < 120) {
-            _heightWarning = 'Entered maternal measurement is outside commonly expected maternal monitoring ranges. Please verify the information.';
+            _heightWarning =
+                'Entered maternal measurement is outside commonly expected maternal monitoring ranges. Please verify the information.';
           } else {
             _heightWarning = null;
           }
@@ -418,7 +419,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       }
     } else {
       setState(() {
-        _heightError = _heightCtrl.text.trim().isEmpty ? null : 'Enter a valid number';
+        _heightError =
+            _heightCtrl.text.trim().isEmpty ? null : 'Enter a valid number';
         _heightWarning = null;
       });
     }
@@ -433,7 +435,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         setState(() {
           _weightError = null;
           if (weight < 35) {
-            _weightWarning = 'Entered maternal measurement is outside commonly expected maternal monitoring ranges. Please verify the information.';
+            _weightWarning =
+                'Entered maternal measurement is outside commonly expected maternal monitoring ranges. Please verify the information.';
           } else {
             _weightWarning = null;
           }
@@ -441,7 +444,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       }
     } else {
       setState(() {
-        _weightError = _weightCtrl.text.trim().isEmpty ? null : 'Enter a valid number';
+        _weightError =
+            _weightCtrl.text.trim().isEmpty ? null : 'Enter a valid number';
         _weightWarning = null;
       });
     }
@@ -469,7 +473,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     } else if (ppw < 35) {
       setState(() {
         _prePregnancyWeightError = null;
-        _prePregnancyWeightWarning = 'Entered maternal measurement is outside commonly expected maternal monitoring ranges. Please verify the information.';
+        _prePregnancyWeightWarning =
+            'Entered maternal measurement is outside commonly expected maternal monitoring ranges. Please verify the information.';
       });
     } else {
       setState(() {
@@ -510,7 +515,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
       final weeks = int.tryParse(_aogWeeksCtrl.text.trim()) ?? 0;
       if (weeks <= 12) {
-        _bmiWarning = 'Recommended total weight gain for this week (Week $weeks) is 0.5 - 2.0 kg.';
+        _bmiWarning =
+            'Recommended total weight gain for this week (Week $weeks) is 0.5 - 2.0 kg.';
       } else {
         final double minRate;
         final double maxRate;
@@ -529,7 +535,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         }
         final minGain = 0.5 + (weeks - 12) * minRate;
         final maxGain = 2.0 + (weeks - 12) * maxRate;
-        _bmiWarning = 'Recommended total weight gain for this week (Week $weeks) is ${minGain.toStringAsFixed(1)} - ${maxGain.toStringAsFixed(1)} kg.';
+        _bmiWarning =
+            'Recommended total weight gain for this week (Week $weeks) is ${minGain.toStringAsFixed(1)} - ${maxGain.toStringAsFixed(1)} kg.';
       }
     } else {
       _calculatedBMI = null;
@@ -671,10 +678,20 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
     // 5. Medical Conditions — ACTIVE / ONGOING only
     final dohConditions = [
-      'Hypertension', 'Preeclampsia', 'Eclampsia',
-      'Heart disease', 'Cardiovascular',
-      'Diabetes', 'Thyroid', 'Asthma', 'Epilepsy',
-      'Renal', 'Kidney', 'Bleeding', 'Clotting', 'Hemophilia',
+      'Hypertension',
+      'Preeclampsia',
+      'Eclampsia',
+      'Heart disease',
+      'Cardiovascular',
+      'Diabetes',
+      'Thyroid',
+      'Asthma',
+      'Epilepsy',
+      'Renal',
+      'Kidney',
+      'Bleeding',
+      'Clotting',
+      'Hemophilia',
     ];
     for (final mc in _medicalConditions) {
       final st = mc.status.toLowerCase();
@@ -709,8 +726,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     if (_calculatedAge != null &&
         _calculatedAge! >= 35 &&
         _pastPregnancies.isNotEmpty) {
-      insights.add(
-          'Maternal age ≥ 35 — closer prenatal monitoring recommended');
+      insights
+          .add('Maternal age ≥ 35 — closer prenatal monitoring recommended');
     }
 
     // Elevated BMI (30–39.9) or underweight — monitoring only
@@ -768,8 +785,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       context: context,
       builder: (_) => ConfirmationDialogBox(
         title: 'Early Pregnancy Notice',
-        subtitle:
-            'The LMP is less than 4 weeks ago. At this early stage, '
+        subtitle: 'The LMP is less than 4 weeks ago. At this early stage, '
             'pregnancy confirmation via serum hCG test is recommended '
             'before proceeding with registration.',
         confirmText: 'Understood',
@@ -1006,7 +1022,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             barrierDismissible: false,
             builder: (ctx) => ConfirmationDialogBox(
               title: 'Existing Account Found',
-              subtitle: 'An account already exists for ${existingData['email_address']}.\n\nWould you like to load the existing data?',
+              subtitle:
+                  'An account already exists for ${existingData['email_address']}.\n\nWould you like to load the existing data?',
               confirmText: 'Load & Continue',
               cancelText: 'Cancel',
               onConfirm: () => Navigator.pop(ctx, true),
@@ -1073,10 +1090,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         _validateBirthdate();
       }
     }
-    if (existingData['height'] != null)
+    if (existingData['height'] != null) {
       _heightCtrl.text = existingData['height'].toString();
-    if (existingData['weight'] != null)
+    }
+    if (existingData['weight'] != null) {
       _weightCtrl.text = existingData['weight'].toString();
+    }
     if (existingData['blood_type'] != null) {
       _bloodType = existingData['blood_type'];
       _bloodTypeCtrl.text = _bloodType ?? '';
@@ -1241,17 +1260,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final dStr = _aogDaysCtrl.text.trim();
 
     if (wStr.isEmpty && dStr.isEmpty) {
-       setState(() {
-         _weeksError = null;
-         _daysError = null;
-         _gestationError = null;
-         _lmp = null;
-         _edd = null;
-         _lmpCtrl.clear();
-         _eddCtrl.clear();
-       });
-       _calculateBMI();
-       return;
+      setState(() {
+        _weeksError = null;
+        _daysError = null;
+        _gestationError = null;
+        _lmp = null;
+        _edd = null;
+        _lmpCtrl.clear();
+        _eddCtrl.clear();
+      });
+      _calculateBMI();
+      return;
     }
 
     final w = int.tryParse(wStr);
@@ -1275,7 +1294,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     setState(() {
       _weeksError = wErr;
       _daysError = dErr;
-      _gestationError = (wErr != null || dErr != null) ? 'Invalid AOG weeks or days' : null;
+      _gestationError =
+          (wErr != null || dErr != null) ? 'Invalid AOG weeks or days' : null;
     });
 
     if (wErr == null && dErr == null && w != null && d != null) {
@@ -1371,20 +1391,24 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     _provinceCtrl.text.trim().isNotEmpty));
 
       case 3:
-        if (_gestationMethod == _GestationMethod.lmp && _lmp == null)
+        if (_gestationMethod == _GestationMethod.lmp && _lmp == null) {
           return false;
-        if (_gestationMethod == _GestationMethod.edd && _edd == null)
+        }
+        if (_gestationMethod == _GestationMethod.edd && _edd == null) {
           return false;
+        }
         if (_gestationMethod == _GestationMethod.aog &&
             _aogWeeksCtrl.text.trim().isEmpty &&
-            _aogDaysCtrl.text.trim().isEmpty) return false;
+            _aogDaysCtrl.text.trim().isEmpty) {
+          return false;
+        }
         if (_gestationError != null) return false;
         return true;
 
       case 4:
         final hVal = double.tryParse(_heightCtrl.text.trim());
         final wVal = double.tryParse(_weightCtrl.text.trim());
-        
+
         setState(() {
           if (_heightCtrl.text.trim().isEmpty) {
             _heightError = 'Height is required';
@@ -1392,14 +1416,15 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           if (_weightCtrl.text.trim().isEmpty) {
             _weightError = 'Weight is required';
           }
-          if (_knowsPrePregnancyWeight && _prePregnancyWeightCtrl.text.trim().isEmpty) {
+          if (_knowsPrePregnancyWeight &&
+              _prePregnancyWeightCtrl.text.trim().isEmpty) {
             _prePregnancyWeightError = 'Pre-pregnancy weight is required';
           }
         });
 
         if (hVal == null || _heightError != null) return false;
         if (wVal == null || _weightError != null) return false;
-        
+
         if (_knowsPrePregnancyWeight) {
           final ppwVal = double.tryParse(_prePregnancyWeightCtrl.text.trim());
           if (ppwVal == null || _prePregnancyWeightError != null) return false;
@@ -1513,11 +1538,19 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         final pregnancyId = result['pregnancy_id'] as int?;
 
         final hasRealEmail = _emailCtrl.text.trim().isNotEmpty;
-        final successMessage = _isUpdatingExisting
-            ? 'Mother account updated successfully!'
-            : (hasRealEmail && result['email_sent'] == true
-                ? 'Mother account created successfully!\n\nA temporary password has been sent to ${_emailCtrl.text.trim()}.'
-                : 'Mother account created successfully!\n\nThe mother can register online later. Her account will sync automatically if she provides the same contact number.');
+        final emailSent = result['email_sent'] == true;
+        final smsSent = result['sms_sent'] == true;
+        
+        String successMessage;
+        if (_isUpdatingExisting) {
+          successMessage = 'Mother account updated successfully!';
+        } else if (emailSent) {
+          successMessage = 'Mother account created successfully!\n\nA temporary password has been sent to ${_emailCtrl.text.trim()}.';
+        } else if (smsSent) {
+          successMessage = 'Mother account created successfully!\n\nA temporary password has been sent via SMS to ${_phoneCtrl.text.trim()}.';
+        } else {
+          successMessage = 'Mother account created successfully!\n\nThe mother can register online later. Her account will sync automatically if she provides the same contact number.';
+        }
 
         await showDialog(
           context: context,
@@ -1587,15 +1620,21 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   }
 
   Future<void> _showAddEmergencyContact({int? editIndex}) async {
-    _EmergencyContact? existing = editIndex != null ? _emergencyContacts[editIndex] : null;
+    _EmergencyContact? existing =
+        editIndex != null ? _emergencyContacts[editIndex] : null;
 
-    final firstNameCtrl = TextEditingController(text: existing?.firstName ?? '');
+    final firstNameCtrl =
+        TextEditingController(text: existing?.firstName ?? '');
     final lastNameCtrl = TextEditingController(text: existing?.lastName ?? '');
     final phoneCtrl = TextEditingController(text: existing?.phoneNumber ?? '');
-    
-    final isCustomRel = existing != null && !['Spouse', 'Partner', 'Mother', 'Father', 'Sibling', 'Friend'].contains(existing.relationship);
-    final relationshipCtrl = TextEditingController(text: isCustomRel ? 'Other' : (existing?.relationship ?? ''));
-    final customRelationshipCtrl = TextEditingController(text: isCustomRel ? existing?.relationship : '');
+
+    final isCustomRel = existing != null &&
+        !['Spouse', 'Partner', 'Mother', 'Father', 'Sibling', 'Friend']
+            .contains(existing.relationship);
+    final relationshipCtrl = TextEditingController(
+        text: isCustomRel ? 'Other' : (existing?.relationship ?? ''));
+    final customRelationshipCtrl =
+        TextEditingController(text: isCustomRel ? existing.relationship : '');
 
     bool showRelationshipDropdown = false;
     String? phoneError;
@@ -1606,16 +1645,20 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       builder: (ctx) {
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           child: Container(
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: StatefulBuilder(
               builder: (dialogCtx, setDialogState) {
                 // Real-time phone validation
                 void validatePhone(String val) {
-                  final normalized = val.trim().replaceAll(RegExp(r'[^0-9+]'), '');
-                  final isValid = RegExp(r'^(\+?63|0)9\d{9}$').hasMatch(normalized);
+                  final normalized =
+                      val.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+                  final isValid =
+                      RegExp(r'^(\+?63|0)9\d{9}$').hasMatch(normalized);
                   setDialogState(() {
                     phoneError = val.isEmpty
                         ? null
@@ -1623,9 +1666,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   });
                 }
 
-                final isPhoneValid = phoneCtrl.text.trim().isNotEmpty && phoneError == null;
-                final isRelationshipValid = relationshipCtrl.text.trim().isNotEmpty &&
-                    (relationshipCtrl.text.trim() != 'Other' || customRelationshipCtrl.text.trim().isNotEmpty);
+                final isPhoneValid =
+                    phoneCtrl.text.trim().isNotEmpty && phoneError == null;
+                final isRelationshipValid =
+                    relationshipCtrl.text.trim().isNotEmpty &&
+                        (relationshipCtrl.text.trim() != 'Other' ||
+                            customRelationshipCtrl.text.trim().isNotEmpty);
                 final isFormValid = firstNameCtrl.text.trim().isNotEmpty &&
                     lastNameCtrl.text.trim().isNotEmpty &&
                     isPhoneValid &&
@@ -1638,7 +1684,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          icon: const Icon(Icons.close,
+                              color: AppColors.brandText),
                           onPressed: () => Navigator.pop(dialogCtx, false),
                         ),
                         const Expanded(
@@ -1699,10 +1746,13 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                               hintText: 'Select relationship',
                               isRequired: true,
                               readOnly: true,
-                              suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                              suffixIcon: const Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: AppColors.brandPrimary),
                               onTap: () {
                                 setDialogState(() {
-                                  showRelationshipDropdown = !showRelationshipDropdown;
+                                  showRelationshipDropdown =
+                                      !showRelationshipDropdown;
                                 });
                               },
                             ),
@@ -1710,17 +1760,21 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                               const SizedBox(height: 4),
                               Card(
                                 elevation: 4,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
                                 color: Colors.white,
                                 child: Container(
-                                  constraints: const BoxConstraints(maxHeight: 200),
+                                  constraints:
+                                      const BoxConstraints(maxHeight: 200),
                                   child: ListView.builder(
                                     shrinkWrap: true,
                                     itemCount: _relationshipOptions.length,
                                     itemBuilder: (context, idx) {
                                       final rel = _relationshipOptions[idx];
                                       return ListTile(
-                                        title: Text(rel, style: const TextStyle(fontSize: 14)),
+                                        title: Text(rel,
+                                            style:
+                                                const TextStyle(fontSize: 14)),
                                         dense: true,
                                         onTap: () {
                                           setDialogState(() {
@@ -1798,7 +1852,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ..lastName = lastNameCtrl.text.trim()
           ..phoneNumber = phoneCtrl.text.trim()
           ..relationship = rel;
-          
+
         if (editIndex != null) {
           _emergencyContacts[editIndex] = contact;
         } else {
@@ -1824,14 +1878,18 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     if (confirm == true) setState(() => _emergencyContacts.removeAt(index));
   }
 
-  Future<void> _showAddMedicalCondition({String? prefill, int? editIndex}) async {
-    _MedicalCondition? existing = editIndex != null ? _medicalConditions[editIndex] : null;
+  Future<void> _showAddMedicalCondition(
+      {String? prefill, int? editIndex}) async {
+    _MedicalCondition? existing =
+        editIndex != null ? _medicalConditions[editIndex] : null;
 
-    final nameCtrl = TextEditingController(text: existing?.conditionName ?? prefill ?? '');
+    final nameCtrl =
+        TextEditingController(text: existing?.conditionName ?? prefill ?? '');
     DateTime? diagDate = existing?.diagnosisDate;
     String status = existing?.status ?? 'active';
     final remarksCtrl = TextEditingController(text: existing?.remarks ?? '');
-    final diagDateCtrl = TextEditingController(text: diagDate != null ? _dateFmt.format(diagDate) : '');
+    final diagDateCtrl = TextEditingController(
+        text: diagDate != null ? _dateFmt.format(diagDate) : '');
 
     final result = await showDialog<bool>(
       context: context,
@@ -1839,16 +1897,21 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       builder: (ctx) {
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           child: Container(
             width: MediaQuery.of(ctx).size.width * 0.9,
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: StatefulBuilder(
               builder: (dialogCtx, setDialogState) {
                 final inputName = nameCtrl.text.trim();
                 final isDuplicate = _medicalConditions.asMap().entries.any(
-                    (e) => e.key != editIndex && e.value.conditionName.toLowerCase() == inputName.toLowerCase());
+                    (e) =>
+                        e.key != editIndex &&
+                        e.value.conditionName.toLowerCase() ==
+                            inputName.toLowerCase());
                 final isFormValid = inputName.isNotEmpty && !isDuplicate;
 
                 return Column(
@@ -1857,7 +1920,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          icon: const Icon(Icons.close,
+                              color: AppColors.brandText),
                           onPressed: () => Navigator.pop(dialogCtx, false),
                         ),
                         const Expanded(
@@ -1881,18 +1945,32 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Common Conditions', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                            const Text('Common Conditions',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary)),
                             const SizedBox(height: 8),
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: _commonConditions.map((cond) {
-                                final isSelected = inputName.toLowerCase() == cond.toLowerCase();
+                                final isSelected = inputName.toLowerCase() ==
+                                    cond.toLowerCase();
                                 return ActionChip(
-                                  label: Text(cond, style: TextStyle(color: isSelected ? Colors.white : AppColors.brandPrimary, fontSize: 12)),
-                                  backgroundColor: isSelected ? AppColors.brandPrimary : Colors.white,
-                                  side: BorderSide(color: AppColors.brandPrimary),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  label: Text(cond,
+                                      style: TextStyle(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : AppColors.brandPrimary,
+                                          fontSize: 12)),
+                                  backgroundColor: isSelected
+                                      ? AppColors.brandPrimary
+                                      : Colors.white,
+                                  side:
+                                      BorderSide(color: AppColors.brandPrimary),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20)),
                                   onPressed: () {
                                     setDialogState(() {
                                       if (cond == 'Other') {
@@ -1911,7 +1989,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                               hintText: 'Condition Name',
                               isRequired: true,
                               leadingIcon: Icons.medical_services_outlined,
-                              errorText: isDuplicate ? 'Condition already added' : null,
+                              errorText: isDuplicate
+                                  ? 'Condition already added'
+                                  : null,
                               onChanged: (val) => setDialogState(() {}),
                             ),
                             const SizedBox(height: 16),
@@ -1936,38 +2016,68 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                               },
                             ),
                             const SizedBox(height: 16),
-                            const Text('Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                            const Text('Status',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary)),
                             const SizedBox(height: 8),
                             Row(
                               children: [
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: () => setDialogState(() => status = 'active'),
+                                    onTap: () =>
+                                        setDialogState(() => status = 'active'),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
                                       decoration: BoxDecoration(
-                                        color: status == 'active' ? AppColors.brandPrimary.withValues(alpha: 0.1) : Colors.white,
+                                        color: status == 'active'
+                                            ? AppColors.brandPrimary
+                                                .withValues(alpha: 0.1)
+                                            : Colors.white,
                                         borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: status == 'active' ? AppColors.brandPrimary : AppColors.borderPrimary),
+                                        border: Border.all(
+                                            color: status == 'active'
+                                                ? AppColors.brandPrimary
+                                                : AppColors.borderPrimary),
                                       ),
                                       alignment: Alignment.center,
-                                      child: Text('Active', style: TextStyle(fontWeight: FontWeight.w600, color: status == 'active' ? AppColors.brandPrimary : AppColors.textSecondary)),
+                                      child: Text('Active',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: status == 'active'
+                                                  ? AppColors.brandPrimary
+                                                  : AppColors.textSecondary)),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: () => setDialogState(() => status = 'resolved'),
+                                    onTap: () => setDialogState(
+                                        () => status = 'resolved'),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
                                       decoration: BoxDecoration(
-                                        color: status == 'resolved' ? AppColors.brandPrimary.withValues(alpha: 0.1) : Colors.white,
+                                        color: status == 'resolved'
+                                            ? AppColors.brandPrimary
+                                                .withValues(alpha: 0.1)
+                                            : Colors.white,
                                         borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: status == 'resolved' ? AppColors.brandPrimary : AppColors.borderPrimary),
+                                        border: Border.all(
+                                            color: status == 'resolved'
+                                                ? AppColors.brandPrimary
+                                                : AppColors.borderPrimary),
                                       ),
                                       alignment: Alignment.center,
-                                      child: Text('Resolved', style: TextStyle(fontWeight: FontWeight.w600, color: status == 'resolved' ? AppColors.brandPrimary : AppColors.textSecondary)),
+                                      child: Text('Resolved',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: status == 'resolved'
+                                                  ? AppColors.brandPrimary
+                                                  : AppColors.textSecondary)),
                                     ),
                                   ),
                                 ),
@@ -2024,7 +2134,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         final condition = _MedicalCondition(nameCtrl.text.trim())
           ..diagnosisDate = diagDate
           ..status = status
-          ..remarks = remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim();
+          ..remarks =
+              remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim();
 
         if (editIndex != null) {
           _medicalConditions[editIndex] = condition;
@@ -2057,11 +2168,29 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     final allergenCtrl = TextEditingController(text: existing?.allergen ?? '');
     DateTime? diagDate = existing?.diagnosisDate;
     String status = existing?.status ?? 'active';
-    final treatmentCtrl = TextEditingController(text: existing?.treatment ?? '');
-    final diagDateCtrl = TextEditingController(text: diagDate != null ? _dateFmt.format(diagDate) : '');
+    final treatmentCtrl =
+        TextEditingController(text: existing?.treatment ?? '');
+    final diagDateCtrl = TextEditingController(
+        text: diagDate != null ? _dateFmt.format(diagDate) : '');
 
     final List<String> commonAllergens = [
-      'Peanuts', 'Penicillin', 'Dust Mites', 'Pollen', 'Shellfish', 'Pet Dander', 'Fish', 'Milk', 'Eggs', 'Soy', 'Wheat', 'Latex', 'Insect Stings', 'Mold', 'Fragrances', 'Nickel', 'Other'
+      'Peanuts',
+      'Penicillin',
+      'Dust Mites',
+      'Pollen',
+      'Shellfish',
+      'Pet Dander',
+      'Fish',
+      'Milk',
+      'Eggs',
+      'Soy',
+      'Wheat',
+      'Latex',
+      'Insect Stings',
+      'Mold',
+      'Fragrances',
+      'Nickel',
+      'Other'
     ];
 
     final result = await showDialog<bool>(
@@ -2070,16 +2199,19 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       builder: (ctx) {
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           child: Container(
             width: MediaQuery.of(ctx).size.width * 0.9,
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: StatefulBuilder(
               builder: (dialogCtx, setDialogState) {
                 final inputName = allergenCtrl.text.trim();
-                final isDuplicate = _allergies.asMap().entries.any(
-                    (e) => e.key != editIndex && e.value.allergen.toLowerCase() == inputName.toLowerCase());
+                final isDuplicate = _allergies.asMap().entries.any((e) =>
+                    e.key != editIndex &&
+                    e.value.allergen.toLowerCase() == inputName.toLowerCase());
                 final isFormValid = inputName.isNotEmpty && !isDuplicate;
 
                 return Column(
@@ -2088,7 +2220,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          icon: const Icon(Icons.close,
+                              color: AppColors.brandText),
                           onPressed: () => Navigator.pop(dialogCtx, false),
                         ),
                         const Expanded(
@@ -2112,18 +2245,32 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Common Allergens', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                            const Text('Common Allergens',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary)),
                             const SizedBox(height: 8),
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: commonAllergens.map((cond) {
-                                final isSelected = inputName.toLowerCase() == cond.toLowerCase();
+                                final isSelected = inputName.toLowerCase() ==
+                                    cond.toLowerCase();
                                 return ActionChip(
-                                  label: Text(cond, style: TextStyle(color: isSelected ? Colors.white : AppColors.brandPrimary, fontSize: 12)),
-                                  backgroundColor: isSelected ? AppColors.brandPrimary : Colors.white,
-                                  side: BorderSide(color: AppColors.brandPrimary),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  label: Text(cond,
+                                      style: TextStyle(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : AppColors.brandPrimary,
+                                          fontSize: 12)),
+                                  backgroundColor: isSelected
+                                      ? AppColors.brandPrimary
+                                      : Colors.white,
+                                  side:
+                                      BorderSide(color: AppColors.brandPrimary),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20)),
                                   onPressed: () {
                                     setDialogState(() {
                                       allergenCtrl.text = cond;
@@ -2138,7 +2285,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                               hintText: 'Allergen Name',
                               isRequired: true,
                               leadingIcon: Icons.warning_amber_rounded,
-                              errorText: isDuplicate ? 'Allergen already added' : null,
+                              errorText:
+                                  isDuplicate ? 'Allergen already added' : null,
                               onChanged: (val) => setDialogState(() {}),
                             ),
                             const SizedBox(height: 16),
@@ -2163,38 +2311,68 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                               },
                             ),
                             const SizedBox(height: 16),
-                            const Text('Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                            const Text('Status',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary)),
                             const SizedBox(height: 8),
                             Row(
                               children: [
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: () => setDialogState(() => status = 'active'),
+                                    onTap: () =>
+                                        setDialogState(() => status = 'active'),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
                                       decoration: BoxDecoration(
-                                        color: status == 'active' ? AppColors.brandPrimary.withValues(alpha: 0.1) : Colors.white,
+                                        color: status == 'active'
+                                            ? AppColors.brandPrimary
+                                                .withValues(alpha: 0.1)
+                                            : Colors.white,
                                         borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: status == 'active' ? AppColors.brandPrimary : AppColors.borderPrimary),
+                                        border: Border.all(
+                                            color: status == 'active'
+                                                ? AppColors.brandPrimary
+                                                : AppColors.borderPrimary),
                                       ),
                                       alignment: Alignment.center,
-                                      child: Text('Active', style: TextStyle(fontWeight: FontWeight.w600, color: status == 'active' ? AppColors.brandPrimary : AppColors.textSecondary)),
+                                      child: Text('Active',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: status == 'active'
+                                                  ? AppColors.brandPrimary
+                                                  : AppColors.textSecondary)),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: () => setDialogState(() => status = 'resolved'),
+                                    onTap: () => setDialogState(
+                                        () => status = 'resolved'),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
                                       decoration: BoxDecoration(
-                                        color: status == 'resolved' ? AppColors.brandPrimary.withValues(alpha: 0.1) : Colors.white,
+                                        color: status == 'resolved'
+                                            ? AppColors.brandPrimary
+                                                .withValues(alpha: 0.1)
+                                            : Colors.white,
                                         borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: status == 'resolved' ? AppColors.brandPrimary : AppColors.borderPrimary),
+                                        border: Border.all(
+                                            color: status == 'resolved'
+                                                ? AppColors.brandPrimary
+                                                : AppColors.borderPrimary),
                                       ),
                                       alignment: Alignment.center,
-                                      child: Text('Resolved', style: TextStyle(fontWeight: FontWeight.w600, color: status == 'resolved' ? AppColors.brandPrimary : AppColors.textSecondary)),
+                                      child: Text('Resolved',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: status == 'resolved'
+                                                  ? AppColors.brandPrimary
+                                                  : AppColors.textSecondary)),
                                     ),
                                   ),
                                 ),
@@ -2281,15 +2459,28 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
   }
 
   Future<void> _showAddPastPregnancy({int? editIndex}) async {
-    _PastPregnancy? existing = editIndex != null ? _pastPregnancies[editIndex] : null;
+    _PastPregnancy? existing =
+        editIndex != null ? _pastPregnancies[editIndex] : null;
 
     int fetalCount = existing?.outcomes.length ?? 1;
-    final gaCtrl = TextEditingController(text: existing?.outcomes.firstOrNull?.gestationalAgeAtEnd?.toStringAsFixed(0) ?? '');
-    DateTime? pregnancyOutcomeDate = existing?.outcomes.isNotEmpty == true ? existing?.outcomes.first.outcomeDate : null;
-    bool isPregnancyDateEstimated = existing?.outcomes.isNotEmpty == true ? existing!.outcomes.first.isEstimated : false;
-    List<String> outcomes = existing?.outcomes.map((o) => o.outcome).toList() ?? ['live_birth'];
-    List<TextEditingController> placeCtrls = existing?.outcomes.map((o) => TextEditingController(text: o.placeOfDelivery ?? '')).toList() ?? [TextEditingController()];
-    List<String?> deliveryMethods = existing?.outcomes.map((o) => o.deliveryMethod).toList() ?? [null];
+    final gaCtrl = TextEditingController(
+        text: existing?.outcomes.firstOrNull?.gestationalAgeAtEnd
+                ?.toStringAsFixed(0) ??
+            '');
+    DateTime? pregnancyOutcomeDate = existing?.outcomes.isNotEmpty == true
+        ? existing?.outcomes.first.outcomeDate
+        : null;
+    bool isPregnancyDateEstimated = existing?.outcomes.isNotEmpty == true
+        ? existing!.outcomes.first.isEstimated
+        : false;
+    List<String> outcomes =
+        existing?.outcomes.map((o) => o.outcome).toList() ?? ['live_birth'];
+    List<TextEditingController> placeCtrls = existing?.outcomes
+            .map((o) => TextEditingController(text: o.placeOfDelivery ?? ''))
+            .toList() ??
+        [TextEditingController()];
+    List<String?> deliveryMethods =
+        existing?.outcomes.map((o) => o.deliveryMethod).toList() ?? [null];
     List<bool> showOutcomeDropdowns = List.generate(10, (_) => false);
     List<bool> showDeliveryDropdowns = List.generate(10, (_) => false);
 
@@ -2299,9 +2490,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       builder: (ctx) {
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           child: Container(
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: StatefulBuilder(
               builder: (dialogCtx, setS) {
@@ -2315,7 +2508,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 if (pregnancyOutcomeDate == null) allValid = false;
 
                 for (int i = 0; i < fetalCount; i++) {
-                  if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') {
+                  if (outcomes[i] == 'live_birth' ||
+                      outcomes[i] == 'stillbirth') {
                     if (placeCtrls[i].text.trim().isEmpty) allValid = false;
                     if (deliveryMethods[i] == null) allValid = false;
                   }
@@ -2342,13 +2536,16 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          icon: const Icon(Icons.close,
+                              color: AppColors.brandText),
                           onPressed: () => Navigator.pop(dialogCtx, false),
                         ),
                         Expanded(
                           child: Center(
                             child: Text(
-                              editIndex != null ? 'Edit Past Pregnancy' : 'Add Past Pregnancy',
+                              editIndex != null
+                                  ? 'Edit Past Pregnancy'
+                                  : 'Add Past Pregnancy',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18,
@@ -2388,15 +2585,21 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                             const SizedBox(height: 16),
                             _buildPremiumTextField(
                               controller: TextEditingController(
-                                text: pregnancyOutcomeDate == null ? '' : _dateFmt.format(pregnancyOutcomeDate!),
+                                text: pregnancyOutcomeDate == null
+                                    ? ''
+                                    : _dateFmt.format(pregnancyOutcomeDate!),
                               ),
                               labelText: 'Outcome Date',
                               hintText: 'Select date',
                               isRequired: true,
                               readOnly: true,
-                              suffixIcon: const Icon(Icons.calendar_today_outlined, color: AppColors.brandPrimary),
+                              suffixIcon: const Icon(
+                                  Icons.calendar_today_outlined,
+                                  color: AppColors.brandPrimary),
                               onTap: () async {
-                                final maxDate = _lmp != null ? _lmp!.subtract(const Duration(days: 14)) : DateTime.now();
+                                final maxDate = _lmp != null
+                                    ? _lmp!.subtract(const Duration(days: 14))
+                                    : DateTime.now();
                                 final picked = await _showBrandedDatePicker(
                                   context: dialogCtx,
                                   initialDate: pregnancyOutcomeDate ?? maxDate,
@@ -2410,24 +2613,34 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                 }
                               },
                             ),
-                            if (pregnancyOutcomeDate != null && _lmp != null && _lmp!.difference(pregnancyOutcomeDate!).inDays < 180) ...[
+                            if (pregnancyOutcomeDate != null &&
+                                _lmp != null &&
+                                _lmp!.difference(pregnancyOutcomeDate!).inDays <
+                                    180) ...[
                               const SizedBox(height: 8),
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: AppColors.warning.withValues(alpha: 0.1),
+                                  color:
+                                      AppColors.warning.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                                  border: Border.all(
+                                      color: AppColors.warning
+                                          .withValues(alpha: 0.3)),
                                 ),
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
+                                    const Icon(Icons.warning_amber_rounded,
+                                        color: AppColors.warning, size: 20),
                                     const SizedBox(width: 8),
                                     const Expanded(
                                       child: Text(
                                         'The interval between recorded pregnancies appears shorter than commonly expected maternal recovery intervals. Continued healthcare monitoring may be beneficial.',
-                                        style: TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w500),
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.warning,
+                                            fontWeight: FontWeight.w500),
                                       ),
                                     ),
                                   ],
@@ -2436,7 +2649,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                             ],
                             const SizedBox(height: 8),
                             GestureDetector(
-                              onTap: () => setS(() => isPregnancyDateEstimated = !isPregnancyDateEstimated),
+                              onTap: () => setS(() => isPregnancyDateEstimated =
+                                  !isPregnancyDateEstimated),
                               child: Row(
                                 children: [
                                   SizedBox(
@@ -2444,15 +2658,21 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                     height: 24,
                                     child: Checkbox(
                                       value: isPregnancyDateEstimated,
-                                      onChanged: (v) => setS(() => isPregnancyDateEstimated = v ?? false),
+                                      onChanged: (v) => setS(() =>
+                                          isPregnancyDateEstimated =
+                                              v ?? false),
                                       activeColor: AppColors.brandPrimary,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(4)),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   const Text(
                                     'Date is estimated',
-                                    style: TextStyle(fontSize: 14, color: AppColors.brandText),
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        color: AppColors.brandText),
                                   ),
                                 ],
                               ),
@@ -2471,23 +2691,30 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFF9F9F9),
                                     borderRadius: BorderRadius.circular(28),
-                                    border: Border.all(color: Colors.grey.shade200),
+                                    border:
+                                        Border.all(color: Colors.grey.shade200),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.people_outline, color: Colors.grey),
+                                      const Icon(Icons.people_outline,
+                                          color: Colors.grey),
                                       const SizedBox(width: 12),
                                       const Text(
                                         'Number of Fetuses',
-                                        style: TextStyle(fontSize: 15, color: AppColors.brandText),
+                                        style: TextStyle(
+                                            fontSize: 15,
+                                            color: AppColors.brandText),
                                       ),
                                       const Spacer(),
                                       IconButton(
-                                        icon: const Icon(Icons.remove_circle_outline, color: AppColors.brandPrimary),
+                                        icon: const Icon(
+                                            Icons.remove_circle_outline,
+                                            color: AppColors.brandPrimary),
                                         onPressed: () {
                                           if (fetalCount > 1) {
                                             setS(() {
@@ -2508,13 +2735,16 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                         ),
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.add_circle_outline, color: AppColors.brandPrimary),
+                                        icon: const Icon(
+                                            Icons.add_circle_outline,
+                                            color: AppColors.brandPrimary),
                                         onPressed: () {
                                           if (fetalCount < 5) {
                                             setS(() {
                                               fetalCount++;
                                               outcomes.add('live_birth');
-                                              placeCtrls.add(TextEditingController());
+                                              placeCtrls
+                                                  .add(TextEditingController());
                                               deliveryMethods.add(null);
                                             });
                                           }
@@ -2530,9 +2760,13 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                 const SizedBox(height: 24),
                                 Row(
                                   children: [
-                                    Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+                                    Expanded(
+                                        child: Divider(
+                                            color: Colors.grey.shade300,
+                                            thickness: 1)),
                                     Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16),
                                       child: Text(
                                         'Fetus ${i + 1}',
                                         style: const TextStyle(
@@ -2542,7 +2776,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                         ),
                                       ),
                                     ),
-                                    Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+                                    Expanded(
+                                        child: Divider(
+                                            color: Colors.grey.shade300,
+                                            thickness: 1)),
                                   ],
                                 ),
                                 const SizedBox(height: 16),
@@ -2550,15 +2787,20 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                 const SizedBox(height: 16),
                               ],
                               _buildPremiumTextField(
-                                controller: TextEditingController(text: outcomeLabels[outcomes[i]] ?? outcomes[i]),
+                                controller: TextEditingController(
+                                    text: outcomeLabels[outcomes[i]] ??
+                                        outcomes[i]),
                                 labelText: 'Outcome',
                                 hintText: 'Select outcome',
                                 isRequired: true,
                                 readOnly: true,
-                                suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                                suffixIcon: const Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    color: AppColors.brandPrimary),
                                 onTap: () {
                                   setS(() {
-                                    showOutcomeDropdowns[i] = !showOutcomeDropdowns[i];
+                                    showOutcomeDropdowns[i] =
+                                        !showOutcomeDropdowns[i];
                                   });
                                 },
                               ),
@@ -2566,13 +2808,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                 const SizedBox(height: 4),
                                 Card(
                                   elevation: 4,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16)),
                                   color: Colors.white,
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
-                                    children: outcomeLabels.entries.map((entry) {
+                                    children:
+                                        outcomeLabels.entries.map((entry) {
                                       return ListTile(
-                                        title: Text(entry.value, style: const TextStyle(fontSize: 14)),
+                                        title: Text(entry.value,
+                                            style:
+                                                const TextStyle(fontSize: 14)),
                                         dense: true,
                                         onTap: () {
                                           setS(() {
@@ -2585,7 +2831,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                   ),
                                 ),
                               ],
-                              if (outcomes[i] == 'live_birth' || outcomes[i] == 'stillbirth') ...[
+                              if (outcomes[i] == 'live_birth' ||
+                                  outcomes[i] == 'stillbirth') ...[
                                 const SizedBox(height: 16),
                                 _buildPremiumTextField(
                                   controller: placeCtrls[i],
@@ -2596,15 +2843,19 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 _buildPremiumTextField(
-                                  controller: TextEditingController(text: deliveryMethods[i] ?? ''),
+                                  controller: TextEditingController(
+                                      text: deliveryMethods[i] ?? ''),
                                   labelText: 'Delivery Method',
                                   hintText: 'Select delivery method',
                                   isRequired: true,
                                   readOnly: true,
-                                  suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandPrimary),
+                                  suffixIcon: const Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      color: AppColors.brandPrimary),
                                   onTap: () {
                                     setS(() {
-                                      showDeliveryDropdowns[i] = !showDeliveryDropdowns[i];
+                                      showDeliveryDropdowns[i] =
+                                          !showDeliveryDropdowns[i];
                                     });
                                   },
                                 ),
@@ -2612,13 +2863,18 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                   const SizedBox(height: 4),
                                   Card(
                                     elevation: 4,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(16)),
                                     color: Colors.white,
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: deliveryMethodsOptions.map((method) {
+                                      children:
+                                          deliveryMethodsOptions.map((method) {
                                         return ListTile(
-                                          title: Text(method, style: const TextStyle(fontSize: 14)),
+                                          title: Text(method,
+                                              style: const TextStyle(
+                                                  fontSize: 14)),
                                           dense: true,
                                           onTap: () {
                                             setS(() {
@@ -2656,7 +2912,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                           elevation: 0,
                         ),
                         child: Text(
-                          editIndex != null ? 'Save Changes' : 'Add Past Pregnancy',
+                          editIndex != null
+                              ? 'Save Changes'
+                              : 'Add Past Pregnancy',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -2964,9 +3222,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             child: FutureBuilder<Uint8List>(
               future: imageFile.readAsBytes(),
               builder: (ctx, snap) {
-                if (snap.hasData)
+                if (snap.hasData) {
                   return Image.memory(snap.data!,
                       height: 180, width: double.infinity, fit: BoxFit.cover);
+                }
                 return Container(
                     height: 180,
                     color: AppColors.bgSecondary,
@@ -3265,8 +3524,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         final mc = _MedicalCondition(m.conditionName)
           ..status = m.status
           ..remarks = m.remarks;
-        if (m.diagnosisDate != null)
+        if (m.diagnosisDate != null) {
           mc.diagnosisDate = DateTime.tryParse(m.diagnosisDate!);
+        }
         _medicalConditions.add(mc);
       }
 
@@ -3276,15 +3536,18 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           ..status = a.status
           ..treatment = a.treatment
           ..remarks = a.remarks;
-        if (a.diagnosisDate != null)
+        if (a.diagnosisDate != null) {
           al.diagnosisDate = DateTime.tryParse(a.diagnosisDate!);
+        }
         _allergies.add(al);
       }
 
       for (final ec in r.emergencyContacts) {
         if (ec.firstName.isEmpty ||
             ec.lastName.isEmpty ||
-            ec.phoneNumber.isEmpty) continue;
+            ec.phoneNumber.isEmpty) {
+          continue;
+        }
         _emergencyContacts.add(
           _EmergencyContact()
             ..firstName = ec.firstName
@@ -3397,7 +3660,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     VoidCallback? onTap,
     bool readOnly = false,
     Widget? suffixIcon,
-    int maxLines = 1,
     void Function(String)? onChanged,
   }) {
     IconData? trailingIconData;
@@ -3446,8 +3708,6 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       ],
     );
   }
-
-
 
   Widget _styledDropdown(
       {required String hint,
@@ -3676,8 +3936,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           const SizedBox(height: 4),
           Card(
             elevation: 4,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             color: Colors.white,
             child: Container(
               constraints: const BoxConstraints(maxHeight: 200),
@@ -3976,7 +4236,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     } else if (fieldType == 'barangay') {
       suggestions = _apiBarangays;
     } else if (fieldType == 'street') {
-      suggestions = ph_addr.PhAddressService.getStreetsForBarangay(_barangayCtrl.text);
+      suggestions =
+          ph_addr.PhAddressService.getStreetsForBarangay(_barangayCtrl.text);
     }
 
     final query = controller.text.trim().toLowerCase();
@@ -4092,8 +4353,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                           itemCount: visibleSuggestions.length,
                           itemBuilder: (context, index) {
                             final item = visibleSuggestions[index];
-                            final bool startsWithQuery =
-                                query.isNotEmpty &&
+                            final bool startsWithQuery = query.isNotEmpty &&
                                 item.toLowerCase().startsWith(query);
 
                             return Material(
@@ -4394,7 +4654,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 controller: _heightCtrl,
                 isRequired: true,
                 leadingIcon: Icons.straighten_outlined,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                   LengthLimitingTextInputFormatter(5)
@@ -4410,7 +4671,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 controller: _weightCtrl,
                 isRequired: true,
                 leadingIcon: Icons.monitor_weight_outlined,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                   LengthLimitingTextInputFormatter(5)
@@ -4428,17 +4690,22 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
             decoration: BoxDecoration(
               color: AppColors.warning.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+              border:
+                  Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
+                const Icon(Icons.warning_amber_rounded,
+                    color: AppColors.warning, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _heightWarning ?? _weightWarning!,
-                    style: const TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.warning,
+                        fontWeight: FontWeight.w500),
                   ),
                 ),
               ],
@@ -4448,9 +4715,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         const SizedBox(height: 24),
         _sectionLabel('Pre-Pregnancy Weight'),
         IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+            child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             Expanded(
               child: GestureDetector(
                 onTap: () {
@@ -4460,7 +4727,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   });
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
                   decoration: BoxDecoration(
                     color: _knowsPrePregnancyWeight
                         ? AppColors.brandPrimary.withValues(alpha: 0.08)
@@ -4484,8 +4752,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        _knowsPrePregnancyWeight ? Icons.check_circle : Icons.circle_outlined,
-                        color: _knowsPrePregnancyWeight ? AppColors.brandPrimary : Colors.grey,
+                        _knowsPrePregnancyWeight
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                        color: _knowsPrePregnancyWeight
+                            ? AppColors.brandPrimary
+                            : Colors.grey,
                         size: 20,
                       ),
                       const SizedBox(height: 6),
@@ -4515,7 +4787,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   });
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
                   decoration: BoxDecoration(
                     color: !_knowsPrePregnancyWeight
                         ? AppColors.brandPrimary.withValues(alpha: 0.08)
@@ -4539,8 +4812,12 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        !_knowsPrePregnancyWeight ? Icons.check_circle : Icons.circle_outlined,
-                        color: !_knowsPrePregnancyWeight ? AppColors.brandPrimary : Colors.grey,
+                        !_knowsPrePregnancyWeight
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                        color: !_knowsPrePregnancyWeight
+                            ? AppColors.brandPrimary
+                            : Colors.grey,
                         size: 20,
                       ),
                       const SizedBox(height: 6),
@@ -4595,17 +4872,22 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               decoration: BoxDecoration(
                 color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
+                  const Icon(Icons.warning_amber_rounded,
+                      color: AppColors.warning, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _prePregnancyWeightWarning!,
-                      style: const TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.warning,
+                          fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -4654,9 +4936,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                         Icon(
                           Icons.info_outline,
                           size: 16,
-                          color: (_calculatedBMI! >= 25 || _calculatedBMI! < 18.5)
-                              ? AppColors.warning
-                              : AppColors.brandPrimary,
+                          color:
+                              (_calculatedBMI! >= 25 || _calculatedBMI! < 18.5)
+                                  ? AppColors.warning
+                                  : AppColors.brandPrimary,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -4665,7 +4948,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: (_calculatedBMI! >= 25 || _calculatedBMI! < 18.5)
+                              color: (_calculatedBMI! >= 25 ||
+                                      _calculatedBMI! < 18.5)
                                   ? AppColors.warning
                                   : AppColors.brandPrimary,
                             ),
@@ -4698,7 +4982,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           const SizedBox(height: 4),
           Card(
             elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             color: Colors.white,
             child: Container(
               constraints: const BoxConstraints(maxHeight: 200),
@@ -4851,7 +5136,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
           const SizedBox(height: 4),
           Card(
             elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             color: Colors.white,
             child: Container(
               constraints: const BoxConstraints(maxHeight: 180),
@@ -4866,8 +5152,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                     dense: true,
                     onTap: () {
                       setState(() {
-                        _gestationMethod =
-                            _GestationMethod.values.firstWhere((e) => e.name == v);
+                        _gestationMethod = _GestationMethod.values
+                            .firstWhere((e) => e.name == v);
                         _gestationMethodCtrl.text = label;
                         _showGestationMethodDropdown = false;
                         _gestationError = null;
@@ -4886,12 +5172,17 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         if (_gestationMethod == _GestationMethod.lmp)
           GestureDetector(
               onTap: () async {
-                final lastLmpDate = DateTime.now().subtract(const Duration(days: 5 * 7));
-                final initialLmpDate = (_lmp != null && !_lmp!.isAfter(lastLmpDate)) ? _lmp! : lastLmpDate;
+                final lastLmpDate =
+                    DateTime.now().subtract(const Duration(days: 5 * 7));
+                final initialLmpDate =
+                    (_lmp != null && !_lmp!.isAfter(lastLmpDate))
+                        ? _lmp!
+                        : lastLmpDate;
                 final picked = await _showBrandedDatePicker(
                     context: context,
                     initialDate: initialLmpDate,
-                    firstDate: DateTime.now().subtract(const Duration(days: 42 * 7)),
+                    firstDate:
+                        DateTime.now().subtract(const Duration(days: 42 * 7)),
                     lastDate: lastLmpDate);
                 if (picked != null) {
                   setState(() => _updateFromLmp(picked));
@@ -5026,7 +5317,8 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                         : AppColors.success.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                        color: isHighRisk ? AppColors.error : AppColors.success),
+                        color:
+                            isHighRisk ? AppColors.error : AppColors.success),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -5037,8 +5329,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                             isHighRisk
                                 ? Icons.warning_rounded
                                 : Icons.check_circle_rounded,
-                            color:
-                                isHighRisk ? AppColors.error : AppColors.success,
+                            color: isHighRisk
+                                ? AppColors.error
+                                : AppColors.success,
                             size: 20,
                           ),
                           const SizedBox(width: 8),
@@ -5077,8 +5370,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 3),
                             decoration: BoxDecoration(
-                              color:
-                                  isHighRisk ? AppColors.error : AppColors.success,
+                              color: isHighRisk
+                                  ? AppColors.error
+                                  : AppColors.success,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -5095,7 +5389,9 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                       ),
                       if (isHighRisk) ...[
                         const SizedBox(height: 14),
-                        Divider(color: AppColors.error.withValues(alpha: 0.15), height: 1),
+                        Divider(
+                            color: AppColors.error.withValues(alpha: 0.15),
+                            height: 1),
                         const SizedBox(height: 14),
                         const Text('Identified Risk Factors:',
                             style: TextStyle(
@@ -5154,8 +5450,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                         Row(
                           children: [
                             Icon(Icons.visibility_outlined,
-                                size: 18,
-                                color: AppColors.warning),
+                                size: 18, color: AppColors.warning),
                             const SizedBox(width: 8),
                             Text(
                               'Monitoring Insights',
@@ -5303,7 +5598,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   const Icon(Icons.edit_outlined,
                       size: 16, color: AppColors.brandPrimary)
                 ])),
-            Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.borderPrimary),
+            Divider(
+                height: 1,
+                indent: 16,
+                endIndent: 16,
+                color: AppColors.borderPrimary),
             Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(children: rows)),
@@ -5342,7 +5641,11 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   const Icon(Icons.edit_outlined,
                       size: 16, color: AppColors.brandPrimary)
                 ])),
-            Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.borderPrimary),
+            Divider(
+                height: 1,
+                indent: 16,
+                endIndent: 16,
+                color: AppColors.borderPrimary),
             Padding(
               padding: const EdgeInsets.all(12),
               child: items.isEmpty
@@ -5398,7 +5701,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
 
   Widget? _buildFloatingActionButton() {
     if (_submitting) return null;
-    
+
     if (_step == 2) {
       return FloatingActionButton(
         onPressed: _showAddEmergencyContact,
