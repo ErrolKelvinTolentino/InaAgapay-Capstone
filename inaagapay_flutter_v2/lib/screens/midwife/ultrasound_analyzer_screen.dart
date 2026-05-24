@@ -92,6 +92,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   List<TextEditingController> _editBabyGrowthRemarkControllers = [];
   late TextEditingController _editKeyObservationsController;
   late TextEditingController _editNextStepsController;
+  bool _showDetailedUltrasoundValues = false;
 
   DateTime? _ultrasoundDate;
   final TextEditingController _dateController = TextEditingController();
@@ -759,6 +760,291 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           }).toList(),
         ),
       ],
+    );
+  }
+
+  Widget _buildMaternalUltrasoundResults() {
+    final text = _healthSummaryController.text;
+    final isFilipino = _selectedLanguage == 'filipino';
+
+    // Helper to search keywords
+    bool hasKeywords(List<String> keywords) {
+      final lower = text.toLowerCase();
+      return keywords.any((kw) => lower.contains(kw));
+    }
+
+    // Resolve statuses
+    final growthWarning = (_monitoringClassification != MonitoringClassification.withinExpectedRange &&
+            hasKeywords(['growth', 'size', 'bpd', 'hc', 'ac', 'fl', 'weight', 'efw', 'restricted', 'iugr', 'lga', 'sga', 'sukat', 'laki', 'timbang'])) ||
+        hasKeywords(['growth restriction', 'iugr', 'small for gestational', 'large for gestational', 'abnormal growth']);
+
+    final heartWarning = (_monitoringClassification != MonitoringClassification.withinExpectedRange &&
+            hasKeywords(['heart', 'fhr', 'cardiac', 'beat', 'tibok', 'puso', 'bpm'])) ||
+        hasKeywords(['bradycardia', 'tachycardia', 'irregular heart rate', 'fetal distress', 'abnormal heartbeat']);
+
+    final envWarning = (_monitoringClassification != MonitoringClassification.withinExpectedRange &&
+            hasKeywords(['fluid', 'amniotic', 'afi', 'oligo', 'poly', 'placenta', 'previa', 'praevia', 'tubig', 'inunan'])) ||
+        hasKeywords(['oligohydramnios', 'polyhydramnios', 'placenta previa', 'low-lying placenta', 'placental abruption']);
+
+    // Colors & Text based on classification
+    final Color overallColor = _monitoringChipColor(_monitoringClassification);
+    final String overallTitle = isFilipino
+        ? (_monitoringClassification == MonitoringClassification.withinExpectedRange
+            ? 'Nasa Inaasahang Kondisyon'
+            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+                ? 'Kailangan ng Masusing Pagsubaybay'
+                : 'Inirerekomenda ang Konsultasyon'))
+        : (_monitoringClassification == MonitoringClassification.withinExpectedRange
+            ? 'Within Expected Monitoring Range'
+            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+                ? 'Requires Closer Monitoring'
+                : 'Clinical Follow-Up Recommended'));
+
+    final String overallDesc = isFilipino
+        ? (_monitoringClassification == MonitoringClassification.withinExpectedRange
+            ? 'Ang iyong ultrasound ay umaayon sa inaasahang kondisyon sa yugtong ito ng pagbubuntis. Ipagpatuloy ang iyong nakasanayang pangangalaga!'
+            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+                ? 'May mga obserbasyon sa iyong ultrasound na nangangailangan ng karagdagang atensyon sa susunod na checkup. Huwag mag-alala, ito ay para sa tamang gabay.'
+                : 'May mga natuklasang obserbasyon na nangangailangan ng konsultasyon sa doktor o espesyalista upang masigurong ligtas kayo ni baby.'))
+        : (_monitoringClassification == MonitoringClassification.withinExpectedRange
+            ? 'Your recorded ultrasound results generally appear consistent with the expected range for this stage of pregnancy. Continue your regular prenatal care!'
+            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+                ? 'Some observations in your ultrasound suggest closer attention in upcoming checkups. There is no cause for alarm; this is for standard prenatal guidance.'
+                : 'Certain findings suggest that a clinical follow-up or consultation is recommended to ensure both you and your baby remain healthy and safe.'));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Overall Summary Card
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 20),
+          decoration: BoxDecoration(
+            color: overallColor.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: overallColor.withValues(alpha: 0.25), width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _monitoringChipIcon(_monitoringClassification),
+                    color: overallColor,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isFilipino ? 'Pangkalahatang Katayuan' : 'Overall Pregnancy Status',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textSecondary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          overallTitle,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: overallColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                overallDesc,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // 2. Simple Monitoring Notes Header
+        Row(
+          children: [
+            const Icon(Icons.favorite_rounded, color: Colors.pinkAccent, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              isFilipino ? 'Mga Gabay Para sa Ina' : 'Simple Monitoring Notes',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Card 1: Baby's Growth
+        _buildMotherFriendlyCard(
+          title: isFilipino ? 'Suporta sa Paglaki at Sukat ng Baby' : "Baby's Growth & Size Support",
+          subtitle: isFilipino ? 'BPD, HC, AC, FL, gestational age, at fetal weight' : 'Body metrics, weight, and general size',
+          icon: Icons.child_care_rounded,
+          iconColor: Colors.teal.shade500,
+          isWarning: growthWarning,
+          desc: isFilipino
+              ? (growthWarning
+                  ? 'May kaunting pagkakaiba sa sukat ni baby kumpara sa karaniwang sukat sa kanyang yugto. Ipinapayo ang patuloy na pagsubaybay sa kanyang paglaki.'
+                  : 'Ang sukat ng ulo, tiyan, at hita ni baby ay umaayon sa kanyang linggo sa sinapupunan. Ito ay nagpapakita ng malusog na paglaki.')
+              : (growthWarning
+                  ? "Some measurements show minor variations from the average size for this stage. Continued monitoring of your baby's growth is recommended."
+                  : "Your baby's head, tummy, and thigh measurements are matching up beautifully with the expected growth for this week of pregnancy."),
+        ),
+        const SizedBox(height: 12),
+
+        // Card 2: Baby's Heart Activity
+        _buildMotherFriendlyCard(
+          title: isFilipino ? 'Tibok ng Puso ni Baby' : "Baby's Heart Activity",
+          subtitle: isFilipino ? 'Tibok ng puso o Fetal Heart Rate (FHR)' : 'Fetal Heart Rate (FHR) & cardiac rhythm',
+          icon: Icons.favorite_border_rounded,
+          iconColor: Colors.redAccent.shade200,
+          isWarning: heartWarning,
+          desc: isFilipino
+              ? (heartWarning
+                  ? 'May nakitang kaunting pagkakaiba sa bilis o ritmo ng tibok ng puso ni baby. Inirerekomenda ang regular na pag-monitor.'
+                  : 'Ang tibok ng puso ni baby ay malakas at nasa ligtas at normal na bilis. Ito ay napakagandang senyales.')
+              : (heartWarning
+                  ? "A minor variation in your baby's heart rhythm or rate was observed. We recommend keeping a close watch during your next visits."
+                  : "Your baby's heartbeat is strong and beating at a safe, healthy rate. This is a wonderful sign of a thriving baby."),
+        ),
+        const SizedBox(height: 12),
+
+        // Card 3: Baby's Environment & Placenta
+        _buildMotherFriendlyCard(
+          title: isFilipino ? 'Placenta at Tubig sa Sinapupunan' : "Baby's Environment & Placenta Support",
+          subtitle: isFilipino ? 'Amniotic fluid at posisyon ng inunan' : 'Amniotic fluid level and placental position',
+          icon: Icons.water_drop_outlined,
+          iconColor: Colors.blue.shade400,
+          isWarning: envWarning,
+          desc: isFilipino
+              ? (envWarning
+                  ? 'May nakitang indikasyon ng mababa o mataas na antas ng tubig o mababang posisyon ng inunan. Kailangan ng masusing paggabay at pag-iingat.'
+                  : 'Sapat ang dami ng tubig (amniotic fluid) sa iyong sinapupunan para malayang makagalaw si baby, at ang inunan ay nasa tamang posisyon.')
+              : (envWarning
+                  ? "There is a slight variation in the fluid level or the placement of the placenta. Rest and guidance on safe movements are advised."
+                  : "Your baby has plenty of amniotic fluid to swim safely, and the placenta is securely positioned to deliver oxygen and nutrients."),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMotherFriendlyCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required bool isWarning,
+    required String desc,
+  }) {
+    final statusColor = isWarning ? AppColors.warning : AppColors.success;
+    final statusText = _selectedLanguage == 'filipino'
+        ? (isWarning ? 'Para sa Dagdag na Pagsubaybay' : 'Nasa Inaasahang Kondisyon')
+        : (isWarning ? 'Closer Monitoring Recommended' : 'Within Expected Range');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.015),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.2), width: 1),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: AppColors.borderPrimary, height: 1),
+          const SizedBox(height: 10),
+          Text(
+            desc,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.45,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3867,185 +4153,151 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     children: _buildRiskFactorsPills(),
                   ),
                 ] else ...[
+                  if (!_isEditing) ...[
+                    // A. Mother-Centered Warm UI Results
+                    _buildMaternalUltrasoundResults(),
+                    const SizedBox(height: 24),
+                    const Divider(color: AppColors.borderPrimary, height: 1),
+                    const SizedBox(height: 16),
 
-                  // B. Closer Monitoring Reasons List (if applicable)
-                  if (displayStatusText == 'Requires Closer Monitoring') ...[
-                    Builder(
-                      builder: (context) {
-                        final reasons = _getCloserMonitoringReasons();
-                        if (reasons.isEmpty) return const SizedBox.shrink();
-                        return Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppColors.info.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.info.withValues(alpha: 0.25)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                    // B. Healthcare Personnel Expandable Panel
+                    Theme(
+                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        initiallyExpanded: _showDetailedUltrasoundValues,
+                        onExpansionChanged: (expanded) {
+                          setState(() {
+                            _showDetailedUltrasoundValues = expanded;
+                          });
+                        },
+                        title: Row(
+                          children: [
+                            const Icon(Icons.settings_outlined, color: AppColors.brandPrimary, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _selectedLanguage == 'filipino'
+                                    ? 'Detalyadong Resulta ng Ultrasound (Para sa Midwife)'
+                                    : 'Detailed Ultrasound Findings (Healthcare Personnel View)',
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.brandPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        tilePadding: EdgeInsets.zero,
+                        children: [
+                          const SizedBox(height: 12),
+                          // Bilingual Language Switcher Toggle
+                          Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: AppColors.bgSecondary,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: AppColors.borderPrimary),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.summarize_outlined, color: AppColors.info, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _selectedLanguage == 'filipino'
-                                        ? 'Buod ng Kailangan ng Masusing Pagsubaybay'
-                                        : 'Why Closer Monitoring is Required',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.info,
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedLanguage = 'filipino';
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        'Filipino (Conversational)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
+                                          color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedLanguage = 'english';
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        'English',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
+                                          color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 10),
-                              ...reasons.map((reason) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          margin: const EdgeInsets.only(top: 6, right: 8),
-                                          width: 5,
-                                          height: 5,
-                                          decoration: const BoxDecoration(
-                                            color: AppColors.info,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            reason,
-                                            style: const TextStyle(
-                                              fontSize: 11.5,
-                                              color: AppColors.textPrimary,
-                                              height: 1.4,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Progression card
+                          _buildPregnancyProgressionCard(),
+
+                          // Reference basis
+                          if (_combinedResponse != null)
+                            _buildClinicalReferenceTile(),
+                          const SizedBox(height: 16),
+
+                          // Header + Edit option + structured insights
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Clinical Findings (Original)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: _enterEditMode,
+                                icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.brandPrimary),
+                                label: const Text(
+                                  'Edit',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.brandPrimary,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
                             ],
                           ),
-                        );
-                      },
-                    ),
-                  ],
-
-                  // C. Bilingual Language Switcher Toggle
-                  if (!_isEditing) ...[
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: AppColors.bgSecondary,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.borderPrimary),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedLanguage = 'filipino';
-                                });
-                              },
-                              child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Text(
-                                    'Filipino (Conversational)',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
-                                      color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ),
-                            ),
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedLanguage = 'english';
-                                });
-                              },
-                              child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Text(
-                                    'English',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
-                                      color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ),
-                            ),
-                          ],
-                        ),
+                          const SizedBox(height: 10),
+                          _buildStructuredInsights(_healthSummaryController.text),
+                          const SizedBox(height: 16),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // D. Pregnancy Progression Card
-                  _buildPregnancyProgressionCard(),
-
-                  // Clinical Reference Basis — subtle expandable panel
-                  // Shown only after AI analysis so midwife can cite references.
-                  if (_combinedResponse != null)
-                    _buildClinicalReferenceTile(),
-                  const SizedBox(height: 16),
-
-                  // E. Clinical Assessment findings Editor / Viewer
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Clinical Findings',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (!_isEditing)
-                        TextButton.icon(
-                          onPressed: _enterEditMode,
-                          icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.brandPrimary),
-                          label: const Text(
-                            'Edit',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.brandPrimary,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (!_isEditing) ...[
-                    _buildStructuredInsights(_healthSummaryController.text),
-                    const SizedBox(height: 16),
                   ] else ...[
                     // Premium Modular Sectioned Editor
                     Column(

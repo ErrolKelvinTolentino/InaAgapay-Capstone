@@ -12,9 +12,8 @@ import '../models/ocr_result.dart';
 class GroqService {
   // ── Model Configuration ─────────────────────────────────────────────────
 
-  static const String _visionModel =
-      'meta-llama/llama-4-scout-17b-16e-instruct';
-  static const String _reasoningModel = 'openai/gpt-oss-120b';
+  static const String _visionModel = 'mixtral-8x7b-32768';
+  static const String _reasoningModel = 'mixtral-8x7b-32768';
 
   // ── API Constraints ─────────────────────────────────────────────────────
 
