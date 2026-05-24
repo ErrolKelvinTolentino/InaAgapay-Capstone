@@ -257,4 +257,31 @@ class EmailService {
       return false;
     }
   }
+
+  // Send account credentials via SMS (for mothers with phone numbers but no email)
+  static Future<bool> sendAccountCredentialsViaSms({
+    required String phoneNumber,
+    required String password,
+    required String firstName,
+    required String lastName,
+  }) async {
+    try {
+      final message = '''INAAGAPAY Welcome!
+
+Your temporary password is:
+$password
+
+IMPORTANT: You will be asked to change this password on first login.
+
+Log in with your phone number as username.
+
+Questions? Contact your barangay health center.''';
+
+      // Use the general SMS sending method
+      return SmsService.sendSmsMessage(phoneNumber, message);
+    } catch (e) {
+      if (kDebugMode) print('SMS credential error: $e');
+      return false;
+    }
+  }
 }
