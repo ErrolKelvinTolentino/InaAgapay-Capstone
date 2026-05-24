@@ -1,6 +1,6 @@
 {
-    "name": "inaagapay_flutter_v2",
-    "short_name": "inaagapay_flutter_v2",
+    "name": "InaAgapay",
+    "short_name": "InaAgapay",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
