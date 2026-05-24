@@ -760,6 +760,9 @@ Instead use:
 - “may benefit from monitoring”
 - “recorded measurements appear generally consistent”
 
+CRITICAL EXCEPTION FOR MEASUREMENT DISCREPANCIES:
+- If there is a significant discrepancy (2 or more weeks) between the registered gestational age (AOG) and the ultrasound's estimated biometry age (for example, the registered age is 28 weeks, but the baby's biometry matches a 34-35 week old fetus), you MUST explicitly state that the measurements (head, abdomen, femur, weight) are larger or smaller than typical averages for the registered gestational age, which explains why the ultrasound's estimated age is higher or lower. Do NOT claim the measurements are consistent with the registered age. Explain this discrepancy in a calm, non-alarmist, and reassuring manner.
+
 4. NEVER prescribe treatment or management.
 
 Do NOT:
@@ -859,6 +862,7 @@ After analyzing the findings, determine the overall monitoring classification:
 - If measurements mostly align with gestational-age expectations → "WITHIN_EXPECTED_RANGE"
 - If mild deviations or borderline findings exist → "REQUIRES_CLOSER_MONITORING"
 - If notable findings or multiple concerning deviations → "FOLLOW_UP_RECOMMENDED"
+- If there is a significant discrepancy (2 or more weeks) between the registered gestational age (AOG) and the ultrasound biometry age, you MUST classify it as "REQUIRES_CLOSER_MONITORING".
 
 This classification is grounded in INTERGROWTH-21st and WHO Fetal Growth Chart reference standards.
 

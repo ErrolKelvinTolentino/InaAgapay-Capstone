@@ -386,9 +386,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     return 0;
   }
 
-  bool _hasGestationalAgeDiscrepancy() {
+  bool _hasGestationalAgeDiscrepancy({GroqResponse? response}) {
+    final res = response ?? _combinedResponse;
     final expected = _calculateExpectedWeeksAtUltrasound();
-    final aiWeeks = _extractWeeksFromAiText(_combinedResponse?.gestationalAge);
+    final aiWeeks = _extractWeeksFromAiText(res?.gestationalAge);
     if (expected == null || aiWeeks == null) return false;
     return (expected - aiWeeks).abs() >= 2;
   }
@@ -401,6 +402,12 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   ///   INTERGROWTH-21st (Papageorghiou et al., The Lancet, 2014)
   ///   WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine, 2017)
   MonitoringClassification _computeMonitoringClassification(GroqResponse result) {
+    // Programmatic override: If there is a gestational age discrepancy of >= 2 weeks,
+    // require closer monitoring regardless of the raw AI status.
+    if (_hasGestationalAgeDiscrepancy(response: result)) {
+      return MonitoringClassification.requiresCloserMonitoring;
+    }
+
     // Prefer the AI-provided field if present
     if (result.monitoringClassification != null &&
         result.monitoringClassification!.isNotEmpty) {
