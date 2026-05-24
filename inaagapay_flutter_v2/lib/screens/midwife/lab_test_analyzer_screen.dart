@@ -44,6 +44,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   static const int _totalSteps = 3;
   String? _selectedLabType;
   bool _analysisApproved = false;
+  bool _aiAnalysisSkipped = false;
   bool _showAdvancedAiDetails = false;
   bool _loadingOverlayVisible = false;
   String _loadingTitle = 'Preparing AI analysis';
@@ -219,6 +220,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       _healthWorkerProfessionController.clear();
       _selectedHealthWorkerProfession = null;
       _analysisApproved = false;
+      _aiAnalysisSkipped = false;
       _showAdvancedAiDetails = false;
     });
   }
@@ -500,6 +502,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       _combinedResponse = null;
       _isEditing = false;
       _analysisApproved = false;
+      _aiAnalysisSkipped = false;
       _healthSummaryController.clear();
     });
 
@@ -575,12 +578,12 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     // Only images + AI analysis result are strictly required (Task 3.4).
     if (!_validateStep1() || !_validateStep3()) return;
     final aiGenerated = _combinedResponse != null;
-    if (!aiGenerated) {
-      _showMessage('Please run AI analysis before saving.',
+    if (!aiGenerated && !_aiAnalysisSkipped) {
+      _showMessage('Please run AI analysis or skip it before saving.',
           type: AppSnackType.warning);
       return;
     }
-    if (aiGenerated && !_analysisApproved) {
+    if (aiGenerated && !_analysisApproved && !_aiAnalysisSkipped) {
       _showMessage('Please approve the AI analysis before saving.',
           type: AppSnackType.warning);
       return;
@@ -2683,20 +2686,76 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: _analyzeImages,
-                  icon: const Icon(Icons.auto_awesome, size: 18),
-                  label: const Text('Run AI Analysis'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 38),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    backgroundColor: AppColors.brandPrimary,
-                    foregroundColor: Colors.white,
-                  ),
+                child: Row(
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _analyzeImages,
+                      icon: const Icon(Icons.auto_awesome, size: 18),
+                      label: const Text('Run AI Analysis'),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 38),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor: AppColors.brandPrimary,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _aiAnalysisSkipped = true;
+                          _combinedResponse = null;
+                          _analysisApproved = false;
+                        });
+                      },
+                      icon: const Icon(Icons.skip_next_outlined, size: 18),
+                      label: const Text('Skip AI'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 38),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              if (_aiAnalysisSkipped) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.orange,
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'AI Analysis has been skipped. You can proceed to save this record manually.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.orange,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               if (_combinedResponse != null)
                 Column(
@@ -2944,7 +3003,9 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                                   ? 'Complete test details first, then continue.'
                                   : _step == 1
                                       ? 'Health worker details are optional. You may skip ahead.'
-                                      : 'Attach images, run AI analysis, and approve before saving.',
+                                      : _aiAnalysisSkipped
+                                          ? 'AI Analysis skipped. Attach images and you can save the record.'
+                                          : 'Attach images, run AI analysis, and approve before saving.',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,

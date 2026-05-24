@@ -431,6 +431,7 @@ class MotherProfileService {
           .eq('reference_table', 'ultrasounds')
           .eq('reference_id', ultrasoundId)
           .eq('response_type', 'ultrasound_analysis')
+          .eq('status', 'approved')
           .maybeSingle();
 
       return response?['response'] as String?;
@@ -448,6 +449,7 @@ class MotherProfileService {
           .eq('reference_table', 'lab_tests')
           .eq('reference_id', labTestId)
           .eq('response_type', 'lab_test_analysis')
+          .eq('status', 'approved')
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
@@ -463,6 +465,7 @@ class MotherProfileService {
           .eq('reference_table', 'lab_tests')
           .eq('reference_id', labTestId)
           .eq('response_type', 'lab_analysis')
+          .eq('status', 'approved')
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();

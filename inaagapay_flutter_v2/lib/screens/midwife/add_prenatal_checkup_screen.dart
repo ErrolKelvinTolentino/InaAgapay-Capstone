@@ -3862,11 +3862,40 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandPrimary),
                       )
-                    else
+                    else ...[
+                      if (_activeRiskTab == 'insight' && !_isEditingAiAssessment && !_aiResponseApproved && !_aiAnalysisSkipped) ...[
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _backupFilipino = _aiFilipinoCtrl.text;
+                              _backupEnglish = _aiEnglishCtrl.text;
+                              _isEditingAiAssessment = true;
+                              _aiResponseApproved = false;
+                              _aiAnalysisSkipped = false;
+                            });
+                          },
+                          icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.brandPrimary),
+                          label: const Text(
+                            'Edit',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brandPrimary,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                       GestureDetector(
                         onTap: () => _refreshRiskPreview(force: true),
                         child: const Icon(Icons.refresh_rounded, size: 18, color: AppColors.brandPrimary),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -4329,7 +4358,51 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                       });
                     },
                     child: const Text(
-                      'Re-edit',
+                      'Cancel',
+                      style: TextStyle(
+                        color: AppColors.brandPrimary,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (_aiAnalysisSkipped) ...[
+            // Case 2b: When AI analysis IS skipped
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(16),
+                border:
+                    Border.all(color: Colors.orange.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange, size: 24),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'AI analysis skipped! Standard rules are active. The care insight will be hidden from the mother.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _aiAnalysisSkipped = false;
+                      });
+                    },
+                    child: const Text(
+                      'Enable AI',
                       style: TextStyle(
                         color: AppColors.brandPrimary,
                         fontWeight: FontWeight.w600,
@@ -4352,6 +4425,7 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                         : () {
                             setState(() {
                               _aiResponseApproved = true;
+                              _aiAnalysisSkipped = false;
                             });
                             _showMessage(
                                 'Insight approved! You can now save the checkup.');
@@ -4369,55 +4443,30 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            // Copy current texts to backup
-                            _backupFilipino = _aiFilipinoCtrl.text;
-                            _backupEnglish = _aiEnglishCtrl.text;
-                            _isEditingAiAssessment = true;
-                            _aiResponseApproved = false;
-                          });
-                        },
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Edit Insight'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textPrimary,
-                          side: const BorderSide(color: AppColors.borderPrimary),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _aiAnalysisSkipped = true;
+                        _aiResponseApproved = false;
+                        final ruleSnapshot = _buildRuleBasedRiskSnapshot();
+                        _syncEditableRiskState(
+                            ruleSnapshot, ruleSnapshot.aiAssessment);
+                        _riskSnapshot = ruleSnapshot;
+                      });
+                    },
+                    icon: const Icon(Icons.settings_backup_restore_rounded,
+                        size: 16),
+                    label: const Text('Skip AI & Use Standard Rules'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: AppColors.borderPrimary),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _aiAnalysisSkipped = true;
-                            final ruleSnapshot = _buildRuleBasedRiskSnapshot();
-                            _syncEditableRiskState(
-                                ruleSnapshot, ruleSnapshot.aiAssessment);
-                            _riskSnapshot = ruleSnapshot;
-                          });
-                        },
-                        icon: const Icon(Icons.settings_backup_restore_rounded,
-                            size: 16),
-                        label: const Text('Use Default'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textPrimary,
-                          side: const BorderSide(color: AppColors.borderPrimary),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -4552,17 +4601,9 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                     flex: (_step > 0) ? 2 : 1,
                     child: _step == _totalSteps - 1
                         ? MainButton(
-                            label: (_aiResponseApproved || _aiAnalysisSkipped)
-                                ? 'Save Checkup'
-                                : 'Approve AI to Save',
-                            rightIcon: (_aiResponseApproved || _aiAnalysisSkipped)
-                                ? Icons.check_rounded
-                                : Icons.arrow_forward_ios_rounded,
-                            onPressed: _submitting
-                                ? null
-                                : ((_aiResponseApproved || _aiAnalysisSkipped)
-                                    ? _submit
-                                    : null),
+                            label: 'Save Checkup',
+                            rightIcon: Icons.check_rounded,
+                            onPressed: _submitting ? null : _submit,
                           )
                         : MainButton(
                             label: 'Next',

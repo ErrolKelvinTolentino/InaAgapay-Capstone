@@ -59,6 +59,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     'Review AI-assisted analysis and override risk factors if necessary.',
   ];
   bool _analysisApproved = false;
+  bool _aiAnalysisSkipped = false;
   bool _showAdvancedAiDetails = false;
   bool _loadingOverlayVisible = false;
   String _loadingTitle = 'Preparing AI analysis';
@@ -1076,6 +1077,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       _healthWorkerProfessionController.clear();
       _selectedHealthWorkerProfession = null;
       _analysisApproved = false;
+      _aiAnalysisSkipped = false;
       _showAdvancedAiDetails = false;
     });
   }
@@ -1366,6 +1368,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       _combinedResponse = null;
       _isEditing = false;
       _analysisApproved = false;
+      _aiAnalysisSkipped = false;
       _healthSummaryController.clear();
     });
 
@@ -1487,10 +1490,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       }
       
       final aiGenerated = _combinedResponse != null;
-      print('DEBUG: aiGenerated = $aiGenerated, _analysisApproved = $_analysisApproved');
+      print('DEBUG: aiGenerated = $aiGenerated, _analysisApproved = $_analysisApproved, _aiAnalysisSkipped = $_aiAnalysisSkipped');
       
-      if (!aiGenerated) {
-        _showMessage('Please run AI analysis before saving.',
+      if (!aiGenerated && !_aiAnalysisSkipped) {
+        _showMessage('Please run AI analysis or skip it before saving.',
             type: AppSnackType.warning);
         return;
       }
@@ -3383,7 +3386,107 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   Widget _buildUltrasoundAssessmentCard() {
-    if (_combinedResponse == null) return const SizedBox.shrink();
+    if (_combinedResponse == null) {
+      if (_aiAnalysisSkipped) {
+        return Container(
+          width: double.infinity,
+          clipBehavior: Clip.hardEdge,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.borderPrimary),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                  border: const Border(bottom: BorderSide(color: AppColors.borderPrimary)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: AppColors.brandPrimary, size: 20),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Pregnancy Risk Assessment (AI Skipped)',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Pregnancy Risk Override',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: AppDropdownField<String>(
+                            value: _pregnancyRiskLevel,
+                            options: const ['low', 'high'],
+                            displayStringForOption: (val) =>
+                                val == 'low' ? 'Low Risk' : 'High Risk',
+                            onSelected: (val) {
+                              setState(() {
+                                _pregnancyRiskLevel = val;
+                              });
+                            },
+                            hintText: 'Select Pregnancy Risk',
+                            leadingIcon: Icons.flag_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: AppColors.borderPrimary, height: 1),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Based on',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _buildRiskFactorsPills(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
 
     final displayStatusText = _monitoringClassification == MonitoringClassification.withinExpectedRange
         ? 'Within Expected Monitoring Range'
@@ -4032,6 +4135,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
   }
 
   Widget _buildAssessmentTabSwitcher() {
+    if (_combinedResponse == null) return const SizedBox.shrink();
     return Align(
       alignment: Alignment.center,
       child: Container(
@@ -4273,23 +4377,69 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Row(
-              children: [
-                if (_step > 0) ...[
-                  Expanded(
-                    child: MainButton(
-                      label: 'Back',
-                      leftIcon: Icons.arrow_back_ios_new_rounded,
-                      isWhiteVariant: true,
-                      onPressed: _isSaving ? null : _prevStep,
+            child: Builder(
+              builder: (context) {
+                if (_step == 1) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: MainButton(
+                          label: 'Back',
+                          leftIcon: Icons.arrow_back_ios_new_rounded,
+                          isWhiteVariant: true,
+                          fontSize: 13,
+                          onPressed: _isSaving ? null : _prevStep,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 4,
+                        child: MainButton(
+                          label: 'Skip AI Analysis',
+                          isWhiteVariant: true,
+                          fontSize: 13,
+                          onPressed: _isSaving ? null : () {
+                            setState(() {
+                              _aiAnalysisSkipped = true;
+                              _step = 2; // Move to Step 3: Assessment & Clinical Review
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 4,
+                        child: MainButton(
+                          label: 'Run AI Analysis',
+                          rightIcon: Icons.auto_awesome,
+                          fontSize: 13,
+                          onPressed: _isSaving ? null : _analyzeImages,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    if (_step > 0) ...[
+                      Expanded(
+                        child: MainButton(
+                          label: 'Back',
+                          leftIcon: Icons.arrow_back_ios_new_rounded,
+                          isWhiteVariant: true,
+                          onPressed: _isSaving ? null : _prevStep,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: _buildRightButton(),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
-                Expanded(
-                  child: _buildRightButton(),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -4305,10 +4455,29 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         onPressed: _isSaving ? null : _nextStep,
       );
     } else if (_step == 1) {
-      return MainButton(
-        label: 'Run AI Analysis',
-        rightIcon: Icons.auto_awesome,
-        onPressed: _isSaving ? null : _analyzeImages,
+      return Row(
+        children: [
+          Expanded(
+            child: MainButton(
+              label: 'Skip AI Analysis',
+              isWhiteVariant: true,
+              onPressed: _isSaving ? null : () {
+                setState(() {
+                  _aiAnalysisSkipped = true;
+                  _step = 2; // Move to Step 3: Assessment & Clinical Review
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: MainButton(
+              label: 'Run AI Analysis',
+              rightIcon: Icons.auto_awesome,
+              onPressed: _isSaving ? null : _analyzeImages,
+            ),
+          ),
+        ],
       );
     } else {
       return MainButton(

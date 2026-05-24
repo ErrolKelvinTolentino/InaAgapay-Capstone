@@ -10,6 +10,7 @@ class MainButton extends StatelessWidget {
   final IconData? leftIcon;
   final IconData? rightIcon;
   final bool isWhiteVariant;
+  final double? fontSize;
 
   const MainButton({
     super.key,
@@ -19,6 +20,7 @@ class MainButton extends StatelessWidget {
     this.leftIcon,
     this.rightIcon,
     this.isWhiteVariant = false,
+    this.fontSize,
   });
 
   @override
@@ -55,8 +57,8 @@ class MainButton extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
+                style: TextStyle(
+                  fontSize: fontSize ?? 16,
                   fontWeight: FontWeight.w600,
                 ),
               ),
