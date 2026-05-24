@@ -1347,14 +1347,30 @@ class SupabaseService {
       }
 
       final isInternalEmail = email.endsWith('@inaagapay.internal');
-      final emailSent = isInternalEmail
-          ? false
-          : await EmailService.sendAccountCredentials(
-              email: email,
-              password: generatedPassword,
-              firstName: firstName,
-              lastName: lastName,
-            );
+      bool credentialsSent = false;
+      String sentMethod = '';
+
+      // Try sending via email first if not internal
+      if (!isInternalEmail) {
+        credentialsSent = await EmailService.sendAccountCredentials(
+          email: email,
+          password: generatedPassword,
+          firstName: firstName,
+          lastName: lastName,
+        );
+        if (credentialsSent) sentMethod = 'email';
+      }
+
+      // If email not sent and phone is available, try SMS
+      if (!credentialsSent && phone.isNotEmpty) {
+        credentialsSent = await EmailService.sendAccountCredentialsViaSms(
+          phoneNumber: phone,
+          password: generatedPassword,
+          firstName: firstName,
+          lastName: lastName,
+        );
+        if (credentialsSent) sentMethod = 'sms';
+      }
 
       return {
         'success': true,
@@ -1362,10 +1378,12 @@ class SupabaseService {
         'pregnancy_id': pregnancyId,
         'account_id': accountId,
         'generated_password': generatedPassword,
-        'email_sent': emailSent,
-        'message': emailSent
-            ? 'Mother account created. Credentials sent to $email'
-            : 'Mother account created but email failed to send. Please provide the password manually.',
+        'email_sent': credentialsSent && sentMethod == 'email',
+        'sms_sent': credentialsSent && sentMethod == 'sms',
+        'credentials_delivery_method': sentMethod,
+        'message': credentialsSent
+            ? 'Mother account created. Credentials sent via ${sentMethod.toUpperCase()}.'
+            : 'Mother account created but failed to send credentials. Please provide the password manually.',
       };
     } catch (e) {
       if (kDebugMode) debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');

@@ -1538,11 +1538,19 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
         final pregnancyId = result['pregnancy_id'] as int?;
 
         final hasRealEmail = _emailCtrl.text.trim().isNotEmpty;
-        final successMessage = _isUpdatingExisting
-            ? 'Mother account updated successfully!'
-            : (hasRealEmail && result['email_sent'] == true
-                ? 'Mother account created successfully!\n\nA temporary password has been sent to ${_emailCtrl.text.trim()}.'
-                : 'Mother account created successfully!\n\nThe mother can register online later. Her account will sync automatically if she provides the same contact number.');
+        final emailSent = result['email_sent'] == true;
+        final smsSent = result['sms_sent'] == true;
+        
+        String successMessage;
+        if (_isUpdatingExisting) {
+          successMessage = 'Mother account updated successfully!';
+        } else if (emailSent) {
+          successMessage = 'Mother account created successfully!\n\nA temporary password has been sent to ${_emailCtrl.text.trim()}.';
+        } else if (smsSent) {
+          successMessage = 'Mother account created successfully!\n\nA temporary password has been sent via SMS to ${_phoneCtrl.text.trim()}.';
+        } else {
+          successMessage = 'Mother account created successfully!\n\nThe mother can register online later. Her account will sync automatically if she provides the same contact number.';
+        }
 
         await showDialog(
           context: context,

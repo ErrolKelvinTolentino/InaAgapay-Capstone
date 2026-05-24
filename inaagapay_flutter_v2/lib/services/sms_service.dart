@@ -8,6 +8,57 @@ class SmsService {
   static String get baseUrl => dotenv.env['SEMAPHORE_BASE_URL'] ?? 'https://api.semaphore.co/api/v4';
   static String get senderName => dotenv.env['SEMAPHORE_SENDER_NAME'] ?? 'SEMAPHORE';
 
+  // Send general SMS message
+  static Future<bool> sendSmsMessage(String phoneNumber, String message) async {
+    try {
+      // Validate Philippine phone number
+      if (!isValidPhilippineNumber(phoneNumber)) {
+        if (kDebugMode) print('Invalid Philippine phone number: $phoneNumber');
+        return false;
+      }
+
+      // Format to international format
+      final formattedNumber = formatPhilippineNumber(phoneNumber);
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/messages'),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+        },
+        body: {
+          'apikey': apiKey,
+          'number': formattedNumber,
+          'message': message,
+          'sendername': senderName,
+        },
+      ).timeout(const Duration(seconds: 30));
+
+      if (kDebugMode) {
+        print('SMS API Response: ${response.statusCode} - ${response.body}');
+      }
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        // Check for success in response
+        if (data is List && data.isNotEmpty) {
+          final firstMessage = data[0];
+          if (firstMessage['status'] == 'Pending' || 
+              firstMessage['status'] == 'Sent' ||
+              firstMessage['message_id'] != null) {
+            return true;
+          }
+        }
+        return false;
+      }
+      
+      return false;
+    } catch (e) {
+      if (kDebugMode) print('Error sending SMS message: $e');
+      return false;
+    }
+  }
+
   // Send OTP via SMS
   static Future<bool> sendOtp(String phoneNumber, String code) async {
     try {
