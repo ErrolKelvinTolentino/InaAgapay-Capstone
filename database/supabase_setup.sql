@@ -225,12 +225,9 @@ CREATE TABLE birth_details (
   child_id BIGINT NOT NULL UNIQUE REFERENCES children(child_id) ON DELETE CASCADE,
   birthdate DATE,
   birth_weight DECIMAL(5, 2),
-  birth VARCHAR(255),
   birthplace_city_municipality VARCHAR(255),
   birthplace_province VARCHAR(255),
   birth_length DECIMAL(5, 2),
-  head_circumference DECIMAL(5, 2),
-  birth_complications TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE child_details (

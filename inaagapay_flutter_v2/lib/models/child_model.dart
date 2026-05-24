@@ -12,7 +12,6 @@ class ChildModel {
   final DateTime? birthdate;
   final double? birthWeight;
   final double? birthLength;
-  final double? headCircumference;
   final String? birthplaceCity;
   final String? birthplaceProvince;
 
@@ -28,7 +27,6 @@ class ChildModel {
     this.birthdate,
     this.birthWeight,
     this.birthLength,
-    this.headCircumference,
     this.birthplaceCity,
     this.birthplaceProvince,
   });
@@ -77,7 +75,6 @@ class ChildModel {
       birthdate: json['birthdate'] != null ? DateTime.parse(json['birthdate']) : null,
       birthWeight: (json['birth_weight'] as num?)?.toDouble(),
       birthLength: (json['birth_length'] as num?)?.toDouble(),
-      headCircumference: (json['head_circumference'] as num?)?.toDouble(),
       birthplaceCity: json['birthplace_city_municipality'] as String?,
       birthplaceProvince: json['birthplace_province'] as String?,
     );

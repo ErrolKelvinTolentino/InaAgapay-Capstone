@@ -6,7 +6,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/app_input_field.dart';
 import '../../services/auth_storage.dart';
 import 'child_profile_page.dart';
-import 'add_child_step3_child.dart';
+import 'add_child_choice.dart';
 
 class MidwifeChildrenScreen extends StatefulWidget {
   const MidwifeChildrenScreen({super.key});
@@ -23,6 +23,8 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
   bool _loading = true;
   String? _errorMessage;
   int? _assignedBhcId;
+
+  static List<Map<String, dynamic>>? _childrenCache;
 
   @override
   void initState() {
@@ -61,14 +63,138 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     }
   }
 
-  Future<void> _fetchChildren() async {
+  Future<void> _fetchChildren({bool forceRefresh = false}) async {
     if (_assignedBhcId == null) return;
-    
+
+    if (forceRefresh) {
+      _childrenCache = null;
+    }
+
+    if (_childrenCache != null) {
+      setState(() {
+        _children = List<Map<String, dynamic>>.from(_childrenCache!);
+        _filteredChildren = List<Map<String, dynamic>>.from(_childrenCache!);
+        _loading = false;
+        _errorMessage = null;
+      });
+      _revalidateChildren();
+      return;
+    }
+
     setState(() {
       _loading = true;
       _errorMessage = null;
     });
 
+    try {
+      await _fetchAndCacheChildren();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchAndCacheChildren() async {
+    final mothersResponse = await Supabase.instance.client
+        .from('mothers')
+        .select('mother_id')
+        .eq('assigned_bhc_id', _assignedBhcId!);
+    
+    final List<int> motherIds = [];
+    for (var mother in mothersResponse) {
+      motherIds.add(mother['mother_id'] as int);
+    }
+    
+    List<Map<String, dynamic>> childrenList = [];
+    
+    if (motherIds.isNotEmpty) {
+      final childrenWithMother = await Supabase.instance.client
+          .from('children')
+          .select('''
+            *,
+            mother:mother_id (
+              mother_id,
+              account:account_id (
+                first_name,
+                last_name
+              )
+            ),
+            guardian:guardian_id (
+              guardian_id,
+              first_name,
+              last_name,
+              relationship
+            ),
+            birth_details (
+              birthdate,
+              birth_weight,
+              birth_length
+            )
+          ''')
+          .inFilter('mother_id', motherIds);
+      
+      childrenList.addAll(List<Map<String, dynamic>>.from(childrenWithMother));
+    }
+    
+    final childrenWithGuardianOnly = await Supabase.instance.client
+        .from('children')
+        .select('''
+          *,
+          mother:mother_id (
+            mother_id,
+            account:account_id (
+              first_name,
+              last_name
+            )
+          ),
+          guardian:guardian_id (
+            guardian_id,
+            first_name,
+            last_name,
+            relationship
+          ),
+          birth_details (
+            birthdate,
+            birth_weight,
+            birth_length
+          )
+        ''')
+        .filter('mother_id', 'is', null)
+        .not('guardian_id', 'is', null);
+    
+    childrenList.addAll(List<Map<String, dynamic>>.from(childrenWithGuardianOnly));
+    
+    final seenIds = <int>{};
+    childrenList = childrenList.where((child) {
+      final id = child['child_id'] as int;
+      if (seenIds.contains(id)) return false;
+      seenIds.add(id);
+      return true;
+    }).toList();
+    
+    childrenList.sort((a, b) {
+      final dateA = DateTime.tryParse(a['added_at'] ?? '');
+      final dateB = DateTime.tryParse(b['added_at'] ?? '');
+      if (dateA == null || dateB == null) return 0;
+      return dateB.compareTo(dateA);
+    });
+
+    _childrenCache = childrenList;
+    
+    if (mounted) {
+      setState(() {
+        _children = childrenList;
+        _filteredChildren = childrenList;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _revalidateChildren() async {
     try {
       final mothersResponse = await Supabase.instance.client
           .from('mothers')
@@ -153,22 +279,36 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
         if (dateA == null || dateB == null) return 0;
         return dateB.compareTo(dateA);
       });
-      
-      if (mounted) {
+
+      bool hasChanges = false;
+      if (_childrenCache == null || _childrenCache!.length != childrenList.length) {
+        hasChanges = true;
+      } else {
+        for (int i = 0; i < childrenList.length; i++) {
+          final c1 = childrenList[i];
+          final c2 = _childrenCache!.firstWhere(
+            (c) => c['child_id'] == c1['child_id'],
+            orElse: () => {},
+          );
+          if (c2.isEmpty ||
+              c1['first_name'] != c2['first_name'] ||
+              c1['last_name'] != c2['last_name'] ||
+              c1['guardian_id'] != c2['guardian_id']) {
+            hasChanges = true;
+            break;
+          }
+        }
+      }
+
+      if (hasChanges && mounted) {
+        _childrenCache = childrenList;
         setState(() {
           _children = childrenList;
-          _filteredChildren = childrenList;
-          _loading = false;
+          _filterChildren();
         });
       }
-      
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.toString();
-          _loading = false;
-        });
-      }
+      debugPrint('Error revalidating children: $e');
     }
   }
 
@@ -233,82 +373,15 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
   Future<void> _addChild() async {
     if (_assignedBhcId == null) return;
 
-    final mothersResponse = await Supabase.instance.client
-        .from('mothers')
-        .select('mother_id, account:account_id (first_name, last_name)')
-        .eq('assigned_bhc_id', _assignedBhcId!);
-
-    final List<Map<String, dynamic>> mothers = List.from(mothersResponse);
-    
     if (!mounted) return;
-    final bool? useMother = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Child'),
-        content: const Text('Do you want to link this child to a registered mother?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No (Create Guardian)')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes')),
-        ],
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddChildChoicePage(assignedBhcId: _assignedBhcId!),
       ),
     );
-
-    if (useMother == true && mothers.isNotEmpty) {
-      if (!mounted) return;
-      final int? selectedMotherId = await showDialog<int>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Select Mother'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300,
-            child: ListView.builder(
-              itemCount: mothers.length,
-              itemBuilder: (ctx, index) {
-                final mother = mothers[index];
-                final account = mother['account'] as Map<String, dynamic>?;
-                final name = account != null
-                    ? '${account['first_name'] ?? ''} ${account['last_name'] ?? ''}'.trim()
-                    : 'Mother ${mother['mother_id']}';
-                final motherIdValue = mother['mother_id'] as int;
-                return ListTile(
-                  title: Text(name),
-                  onTap: () => Navigator.pop(ctx, motherIdValue),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ],
-        ),
-      );
-
-      if (selectedMotherId != null && mounted) {
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AddChildStep3Child(
-              mode: ChildParentMode.registeredMother,
-              motherId: selectedMotherId,
-            ),
-          ),
-        );
-        if (result == true && mounted) {
-          _fetchChildren();
-        }
-      }
-    } else {
-      if (!mounted) return;
-      final result = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const AddChildStep3Child(mode: ChildParentMode.newGuardian),
-        ),
-      );
-      if (result == true && mounted) {
-        _fetchChildren();
-      }
+    if (mounted) {
+      _fetchChildren(forceRefresh: true);
     }
   }
 
@@ -352,8 +425,8 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('There are', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textSecondary)),
-                        Text('${_filteredChildren.length} Children', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.brandPrimary)),
+                        const Text('Showing', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textSecondary)),
+                        Text('${_filteredChildren.length}/${_children.length} Children', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.brandPrimary)),
                       ],
                     ),
                   ),
@@ -387,7 +460,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
 
             Expanded(
               child: RefreshIndicator(
-                onRefresh: _fetchChildren,
+                onRefresh: () => _fetchChildren(forceRefresh: true),
                 color: AppColors.brandPrimary,
                 child: _loading
                     ? const Center(child: CircularProgressIndicator(color: AppColors.brandPrimary))
@@ -400,7 +473,7 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
                                 const SizedBox(height: 16),
                                 Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
                                 const SizedBox(height: 16),
-                                ElevatedButton(onPressed: _fetchChildren, style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandPrimary), child: const Text('Retry')),
+                                ElevatedButton(onPressed: () => _fetchChildren(forceRefresh: true), style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandPrimary), child: const Text('Retry')),
                               ],
                             ),
                           )

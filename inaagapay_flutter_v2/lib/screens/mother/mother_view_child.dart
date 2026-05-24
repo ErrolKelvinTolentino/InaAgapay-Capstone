@@ -409,13 +409,6 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                         ? '${birthData!['birth_weight']} kg'
                         : _t('Not recorded', 'Hindi naitala'),
                   ),
-                  RecordItem(
-                    leadingIcon: Icons.circle_outlined,
-                    label: _t('Head Circumference', 'Sukat ng Ulo'),
-                    value: birthData?['head_circumference'] != null
-                        ? '${birthData!['head_circumference']} cm'
-                        : _t('Not recorded', 'Hindi naitala'),
-                  ),
                 ],
               ),
 

@@ -541,13 +541,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                         ? '${birthData!['birth_weight']} kg'
                         : 'Not recorded',
                   ),
-                  RecordItem(
-                    leadingIcon: Icons.circle_outlined,
-                    label: 'Head Circumference',
-                    value: birthData?['head_circumference'] != null
-                        ? '${birthData!['head_circumference']} cm'
-                        : 'Not recorded',
-                  ),
                 ],
               ),
 

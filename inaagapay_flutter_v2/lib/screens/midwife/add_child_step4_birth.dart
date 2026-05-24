@@ -10,6 +10,7 @@ import '../../widgets/dialog_box.dart';
 import '../../widgets/app_input_field.dart';
 import 'add_child_step3_child.dart';
 import 'child_profile_page.dart';
+import '../../services/ph_address_service.dart' as ph_addr;
 
 class AddChildStep4Birth extends StatefulWidget {
   final ChildParentMode mode;
@@ -64,14 +65,316 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
   final birthdateCtrl = TextEditingController();
   final birthWeightCtrl = TextEditingController();
   final birthLengthCtrl = TextEditingController();
-  final headCtrl = TextEditingController();
   final provinceCtrl = TextEditingController();
   final cityCtrl = TextEditingController();
-  final complicationsCtrl = TextEditingController();
   final birthplaceCtrl = TextEditingController();
 
   DateTime? selectedBirthdate;
-  bool _isEstimatedBirthdate = false;
+
+  List<String> _apiProvinces = [];
+  List<String> _apiCities = [];
+  bool _loadingProvinces = false;
+  bool _loadingCities = false;
+  String? _activeAddressSearchField;
+  final ScrollController _suggestionScrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProvinces();
+    if (provinceCtrl.text.isNotEmpty) {
+      _preloadCities();
+    }
+  }
+
+  Future<void> _loadProvinces() async {
+    setState(() => _loadingProvinces = true);
+    try {
+      final list = await ph_addr.PhAddressService.getProvinces();
+      if (mounted) {
+        setState(() {
+          _apiProvinces = list.map((p) => p.name).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading provinces: $e');
+    } finally {
+      if (mounted) setState(() => _loadingProvinces = false);
+    }
+  }
+
+  Future<void> _preloadCities() async {
+    setState(() => _loadingCities = true);
+    try {
+      final list = await ph_addr.PhAddressService.getCities(provinceCtrl.text);
+      if (mounted) {
+        setState(() {
+          _apiCities = list.map((c) => c.name).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error preloading cities: $e');
+    } finally {
+      if (mounted) setState(() => _loadingCities = false);
+    }
+  }
+
+  Future<void> _onProvinceSelected(String provinceName) async {
+    setState(() {
+      provinceCtrl.text = provinceName;
+      cityCtrl.clear();
+      _apiCities = [];
+      _loadingCities = true;
+    });
+
+    try {
+      final list = await ph_addr.PhAddressService.getCities(provinceName);
+      if (mounted) {
+        setState(() {
+          _apiCities = list.map((c) => c.name).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading cities: $e');
+    } finally {
+      if (mounted) setState(() => _loadingCities = false);
+    }
+  }
+
+  void _onCitySelected(String cityName) {
+    setState(() {
+      cityCtrl.text = cityName;
+    });
+  }
+
+  List<TextSpan> _buildHighlightedTextSpans(String text, String query) {
+    final List<TextSpan> spans = [];
+    final textLower = text.toLowerCase();
+    final queryLower = query.toLowerCase();
+
+    int start = 0;
+    int indexOfMatch = textLower.indexOf(queryLower, start);
+
+    while (indexOfMatch != -1) {
+      if (indexOfMatch > start) {
+        spans.add(TextSpan(
+          text: text.substring(start, indexOfMatch),
+        ));
+      }
+      spans.add(TextSpan(
+        text: text.substring(indexOfMatch, indexOfMatch + query.length),
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: AppColors.brandPrimary,
+        ),
+      ));
+      start = indexOfMatch + query.length;
+      indexOfMatch = textLower.indexOf(queryLower, start);
+    }
+
+    if (start < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(start),
+      ));
+    }
+
+    return spans;
+  }
+
+  Widget _buildSearchableAddressField({
+    required String hintText,
+    required TextEditingController controller,
+    required String fieldType, // 'province', 'city'
+    required bool isRequired,
+    required IconData leadingIcon,
+    required bool readOnly,
+    required bool isLoading,
+    required Function(String) onSelected,
+    required VoidCallback onChanged,
+  }) {
+    final bool isActive = _activeAddressSearchField == fieldType;
+
+    // Filter items
+    List<String> suggestions = [];
+    if (fieldType == 'province') {
+      suggestions = _apiProvinces;
+    } else if (fieldType == 'city') {
+      suggestions = _apiCities;
+    }
+
+    final query = controller.text.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      final primary = suggestions
+          .where((item) => item.toLowerCase().startsWith(query))
+          .toList();
+      final secondary = suggestions
+          .where((item) =>
+              item.toLowerCase().contains(query) &&
+              !item.toLowerCase().startsWith(query))
+          .toList();
+      suggestions = [...primary, ...secondary];
+    }
+
+    final visibleSuggestions = suggestions.take(15).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Focus(
+          onFocusChange: (focused) {
+            if (focused && !readOnly) {
+              setState(() {
+                _activeAddressSearchField = fieldType;
+              });
+            } else {
+              Future.delayed(const Duration(milliseconds: 250), () {
+                if (mounted && _activeAddressSearchField == fieldType) {
+                  setState(() {
+                    _activeAddressSearchField = null;
+                  });
+                }
+              });
+            }
+          },
+          child: AppInputField(
+            hintText: hintText,
+            controller: controller,
+            isRequired: isRequired,
+            leadingIcon: leadingIcon,
+            readOnly: readOnly,
+            onChanged: (val) {
+              onChanged();
+              setState(() {});
+            },
+          ),
+        ),
+        if (!readOnly && isActive) ...[
+          const SizedBox(height: 4),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            constraints: const BoxConstraints(maxHeight: 220),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.cardColorOf(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.brandPrimaryOf(context).withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: isLoading
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.brandPrimaryOf(context),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : visibleSuggestions.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                          horizontal: 16,
+                        ),
+                        child: Text(
+                          query.isEmpty
+                              ? 'Start typing to search...'
+                              : 'No matches found. You can keep typing.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondaryOf(context),
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      )
+                    : Scrollbar(
+                        controller: _suggestionScrollController,
+                        thumbVisibility: true,
+                        child: ListView.builder(
+                          controller: _suggestionScrollController,
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          itemCount: visibleSuggestions.length,
+                          itemBuilder: (context, index) {
+                            final item = visibleSuggestions[index];
+                            final bool startsWithQuery = query.isNotEmpty &&
+                                item.toLowerCase().startsWith(query);
+
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  onSelected(item);
+                                  FocusScope.of(context).unfocus();
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        startsWithQuery
+                                            ? Icons.arrow_right_alt
+                                            : Icons.location_on_outlined,
+                                        size: 16,
+                                        color: startsWithQuery
+                                            ? AppColors.brandPrimaryOf(context)
+                                            : AppColors.textSecondaryOf(
+                                                context,
+                                              ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: RichText(
+                                          text: TextSpan(
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: AppColors.textPrimaryOf(
+                                                context,
+                                              ),
+                                            ),
+                                            children: query.isEmpty
+                                                ? [TextSpan(text: item)]
+                                                : _buildHighlightedTextSpans(
+                                                    item,
+                                                    query,
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
 
   String? get _birthWeightWarning {
     final weight = double.tryParse(birthWeightCtrl.text);
@@ -97,11 +400,15 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
         double.tryParse(birthWeightCtrl.text) != null;
     final birthLengthValid = birthLengthCtrl.text.isNotEmpty &&
         double.tryParse(birthLengthCtrl.text) != null;
+    final provinceValid = provinceCtrl.text.trim().isNotEmpty;
+    final cityValid = cityCtrl.text.trim().isNotEmpty;
     final birthplaceValid = birthplaceCtrl.text.trim().isNotEmpty;
 
     return birthdateValid &&
         birthWeightValid &&
         birthLengthValid &&
+        provinceValid &&
+        cityValid &&
         birthplaceValid;
   }
 
@@ -197,16 +504,11 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
       await Supabase.instance.client.from('birth_details').insert({
         'child_id': childId,
         'birthdate': birthdateCtrl.text,
-        'is_birthdate_estimated': _isEstimatedBirthdate,
         'birth_weight': birthWeight,
         'birth_length': birthLength,
-        'head_circumference':
-            headCtrl.text.isEmpty ? null : double.parse(headCtrl.text),
         'birthplace_city_municipality': cityCtrl.text,
         'birthplace_province': provinceCtrl.text,
         'birthplace_facility': birthplaceCtrl.text.trim(),
-        'birth_complications':
-            complicationsCtrl.text.isEmpty ? null : complicationsCtrl.text,
         'created_at': DateTime.now().toIso8601String(),
       });
 
@@ -278,11 +580,10 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
     birthdateCtrl.dispose();
     birthWeightCtrl.dispose();
     birthLengthCtrl.dispose();
-    headCtrl.dispose();
     provinceCtrl.dispose();
     cityCtrl.dispose();
-    complicationsCtrl.dispose();
     birthplaceCtrl.dispose();
+    _suggestionScrollController.dispose();
     super.dispose();
   }
 
@@ -291,8 +592,8 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
       birthWeightCtrl.text.trim().isNotEmpty ||
       birthLengthCtrl.text.trim().isNotEmpty ||
       birthplaceCtrl.text.trim().isNotEmpty ||
-      headCtrl.text.trim().isNotEmpty ||
-      complicationsCtrl.text.trim().isNotEmpty;
+      provinceCtrl.text.trim().isNotEmpty ||
+      cityCtrl.text.trim().isNotEmpty;
 
   Future<void> _confirmDiscardAndPop() async {
     if (!_hasEnteredData) {
@@ -420,26 +721,6 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: _isEstimatedBirthdate,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _isEstimatedBirthdate = value ?? false;
-                                    });
-                                  },
-                                  activeColor: AppColors.brandPrimary,
-                                ),
-                                const Text(
-                                  'Birth date is estimated',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: AppColors.textSecondary),
-                                ),
-                              ],
-                            ),
                             const SizedBox(height: 16),
                             AppInputField(
                               hintText: 'Birth Weight (kg) *',
@@ -497,24 +778,37 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                                 ),
                               ),
                             const SizedBox(height: 16),
-                            AppInputField(
-                              hintText: 'Head Circumference (cm)',
-                              controller: headCtrl,
-                              keyboardType: TextInputType.number,
-                            ),
-                            const SizedBox(height: 16),
-                            AppInputField(
+                            _buildSearchableAddressField(
                               hintText: 'Birth Province *',
                               controller: provinceCtrl,
+                              fieldType: 'province',
                               isRequired: true,
-                              onChanged: (_) => setState(() {}),
+                              leadingIcon: Icons.map_outlined,
+                              readOnly: false,
+                              isLoading: _loadingProvinces,
+                              onSelected: (val) {
+                                _onProvinceSelected(val);
+                              },
+                              onChanged: () {
+                                setState(() {
+                                  cityCtrl.clear();
+                                  _apiCities = [];
+                                });
+                              },
                             ),
                             const SizedBox(height: 16),
-                            AppInputField(
+                            _buildSearchableAddressField(
                               hintText: 'Birth City/Municipality *',
                               controller: cityCtrl,
+                              fieldType: 'city',
                               isRequired: true,
-                              onChanged: (_) => setState(() {}),
+                              leadingIcon: Icons.location_city_outlined,
+                              readOnly: provinceCtrl.text.isEmpty,
+                              isLoading: _loadingCities,
+                              onSelected: (val) {
+                                _onCitySelected(val);
+                              },
+                              onChanged: () {},
                             ),
                             const SizedBox(height: 16),
                             AppInputField(
@@ -523,28 +817,6 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
                               isRequired: true,
                               leadingIcon: Icons.location_on_outlined,
                               onChanged: (_) => setState(() {}),
-                            ),
-                            const SizedBox(height: 16),
-                            Container(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: AppColors.bgSecondary,
-                                borderRadius: BorderRadius.circular(28),
-                                border:
-                                    Border.all(color: AppColors.borderPrimary),
-                              ),
-                              child: TextField(
-                                controller: complicationsCtrl,
-                                maxLines: 3,
-                                minLines: 1,
-                                decoration: const InputDecoration(
-                                  hintText: 'Birth Complications (Optional)',
-                                  border: InputBorder.none,
-                                  icon: Icon(Icons.medical_information,
-                                      color: AppColors.brandPrimary),
-                                ),
-                              ),
                             ),
                           ],
                         ),
