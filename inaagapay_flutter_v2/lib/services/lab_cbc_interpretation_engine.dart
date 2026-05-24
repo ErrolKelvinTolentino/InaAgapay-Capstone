@@ -234,10 +234,54 @@ class LabCbcInterpretationEngine {
 
   // ── Single Component Interpretation ───────────────────────────────────────
 
+  /// Normalizes raw lab value based on magnitude and OCR string content.
+  static double normalizeValue(String componentName, double rawValue, String valueStr) {
+    final normalized = _normalizeComponentName(componentName);
+    final rawUnit = valueStr.toLowerCase();
+    double value = rawValue;
+
+    switch (normalized) {
+      case 'Hemoglobin':
+        if (rawUnit.contains('g/l') || value > 40.0) {
+          value = value / 10.0;
+        }
+        break;
+      case 'Hematocrit':
+        if (value > 0.0 && value < 1.0) {
+          value = value * 100.0;
+        }
+        break;
+      case 'WBC':
+        if (rawUnit.contains('cumm') || rawUnit.contains('ul') || rawUnit.contains('µl') || value > 100.0) {
+          value = value / 1000.0;
+        }
+        break;
+      case 'Platelets':
+        if (rawUnit.contains('cumm') || rawUnit.contains('ul') || rawUnit.contains('µl') || value > 1000.0) {
+          value = value / 1000.0;
+        }
+        break;
+      case 'RBC':
+        if (value > 1000000.0) {
+          value = value / 1000000.0;
+        } else if (value > 100000.0) {
+          value = value / 100000.0;
+        }
+        break;
+      case 'MCHC':
+        if (rawUnit.contains('g/l') || value > 100.0) {
+          value = value / 10.0;
+        }
+        break;
+    }
+    return value;
+  }
+
   static CbcComponentResult? interpretComponent({
     required String componentName,
     required double value,
     required Trimester trimester,
+    String? valueStr,
   }) {
     final normalized = _normalizeComponentName(componentName);
     final ref = getReferenceRange(normalized, trimester);
@@ -246,10 +290,11 @@ class LabCbcInterpretationEngine {
       return null;
     }
 
-    final status = _classifyValue(value, ref.low, ref.high);
+    final double normalizedValue = normalizeValue(normalized, value, valueStr ?? '');
+    final status = _classifyValue(normalizedValue, ref.low, ref.high);
     final phrase = _buildContextPhrase(
       componentName: normalized,
-      value: value,
+      value: normalizedValue,
       unit: ref.unit,
       low: ref.low,
       high: ref.high,
@@ -260,7 +305,7 @@ class LabCbcInterpretationEngine {
     return CbcComponentResult(
       componentName: normalized,
       unit: ref.unit,
-      value: value,
+      value: normalizedValue,
       referenceLow: ref.low,
       referenceHigh: ref.high,
       trimester: trimester,
@@ -275,13 +320,16 @@ class LabCbcInterpretationEngine {
   /// Only includes components that have reference ranges in our table.
   static List<CbcComponentResult> interpretAll({
     required Map<String, double> values,
+    Map<String, String>? valueStrs,
     required Trimester trimester,
   }) {
     final results = <CbcComponentResult>[];
     for (final entry in values.entries) {
+      final valueStr = valueStrs?[entry.key];
       final result = interpretComponent(
         componentName: entry.key,
         value: entry.value,
+        valueStr: valueStr,
         trimester: trimester,
       );
       if (result != null) {
@@ -294,35 +342,95 @@ class LabCbcInterpretationEngine {
   // ── Overall Monitoring Classification ─────────────────────────────────────
 
   /// Classifies the overall monitoring status from a list of component results.
-  /// Reuses MonitoringClassification from the ultrasound engine for consistency.
   static MonitoringClassification classifyOverall(
       List<CbcComponentResult> results) {
-    int reviewCount = 0;
-    int monitorCount = 0;
+    int highPriorityMonitorCount = 0;
+    int lowPriorityMonitorCount = 0;
+    int highPriorityReviewCount = 0;
+    int lowPriorityReviewCount = 0;
+
+    final highPriorityNames = {'Hemoglobin', 'Hematocrit', 'WBC', 'Platelets'};
 
     for (final result in results) {
+      final isHighPriority = highPriorityNames.contains(result.componentName);
+      
       switch (result.status) {
         case CbcComponentStatus.review:
-          reviewCount++;
+          if (isHighPriority) {
+            highPriorityReviewCount++;
+          } else {
+            lowPriorityReviewCount++;
+          }
           break;
         case CbcComponentStatus.monitor:
-          monitorCount++;
+          if (isHighPriority) {
+            highPriorityMonitorCount++;
+          } else {
+            lowPriorityMonitorCount++;
+          }
           break;
         case CbcComponentStatus.expected:
           break;
       }
     }
 
-    if (reviewCount >= 1) {
+    // 1. Clinically notable deviations -> Clinical Follow-Up Recommended
+    // Co-existing multiple reviews OR single high-priority review (severe anemia or platelet drop, etc.)
+    if (highPriorityReviewCount >= 1 || (lowPriorityReviewCount + highPriorityReviewCount) >= 2) {
+      return MonitoringClassification.followUpRecommended;
+    }
+
+    // 2. 2+ mild findings (monitor status) -> Monitoring Recommended
+    final totalMonitorCount = highPriorityMonitorCount + lowPriorityMonitorCount;
+    if (totalMonitorCount >= 2 || lowPriorityReviewCount == 1) {
       return MonitoringClassification.requiresCloserMonitoring;
     }
-    if (monitorCount >= 2) {
+
+    // 3. Isolated high-priority mild deviation -> Monitoring Recommended
+    if (totalMonitorCount == 1 && highPriorityMonitorCount == 1) {
       return MonitoringClassification.requiresCloserMonitoring;
     }
-    if (monitorCount >= 1) {
-      return MonitoringClassification.withinExpectedRange;
-    }
+
+    // Default: reassuring or isolated low-priority mild deviation (e.g. isolated mild MCV/MCHC)
     return MonitoringClassification.withinExpectedRange;
+  }
+
+  /// Custom decoupled labels specifically for CBC laboratory interpretation.
+  static String classificationLabel(
+      MonitoringClassification classification, {String language = 'english'}) {
+    final bool fil = language == 'filipino';
+    switch (classification) {
+      case MonitoringClassification.withinExpectedRange:
+        return fil
+            ? 'Nasa Inaasahang Saklaw ng Pagsubaybay'
+            : 'Within Expected Monitoring Range';
+      case MonitoringClassification.requiresCloserMonitoring:
+        return fil
+            ? 'Inirerekomenda ang Pagsubaybay'
+            : 'Monitoring Recommended';
+      case MonitoringClassification.followUpRecommended:
+        return fil
+            ? 'Inirerekomenda ang Clinical Follow-Up'
+            : 'Clinical Follow-Up Recommended';
+    }
+  }
+
+  /// Returns a safety or data-quality warning if the results are insufficient.
+  static String? getSufficiencyWarning({
+    required List<CbcComponentResult> results,
+    required Trimester? trimester,
+    required double? confidenceScore,
+  }) {
+    if (confidenceScore != null && confidenceScore < 0.6) {
+      return 'Some laboratory values may require manual verification due to incomplete or unclear record formatting.';
+    }
+
+    final presentComponents = results.map((r) => r.componentName).toSet();
+    if (presentComponents.isNotEmpty && !presentComponents.contains('Hemoglobin')) {
+      return 'Critical pregnancy monitoring values (like Hemoglobin) were not detected. Please verify the report manually.';
+    }
+
+    return null;
   }
 
   /// UI label for a component status badge.

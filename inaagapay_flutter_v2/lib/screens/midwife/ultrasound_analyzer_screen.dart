@@ -79,6 +79,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
 
   late TextEditingController _healthSummaryController;
   bool _isEditing = false;
+  bool _isManualEditing = false;
   String _healthSummaryBeforeEdit = '';
 
   bool _editMonitoringRange = true;
@@ -324,6 +325,24 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       age--;
     }
     return age;
+  }
+
+  String _buildRuleBasedUltrasoundSummary({String? lang}) {
+    final language = lang ?? _selectedLanguage;
+    final aogWeeks = _calculateExpectedWeeksAtUltrasound() ?? 0;
+    final trimesterLabel = aogWeeks <= 13 ? 'First Trimester' : (aogWeeks <= 27 ? 'Second Trimester' : 'Third Trimester');
+    final trimesterFil = aogWeeks <= 13 ? 'Unang Trimester' : (aogWeeks <= 27 ? 'Ikalawang Trimester' : 'Ikatlong Trimester');
+    final fetalCountLabel = _pregnancyFetalCount == null ? 'Singleton' : (_pregnancyFetalCount == 1 ? 'Singleton' : '$_pregnancyFetalCount babies');
+    final fetalCountFil = _pregnancyFetalCount == null ? 'Isa (Singleton)' : (_pregnancyFetalCount == 1 ? 'Isa (Singleton)' : '$_pregnancyFetalCount sanggol');
+    
+    final riskLabelEn = _pregnancyRiskLevel == 'low' ? 'Low Risk' : 'High Risk';
+    final riskLabelFil = _pregnancyRiskLevel == 'low' ? 'Mababa (Low Risk)' : 'Mataas (High Risk)';
+    
+    if (language == 'filipino') {
+      return '''Kamusta, mommy! Sa iyong ultrasound record ngayon, naitala ang iyong edad ng pagbubuntis (AOG) sa $aogWeeks linggo ($trimesterFil) kasama ang $fetalCountFil. Ang iyong pangkalahatang pregnancy risk level ay $riskLabelFil. Iminumungkahi namin ang regular na pagsubaybay sa anatomical measurements at anatomical findings mula sa iyong ultrasound report upang masiguro ang malusog na paglaki ni baby. Ang patuloy na pagbisita sa iyong doktor o midwife ay makakatulong sa inyong kalusugan.''';
+    } else {
+      return '''Hello, Mommy! In your ultrasound record today, your gestational age is recorded at $aogWeeks weeks ($trimesterLabel) with a $fetalCountLabel fetus. Your overall pregnancy risk level is evaluated as $riskLabelEn. We recommend tracking baby's growth measurements and anatomical developments from your ultrasound report to ensure healthy progression. Continued prenatal checkups and consultations are highly recommended.''';
+    }
   }
 
   int? _extractWeeksFromAiText(String? ageText) {
@@ -2343,9 +2362,32 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     return result;
   }
 
+  String _cleanBilingualText(String text, String language) {
+    final filipinoIndex = text.indexOf('=== FILIPINO ===');
+    final englishIndex = text.indexOf('=== ENGLISH ===');
+
+    if (filipinoIndex != -1 && englishIndex != -1) {
+      if (filipinoIndex < englishIndex) {
+        final filipino = text.substring(filipinoIndex + '=== FILIPINO ==='.length, englishIndex).trim();
+        final english = text.substring(englishIndex + '=== ENGLISH ==='.length).trim();
+        return language == 'filipino' ? filipino : english;
+      } else {
+        final english = text.substring(englishIndex + '=== ENGLISH ==='.length, filipinoIndex).trim();
+        final filipino = text.substring(filipinoIndex + '=== FILIPINO ==='.length).trim();
+        return language == 'filipino' ? filipino : english;
+      }
+    } else if (filipinoIndex != -1) {
+      return text.substring(filipinoIndex + '=== FILIPINO ==='.length).trim();
+    } else if (englishIndex != -1) {
+      return text.substring(englishIndex + '=== ENGLISH ==='.length).trim();
+    }
+    return text.trim();
+  }
+
   Widget _buildStructuredInsights(String text, {VoidCallback? onInteraction}) {
-    final sections = _extractInsightSections(text);
-    if (sections.isEmpty) return _buildFormattedText(text);
+    final cleanedText = _cleanBilingualText(text, _selectedLanguage);
+    final sections = _extractInsightSections(cleanedText);
+    if (sections.isEmpty) return _buildFormattedText(cleanedText);
 
     final sectionOrder = [
       'OVERALL HEALTH STATUS',
@@ -3435,6 +3477,34 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.25)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded,
+                              color: Colors.orange, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'AI analysis was skipped. This record will be saved with a plain rule-based monitoring summary.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     Row(
                       children: [
                         const Text(
@@ -3454,6 +3524,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                             onSelected: (val) {
                               setState(() {
                                 _pregnancyRiskLevel = val;
+                                _healthSummaryController.text = _buildRuleBasedUltrasoundSummary(); // Re-populate based on selected risk
                               });
                             },
                             hintText: 'Select Pregnancy Risk',
@@ -3466,11 +3537,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     const Divider(color: AppColors.borderPrimary, height: 1),
                     const SizedBox(height: 16),
                     const Text(
-                      'Based on',
+                      'Overall Pregnancy Risk Factors',
                       style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary),
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 8),
                     Wrap(
@@ -3478,6 +3549,185 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       runSpacing: 8,
                       children: _buildRiskFactorsPills(),
                     ),
+                    const SizedBox(height: 16),
+                    const Divider(color: AppColors.borderPrimary, height: 1),
+                    const SizedBox(height: 16),
+
+                    // Clinical Findings (Rule-Based Summary)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Clinical Findings',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: AppColors.borderPrimary.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                children: [
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedLanguage = 'filipino';
+                                        _healthSummaryController.text = _buildRuleBasedUltrasoundSummary();
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        'Tagalog',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
+                                          color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedLanguage = 'english';
+                                        _healthSummaryController.text = _buildRuleBasedUltrasoundSummary();
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        'English',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
+                                          color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (!_isManualEditing)
+                              TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _healthSummaryBeforeEdit =
+                                        _healthSummaryController.text;
+                                    _isManualEditing = true;
+                                  });
+                                },
+                                icon: const Icon(Icons.edit_outlined,
+                                    size: 14, color: AppColors.brandPrimary),
+                                label: const Text(
+                                  'Edit',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.brandPrimary,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (!_isManualEditing) ...[
+                      _buildStructuredInsights(
+                          _healthSummaryController.text),
+                      const SizedBox(height: 16),
+                    ] else ...[
+                      TextField(
+                        controller: _healthSummaryController,
+                        maxLines: 6,
+                        decoration: InputDecoration(
+                          hintText: 'Edit clinical findings...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: AppColors.borderPrimary),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.all(16),
+                        ),
+                        style: const TextStyle(
+                            fontSize: 13, height: 1.5),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _healthSummaryController.text =
+                                      _healthSummaryBeforeEdit;
+                                  _isManualEditing = false;
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.textPrimary,
+                                side: const BorderSide(
+                                    color: AppColors.borderPrimary),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                              ),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                setState(() {
+                                  _isManualEditing = false;
+                                });
+                              },
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.brandPrimary,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                              ),
+                              child: const Text('Save Draft'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                   ],
                 ),
               ),
@@ -4402,6 +4652,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                           onPressed: _isSaving ? null : () {
                             setState(() {
                               _aiAnalysisSkipped = true;
+                              _combinedResponse = null;
+                              _healthSummaryController.text = _buildRuleBasedUltrasoundSummary();
+                              _isManualEditing = false;
+                              _analysisApproved = false;
                               _step = 2; // Move to Step 3: Assessment & Clinical Review
                             });
                           },
@@ -4464,6 +4718,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               onPressed: _isSaving ? null : () {
                 setState(() {
                   _aiAnalysisSkipped = true;
+                  _combinedResponse = null;
+                  _healthSummaryController.text = _buildRuleBasedUltrasoundSummary();
+                  _isManualEditing = false;
+                  _analysisApproved = false;
                   _step = 2; // Move to Step 3: Assessment & Clinical Review
                 });
               },

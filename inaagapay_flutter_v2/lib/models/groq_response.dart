@@ -199,8 +199,13 @@ class GroqResponse {
         final value = _safeText(item['value']);
         final unit = _safeText(item['unit']);
         final status = _safeText(item['status']).toUpperCase();
-        final displayValue =
-            [value, unit].where((part) => part.isNotEmpty).join(' ').trim();
+        final cleanValue = value.toLowerCase().trim();
+        final cleanUnit = unit.toLowerCase().trim();
+        final displayValue = (cleanValue.endsWith(cleanUnit) ||
+                              cleanValue.contains(' $cleanUnit') ||
+                              unit.isEmpty)
+            ? value
+            : '$value $unit'.trim();
 
         if (testName.isEmpty && displayValue.isEmpty) continue;
 

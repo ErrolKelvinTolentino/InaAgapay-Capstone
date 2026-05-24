@@ -13,7 +13,7 @@ import '../../services/groq_service.dart';
 import '../../services/auth_storage.dart';
 import '../../services/lab_cbc_interpretation_engine.dart';
 import '../../services/ultrasound_interpretation_engine.dart'
-    show MonitoringClassification, Trimester, UltrasoundInterpretationEngine;
+    show MonitoringClassification, Trimester;
 import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
@@ -42,6 +42,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   final DateFormat _dateFormat = DateFormat('MMMM d, yyyy');
 
   final List<XFile> _selectedImages = [];
+  String _selectedLanguage = 'filipino';
   GroqResponse? _combinedResponse;
   bool _isSaving = false;
   String? _errorMessage;
@@ -70,6 +71,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   MonitoringClassification _monitoringClassification =
       MonitoringClassification.withinExpectedRange;
   List<CbcComponentResult> _cbcResults = [];
+  bool _showSecondaryDetails = false;
   bool _loadingOverlayVisible = false;
   String _loadingTitle = 'Preparing AI analysis';
   String _loadingDetail = 'Validating images and input context';
@@ -99,6 +101,12 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   String _motherName = '';
 
   final List<String> _uploadedImageUrls = [];
+  DateTime? _motherBirthdate;
+  List<String> _maternalActiveConditions = [];
+  List<String> _maternalAllergies = [];
+  double? _maternalHeight;
+  double? _maternalPrePregWeight;
+  int? _pregnancyFetalCount;
 
   static const List<String> _acceptedLabProfessions = [
     'Medical Technologist',
@@ -179,27 +187,205 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     try {
       final response = await Supabase.instance.client
           .from('pregnancies')
-          .select('last_menstrual_period')
+          .select('last_menstrual_period, pregnancy_risk_level, fetal_count, pre_pregnancy_weight')
           .eq('pregnancy_id', _pregnancyId)
           .maybeSingle();
 
-      if (response != null && response['last_menstrual_period'] != null) {
-        final lmp =
-            DateTime.tryParse(response['last_menstrual_period'].toString());
-        if (lmp != null && mounted) {
-          final referenceDate = _labTestDate ?? DateTime.now();
-          final aogWeeks =
-              LabCbcInterpretationEngine.calculateAogWeeks(lmp, referenceDate);
+      if (response != null) {
+        if (mounted) {
           setState(() {
-            _pregnancyLmp = lmp;
-            _currentTrimester =
-                LabCbcInterpretationEngine.getTrimester(aogWeeks);
+            if (response['last_menstrual_period'] != null) {
+              _pregnancyLmp = DateTime.parse(response['last_menstrual_period'].toString());
+            }
+            if (response['pregnancy_risk_level'] != null) {
+              _pregnancyRiskLevel = response['pregnancy_risk_level'].toString().toLowerCase();
+            }
+            if (response['fetal_count'] != null) {
+              _pregnancyFetalCount = int.tryParse(response['fetal_count'].toString());
+            }
+            if (response['pre_pregnancy_weight'] != null) {
+              _maternalPrePregWeight = double.tryParse(response['pre_pregnancy_weight'].toString());
+            }
+
+            if (_pregnancyLmp != null) {
+              final referenceDate = _labTestDate ?? DateTime.now();
+              final aogWeeks =
+                  LabCbcInterpretationEngine.calculateAogWeeks(_pregnancyLmp!, referenceDate);
+              _currentTrimester =
+                  LabCbcInterpretationEngine.getTrimester(aogWeeks);
+            }
           });
         }
       }
+
+      // Load mother profile details (height, birthdate)
+      final motherRes = await Supabase.instance.client
+          .from('mothers')
+          .select('height, birthdate')
+          .eq('mother_id', _motherId)
+          .maybeSingle();
+      if (motherRes != null) {
+        if (mounted) {
+          setState(() {
+            if (motherRes['height'] != null) {
+              _maternalHeight = double.tryParse(motherRes['height'].toString());
+            }
+            if (motherRes['birthdate'] != null) {
+              _motherBirthdate = DateTime.parse(motherRes['birthdate'].toString());
+            }
+          });
+        }
+      }
+
+      // Load active medical conditions
+      final List conditionsRes = await Supabase.instance.client
+          .from('medical_conditions')
+          .select('condition_name')
+          .eq('mother_id', _motherId)
+          .eq('status', 'active');
+      if (mounted) {
+        setState(() {
+          _maternalActiveConditions = conditionsRes
+              .map((c) => c['condition_name'].toString())
+              .toList();
+        });
+      }
+
+      // Load allergies
+      final List allergiesRes = await Supabase.instance.client
+          .from('allergies')
+          .select('allergen')
+          .eq('mother_id', _motherId)
+          .eq('status', 'active');
+      if (mounted) {
+        setState(() {
+          _maternalAllergies = allergiesRes
+              .map((a) => a['allergen'].toString())
+              .toList();
+        });
+      }
     } catch (e) {
-      if (kDebugMode) print('Error loading pregnancy data: $e');
+      if (kDebugMode) print('Error loading pregnancy details: $e');
     }
+  }
+
+  double? _calculatePrePregnancyBmi() {
+    if (_maternalPrePregWeight == null || _maternalHeight == null || _maternalHeight! <= 0) return null;
+    final heightInMeters = _maternalHeight! / 100.0;
+    return _maternalPrePregWeight! / (heightInMeters * heightInMeters);
+  }
+
+  int? _calculateMaternalAge() {
+    if (_motherBirthdate == null) return null;
+    final today = DateTime.now();
+    var age = today.year - _motherBirthdate!.year;
+    if (today.month < _motherBirthdate!.month ||
+        (today.month == _motherBirthdate!.month && today.day < _motherBirthdate!.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  String _buildRuleBasedLabSummary({String? lang}) {
+    final language = lang ?? _selectedLanguage;
+    final trimesterLabel = _currentTrimester == Trimester.first ? 'First Trimester' : (_currentTrimester == Trimester.second ? 'Second Trimester' : 'Third Trimester');
+    final trimesterFil = _currentTrimester == Trimester.first ? 'Unang Trimester' : (_currentTrimester == Trimester.second ? 'Ikalawang Trimester' : 'Ikatlong Trimester');
+    
+    final riskLabelEn = _pregnancyRiskLevel == 'low' ? 'Low Risk' : 'High Risk';
+    final riskLabelFil = _pregnancyRiskLevel == 'low' ? 'Mababa (Low Risk)' : 'Mataas (High Risk)';
+    
+    if (language == 'filipino') {
+      return '''Kamusta, mommy! Ang iyong laboratory record para sa $trimesterFil ay naitala na. Ang iyong pangkalahatang pregnancy risk level ay kasalukuyang $riskLabelFil. Upang masubaybayan ang kalagayan ng iyong dugo at maiwasan ang mga karaniwang isyu tulad ng anemia habang nagbubuntis, iminumungkahi namin ang regular na pagsubaybay sa iyong Hemoglobin, Hematocrit, at Platelet levels mula sa iyong CBC report. Ang patuloy na prenatal monitoring ay lubhang makakatulong sa inyong kalusugan.''';
+    } else {
+      return '''Hello, Mommy! Your laboratory record for the $trimesterLabel has been logged. Your overall pregnancy risk level is evaluated as $riskLabelEn. To support your health and prevent issues like anemia during pregnancy, it is recommended to keep track of your Hemoglobin, Hematocrit, and Platelet levels from your printed CBC report. Continued prenatal checkups and healthcare consultations are highly recommended to support your health.''';
+    }
+  }
+
+  List<Widget> _buildRiskFactorsPills() {
+    final List<Widget> pills = [];
+
+    // BMI Warning Pill
+    final bmi = _calculatePrePregnancyBmi();
+    if (bmi != null) {
+      if (bmi < 18.5) {
+        pills.add(_buildRiskPill('Underweight BMI (${bmi.toStringAsFixed(1)})', isSevere: false));
+      } else if (bmi >= 25.0 && bmi < 30.0) {
+        pills.add(_buildRiskPill('Overweight BMI (${bmi.toStringAsFixed(1)})', isSevere: false));
+      } else if (bmi >= 30.0) {
+        pills.add(_buildRiskPill('Obese BMI (${bmi.toStringAsFixed(1)})', isSevere: true));
+      }
+    }
+
+    // Maternal Age Warning Pill
+    final age = _calculateMaternalAge();
+    if (age != null) {
+      if (age < 18) {
+        pills.add(_buildRiskPill('Early Maternal Age ($age years)', isSevere: true));
+      } else if (age >= 35) {
+        pills.add(_buildRiskPill('Advanced Maternal Age ($age years)', isSevere: true));
+      }
+    }
+
+    // Multiple pregnancy pill
+    if (_pregnancyFetalCount != null && _pregnancyFetalCount! > 1) {
+      pills.add(_buildRiskPill('Multiple Pregnancy ($_pregnancyFetalCount babies)', isSevere: true));
+    }
+
+    // Medical conditions
+    for (final cond in _maternalActiveConditions) {
+      pills.add(_buildRiskPill('Medical: $cond', isSevere: true));
+    }
+
+    // Allergies
+    for (final allerg in _maternalAllergies) {
+      pills.add(_buildRiskPill('Allergy: $allerg', isSevere: false));
+    }
+
+    if (pills.isEmpty) {
+      pills.add(_buildRiskPill('No high-risk complications detected', isSevere: false, isSuccess: true));
+    }
+
+    return pills;
+  }
+
+  Widget _buildRiskPill(String label, {required bool isSevere, bool isSuccess = false}) {
+    final Color bgColor = isSuccess
+        ? AppColors.success.withValues(alpha: 0.08)
+        : (isSevere ? AppColors.error.withValues(alpha: 0.08) : AppColors.warning.withValues(alpha: 0.08));
+    final Color borderColor = isSuccess
+        ? AppColors.success.withValues(alpha: 0.3)
+        : (isSevere ? AppColors.error.withValues(alpha: 0.3) : AppColors.warning.withValues(alpha: 0.3));
+    final Color textColor = isSuccess
+        ? AppColors.success
+        : (isSevere ? AppColors.error : AppColors.warning);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isSuccess ? Icons.check_circle : Icons.error_outline,
+            size: 12,
+            color: textColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _pickImages() async {
@@ -659,19 +845,23 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         // Compute CBC interpretation results from AI-extracted lab data
         if (result.labResults != null && result.labResults!.isNotEmpty) {
           final valueMap = <String, double>{};
+          final valueStrs = <String, String>{};
           for (final lr in result.labResults!) {
             final numVal = double.tryParse(
                 lr.value.replaceAll(RegExp(r'[^\d.]'), ''));
             if (numVal != null) {
               valueMap[lr.testName] = numVal;
+              valueStrs[lr.testName] = lr.value;
             }
           }
           _cbcResults = LabCbcInterpretationEngine.interpretAll(
             values: valueMap,
+            valueStrs: valueStrs,
             trimester: _currentTrimester,
           );
           _monitoringClassification =
               LabCbcInterpretationEngine.classifyOverall(_cbcResults);
+          _showSecondaryDetails = false;
         }
 
         _step = 2; // Navigate to Step 3 (0-indexed)
@@ -731,8 +921,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         }
       }
 
-      final notesText = _notesController.text.trim();
-      final String remarks = notesText;
+      final String remarks = aiGenerated ? _notesController.text.trim() : _healthSummaryController.text.trim();
 
       final List<String> uploadedFilePaths = [];
       final List<int> fileIds = [];
@@ -791,6 +980,14 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
           }
         }
       }
+
+      // Update pregnancy risk level if overridden by midwife
+      await Supabase.instance.client
+          .from('pregnancies')
+          .update({
+            'pregnancy_risk_level': _pregnancyRiskLevel,
+          })
+          .eq('pregnancy_id', _pregnancyId);
 
       final labTestResponse = await Supabase.instance.client
           .from('lab_tests')
@@ -1667,12 +1864,35 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     );
   }
 
+  String _cleanBilingualText(String text, String language) {
+    final filipinoIndex = text.indexOf('=== FILIPINO ===');
+    final englishIndex = text.indexOf('=== ENGLISH ===');
+
+    if (filipinoIndex != -1 && englishIndex != -1) {
+      if (filipinoIndex < englishIndex) {
+        final filipino = text.substring(filipinoIndex + '=== FILIPINO ==='.length, englishIndex).trim();
+        final english = text.substring(englishIndex + '=== ENGLISH ==='.length).trim();
+        return language == 'filipino' ? filipino : english;
+      } else {
+        final english = text.substring(englishIndex + '=== ENGLISH ==='.length, filipinoIndex).trim();
+        final filipino = text.substring(filipinoIndex + '=== FILIPINO ==='.length).trim();
+        return language == 'filipino' ? filipino : english;
+      }
+    } else if (filipinoIndex != -1) {
+      return text.substring(filipinoIndex + '=== FILIPINO ==='.length).trim();
+    } else if (englishIndex != -1) {
+      return text.substring(englishIndex + '=== ENGLISH ==='.length).trim();
+    }
+    return text.trim();
+  }
+
   Widget _buildStructuredInsights(
     String text, {
     VoidCallback? onInteraction,
   }) {
-    final sections = _extractInsightSections(text);
-    if (sections.isEmpty) return _buildFormattedText(text);
+    final cleanedText = _cleanBilingualText(text, _selectedLanguage);
+    final sections = _extractInsightSections(cleanedText);
+    if (sections.isEmpty) return _buildFormattedText(cleanedText);
 
     const sectionOrder = [
       'OVERALL ASSESSMENT',
@@ -1711,6 +1931,12 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
       // These details are now merged into expandable rows per aspect.
       if (entry.key == 'ABNORMAL FINDINGS' || entry.key == 'NORMAL RANGES') {
+        continue;
+      }
+
+      // Hide recommendations from the tab list because we display them
+      // prominently directly above the approval checkbox!
+      if (entry.key == 'RECOMMENDATIONS') {
         continue;
       }
 
@@ -2308,7 +2534,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   // ── Tab Switcher (matches ultrasound's _buildAssessmentTabSwitcher) ──────
 
   Widget _buildLabTabSwitcher() {
-    if (_combinedResponse == null && !_aiAnalysisSkipped) {
+    if (_combinedResponse == null) {
       return const SizedBox.shrink();
     }
     return Align(
@@ -2552,7 +2778,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'AI analysis was skipped. This record will be saved without AI monitoring insights.',
+                            'AI analysis was skipped. This record will be saved with a plain rule-based monitoring summary.',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.orange,
@@ -2582,6 +2808,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                           onSelected: (val) {
                             setState(() {
                               _pregnancyRiskLevel = val;
+                              _healthSummaryController.text = _buildRuleBasedLabSummary(); // Re-populate based on selected risk
                             });
                           },
                           hintText: 'Select Pregnancy Risk',
@@ -2590,6 +2817,203 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  const Divider(color: AppColors.borderPrimary, height: 1),
+                  const SizedBox(height: 16),
+
+                  // Overall Pregnancy Risk Factors
+                  const Text(
+                    'Overall Pregnancy Risk Factors',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _buildRiskFactorsPills(),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(color: AppColors.borderPrimary, height: 1),
+                  const SizedBox(height: 16),
+
+                  // Clinical Findings (Rule-Based Summary)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Clinical Findings',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: AppColors.borderPrimary.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedLanguage = 'filipino';
+                                      _healthSummaryController.text = _buildRuleBasedLabSummary();
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'Tagalog',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
+                                        color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedLanguage = 'english';
+                                      _healthSummaryController.text = _buildRuleBasedLabSummary();
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'English',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
+                                        color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (!_isEditing)
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _healthSummaryBeforeEdit =
+                                      _healthSummaryController.text;
+                                  _isEditing = true;
+                                });
+                              },
+                              icon: const Icon(Icons.edit_outlined,
+                                  size: 14, color: AppColors.brandPrimary),
+                              label: const Text(
+                                'Edit',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.brandPrimary,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (!_isEditing) ...[
+                    _buildStructuredInsights(
+                        _healthSummaryController.text),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    TextField(
+                      controller: _healthSummaryController,
+                      maxLines: 6,
+                      decoration: InputDecoration(
+                        hintText: 'Edit clinical findings...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: AppColors.borderPrimary),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.all(16),
+                      ),
+                      style: const TextStyle(
+                          fontSize: 13, height: 1.5),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              setState(() {
+                                _healthSummaryController.text =
+                                    _healthSummaryBeforeEdit;
+                                _isEditing = false;
+                              });
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.textPrimary,
+                              side: const BorderSide(
+                                  color: AppColors.borderPrimary),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () {
+                              setState(() {
+                                _isEditing = false;
+                              });
+                            },
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.brandPrimary,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                            ),
+                            child: const Text('Save Draft'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ],
               ),
             ),
@@ -2600,8 +3024,8 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
     // AI analysis exists → full assessment card
     final classificationLabel =
-        UltrasoundInterpretationEngine.classificationLabel(
-            _monitoringClassification, 'english');
+        LabCbcInterpretationEngine.classificationLabel(
+            _monitoringClassification, language: 'english');
     final chipColor = _monitoringChipColor(_monitoringClassification);
     final chipIcon = _monitoringChipIcon(_monitoringClassification);
 
@@ -2681,6 +3105,46 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Sufficiency Warning Callout
+                if (_combinedResponse != null) ...[
+                  () {
+                    final warning = LabCbcInterpretationEngine.getSufficiencyWarning(
+                      results: _cbcResults,
+                      trimester: _currentTrimester,
+                      confidenceScore: _combinedResponse!.confidence,
+                    );
+                    if (warning == null) return const SizedBox.shrink();
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded,
+                              color: Colors.amber, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              warning,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.amber,
+                                fontWeight: FontWeight.w600,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }(),
+                ],
                 if (_activeLabTab == 'risk') ...[
                   // Pregnancy Risk Override
                   Row(
@@ -2715,67 +3179,20 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       color: AppColors.borderPrimary, height: 1),
                   const SizedBox(height: 16),
 
-                  // Risk basis from CBC results
+                  // Overall Pregnancy Risk Factors
                   const Text(
-                    'Based on',
+                    'Overall Pregnancy Risk Factors',
                     style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textSecondary),
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary),
                   ),
                   const SizedBox(height: 8),
-                  if (_cbcResults.isNotEmpty)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _cbcResults.map((r) {
-                        final color = r.status == CbcComponentStatus.expected
-                            ? AppColors.success
-                            : (r.status == CbcComponentStatus.monitor
-                                ? AppColors.warning
-                                : AppColors.error);
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                                color: color.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                r.status == CbcComponentStatus.expected
-                                    ? Icons.check_circle
-                                    : Icons.info_outline,
-                                size: 14,
-                                color: color,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${r.componentName}: ${LabCbcInterpretationEngine.statusLabel(r.status)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: color,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    )
-                  else
-                    Text(
-                      'CBC component data not yet available.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _buildRiskFactorsPills(),
+                  ),
                 ] else ...[
                   // Lab Monitoring Insight tab
 
@@ -2795,33 +3212,94 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                           color: AppColors.textPrimary,
                         ),
                       ),
-                      if (!_isEditing)
-                        TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _healthSummaryBeforeEdit =
-                                  _healthSummaryController.text;
-                              _isEditing = true;
-                            });
-                          },
-                          icon: const Icon(Icons.edit_outlined,
-                              size: 14, color: AppColors.brandPrimary),
-                          label: const Text(
-                            'Edit',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.brandPrimary,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: AppColors.borderPrimary.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedLanguage = 'filipino';
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'Tagalog',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
+                                        color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedLanguage = 'english';
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'English',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
+                                        color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            minimumSize: Size.zero,
-                            tapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
+                          const SizedBox(width: 8),
+                          if (!_isEditing)
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _healthSummaryBeforeEdit =
+                                      _healthSummaryController.text;
+                                  _isEditing = true;
+                                });
+                              },
+                              icon: const Icon(Icons.edit_outlined,
+                                  size: 14, color: AppColors.brandPrimary),
+                              label: const Text(
+                                'Edit',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.brandPrimary,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -2902,6 +3380,19 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                   ],
                 ],
 
+                // AI-Assisted Recommendations (placed prominently above approval checkbox)
+                if (_combinedResponse != null && !_aiAnalysisSkipped && _activeLabTab == 'insight') ...[
+                  () {
+                    final sections = _extractInsightSections(_healthSummaryController.text);
+                    final recLines = sections['RECOMMENDATIONS'] ?? _combinedResponse?.recommendations;
+                    if (recLines == null || recLines.isEmpty) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: _buildInsightSectionCard('RECOMMENDATIONS', recLines),
+                    );
+                  }(),
+                ],
+
                 // Approval checkbox (outside tabs)
                 const SizedBox(height: 16),
                 const Divider(
@@ -2949,14 +3440,353 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
   // ── Monitoring Results (replaces _buildDetailedResults with interpretive language) ─
 
+  Widget _buildMotherFriendlyCard({
+    required String title,
+    required IconData icon,
+    required CbcComponentStatus status,
+    required String description,
+  }) {
+    final statusColor = status == CbcComponentStatus.expected
+        ? AppColors.success
+        : (status == CbcComponentStatus.monitor
+            ? AppColors.warning
+            : AppColors.error);
+
+    final statusText = _selectedLanguage == 'filipino'
+        ? (status == CbcComponentStatus.expected
+            ? '✅ Maayos (Normal na Antas)'
+            : (status == CbcComponentStatus.monitor
+                ? '⚠️ Iminumungkahi ang Pagsubaybay'
+                : '🚨 Nangangailangan ng Pagsusuri'))
+        : (status == CbcComponentStatus.expected
+            ? '✅ Within Expected Monitoring Range'
+            : (status == CbcComponentStatus.monitor
+                ? '⚠️ Monitoring Recommended'
+                : '🚨 Clinical Follow-Up Recommended'));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: statusColor, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMonitoringResults() {
     if (_combinedResponse == null || !_hasDetailedLabData()) {
       return const SizedBox.shrink();
     }
 
+    CbcComponentResult? findResult(String name) {
+      for (final res in _cbcResults) {
+        if (res.componentName.toLowerCase() == name.toLowerCase()) {
+          return res;
+        }
+      }
+      return null;
+    }
+
+    CbcComponentStatus getGroupStatus(List<String> names) {
+      var finalStatus = CbcComponentStatus.expected;
+      for (final name in names) {
+        final res = findResult(name);
+        if (res != null) {
+          if (res.status == CbcComponentStatus.review) {
+            return CbcComponentStatus.review;
+          } else if (res.status == CbcComponentStatus.monitor) {
+            finalStatus = CbcComponentStatus.monitor;
+          }
+        }
+      }
+      return finalStatus;
+    }
+
+    final oxygenStatus = getGroupStatus(['Hemoglobin', 'Hematocrit', 'MCV']);
+    final immuneStatus = getGroupStatus(['WBC']);
+    final clottingStatus = getGroupStatus(['Platelets']);
+
+    final overallColor = _monitoringClassification == MonitoringClassification.withinExpectedRange
+        ? AppColors.success
+        : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+            ? AppColors.warning
+            : AppColors.error);
+
+    final overallTitle = _selectedLanguage == 'filipino'
+        ? 'Pangkalahatang Buod ng Pagsusuri sa Dugo'
+        : 'Blood Monitoring Summary';
+
+    final overallBadge = _selectedLanguage == 'filipino'
+        ? (_monitoringClassification == MonitoringClassification.withinExpectedRange
+            ? '✅ Maayos at Normal na Antas'
+            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+                ? '⚠️ Iminumungkahi ang Masusing Pagsubaybay'
+                : '🚨 Konsultasyon sa Doktor ay Iminumungkahi'))
+        : (_monitoringClassification == MonitoringClassification.withinExpectedRange
+            ? '✅ Within Expected Monitoring Range'
+            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+                ? '⚠️ Monitoring Recommended'
+                : '🚨 Clinical Follow-Up Recommended'));
+
+    final overallDesc = _selectedLanguage == 'filipino'
+        ? (_monitoringClassification == MonitoringClassification.withinExpectedRange
+            ? 'Ang iyong kabuuang resulta ng pagsusuri sa dugo ay maayos at angkop para sa iyong yugto ng pagbubuntis.'
+            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+                ? 'Iminumungkahi ang masusing pagsubaybay sa ilang antas ng iyong dugo kasama ang iyong midwife o doktor.'
+                : 'Lubhang iminumungkahi ang agarang konsultasyon sa iyong doktor o midwife upang masuri ang mga antas ng iyong dugo.'))
+        : (_monitoringClassification == MonitoringClassification.withinExpectedRange
+            ? 'Your overall blood monitoring results generally appear consistent with the expected range for this stage of pregnancy.'
+            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
+                ? 'A closer monitoring of certain blood levels is recommended in coordination with your midwife or doctor.'
+                : 'A prompt follow-up consultation with your doctor or midwife is highly recommended to evaluate your blood levels.'));
+
+    final oxygenDesc = _selectedLanguage == 'filipino'
+        ? (oxygenStatus == CbcComponentStatus.expected
+            ? 'Ang iyong mga antas na may kinalaman sa pagdadala ng oxygen sa dugo (tulad ng Hemoglobin at Hematocrit) ay maayos at nasa normal na antas para sa iyong yugto ng pagbubuntis.'
+            : (oxygenStatus == CbcComponentStatus.monitor
+                ? 'May kaunting pagbabago sa iyong mga resulta para sa oxygen support. Ipagpatuloy ang pag-inom ng prenatal vitamins at kumonsulta sa iyong midwife.'
+                : 'May mga antas sa oxygen support na nangangailangan ng masusing pagsusuri ng midwife o doktor upang maiwasan ang anemia o matinding pagkapagod.'))
+        : (oxygenStatus == CbcComponentStatus.expected
+            ? 'Your blood monitoring results related to oxygen support (such as Hemoglobin and Hematocrit) appear generally consistent and within the expected range for this stage of pregnancy.'
+            : (oxygenStatus == CbcComponentStatus.monitor
+                ? 'Your blood monitoring results related to oxygen support show some slight variations. It is recommended to observe these and correlate them with your midwife.'
+                : 'Your oxygen support levels indicate variations that require clinical review by your midwife or doctor to prevent anemia.'));
+
+    final immuneDesc = _selectedLanguage == 'filipino'
+        ? (immuneStatus == CbcComponentStatus.expected
+            ? 'Ang mga naitalang antas na may kinalaman sa immune response o paglaban sa impeksyon (WBC o White Blood Cells) ay maayos at nagpapakita ng malusog na proteksyon.'
+            : (immuneStatus == CbcComponentStatus.monitor
+                ? 'May katamtamang pagbabago sa immune monitoring. Ito ay karaniwang reaksyon ng katawan habang nagbubuntis, ngunit iminumungkahi ang patuloy na pagsubaybay.'
+                : 'Nangangailangan ng karagdagang pagsusuri ang iyong immune response levels upang masigurong ligtas ka at si baby sa anumang impeksyon.'))
+        : (immuneStatus == CbcComponentStatus.expected
+            ? 'The recorded blood monitoring values related to immune response and infection monitoring (WBC) appear generally reassuring and expected.'
+            : (immuneStatus == CbcComponentStatus.monitor
+                ? 'The immune monitoring results show moderate variations. While often normal during pregnancy, continued monitoring is recommended.'
+                : 'Your immune response levels indicate a need for further clinical review to ensure safety from any infection.'));
+
+    final clottingDesc = _selectedLanguage == 'filipino'
+        ? (clottingStatus == CbcComponentStatus.expected
+            ? 'Ang mga naitalang antas na may kinalaman sa pagpigil sa pagdurugo (Platelets) ay maayos, ligtas, at handa para sa iyong panganganak.'
+            : (clottingStatus == CbcComponentStatus.monitor
+                ? 'May kaunting pagbabago sa platelet count. Subaybayan ito sa tulong ng iyong midwife upang manatiling ligtas at malusog.'
+                : 'Ang mga antas para sa pagpigil sa pagdurugo ay nangangailangan ng pagsusuri ng doktor upang masigurong ligtas ang iyong panganganak at maiwasan ang komplikasyon.'))
+        : (clottingStatus == CbcComponentStatus.expected
+            ? 'The recorded blood monitoring values related to platelet activity and blood clotting support (Platelets) appear stable and within expected ranges.'
+            : (clottingStatus == CbcComponentStatus.monitor
+                ? 'There are minor variations in your platelet levels. Continued observation with your midwife is recommended.'
+                : 'Your blood clotting support levels indicate variations that require professional medical review for a safe delivery.'));
+
+    final highPriorityComponents = {'Hemoglobin', 'Hematocrit', 'WBC', 'Platelets', 'MCV'};
+    final highPriorityWidgets = <Widget>[];
+    final secondaryWidgets = <Widget>[];
+
+    if (_combinedResponse!.labResults != null &&
+        _combinedResponse!.labResults!.isNotEmpty) {
+      final interpreted = _combinedResponse!.labResults!
+          .map((result) {
+            final interpretation =
+                LabCbcInterpretationEngine.interpretComponent(
+              componentName: result.testName,
+              value: double.tryParse(
+                      result.value.replaceAll(RegExp(r'[^\d.]'), '')) ??
+                  0,
+              trimester: _currentTrimester,
+              valueStr: result.value,
+            );
+            if (interpretation == null) return null;
+            return MapEntry(result, interpretation);
+          })
+          .where((e) => e != null)
+          .toList();
+
+      for (final e in interpreted) {
+        final result = e!.key;
+        final interpretation = e.value;
+
+        final statusColor =
+            interpretation.status == CbcComponentStatus.expected
+                ? AppColors.success
+                : (interpretation.status == CbcComponentStatus.monitor
+                    ? AppColors.warning
+                    : AppColors.error);
+
+        final statusLabel = LabCbcInterpretationEngine.statusLabel(
+            interpretation.status);
+
+        final widget = Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: statusColor.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                result.testName,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      result.value,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: statusColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                interpretation.contextPhrase,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        );
+
+        if (highPriorityComponents.contains(interpretation.componentName)) {
+          highPriorityWidgets.add(widget);
+        } else {
+          secondaryWidgets.add(widget);
+        }
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 20),
+          decoration: BoxDecoration(
+            color: overallColor.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: overallColor.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                overallTitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: overallColor,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                overallBadge,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: overallColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                overallDesc,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textPrimary,
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+        ),
         Row(
           children: [
             Container(
@@ -2965,13 +3795,13 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                 color: AppColors.brandAccent.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.science,
+              child: const Icon(Icons.favorite_rounded,
                   color: AppColors.brandAccent, size: 20),
             ),
             const SizedBox(width: 12),
-            const Text(
-              'Lab Monitoring Findings',
-              style: TextStyle(
+            Text(
+              _selectedLanguage == 'filipino' ? 'Gabay sa Pagsusuri' : 'Simple Monitoring Notes',
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -2979,153 +3809,180 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Status guide: REVIEW = needs clinical review, MONITOR = observe and correlate, EXPECTED = within commonly expected range.',
-          style: TextStyle(
-            fontSize: 11,
-            color: AppColors.textSecondary,
-            fontStyle: FontStyle.italic,
-          ),
+        const SizedBox(height: 12),
+        _buildMotherFriendlyCard(
+          title: _selectedLanguage == 'filipino' ? 'Suporta sa Oxygen ng Dugo (Blood Oxygen Support)' : 'Blood Oxygen Support',
+          icon: Icons.air_rounded,
+          status: oxygenStatus,
+          description: oxygenDesc,
+        ),
+        _buildMotherFriendlyCard(
+          title: _selectedLanguage == 'filipino' ? 'Pagsubaybay sa Impeksyon at Imunidad' : 'Infection & Immune Monitoring',
+          icon: Icons.shield_outlined,
+          status: immuneStatus,
+          description: immuneDesc,
+        ),
+        _buildMotherFriendlyCard(
+          title: _selectedLanguage == 'filipino' ? 'Suporta sa Pag-ampat ng Dugo (Blood Clotting Support)' : 'Blood Clotting Support',
+          icon: Icons.water_drop_outlined,
+          status: clottingStatus,
+          description: clottingDesc,
         ),
         const SizedBox(height: 16),
-        if (_combinedResponse!.labResults != null &&
-            _combinedResponse!.labResults!.isNotEmpty) ...[
-          ..._combinedResponse!.labResults!
-              .map((result) {
-                final interpretation =
-                    LabCbcInterpretationEngine.interpretComponent(
-                  componentName: result.testName,
-                  value: double.tryParse(
-                          result.value.replaceAll(RegExp(r'[^\d.]'), '')) ??
-                      0,
-                  trimester: _currentTrimester,
-                );
-                // Skip components without CBC reference ranges
-                if (interpretation == null) return null;
-                return MapEntry(result, interpretation);
-              })
-              .where((e) => e != null)
-              .map((e) {
-            final result = e!.key;
-            final interpretation = e.value;
-
-            final statusColor =
-                interpretation.status == CbcComponentStatus.expected
-                    ? AppColors.success
-                    : (interpretation.status == CbcComponentStatus.monitor
-                        ? AppColors.warning
-                        : AppColors.error);
-
-            final statusLabel = LabCbcInterpretationEngine.statusLabel(
-                interpretation.status);
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                    color: statusColor.withValues(alpha: 0.25)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    result.testName,
+        InkWell(
+          onTap: () {
+            setState(() {
+              _showSecondaryDetails = !_showSecondaryDetails;
+            });
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderPrimary),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _showSecondaryDetails
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.brandPrimary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _selectedLanguage == 'filipino'
+                          ? (_showSecondaryDetails ? 'Itago ang Detalyadong Resulta' : 'Ipakita ang Detalyadong Resulta (Personnel View)')
+                          : (_showSecondaryDetails ? 'Hide Detailed Laboratory Values' : 'Detailed Laboratory Values (Healthcare Personnel View)'),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.brandText,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${highPriorityWidgets.length + secondaryWidgets.length}',
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandText,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_showSecondaryDetails) ...[
+          const SizedBox(height: 16),
+          Text(
+            _selectedLanguage == 'filipino'
+                ? 'Gabay sa Status: REVIEW = kailangan ng masusing pagsusuri, MONITOR = subaybayan, EXPECTED = normal na antas.'
+                : 'Status guide: REVIEW = needs clinical review, MONITOR = observe and correlate, EXPECTED = within commonly expected range.',
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...highPriorityWidgets,
+          if (secondaryWidgets.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Divider(color: AppColors.borderPrimary, height: 1),
+            const SizedBox(height: 16),
+            const Text(
+              'Secondary CBC Indices',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...secondaryWidgets,
+          ],
+        const SizedBox(height: 16),
+        () {
+          final cleanAbnormalFindings = (_combinedResponse!.abnormalFindings ?? []).where((finding) {
+            final lower = finding.toLowerCase();
+            for (final res in _cbcResults) {
+              final name = res.componentName.toLowerCase();
+              if (lower.contains(name) || (name == 'hemoglobin' && (lower.contains('hb') || lower.contains('hgb')))) {
+                if (res.status == CbcComponentStatus.expected) {
+                  return false;
+                }
+              }
+            }
+            return true;
+          }).toList();
+
+          if (cleanAbnormalFindings.isEmpty) return const SizedBox.shrink();
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'FLAGGED FINDINGS',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...cleanAbnormalFindings.map((finding) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppColors.warning.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          statusLabel,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
+                      Icon(Icons.info_outline,
+                          color: AppColors.warning, size: 16),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          result.value,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: statusColor,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          finding,
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    interpretation.contextPhrase,
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      color: AppColors.textSecondary,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-          const SizedBox(height: 8),
-        ],
-        if (_combinedResponse!.abnormalFindings != null &&
-            _combinedResponse!.abnormalFindings!.isNotEmpty) ...[
-          const Text(
-            'FLAGGED FINDINGS',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ..._combinedResponse!.abnormalFindings!.map((finding) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.warning.withValues(alpha: 0.25)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      color: AppColors.warning, size: 16),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      finding,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-          const SizedBox(height: 8),
-        ],
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          );
+        }(),
         // AI disclaimer banner
         Container(
           padding: const EdgeInsets.all(12),
@@ -3151,6 +4008,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
             ],
           ),
         ),
+        ],
       ],
     );
   }
@@ -3405,6 +4263,10 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                           onPressed: _isSaving ? null : () {
                             setState(() {
                               _aiAnalysisSkipped = true;
+                              _combinedResponse = null; // Clear old AI results!
+                              _cbcResults.clear();      // Clear cbc component list!
+                              _healthSummaryController.text = _buildRuleBasedLabSummary(); // Plain rule-based summary!
+                              _analysisApproved = false; // Reset approval!
                               _step = 2; // Move to Step 3: Assessment & Clinical Review
                             });
                           },
