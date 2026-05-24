@@ -14,6 +14,12 @@ class GroqResponse {
   final String? fetalWeight;
   final String? heartRate;
 
+  // Trimester-aware monitoring classification
+  // Values: 'WITHIN_EXPECTED_RANGE' | 'REQUIRES_CLOSER_MONITORING' | 'FOLLOW_UP_RECOMMENDED'
+  // Reference: INTERGROWTH-21st (Papageorghiou et al., Lancet 2014);
+  //            WHO Fetal Growth Charts (Kiserud et al., PLOS Medicine 2017)
+  final String? monitoringClassification;
+
   // Fields for lab test assessment
   final List<LabResult>? labResults;
   final String? overallAssessment;
@@ -25,6 +31,7 @@ class GroqResponse {
   final String? extractedPatientName;
   final String? extractedClinicLocation;
   final String? extractedProfessional;
+  final String? extractedLabTestType;
 
   GroqResponse({
     required this.description,
@@ -37,6 +44,7 @@ class GroqResponse {
     this.gestationalAge,
     this.fetalWeight,
     this.heartRate,
+    this.monitoringClassification,
     this.labResults,
     this.overallAssessment,
     this.abnormalFindings,
@@ -45,6 +53,7 @@ class GroqResponse {
     this.extractedPatientName,
     this.extractedClinicLocation,
     this.extractedProfessional,
+    this.extractedLabTestType,
   });
 
   factory GroqResponse.fromJson(Map<String, dynamic> json) {
@@ -190,8 +199,13 @@ class GroqResponse {
         final value = _safeText(item['value']);
         final unit = _safeText(item['unit']);
         final status = _safeText(item['status']).toUpperCase();
-        final displayValue =
-            [value, unit].where((part) => part.isNotEmpty).join(' ').trim();
+        final cleanValue = value.toLowerCase().trim();
+        final cleanUnit = unit.toLowerCase().trim();
+        final displayValue = (cleanValue.endsWith(cleanUnit) ||
+                              cleanValue.contains(' $cleanUnit') ||
+                              unit.isEmpty)
+            ? value
+            : '$value $unit'.trim();
 
         if (testName.isEmpty && displayValue.isEmpty) continue;
 
@@ -210,10 +224,15 @@ class GroqResponse {
     final gestationalAge = _safeText(json['gestational_age_assessment']);
     final overallAssessment = _safeText(json['overall_assessment']);
 
+    // Parse trimester-aware monitoring classification
+    // Reference: INTERGROWTH-21st; WHO Fetal Growth Charts
+    final monitoringClassification = _safeText(json['monitoring_classification']).toUpperCase();
+
     final patientInfo = json['patient_info_visible'] as Map<String, dynamic>?;
     final extractedPatientName = _safeText(patientInfo?['patient_name'] ?? patientInfo?['name']);
     final extractedClinicLocation = _safeText(patientInfo?['clinic_location'] ?? patientInfo?['lab_name']);
     final extractedProfessional = _safeText(patientInfo?['attending_professional']);
+    final extractedLabTestType = _safeText(json['identified_lab_test_type'] ?? json['lab_test_type']);
 
     final description = _buildStructuredDescription(
       relevance: relevance,
@@ -243,6 +262,7 @@ class GroqResponse {
       gestationalAge: gestationalAge.isEmpty ? null : gestationalAge,
       fetalWeight: fetalWeight,
       heartRate: heartRate,
+      monitoringClassification: monitoringClassification.isEmpty ? null : monitoringClassification,
       labResults: labResults.isEmpty ? null : labResults,
       overallAssessment: overallAssessment.isEmpty ? null : overallAssessment,
       abnormalFindings:
@@ -253,6 +273,7 @@ class GroqResponse {
       extractedPatientName: extractedPatientName.isEmpty ? null : extractedPatientName,
       extractedClinicLocation: extractedClinicLocation.isEmpty ? null : extractedClinicLocation,
       extractedProfessional: extractedProfessional.isEmpty ? null : extractedProfessional,
+      extractedLabTestType: extractedLabTestType.isEmpty ? null : extractedLabTestType,
     );
   }
 
@@ -368,6 +389,7 @@ class GroqResponse {
           : measurements.firstWhere(
               (m) => RegExp(r'heart', caseSensitive: false).hasMatch(m),
             ),
+      monitoringClassification: null, // Free-text fallback; engine will compute from screen
       labResults: labResults.isEmpty ? null : labResults,
       overallAssessment: overallAssessment.isEmpty ? null : overallAssessment,
       abnormalFindings: abnormalFindings.isEmpty ? null : abnormalFindings,

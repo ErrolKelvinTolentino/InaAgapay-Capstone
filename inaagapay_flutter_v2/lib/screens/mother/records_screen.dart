@@ -816,7 +816,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     try {
       final aiRow = await SupabaseService.client
           .from('ai_responses')
-          .select('ai_response_id, response')
+          .select('ai_response_id, response, status')
           .eq('reference_table', 'prenatal_checkups')
           .eq('reference_id', prenatalCheckupId)
           .eq('response_type', 'risk_assessment')
@@ -825,6 +825,10 @@ class _RecordsScreenState extends State<RecordsScreen>
           .maybeSingle();
 
       String? aiResponse = aiRow?['response'] as String?;
+      final status = aiRow?['status'] as String?;
+      if (status != 'approved') {
+        aiResponse = null;
+      }
       String? riskLevel;
       String riskFactors = '';
       String medicationPlans = _t('None', 'Wala');
