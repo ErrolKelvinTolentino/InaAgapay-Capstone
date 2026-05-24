@@ -31,6 +31,7 @@ class GroqResponse {
   final String? extractedPatientName;
   final String? extractedClinicLocation;
   final String? extractedProfessional;
+  final String? extractedLabTestType;
 
   GroqResponse({
     required this.description,
@@ -52,6 +53,7 @@ class GroqResponse {
     this.extractedPatientName,
     this.extractedClinicLocation,
     this.extractedProfessional,
+    this.extractedLabTestType,
   });
 
   factory GroqResponse.fromJson(Map<String, dynamic> json) {
@@ -225,6 +227,7 @@ class GroqResponse {
     final extractedPatientName = _safeText(patientInfo?['patient_name'] ?? patientInfo?['name']);
     final extractedClinicLocation = _safeText(patientInfo?['clinic_location'] ?? patientInfo?['lab_name']);
     final extractedProfessional = _safeText(patientInfo?['attending_professional']);
+    final extractedLabTestType = _safeText(json['identified_lab_test_type'] ?? json['lab_test_type']);
 
     final description = _buildStructuredDescription(
       relevance: relevance,
@@ -265,6 +268,7 @@ class GroqResponse {
       extractedPatientName: extractedPatientName.isEmpty ? null : extractedPatientName,
       extractedClinicLocation: extractedClinicLocation.isEmpty ? null : extractedClinicLocation,
       extractedProfessional: extractedProfessional.isEmpty ? null : extractedProfessional,
+      extractedLabTestType: extractedLabTestType.isEmpty ? null : extractedLabTestType,
     );
   }
 

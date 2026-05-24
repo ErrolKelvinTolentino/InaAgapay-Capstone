@@ -749,7 +749,7 @@ IMPORTANT GUIDELINES:
 - Use ONLY the extracted data provided below. Do not fabricate anything.
 
 I am providing $imageCount laboratory image(s).
-Selected lab test type: ${labType.isEmpty ? 'Not specified' : labType}
+Allowed pregnancy lab test types: Complete Blood Count (CBC), Urinalysis, OGTT (Oral Glucose Tolerance Test), Fasting Blood Sugar, Hepatitis B (HBsAg), HIV Screening, Syphilis (VDRL/RPR), Blood Typing, Glucose Challenge Test, Thyroid Function (TSH), Stool Examination.
 Notes entered by user: ${notes.isEmpty ? 'None provided' : notes}
 Clinical context: ${clinicalContext.isEmpty ? 'Not provided' : clinicalContext}
 
@@ -758,8 +758,10 @@ $cleaned
 
 Step-by-step, analyze these lab values:
 
-Step 1: Check if the extracted data is relevant (is it actually a lab report?)
-If irrelevant or unreadable (image_quality: POOR with 0 tests found), set relevance_check to UNRELATED.
+Step 1: Check if the extracted data is relevant:
+- Is it actually a laboratory report?
+- Does it contain tests related to the allowed pregnancy lab test types (Complete Blood Count (CBC), Urinalysis, OGTT, Fasting Blood Sugar, Hepatitis B (HBsAg), HIV Screening, Syphilis (VDRL/RPR), Blood Typing, Glucose Challenge Test, Thyroid Function (TSH), Stool Examination)?
+- If the report does not contain any of these allowed categories or is completely unrelated/unreadable (image_quality: POOR), set relevance_check to UNRELATED and explain why in relevance_reason (e.g. 'Unrelated lab test type' or 'Not a valid lab report').
 
 Step 2: For EACH extracted test, determine its status by comparing the value to the reference range:
 - NORMAL: value within reference range
@@ -782,6 +784,7 @@ Return ONLY valid JSON in this exact schema:
 {
   "relevance_check": "RELATED|UNRELATED",
   "relevance_reason": "string",
+  "identified_lab_test_type": "string matching exactly one of the allowed categories: 'Complete Blood Count (CBC)', 'Urinalysis', 'OGTT (Oral Glucose Tolerance Test)', 'Fasting Blood Sugar', 'Hepatitis B (HBsAg)', 'HIV Screening', 'Syphilis (VDRL/RPR)', 'Blood Typing', 'Glucose Challenge Test', 'Thyroid Function (TSH)', 'Stool Examination' (or 'Multiple Tests' if more than one category is present)",
   "summary": "1-2 sentence caring summary (e.g. 'Great news, mama — most of your lab results look healthy! There's just one thing we'll want to work on together.')",
   "lab_results": [
     {

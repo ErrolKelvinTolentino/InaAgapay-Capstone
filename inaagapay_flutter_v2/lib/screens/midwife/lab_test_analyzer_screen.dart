@@ -11,10 +11,16 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/groq_service.dart';
 import '../../services/auth_storage.dart';
+import '../../services/lab_cbc_interpretation_engine.dart';
+import '../../services/ultrasound_interpretation_engine.dart'
+    show MonitoringClassification, Trimester, UltrasoundInterpretationEngine;
 import '../../models/groq_response.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
-import '../../widgets/progressive_step_indicator.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/secondary_header.dart';
+import '../../widgets/main_button.dart';
+import '../../widgets/app_dropdown_field.dart';
 
 class LabTestAnalyzerScreen extends StatefulWidget {
   final int motherId;
@@ -42,10 +48,28 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
   int _step = 0;
   static const int _totalSteps = 3;
-  String? _selectedLabType;
+  static const List<String> _stepTitles = [
+    'Lab Test Details',
+    'Attach Images and Notes',
+    'Assessment & Clinical Review',
+  ];
+  static const List<String> _stepSubtitles = [
+    'Set the date and enter optional health worker details.',
+    'Attach lab test images and add optional clinical notes.',
+    'Review AI-assisted analysis and save to records.',
+  ];
   bool _analysisApproved = false;
   bool _aiAnalysisSkipped = false;
+  // ignore: unused_field
   bool _showAdvancedAiDetails = false;
+  String _activeLabTab = 'risk';
+  String _pregnancyRiskLevel = 'low';
+  // ignore: unused_field
+  DateTime? _pregnancyLmp;
+  Trimester _currentTrimester = Trimester.second;
+  MonitoringClassification _monitoringClassification =
+      MonitoringClassification.withinExpectedRange;
+  List<CbcComponentResult> _cbcResults = [];
   bool _loadingOverlayVisible = false;
   String _loadingTitle = 'Preparing AI analysis';
   String _loadingDetail = 'Validating images and input context';
@@ -72,23 +96,9 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
   late int _motherId;
   late int _pregnancyId;
+  String _motherName = '';
 
   final List<String> _uploadedImageUrls = [];
-
-  static const List<String> _pregnancyLabTests = [
-    'Complete Blood Count (CBC)',
-    'Urinalysis',
-    'OGTT (Oral Glucose Tolerance Test)',
-    'Fasting Blood Sugar',
-    'Hepatitis B (HBsAg)',
-    'HIV Screening',
-    'Syphilis (VDRL/RPR)',
-    'Blood Typing',
-    'Glucose Challenge Test',
-    'Thyroid Function (TSH)',
-    'Stool Examination',
-    'Other (specify in notes)',
-  ];
 
   static const List<String> _acceptedLabProfessions = [
     'Medical Technologist',
@@ -110,8 +120,11 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
     _motherId = widget.motherId;
     _pregnancyId = widget.pregnancyId;
+    _motherName = 'Mother #$_motherId';
 
     _loadUserContext();
+    _loadMotherName();
+    _loadPregnancyData();
   }
 
   @override
@@ -135,6 +148,57 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       await AuthStorage.getUserRole();
     } catch (e) {
       if (kDebugMode) print('Error loading user context: $e');
+    }
+  }
+
+  Future<void> _loadMotherName() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('mothers')
+          .select('account:account_id (first_name, last_name)')
+          .eq('mother_id', _motherId)
+          .maybeSingle();
+
+      if (response != null && response['account'] != null) {
+        final account = response['account'] as Map<String, dynamic>;
+        final first = account['first_name']?.toString() ?? '';
+        final last = account['last_name']?.toString() ?? '';
+        final full = '$first $last'.trim();
+        if (mounted && full.isNotEmpty) {
+          setState(() {
+            _motherName = full;
+          });
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error loading mother name: $e');
+    }
+  }
+
+  Future<void> _loadPregnancyData() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('pregnancies')
+          .select('last_menstrual_period')
+          .eq('pregnancy_id', _pregnancyId)
+          .maybeSingle();
+
+      if (response != null && response['last_menstrual_period'] != null) {
+        final lmp =
+            DateTime.tryParse(response['last_menstrual_period'].toString());
+        if (lmp != null && mounted) {
+          final referenceDate = _labTestDate ?? DateTime.now();
+          final aogWeeks =
+              LabCbcInterpretationEngine.calculateAogWeeks(lmp, referenceDate);
+          setState(() {
+            _pregnancyLmp = lmp;
+            _currentTrimester =
+                LabCbcInterpretationEngine.getTrimester(aogWeeks);
+          });
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error loading pregnancy data: $e');
     }
   }
 
@@ -231,6 +295,54 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       initialDate: _labTestDate ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.brandPrimary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.brandText,
+              secondary: AppColors.brandPrimary,
+              surface: Colors.white,
+            ),
+            dialogTheme: DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 4,
+              surfaceTintColor: Colors.transparent,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              headerBackgroundColor: Colors.white,
+              headerForegroundColor: AppColors.brandText,
+              headerHeadlineStyle: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandText,
+              ),
+              headerHelpStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandPrimary,
+              ),
+              surfaceTintColor: Colors.transparent,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
@@ -247,16 +359,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       _showMessage('Please select lab test date.', type: AppSnackType.warning);
       return false;
     }
-    if (_selectedLabType == null || _selectedLabType!.isEmpty) {
-      _showMessage('Please select lab test type.', type: AppSnackType.warning);
-      return false;
-    }
-    return true;
-  }
-
-  bool _validateStep2() {
-    // Health worker metadata is optional (Task 3.1).
-    // Only validate "Other (specify)" consistency when a profession is chosen.
+    // Health worker metadata is optional.
     final selected = _effectiveSelectedProfession();
     if (selected == _otherProfessionOption &&
         _healthWorkerProfessionController.text.trim().isEmpty) {
@@ -264,6 +367,22 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
           type: AppSnackType.warning);
       return false;
     }
+    return true;
+  }
+
+  bool _validateStep2() {
+    if (_selectedImages.isEmpty) {
+      _showMessage('Please attach at least one lab test image.',
+          type: AppSnackType.warning);
+      return false;
+    }
+
+    final noteError = _validateNotesInput();
+    if (noteError != null) {
+      _showMessage(noteError, type: AppSnackType.warning);
+      return false;
+    }
+
     return true;
   }
 
@@ -280,28 +399,8 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     return _otherProfessionOption;
   }
 
-  bool _validateStep3() {
-    if (_selectedImages.isEmpty) {
-      _showMessage('Please attach at least one lab test image.',
-          type: AppSnackType.warning);
-      return false;
-    }
-
-    final noteError = _validateNotesInput();
-    if (noteError != null) {
-      _showMessage(noteError, type: AppSnackType.warning);
-      return false;
-    }
-
-    return true;
-  }
-
   String? _validateNotesInput() {
     final notes = _notesController.text.trim();
-
-    if ((_selectedLabType ?? '').startsWith('Other') && notes.isEmpty) {
-      return 'Please specify details in notes when lab test type is Other.';
-    }
 
     if (notes.length > 2000) {
       return 'Notes are too long. Please keep notes within 2000 characters.';
@@ -428,7 +527,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   }
 
   bool get _hasEnteredData =>
-      _selectedLabType != null ||
       _selectedImages.isNotEmpty ||
       _notesController.text.trim().isNotEmpty ||
       _healthWorkerNameController.text.trim().isNotEmpty ||
@@ -478,7 +576,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   }
 
   Future<void> _analyzeImages() async {
-    if (!_validateStep1() || !_validateStep3()) return;
+    if (!_validateStep2()) return;
 
     _setLoadingState(
       'Checking image quality',
@@ -509,7 +607,6 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     try {
       _lastAiPrompt = [
         'Lab test AI analysis request',
-        'Selected lab type: ${_selectedLabType ?? 'Not specified'}',
         'Notes: ${_notesController.text.trim().isEmpty ? 'None provided' : _notesController.text.trim()}',
         'Image count: ${_selectedImages.length}',
       ].join('\n');
@@ -521,7 +618,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
       final result = await _groqService.analyzeLabTestImages(
         _selectedImages,
-        selectedLabType: _selectedLabType,
+        selectedLabType: null,
         notes: _notesController.text.trim(),
       );
       if (!mounted || _cancelledRunIds.contains(runId)) return;
@@ -558,9 +655,27 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         if (result.extractedClinicLocation != null && result.extractedClinicLocation!.isNotEmpty && _healthWorkerInstitutionController.text.trim().isEmpty) {
           _healthWorkerInstitutionController.text = result.extractedClinicLocation!;
         }
-      });
 
-      await _showInsightsModal();
+        // Compute CBC interpretation results from AI-extracted lab data
+        if (result.labResults != null && result.labResults!.isNotEmpty) {
+          final valueMap = <String, double>{};
+          for (final lr in result.labResults!) {
+            final numVal = double.tryParse(
+                lr.value.replaceAll(RegExp(r'[^\d.]'), ''));
+            if (numVal != null) {
+              valueMap[lr.testName] = numVal;
+            }
+          }
+          _cbcResults = LabCbcInterpretationEngine.interpretAll(
+            values: valueMap,
+            trimester: _currentTrimester,
+          );
+          _monitoringClassification =
+              LabCbcInterpretationEngine.classifyOverall(_cbcResults);
+        }
+
+        _step = 2; // Navigate to Step 3 (0-indexed)
+      });
     } catch (e) {
       if (!mounted || _cancelledRunIds.contains(runId)) return;
       _closeLoadingOverlayIfNeeded();
@@ -575,8 +690,8 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   }
 
   Future<void> _saveToDatabase() async {
-    // Only images + AI analysis result are strictly required (Task 3.4).
-    if (!_validateStep1() || !_validateStep3()) return;
+    // Only images + AI analysis result are strictly required.
+    if (!_validateStep2()) return;
     final aiGenerated = _combinedResponse != null;
     if (!aiGenerated && !_aiAnalysisSkipped) {
       _showMessage('Please run AI analysis or skip it before saving.',
@@ -602,10 +717,12 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
       _uploadedImageUrls.clear();
 
-      // Prefer explicit user-selected type. Use AI extraction only as fallback.
-      String labTestType = _selectedLabType ?? 'Multiple Tests';
-      if ((_selectedLabType == null || _selectedLabType!.trim().isEmpty) &&
-          aiGenerated &&
+      // Prefer AI-extracted lab test type. Fall back to first result name.
+      String labTestType = 'Multiple Tests';
+      if (aiGenerated && _combinedResponse!.extractedLabTestType != null &&
+          _combinedResponse!.extractedLabTestType!.trim().isNotEmpty) {
+        labTestType = _combinedResponse!.extractedLabTestType!;
+      } else if (aiGenerated &&
           _combinedResponse!.labResults != null &&
           _combinedResponse!.labResults!.isNotEmpty) {
         final firstTest = _combinedResponse!.labResults!.first;
@@ -1064,6 +1181,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     ).hasMatch(text);
   }
 
+  // ignore: unused_element
   bool _hasAbnormalSignals() {
     final text =
         (_combinedResponse?.description ?? _healthSummaryController.text)
@@ -1164,6 +1282,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     return matches.join('\n\n').trim();
   }
 
+  // ignore: unused_element
   Widget _buildCombinedLabResultsCard(
     Map<String, List<String>> sections, {
     VoidCallback? onInteraction,
@@ -1584,13 +1703,9 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         continue;
       }
 
+      // Laboratory Results is now handled by the engine-based
+      // _buildMonitoringResults() card — skip the AI-parsed text version.
       if (entry.key == 'LABORATORY RESULTS') {
-        widgets.add(
-          _buildCombinedLabResultsCard(
-            sections,
-            onInteraction: onInteraction,
-          ),
-        );
         continue;
       }
 
@@ -1670,53 +1785,66 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => WillPopScope(
-        onWillPop: () async => false,
+      barrierColor: AppColors.textPrimary.withValues(alpha: 0.35),
+      builder: (context) => PopScope(
+        canPop: false,
         child: Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+            decoration: BoxDecoration(
+              color: AppColors.faintWhite,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.textPrimary.withValues(alpha: 0.12),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _loadingTitle,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
                 Container(
-                  width: double.infinity,
+                  width: 64,
+                  height: 64,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
-                    borderRadius: BorderRadius.circular(12),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.brandPrimary, width: 3),
                   ),
-                  child: _StatusLine(
-                    icon: Icons.auto_awesome_outlined,
-                    text: _loadingDetail,
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
                   ),
                 ),
-                const SizedBox(height: 14),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
+                const SizedBox(height: 20),
+                Text(
+                  _loadingTitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _loadingDetail,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton(
                     onPressed: () {
                       _cancelledRunIds.add(runId);
                       Navigator.of(context).pop();
@@ -1724,8 +1852,24 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       _showMessage('AI analysis canceled.',
                           type: AppSnackType.info);
                     },
-                    icon: const Icon(Icons.close_rounded),
-                    label: const Text('Cancel'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      side: const BorderSide(
+                        color: AppColors.borderPrimary,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1744,6 +1888,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     _loadingOverlayVisible = false;
   }
 
+  // ignore: unused_element
   Future<void> _showInsightsModal() async {
     if (_combinedResponse == null) return;
     final summaryDraft =
@@ -1755,8 +1900,8 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return WillPopScope(
-              onWillPop: () async => false,
+            return PopScope(
+              canPop: false,
               child: Dialog(
                 insetPadding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
@@ -1899,427 +2044,34 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     summaryDraft.dispose();
   }
 
-  String _getHealthStatus() {
-    if (_combinedResponse == null) return 'Assessment Complete';
-
-    if (_hasWithinNormalOverallAssessment() && !_hasAbnormalSignals()) {
-      return 'WITHIN NORMAL LIMITS';
-    }
-
-    if (_hasWithinNormalOverallAssessment() && _hasAbnormalSignals()) {
-      return 'MIXED FINDINGS, CLINICAL REVIEW ADVISED';
-    }
-
-    if (_hasAbnormalSignals()) {
-      return 'REVIEW FLAGGED FINDINGS';
-    }
-
-    return 'NO HIGH-RISK FINDINGS DETECTED';
-  }
-
-  Color _getHealthStatusColor() {
-    if (_combinedResponse == null) return Colors.grey;
-
-    if (_hasWithinNormalOverallAssessment() && !_hasAbnormalSignals()) {
-      return AppColors.success;
-    }
-
-    if (_hasWithinNormalOverallAssessment() && _hasAbnormalSignals()) {
-      return AppColors.warning;
-    }
-
-    if (_hasAbnormalSignals()) {
-      return AppColors.error;
-    }
-
-    return Colors.blueGrey;
-  }
-
-  IconData _getHealthStatusIcon() {
-    if (_combinedResponse == null) return Icons.help_outline;
-
-    if (_hasWithinNormalOverallAssessment() && !_hasAbnormalSignals()) {
-      return Icons.verified_rounded;
-    }
-
-    if (_hasWithinNormalOverallAssessment() && _hasAbnormalSignals()) {
-      return Icons.rule_folder_outlined;
-    }
-
-    if (_hasAbnormalSignals()) {
-      return Icons.warning_amber_rounded;
-    }
-
-    return Icons.verified_outlined;
-  }
-
-  Widget _buildEditableSection() {
-    if (_combinedResponse == null) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            if (!_isEditing)
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    _healthSummaryBeforeEdit = _healthSummaryController.text;
-                    _isEditing = true;
-                  });
-                },
-                icon: Icon(Icons.edit, color: AppColors.brandPrimary),
-                tooltip: 'Edit notes',
-              )
-            else
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      setState(() {
-                        _isEditing = false;
-                      });
-                    },
-                    icon: Icon(Icons.save, color: AppColors.success),
-                    tooltip: 'Save changes',
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      setState(() {
-                        _healthSummaryController.text =
-                            _healthSummaryBeforeEdit;
-                        _isEditing = false;
-                      });
-                    },
-                    icon: Icon(Icons.close, color: AppColors.error),
-                    tooltip: 'Cancel',
-                  ),
-                ],
-              ),
-          ],
-        ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: AppColors.borderPrimary,
-              width: 1.5,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.medical_information,
-                      color: AppColors.brandPrimary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Clinical Assessment',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (!_isEditing)
-                _buildStructuredInsights(_healthSummaryController.text)
-              else
-                TextField(
-                  controller: _healthSummaryController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: 'Enter clinical assessment...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.all(16),
-                  ),
-                  style: const TextStyle(fontSize: 15, height: 1.5),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDetailedResults() {
-    if (_combinedResponse == null || !_hasDetailedLabData()) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.brandAccent.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.science,
-                    color: AppColors.brandAccent, size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Detailed Laboratory Results',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (_combinedResponse!.labResults != null &&
-              _combinedResponse!.labResults!.isNotEmpty) ...[
-            const Text(
-              'TEST RESULTS',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ..._combinedResponse!.labResults!.map((result) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: result.isNormal
-                      ? AppColors.success.withValues(alpha: 0.08)
-                      : AppColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: result.isNormal
-                        ? AppColors.success.withValues(alpha: 0.25)
-                        : AppColors.error.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        result.isNormal ? Icons.check_circle : Icons.warning,
-                        color: result.isNormal ? AppColors.success : AppColors.error,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            result.testName,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            result.value,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: result.isNormal
-                                  ? AppColors.success
-                                  : AppColors.error,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: result.isNormal ? AppColors.success : AppColors.error,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        result.isNormal ? 'NORMAL' : 'ABNORMAL',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: 16),
-          ],
-          if (_combinedResponse!.abnormalFindings != null &&
-              _combinedResponse!.abnormalFindings!.isNotEmpty) ...[
-            const Text(
-              'ABNORMAL FINDINGS',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ..._combinedResponse!.abnormalFindings!.map((finding) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning, color: AppColors.error, size: 16),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        finding,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: 16),
-          ],
-          if (_combinedResponse!.normalRanges != null &&
-              _combinedResponse!.normalRanges!.isNotEmpty) ...[
-            const Text(
-              'REFERENCE RANGES',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ..._combinedResponse!.normalRanges!.map((range) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info, color: Colors.blue, size: 16),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        range,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ],
-          Padding(
-            padding: const EdgeInsets.only(top: 20),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      size: 16, color: Colors.amber.shade800),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'This analysis is AI-generated for reference only. Always consult with a qualified healthcare provider for proper interpretation.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.amber.shade800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildStep1() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _stepHeader(
-          title: 'Step 1: Test Details',
-          subtitle: 'Set the date and choose the pregnancy-related lab test.',
+        _sectionLabel('Lab Test Date'),
+        AppInputField(
+          hintText: 'Select Lab Test Date',
+          controller: _dateController,
+          isRequired: true,
+          leadingIcon: Icons.calendar_today_outlined,
+          readOnly: true,
+          onTap: _selectDate,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 24),
+
+        // Optional Health Worker details card
         Container(
-          padding: const EdgeInsets.all(20),
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.borderPrimary),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -2327,72 +2079,68 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Lab Test Date',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: _selectDate,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today,
-                          size: 20, color: AppColors.brandPrimary),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Lab Test Date',
-                              style: TextStyle(
-                                  fontSize: 12, color: AppColors.textSecondary),
-                            ),
-                            Text(
-                              _dateController.text,
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
+              Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: AppColors.brandPrimary),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'AI will automatically extract health worker details from your uploaded lab test. You can also optionally specify them below.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                        height: 1.4,
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Lab Test Type',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
+              const SizedBox(height: 18),
+              const Divider(color: AppColors.borderPrimary, height: 1),
+              const SizedBox(height: 18),
+
+              _sectionLabel('Health Worker Name (Optional)'),
+              AppInputField(
+                hintText: 'e.g. Dr. Jane Doe',
+                controller: _healthWorkerNameController,
+                isRequired: false,
+                leadingIcon: Icons.person_outline,
               ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedLabType,
-                decoration: const InputDecoration(
-                  hintText: 'Select pregnancy-related lab test',
-                  border: OutlineInputBorder(),
-                ),
-                items: _pregnancyLabTests
-                    .map((type) =>
-                        DropdownMenuItem(value: type, child: Text(type)))
-                    .toList(),
-                onChanged: (value) => setState(() => _selectedLabType = value),
+              const SizedBox(height: 16),
+
+              _sectionLabel('Institution / Clinic (Optional)'),
+              AppInputField(
+                hintText: 'e.g. Health Center or Clinic Name',
+                controller: _healthWorkerInstitutionController,
+                isRequired: false,
+                leadingIcon: Icons.local_hospital_outlined,
               ),
+              const SizedBox(height: 16),
+
+              _sectionLabel('Profession (Optional)'),
+              AppDropdownField<String>(
+                value: _selectedHealthWorkerProfession,
+                options: [..._acceptedLabProfessions, _otherProfessionOption],
+                displayStringForOption: (val) => val,
+                onSelected: (val) {
+                  setState(() {
+                    _selectedHealthWorkerProfession = val;
+                  });
+                },
+                hintText: 'Select Profession',
+                leadingIcon: Icons.work_outline,
+              ),
+              if (_selectedHealthWorkerProfession == _otherProfessionOption) ...[
+                const SizedBox(height: 16),
+                _sectionLabel('Specify Profession'),
+                AppInputField(
+                  hintText: 'e.g. Medical Technologist, Pathologist',
+                  controller: _healthWorkerProfessionController,
+                  isRequired: true,
+                  leadingIcon: Icons.work_outline,
+                ),
+              ],
             ],
           ),
         ),
@@ -2484,105 +2232,19 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _stepHeader(
-          title: 'Step 2: Health Worker Information',
-          subtitle:
-              'Optional \u2014 AI analysis is the primary output.',
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Health Worker Information',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Optional \u2014 AI analysis is the primary output',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _healthWorkerNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  hintText: 'Optional',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _healthWorkerInstitutionController,
-                decoration: const InputDecoration(
-                  labelText: 'Institution/Clinic',
-                  hintText: 'Optional',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Builder(
-                builder: (context) {
-                  final effectiveSelected = _effectiveSelectedProfession();
-                  final dropdownValue =
-                      (_acceptedLabProfessions.contains(effectiveSelected) ||
-                              effectiveSelected == _otherProfessionOption)
-                          ? effectiveSelected
-                          : null;
-
-                  final dropdownItems = [
-                    ..._acceptedLabProfessions,
-                    _otherProfessionOption,
-                  ];
-
-                  return DropdownButtonFormField<String>(
-                    initialValue: dropdownValue,
-                    decoration: const InputDecoration(
-                      labelText: 'Profession',
-                      hintText: 'Optional',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: dropdownItems
-                        .map((profession) => DropdownMenuItem<String>(
-                              value: profession,
-                              child: Text(profession),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedHealthWorkerProfession = value;
-                        if (value != null && value != _otherProfessionOption) {
-                          _healthWorkerProfessionController.text = value;
-                        }
-                      });
-                    },
-                  );
-                },
-              ),
-              if (_effectiveSelectedProfession() == _otherProfessionOption) ...[
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _healthWorkerProfessionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Specify Profession',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ],
+        _sectionLabel('Attached Images'),
+        const SizedBox(height: 8),
+        _buildImageBox(),
+        const SizedBox(height: 24),
+        _sectionLabel('Notes'),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _notesController,
+          minLines: 4,
+          maxLines: 8,
+          decoration: const InputDecoration(
+            hintText: 'Optional context. AI uses this during analysis if provided.',
+            border: OutlineInputBorder(),
           ),
         ),
       ],
@@ -2593,8 +2255,9 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     final buffer = StringBuffer();
     buffer.writeln('=== LAB TEST ANALYSIS REPORT ===');
     buffer.writeln('Date: ${_dateController.text}');
-    if (_selectedLabType != null && _selectedLabType!.isNotEmpty) {
-      buffer.writeln('Lab Test Type: $_selectedLabType');
+    final aiLabType = _combinedResponse?.extractedLabTestType;
+    if (aiLabType != null && aiLabType.isNotEmpty) {
+      buffer.writeln('Lab Test Type: $aiLabType');
     }
     buffer.writeln();
     if (_healthWorkerNameController.text.trim().isNotEmpty) {
@@ -2625,6 +2288,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     return buffer.toString();
   }
 
+  // ignore: unused_element
   void _copyReportToClipboard() {
     final report = _buildReportText();
     Clipboard.setData(ClipboardData(text: report));
@@ -2635,442 +2299,121 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _stepHeader(
-          title: 'Step 3: Attach Images and Notes',
-          subtitle:
-              'Attach lab result images, add notes, then run and review AI analysis.',
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Image Layout',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              const Text(
-                'Required: Add at least one lab test image',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              _buildImageBox(),
-              const SizedBox(height: 16),
-              const Text('Notes',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              const Text(
-                'Optional context. AI uses this during analysis if provided.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _notesController,
-                minLines: 4,
-                maxLines: 8,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  children: [
-                    FilledButton.icon(
-                      onPressed: _analyzeImages,
-                      icon: const Icon(Icons.auto_awesome, size: 18),
-                      label: const Text('Run AI Analysis'),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 38),
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        backgroundColor: AppColors.brandPrimary,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _aiAnalysisSkipped = true;
-                          _combinedResponse = null;
-                          _analysisApproved = false;
-                        });
-                      },
-                      icon: const Icon(Icons.skip_next_outlined, size: 18),
-                      label: const Text('Skip AI'),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 38),
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        foregroundColor: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_aiAnalysisSkipped) ...[
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.orange.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.orange,
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'AI Analysis has been skipped. You can proceed to save this record manually.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.orange,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              if (_combinedResponse != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _showInsightsModal,
-                            icon: const Icon(Icons.article_outlined),
-                            label: const Text('Open AI Insights'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        if (_analysisApproved)
-                          const Chip(
-                            label: Text('Approved'),
-                            avatar: Icon(Icons.check_circle,
-                                color: AppColors.success, size: 18),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _copyReportToClipboard,
-                        icon: const Icon(Icons.copy, size: 18),
-                        label: const Text('Copy Report to Clipboard'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _getHealthStatusColor().withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _getHealthStatusColor().withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _getHealthStatusIcon(),
-                            color: _getHealthStatusColor(),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _getHealthStatus(),
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: _getHealthStatusColor(),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    InkWell(
-                      onTap: () => setState(
-                        () => _showAdvancedAiDetails = !_showAdvancedAiDetails,
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.borderPrimary),
-                          color: AppColors.bgSecondary,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _showAdvancedAiDetails
-                                  ? Icons.expand_less
-                                  : Icons.expand_more,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _showAdvancedAiDetails
-                                  ? 'Hide Advanced AI Details'
-                                  : 'Show Advanced AI Details',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (_showAdvancedAiDetails) ...[
-                      const SizedBox(height: 10),
-                      _buildEditableSection(),
-                      if (_hasDetailedLabData()) _buildDetailedResults(),
-                    ],
-                  ],
-                ),
-            ],
-          ),
-        ),
+        _buildLabTabSwitcher(),
+        _buildLabAssessmentCard(),
       ],
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
-      body: SafeArea(
-        child: Column(
+  // ── Tab Switcher (matches ultrasound's _buildAssessmentTabSwitcher) ──────
+
+  Widget _buildLabTabSwitcher() {
+    if (_combinedResponse == null && !_aiAnalysisSkipped) {
+      return const SizedBox.shrink();
+    }
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.borderPrimary, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      shape: BoxShape.circle,
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _activeLabTab = 'risk';
+                });
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: _activeLabTab == 'risk'
+                      ? AppColors.brandPrimary
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.gavel_rounded,
+                      size: 14,
+                      color: _activeLabTab == 'risk'
+                          ? Colors.white
+                          : AppColors.brandPrimary,
                     ),
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back,
-                          color: AppColors.textPrimary),
-                      onPressed: _confirmDiscardAndPop,
-                      constraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 40,
-                      ),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Lab Test Analysis',
+                    const SizedBox(width: 6),
+                    Text(
+                      'Pregnancy Risk',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.brandText,
+                        fontSize: 12,
+                        fontWeight: _activeLabTab == 'risk'
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: _activeLabTab == 'risk'
+                            ? Colors.white
+                            : AppColors.textSecondary,
                       ),
                     ),
-                  ),
-                  if (_selectedImages.isNotEmpty)
-                    IconButton(
-                      icon: Icon(Icons.delete_sweep, color: AppColors.error),
-                      onPressed: _clearAll,
-                      tooltip: 'Clear all images',
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
-            Expanded(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: AppColors.brandAccent.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(12),
-                              border:
-                                  Border.all(color: AppColors.brandAccent.withValues(alpha: 0.25)),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(Icons.person,
-                                      size: 20,
-                                      color: AppColors.brandAccent),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Mother #$_motherId',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.brandAccent,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Pregnancy ID: $_pregnancyId',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.brandAccent,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          ProgressiveStepIndicator(
-                            currentStep: _step,
-                            totalSteps: _totalSteps,
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border:
-                                  Border.all(color: AppColors.borderPrimary),
-                            ),
-                            child: Text(
-                              _step == 0
-                                  ? 'Complete test details first, then continue.'
-                                  : _step == 1
-                                      ? 'Health worker details are optional. You may skip ahead.'
-                                      : _aiAnalysisSkipped
-                                          ? 'AI Analysis skipped. Attach images and you can save the record.'
-                                          : 'Attach images, run AI analysis, and approve before saving.',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          _step == 0
-                              ? _buildStep1()
-                              : _step == 1
-                                  ? _buildStep2()
-                                  : _buildStep3(),
-                        ],
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _activeLabTab = 'insight';
+                });
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: _activeLabTab == 'insight'
+                      ? AppColors.brandPrimary
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.analytics_outlined,
+                      size: 14,
+                      color: _activeLabTab == 'insight'
+                          ? Colors.white
+                          : AppColors.brandPrimary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Lab Monitoring Insight',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: _activeLabTab == 'insight'
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: _activeLabTab == 'insight'
+                            ? Colors.white
+                            : AppColors.textSecondary,
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-                    child: Row(
-                      children: [
-                        if (_step > 0)
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: _isSaving ? null : _prevStep,
-                              child: const Text('Back'),
-                            ),
-                          ),
-                        if (_step > 0) const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: _step == _totalSteps - 1
-                              ? (_isSaving
-                                  ? const Center(
-                                      child: Padding(
-                                        padding: EdgeInsets.all(8),
-                                        child: CircularProgressIndicator(
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                  AppColors.success),
-                                        ),
-                                      ),
-                                    )
-                                  : FilledButton.icon(
-                                      onPressed: _saveToDatabase,
-                                      icon: const Icon(Icons.save_outlined),
-                                      label: const Text('Save to Records'),
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: AppColors.brandPrimary,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                    ))
-                              : FilledButton(
-                                  onPressed: _nextStep,
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: AppColors.brandPrimary,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: const Text('Next'),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -3079,40 +2422,1074 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
     );
   }
 
-  Widget _stepHeader({required String title, required String subtitle}) {
+  // ── Assessment Card (matches ultrasound's _buildUltrasoundAssessmentCard) ─
+
+  Color _monitoringChipColor(MonitoringClassification c) {
+    switch (c) {
+      case MonitoringClassification.withinExpectedRange:
+        return AppColors.success;
+      case MonitoringClassification.requiresCloserMonitoring:
+        return AppColors.warning;
+      case MonitoringClassification.followUpRecommended:
+        return AppColors.error;
+    }
+  }
+
+  IconData _monitoringChipIcon(MonitoringClassification c) {
+    switch (c) {
+      case MonitoringClassification.withinExpectedRange:
+        return Icons.check_circle_rounded;
+      case MonitoringClassification.requiresCloserMonitoring:
+        return Icons.remove_circle_outline_rounded;
+      case MonitoringClassification.followUpRecommended:
+        return Icons.warning_rounded;
+    }
+  }
+
+  Widget _buildLabAssessmentCard() {
+    // No AI and not skipped → prompt user
+    if (_combinedResponse == null && !_aiAnalysisSkipped) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.bgSecondary,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borderPrimary),
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.info_outline,
+                color: AppColors.textSecondary, size: 32),
+            SizedBox(height: 8),
+            Text(
+              'No AI analysis available yet.',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              'Go back to Step 2 to run or skip AI analysis.',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // AI Skipped → simplified card with risk override only
+    if (_combinedResponse == null && _aiAnalysisSkipped) {
+      return Container(
+        width: double.infinity,
+        clipBehavior: Clip.hardEdge,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.borderPrimary),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                border: const Border(
+                    bottom: BorderSide(color: AppColors.borderPrimary)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      color: AppColors.brandPrimary, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Lab Test Assessment (AI Skipped)',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brandPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.25)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: Colors.orange, size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'AI analysis was skipped. This record will be saved without AI monitoring insights.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      const Text(
+                        'Pregnancy Risk Override',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AppDropdownField<String>(
+                          value: _pregnancyRiskLevel,
+                          options: const ['low', 'high'],
+                          displayStringForOption: (val) =>
+                              val == 'low' ? 'Low Risk' : 'High Risk',
+                          onSelected: (val) {
+                            setState(() {
+                              _pregnancyRiskLevel = val;
+                            });
+                          },
+                          hintText: 'Select Pregnancy Risk',
+                          leadingIcon: Icons.flag_rounded,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // AI analysis exists → full assessment card
+    final classificationLabel =
+        UltrasoundInterpretationEngine.classificationLabel(
+            _monitoringClassification, 'english');
+    final chipColor = _monitoringChipColor(_monitoringClassification);
+    final chipIcon = _monitoringChipIcon(_monitoringClassification);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
-        color: AppColors.bgSecondary,
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderPrimary),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.brandText,
+          // Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary.withValues(alpha: 0.08),
+              border: const Border(
+                  bottom: BorderSide(color: AppColors.borderPrimary)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome,
+                    color: AppColors.brandPrimary, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Lab Test AI-Assisted Assessment',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brandPrimary,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: chipColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(chipIcon, size: 14, color: chipColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        classificationLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: chipColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
+
+          // Body
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_activeLabTab == 'risk') ...[
+                  // Pregnancy Risk Override
+                  Row(
+                    children: [
+                      const Text(
+                        'Pregnancy Risk Override',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AppDropdownField<String>(
+                          value: _pregnancyRiskLevel,
+                          options: const ['low', 'high'],
+                          displayStringForOption: (val) =>
+                              val == 'low' ? 'Low Risk' : 'High Risk',
+                          onSelected: (val) {
+                            setState(() {
+                              _pregnancyRiskLevel = val;
+                            });
+                          },
+                          hintText: 'Select Pregnancy Risk',
+                          leadingIcon: Icons.flag_rounded,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(
+                      color: AppColors.borderPrimary, height: 1),
+                  const SizedBox(height: 16),
+
+                  // Risk basis from CBC results
+                  const Text(
+                    'Based on',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_cbcResults.isNotEmpty)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _cbcResults.map((r) {
+                        final color = r.status == CbcComponentStatus.expected
+                            ? AppColors.success
+                            : (r.status == CbcComponentStatus.monitor
+                                ? AppColors.warning
+                                : AppColors.error);
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: color.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                r.status == CbcComponentStatus.expected
+                                    ? Icons.check_circle
+                                    : Icons.info_outline,
+                                size: 14,
+                                color: color,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${r.componentName}: ${LabCbcInterpretationEngine.statusLabel(r.status)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    )
+                  else
+                    Text(
+                      'CBC component data not yet available.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                ] else ...[
+                  // Lab Monitoring Insight tab
+
+                  // Clinical Reference Tile
+                  _buildLabClinicalReferenceTile(),
+                  const SizedBox(height: 16),
+
+                  // Clinical Findings header with Edit
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Clinical Findings',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      if (!_isEditing)
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _healthSummaryBeforeEdit =
+                                  _healthSummaryController.text;
+                              _isEditing = true;
+                            });
+                          },
+                          icon: const Icon(Icons.edit_outlined,
+                              size: 14, color: AppColors.brandPrimary),
+                          label: const Text(
+                            'Edit',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brandPrimary,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (!_isEditing) ...[
+                    _buildStructuredInsights(
+                        _healthSummaryController.text),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    TextField(
+                      controller: _healthSummaryController,
+                      maxLines: 6,
+                      decoration: InputDecoration(
+                        hintText: 'Edit clinical findings...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: AppColors.borderPrimary),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.all(16),
+                      ),
+                      style: const TextStyle(
+                          fontSize: 13, height: 1.5),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              setState(() {
+                                _healthSummaryController.text =
+                                    _healthSummaryBeforeEdit;
+                                _isEditing = false;
+                              });
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.textPrimary,
+                              side: const BorderSide(
+                                  color: AppColors.borderPrimary),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () {
+                              setState(() {
+                                _isEditing = false;
+                              });
+                            },
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.brandPrimary,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                            ),
+                            child: const Text('Save Draft'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Detailed Lab Monitoring Findings
+                  if (_hasDetailedLabData()) ...[
+                    _buildMonitoringResults(),
+                  ],
+                ],
+
+                // Approval checkbox (outside tabs)
+                const SizedBox(height: 16),
+                const Divider(
+                    color: AppColors.borderPrimary, height: 1),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _analysisApproved,
+                      activeColor: AppColors.brandPrimary,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4)),
+                      onChanged: (val) {
+                        setState(() {
+                          _analysisApproved = val ?? false;
+                        });
+                      },
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _analysisApproved = !_analysisApproved;
+                          });
+                        },
+                        child: const Text(
+                          'I have reviewed and approved this clinical assessment',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  // ── Monitoring Results (replaces _buildDetailedResults with interpretive language) ─
+
+  Widget _buildMonitoringResults() {
+    if (_combinedResponse == null || !_hasDetailedLabData()) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.brandAccent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.science,
+                  color: AppColors.brandAccent, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Lab Monitoring Findings',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Status guide: REVIEW = needs clinical review, MONITOR = observe and correlate, EXPECTED = within commonly expected range.',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textSecondary,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_combinedResponse!.labResults != null &&
+            _combinedResponse!.labResults!.isNotEmpty) ...[
+          ..._combinedResponse!.labResults!
+              .map((result) {
+                final interpretation =
+                    LabCbcInterpretationEngine.interpretComponent(
+                  componentName: result.testName,
+                  value: double.tryParse(
+                          result.value.replaceAll(RegExp(r'[^\d.]'), '')) ??
+                      0,
+                  trimester: _currentTrimester,
+                );
+                // Skip components without CBC reference ranges
+                if (interpretation == null) return null;
+                return MapEntry(result, interpretation);
+              })
+              .where((e) => e != null)
+              .map((e) {
+            final result = e!.key;
+            final interpretation = e.value;
+
+            final statusColor =
+                interpretation.status == CbcComponentStatus.expected
+                    ? AppColors.success
+                    : (interpretation.status == CbcComponentStatus.monitor
+                        ? AppColors.warning
+                        : AppColors.error);
+
+            final statusLabel = LabCbcInterpretationEngine.statusLabel(
+                interpretation.status);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: statusColor.withValues(alpha: 0.25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    result.testName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          statusLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          result.value,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: statusColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    interpretation.contextPhrase,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: AppColors.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+        ],
+        if (_combinedResponse!.abnormalFindings != null &&
+            _combinedResponse!.abnormalFindings!.isNotEmpty) ...[
+          const Text(
+            'FLAGGED FINDINGS',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ..._combinedResponse!.abnormalFindings!.map((finding) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      color: AppColors.warning, size: 16),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      finding,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+        ],
+        // AI disclaimer banner
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.amber.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline,
+                  size: 16, color: Colors.amber.shade800),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'This monitoring context is generated for reference purposes only using WHO and pregnancy-adjusted laboratory standards. It does not constitute a medical diagnosis. Always consult with a qualified healthcare provider.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.amber.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Clinical Reference Tile (matches ultrasound's _buildClinicalReferenceTile) ─
+
+  Widget _buildLabClinicalReferenceTile() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.borderPrimary.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          leading: Icon(
+            Icons.menu_book_outlined,
+            size: 15,
+            color: AppColors.textSecondary.withValues(alpha: 0.6),
+          ),
+          title: Text(
+            'Clinical Reference Basis',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary.withValues(alpha: 0.7),
+            ),
+          ),
+          iconColor: AppColors.textSecondary.withValues(alpha: 0.5),
+          collapsedIconColor:
+              AppColors.textSecondary.withValues(alpha: 0.4),
+          children: [
+            _buildLabCitationRow(
+              authors: LabCbcInterpretationEngine.citation1Authors,
+              full: LabCbcInterpretationEngine.citation1Full,
+              url: LabCbcInterpretationEngine.citation1Url,
+            ),
+            const SizedBox(height: 8),
+            _buildLabCitationRow(
+              authors: LabCbcInterpretationEngine.citation2Authors,
+              full: LabCbcInterpretationEngine.citation2Full,
+              url: LabCbcInterpretationEngine.citation2Url,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'For health monitoring support only. Does not replace professional medical consultation.',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary.withValues(alpha: 0.55),
+                fontStyle: FontStyle.italic,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabCitationRow({
+    required String authors,
+    required String full,
+    required String url,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$authors $full',
+          style: TextStyle(
+            fontSize: 10,
+            color: AppColors.textSecondary.withValues(alpha: 0.65),
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          url,
+          style: TextStyle(
+            fontSize: 10,
+            color: AppColors.brandPrimary.withValues(alpha: 0.6),
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      ],
+    );
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            SecondaryHeader(
+              title: 'Lab Test Analysis',
+              onBack: _confirmDiscardAndPop,
+              trailing: _selectedImages.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(Icons.delete_sweep, color: AppColors.error),
+                      onPressed: _clearAll,
+                      tooltip: 'Clear all images',
+                    )
+                  : null,
+            ),
+            LinearProgressIndicator(
+              value: (_step + 1) / _totalSteps,
+              backgroundColor: AppColors.borderPrimary,
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+              minHeight: 3,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                children: [
+                  Text(
+                    _stepTitles[_step],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandPrimary),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _stepSubtitles[_step],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.person,
+                                size: 20, color: Colors.teal.shade700),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _motherName,
+                              style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.teal),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border:
+                            Border.all(color: AppColors.borderPrimary),
+                      ),
+                      child: Text(
+                        _step == 0
+                            ? 'Complete lab test details first, then continue.'
+                            : (_step == 1
+                                ? 'Attach images and notes, then run AI analysis.'
+                                : 'Review the AI-assisted assessment findings.'),
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _step == 0
+                        ? _buildStep1()
+                        : (_step == 1 ? _buildStep2() : _buildStep3()),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.07),
+                blurRadius: 14,
+                offset: const Offset(0, -4))
+          ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Builder(
+              builder: (context) {
+                if (_step == 1) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: MainButton(
+                          label: 'Back',
+                          leftIcon: Icons.arrow_back_ios_new_rounded,
+                          isWhiteVariant: true,
+                          fontSize: 13,
+                          onPressed: _isSaving ? null : _prevStep,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 4,
+                        child: MainButton(
+                          label: 'Skip AI Analysis',
+                          isWhiteVariant: true,
+                          fontSize: 13,
+                          onPressed: _isSaving ? null : () {
+                            setState(() {
+                              _aiAnalysisSkipped = true;
+                              _step = 2; // Move to Step 3: Assessment & Clinical Review
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 4,
+                        child: MainButton(
+                          label: 'Run AI Analysis',
+                          rightIcon: Icons.auto_awesome,
+                          fontSize: 13,
+                          onPressed: _isSaving ? null : _analyzeImages,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    if (_step > 0) ...[
+                      Expanded(
+                        child: MainButton(
+                          label: 'Back',
+                          leftIcon: Icons.arrow_back_ios_new_rounded,
+                          isWhiteVariant: true,
+                          onPressed: _isSaving ? null : _prevStep,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: _buildRightButton(),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRightButton() {
+    if (_step == 0) {
+      return MainButton(
+        label: 'Next',
+        rightIcon: Icons.arrow_forward_ios_rounded,
+        onPressed: _isSaving ? null : _nextStep,
+      );
+    } else {
+      return MainButton(
+        label: _isSaving ? 'Saving...' : 'Save to Records',
+        rightIcon: _isSaving ? null : Icons.check_rounded,
+        onPressed: _isSaving ? null : _saveToDatabase,
+      );
+    }
+  }
+
+  Widget _sectionLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Container(
+                width: 3,
+                height: 12,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                    color: AppColors.brandPrimary,
+                    borderRadius: BorderRadius.circular(2))),
+            Text(text.toUpperCase(),
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 1.3)),
+          ],
+        ),
+      );
+
 }
 
+// ignore: unused_element
 class _StatusLine extends StatelessWidget {
   const _StatusLine({required this.icon, required this.text});
 
