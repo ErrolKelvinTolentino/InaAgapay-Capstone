@@ -20,6 +20,7 @@ import '../../widgets/app_input_field.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/app_dropdown_field.dart';
+import '../../widgets/confirmation_dialog_box.dart';
 
 class UltrasoundAnalyzerScreen extends StatefulWidget {
   final int motherId;
@@ -1612,21 +1613,14 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
     }
     final discard = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Discard changes?'),
-        content: const Text(
-            'You have unsaved ultrasound data. Are you sure you want to go back?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Discard'),
-          ),
-        ],
+      builder: (_) => ConfirmationDialogBox(
+        title: 'Discard changes?',
+        subtitle:
+            'You have unsaved ultrasound data. Are you sure you want to go back?',
+        cancelText: 'Cancel',
+        confirmText: 'Discard',
+        onCancel: () => Navigator.pop(context, false),
+        onConfirm: () => Navigator.pop(context, true),
       ),
     );
     if (discard == true && mounted) {
@@ -4191,67 +4185,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                         tilePadding: EdgeInsets.zero,
                         children: [
                           const SizedBox(height: 12),
-                          // Bilingual Language Switcher Toggle
-                          Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: AppColors.bgSecondary,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.borderPrimary),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedLanguage = 'filipino';
-                                      });
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        'Filipino (Conversational)',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
-                                          color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedLanguage = 'english';
-                                      });
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        'English',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
-                                          color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
 
                           // Progression card
                           _buildPregnancyProgressionCard(),
@@ -4273,22 +4206,83 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                                   color: AppColors.textPrimary,
                                 ),
                               ),
-                              TextButton.icon(
-                                onPressed: _enterEditMode,
-                                icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.brandPrimary),
-                                label: const Text(
-                                  'Edit',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.brandPrimary,
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.borderPrimary.withValues(alpha: 0.5),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              _selectedLanguage = 'filipino';
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              'Tagalog',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
+                                                color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              _selectedLanguage = 'english';
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              'English',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
+                                                color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
+                                  const SizedBox(width: 8),
+                                  TextButton.icon(
+                                    onPressed: _enterEditMode,
+                                    icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.brandPrimary),
+                                    label: const Text(
+                                      'Edit',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.brandPrimary,
+                                      ),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
