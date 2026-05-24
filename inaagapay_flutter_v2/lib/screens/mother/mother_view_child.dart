@@ -68,10 +68,14 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
             *,
             mother:mother_id (
               mother_id,
+              barangay,
+              city_municipality,
+              province,
               account:account_id (
                 first_name,
                 last_name,
-                middle_name
+                middle_name,
+                phone_number
               )
             ),
             guardian:guardian_id (
@@ -155,17 +159,36 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
 
       int years = now.year - birth.year;
       int months = now.month - birth.month;
+      int days = now.day - birth.day;
 
+      if (days < 0) {
+        months -= 1;
+        final prevMonthDate = DateTime(now.year, now.month, 0);
+        days += prevMonthDate.day;
+      }
       if (months < 0) {
-        years--;
+        years -= 1;
         months += 12;
       }
 
-      if (years <= 0) {
-        return '$months month${months != 1 ? 's' : ''} old';
+      if (years > 0) {
+        final monthPart = months > 0 ? ', $months month${months != 1 ? 's' : ''}' : '';
+        return '$years year${years != 1 ? 's' : ''}$monthPart old';
+      } else if (months > 0) {
+        final weeks = days ~/ 7;
+        final weekPart = weeks > 0 ? ', $weeks week${weeks != 1 ? 's' : ''}' : '';
+        return '$months month${months != 1 ? 's' : ''}$weekPart old';
       } else {
-        return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'
-            .trim();
+        if (days >= 7) {
+          final weeks = days ~/ 7;
+          final remainingDays = days % 7;
+          final dayPart = remainingDays > 0 ? ', $remainingDays day${remainingDays != 1 ? 's' : ''}' : '';
+          return '$weeks week${weeks != 1 ? 's' : ''}$dayPart old';
+        } else if (days > 0) {
+          return '$days day${days != 1 ? 's' : ''} old';
+        } else {
+          return 'Newborn';
+        }
       }
     } catch (e) {
       return 'Unknown age';
@@ -242,18 +265,34 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     return _t('Mother', 'Ina');
   }
 
-  String getGuardianPhone() {
+  String getParentPhone() {
     if (hasGuardian && guardianData != null) {
       return guardianData!['phone_number']?.toString() ??
           _t('Not recorded', 'Hindi naitala');
     }
+    final mother = childData?['mother'] as Map<String, dynamic>?;
+    if (mother != null) {
+      final account = mother['account'] as Map<String, dynamic>?;
+      if (account != null) {
+        return account['phone_number']?.toString() ??
+            _t('Not recorded', 'Hindi naitala');
+      }
+    }
     return _t('Not recorded', 'Hindi naitala');
   }
 
-  String getGuardianAddress() {
+  String getParentAddress() {
     if (hasGuardian && guardianData != null) {
       return guardianData!['address']?.toString() ??
           _t('Not recorded', 'Hindi naitala');
+    }
+    final mother = childData?['mother'] as Map<String, dynamic>?;
+    if (mother != null) {
+      final barangay = mother['barangay']?.toString() ?? '';
+      final city = mother['city_municipality']?.toString() ?? '';
+      final province = mother['province']?.toString() ?? '';
+      final parts = [barangay, city, province].where((p) => p.trim().isNotEmpty).toList();
+      return parts.isNotEmpty ? parts.join(', ') : _t('Not recorded', 'Hindi naitala');
     }
     return _t('Not recorded', 'Hindi naitala');
   }
@@ -329,7 +368,7 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     final fullName =
         '${childData!['first_name']} ${childData!['last_name']}'.trim();
     final age = calculateAge();
-    final sex = (childData!['sex'] ?? '').toString().toUpperCase();
+    final sex = (childData!['sex'] ?? '').toString();
     final birthPlace = getBirthPlace();
     final parentName = getParentName();
     final parentRelationship = getParentRelationship();
@@ -363,7 +402,8 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
               HeroCard(
                 image: null,
                 title: fullName.isNotEmpty ? fullName : 'Unnamed Child',
-                subtitle: '$age • $sex',
+                subtitle: age,
+                sex: sex,
                 showWeekBadge: false,
                 showHeartRow: false,
               ),
@@ -579,25 +619,94 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
   }
 
   String _bmiStatus(double bmi) {
-    if (bmi < 18.5) return 'Underweight';
-    if (bmi < 25) return 'Normal';
-    if (bmi < 30) return 'Overweight';
-    return 'Obese';
+    if (latestGrowth == null || childData == null) return 'Within Range';
+    final sex = (childData!['sex'] as String?) ?? 'female';
+    final ageWeeks = _ageInWeeks(DateTime.parse(latestGrowth!['created_at']));
+    final zScore = GrowthCalculator.calculateBMIZScore(bmi, ageWeeks, sex);
+
+    if (zScore == null) return 'Within Range';
+    if (zScore < -2) return 'Below Range';
+    if (zScore < -1) return 'Slightly Below';
+    if (zScore <= 1) return 'Within Range';
+    if (zScore <= 2) return 'Slightly Above';
+    if (zScore <= 3) return 'Above Range';
+    return 'Far Above Range';
   }
 
   Color _bmiStatusColor(String status) {
     switch (status) {
-      case 'Underweight':
-        return AppColors.warning;
-      case 'Normal':
+      case 'Below Range':
+        return AppColors.error;
+      case 'Slightly Below':
+        return Colors.orange;
+      case 'Within Range':
         return AppColors.success;
-      case 'Overweight':
-        return AppColors.warning;
-      case 'Obese':
+      case 'Slightly Above':
+        return Colors.orange;
+      case 'Above Range':
+      case 'Far Above Range':
         return AppColors.error;
       default:
         return AppColors.textSecondary;
     }
+  }
+
+  void _showReferenceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.info_outline, color: AppColors.brandPrimary),
+            const SizedBox(width: 8),
+            Text(_t('Growth Reference', 'Reference ng Paglaki')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _t(
+                  'Our growth indicators are based on the World Health Organization (WHO) Child Growth Standards.',
+                  'Ang mga growth indicator ay batay sa World Health Organization (WHO) Child Growth Standards.',
+                ),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _t(
+                  'Z-scores compare a child\'s measurements (BMI-for-age, weight-for-age, height-for-age) to expected values for healthy growth:',
+                  'Ikinukumpara ng Z-score ang sukat ng bata sa inaasahang sukat para sa malusog na paglaki:',
+                ),
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _t('• Within Range (Green): between -1 and +1 Z-score.', '• Sapat/Normal (Green): nasa pagitan ng -1 at +1 Z-score.'),
+                style: const TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                _t('• Slightly Below/Above (Orange): between 1 and 2 standard deviations.', '• Medyo Mababa/Mataas (Orange): lagpas ng 1 hanggang 2 standard deviation.'),
+                style: const TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                _t('• Below/Above Range (Red): more than 2 standard deviations.', '• Mababa/Mataas (Red): lagpas ng higit sa 2 standard deviation.'),
+                style: const TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: AppColors.brandPrimary, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBMICard(double? bmi, String? status) {
@@ -637,13 +746,26 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  _t('Body Mass Index', 'Body Mass Index'),
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+                child: Row(
+                  children: [
+                    Text(
+                      _t('Body Mass Index', 'Body Mass Index'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: _showReferenceDialog,
+                      child: const Icon(
+                        Icons.help_outline_rounded,
+                        color: AppColors.textSecondary,
+                        size: 16,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -736,7 +858,15 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
       if (saved != null &&
           saved['response'] != null &&
           saved['response'].toString().trim().isNotEmpty) {
-        aiAnalysis = saved['response'].toString().trim();
+        final savedText = saved['response'].toString().trim();
+        final lower = savedText.toLowerCase();
+        final isOldOrSingleLang = !lower.contains('english') ||
+            !(lower.contains('filipino') || lower.contains('tagalog'));
+        if (isOldOrSingleLang) {
+          await _generateAndSaveProfileAiInsight(latestRecordId);
+        } else {
+          aiAnalysis = savedText;
+        }
       } else {
         await _generateAndSaveProfileAiInsight(latestRecordId);
       }
@@ -783,8 +913,9 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
 
       final generated = await GroqService().generateTextInsight(
         prompt: prompt,
+        systemPrompt: GroqService.childGrowthSystemPrompt,
         temperature: 0.2,
-        maxOutputTokens: 512,
+        maxOutputTokens: 2048,
       );
 
       aiAnalysis = generated.trim();
@@ -852,8 +983,10 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     }).join('\n');
 
     return '''
-You are a warm, caring assistant writing a short growth update for a parent and midwife.
-Do not use the phrase "your baby". Use "the child" or "the baby" instead.
+You are a warm, caring assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
+Your tone must be gentle, comforting, and encouraging. Use simple, non-clinical language.
+Do not use cold/technical terms (avoid z-scores, percentiles, or medical jargon). Focus on what the measurements mean for everyday care and reassuring the parent.
+Refer to the child by their first name or as "your little one" ("iyong munting anak" in Filipino) to make it personal and comforting.
 Provide the response in both English and Filipino. Only one language will be shown at a time.
 Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
 
@@ -872,39 +1005,40 @@ Output format:
 
 ## English
 ## Baby Growth Summary
-- A short, gentle explanation of how the child is growing.
+- A short, gentle, and comforting explanation of how the child is growing.
 
 ### Current Measurements
 - Length: ${height.toStringAsFixed(1)} cm
 - Weight: ${weight.toStringAsFixed(1)} kg
 
 ### What This Means
-- ...
-- ...
+- Simple, reassuring explanation of the numbers. Compare to expected healthy ranges in a friendly way.
 
 ### Helpful Note
-- ...
+- Reassuring tip or encouragement for the parents.
 
 ## Filipino
 ## Buod ng Paglaki ng Bata
-- Maikling, banayad na paliwanag kung paano lumalago ang bata.
+- Maikling, banayad, at nakapapawing-pagod na paliwanag kung paano lumalago ang bata.
 
 ### Kasalukuyang Sukat
 - Haba: ${height.toStringAsFixed(1)} cm
 - Timbang: ${weight.toStringAsFixed(1)} kg
 
 ### Ano ang Kahulugan Nito
-- ...
-- ...
+- Simpleng paliwanag na nagbibigay-linaw at nagpapakalma sa magulang tungkol sa timbang at haba ng bata.
 
 ### Paalala
-- ...
+- Banayad na paalala at suporta mula sa isang mapagkalingang ate o midwife.
 
 Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for everyday care and follow-up.
 ''';
   }
 
   Widget _buildGuardianCard(String parentName, String parentRelationship) {
+    final phone = getParentPhone();
+    final address = getParentAddress();
+    final notRecordedText = _t('Not recorded', 'Hindi naitala');
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -950,8 +1084,8 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                 children: [
                   Text(
                     hasGuardian
-                        ? _t('Guardian', 'Tagapag-alaga')
-                        : _t('Mother', 'Ina'),
+                        ? _t('Guardian Details', 'Mga Detalye ng Tagapag-alaga')
+                        : _t('Mother\'s Details', 'Mga Detalye ng Ina'),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -961,7 +1095,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                     ),
                   ),
                   Text(
-                    parentRelationship,
+                    hasGuardian ? parentRelationship : _t('Primary Caregiver', 'Pangunahing Tagapag-alaga'),
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -989,7 +1123,8 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
               ),
             ],
           ),
-          if (hasGuardian) ...[
+
+          if (phone != notRecordedText && phone.isNotEmpty) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -997,7 +1132,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                     size: 16, color: AppColors.textSecondary),
                 const SizedBox(width: 8),
                 Text(
-                  getGuardianPhone(),
+                  phone,
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -1005,27 +1140,26 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                 ),
               ],
             ),
-            if (getGuardianAddress() !=
-                _t('Not recorded', 'Hindi naitala')) ...[
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.location_on_outlined,
-                      size: 16, color: AppColors.textSecondary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      getGuardianAddress(),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
+          ],
+          if (address != notRecordedText && address.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on_outlined,
+                    size: 16, color: AppColors.textSecondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    address,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ],
         ],
       ),

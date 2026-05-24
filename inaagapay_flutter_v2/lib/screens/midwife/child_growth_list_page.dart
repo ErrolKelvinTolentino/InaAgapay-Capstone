@@ -103,7 +103,15 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
           if (saved != null &&
               saved['response'] != null &&
               saved['response'].toString().isNotEmpty) {
-            aiAnalysis = saved['response'].toString();
+            final savedText = saved['response'].toString().trim();
+            final lower = savedText.toLowerCase();
+            final isOldOrSingleLang = !lower.contains('english') ||
+                !(lower.contains('filipino') || lower.contains('tagalog'));
+            if (isOldOrSingleLang) {
+              await _generateAndSaveAIAnalysis(latestId);
+            } else {
+              aiAnalysis = savedText;
+            }
           } else {
             await _generateAndSaveAIAnalysis(latestId);
           }
@@ -209,8 +217,9 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
 
       final generated = await _groqService.generateTextInsight(
         prompt: prompt,
+        systemPrompt: GroqService.childGrowthSystemPrompt,
         temperature: 0.2,
-        maxOutputTokens: 512,
+        maxOutputTokens: 2048,
       );
 
       final analysis = generated.trim();
@@ -253,21 +262,10 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
     }).join('\n');
 
     return '''
-You are a caring ate (trusted older sister) who is also a knowledgeable midwife in the Philippines. You are writing a gentle growth update for a mother about her child.
-
-Your tone should be warm and personal — like you're chatting with the mother at the barangay health center, celebrating her child's milestones. When growth is on track, be genuinely happy. When something needs attention, be gentle and offer practical advice (local foods like malunggay, dilis, squash, eggs).
-
-Use "your little one" or the child's name, not "the child" or "the baby" — make it personal.
-
-WEIGHT/GROWTH INTERPRETATION RULES:
-- You do NOT compute Z-scores or growth formulas — the system provides those. You only explain them.
-- NEVER use "ideal weight", "perfect weight", or "normal weight". Use "commonly expected range" or "appears within range".
-- NEVER present exact target weights or rigid expectations for children.
-- Be weight-sensitive — never shame parents. Guide positively.
-- When growth is on track: celebrate warmly.
-- When below/above range: be gentle, offer practical local food advice, and encourage continued monitoring.
-- End growth interpretation with: "This is for monitoring support only and does not replace your pediatrician's advice."
-
+You are a warm, caring assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
+Your tone must be gentle, comforting, and encouraging. Use simple, non-clinical language.
+Do not use cold/technical terms (avoid z-scores, percentiles, or medical jargon). Focus on what the measurements mean for everyday care and reassuring the parent.
+Refer to the child by their first name or as "your little one" ("iyong munting anak" in Filipino) to make it personal and comforting.
 Provide the response in both English and Filipino. Only one language will be shown at a time.
 Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
 
@@ -293,7 +291,7 @@ Output format:
 - Weight: ${weight.toStringAsFixed(1)} kg
 
 ### What This Means for You
-- Explain in simple terms what these numbers mean. Compare to healthy ranges in a friendly way.
+- Explain in simple terms what these numbers mean. Compare to expected healthy ranges in a friendly way.
 - If on track: celebrate! If not: be gentle, explain why it matters, and give food/care tips.
 
 ### Tips from Your Ate
@@ -309,10 +307,10 @@ Output format:
 - Timbang: ${weight.toStringAsFixed(1)} kg
 
 ### Ano ang Ibig Sabihin Nito Para Sa Iyo
-- Ipaliwanag sa simpleng salita. Kung maayos: magdiwang! Kung hindi: maging banayad at magbigay ng payo.
+- Ipaliwanag sa simpleng salita. Kung maayos: magdiwang! Kung hindi: maging banayad at magbigay ng payo tungkol sa pagkain at pangangalaga.
 
 ### Payo mula sa Iyong Ate
-- Praktikal na payo (pagkain, pag-aalaga, laro)
+- Praktikal na payo (pagkain tulad ng malunggay, kalabasa, itlog, pag-aalaga, laro)
 - Tapusin ng pagpapalakas ng loob
 
 Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for daily care and follow-up.
@@ -372,7 +370,8 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
 
     if (days < 0) {
       months -= 1;
-      days += DateTime(now.year, now.month, 0).day;
+      final prevMonthDate = DateTime(now.year, now.month, 0);
+      days += prevMonthDate.day;
     }
     if (months < 0) {
       years -= 1;
@@ -380,14 +379,23 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
     }
 
     if (years > 0) {
-      return '$years year${years != 1 ? 's' : ''}${months > 0 ? ', $months month${months != 1 ? 's' : ''}' : ''} old';
+      final monthPart = months > 0 ? ', $months month${months != 1 ? 's' : ''}' : '';
+      return '$years year${years != 1 ? 's' : ''}$monthPart old';
     } else if (months > 0) {
-      final weekText = days > 0
-          ? ', ${(days / 7).floor()} week${(days / 7).floor() != 1 ? 's' : ''}'
-          : '';
-      return '$months month${months != 1 ? 's' : ''}$weekText old';
+      final weeks = days ~/ 7;
+      final weekPart = weeks > 0 ? ', $weeks week${weeks != 1 ? 's' : ''}' : '';
+      return '$months month${months != 1 ? 's' : ''}$weekPart old';
     } else {
-      return '$days day${days != 1 ? 's' : ''} old';
+      if (days >= 7) {
+        final weeks = days ~/ 7;
+        final remainingDays = days % 7;
+        final dayPart = remainingDays > 0 ? ', $remainingDays day${remainingDays != 1 ? 's' : ''}' : '';
+        return '$weeks week${weeks != 1 ? 's' : ''}$dayPart old';
+      } else if (days > 0) {
+        return '$days day${days != 1 ? 's' : ''} old';
+      } else {
+        return 'Newborn';
+      }
     }
   }
 
@@ -414,25 +422,76 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
   }
 
   String _bmiCategory(double bmi) {
-    if (bmi < 18.5) return 'Underweight';
-    if (bmi < 25) return 'Normal';
-    if (bmi < 30) return 'Overweight';
-    return 'Obese';
+    final zScore =
+        GrowthCalculator.calculateBMIZScore(bmi, latestAgeWeeks, childSex);
+    if (zScore == null) return 'Within Range';
+    if (zScore < -2) return 'Below Range';
+    if (zScore < -1) return 'Slightly Below';
+    if (zScore <= 1) return 'Within Range';
+    if (zScore <= 2) return 'Slightly Above';
+    if (zScore <= 3) return 'Above Range';
+    return 'Far Above Range';
   }
 
   Color _bmiCategoryColor(String category) {
     switch (category) {
-      case 'Underweight':
-        return AppColors.warning;
-      case 'Normal':
+      case 'Below Range':
+        return AppColors.error;
+      case 'Slightly Below':
+        return Colors.orange;
+      case 'Within Range':
         return AppColors.success;
-      case 'Overweight':
-        return AppColors.warning;
-      case 'Obese':
+      case 'Slightly Above':
+        return Colors.orange;
+      case 'Above Range':
+      case 'Far Above Range':
         return AppColors.error;
       default:
         return AppColors.textSecondary;
     }
+  }
+
+  void _showReferenceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.info_outline, color: AppColors.brandPrimary),
+            SizedBox(width: 8),
+            Text('Growth Reference'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                'Our growth indicators are based on the World Health Organization (WHO) Child Growth Standards.',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, height: 1.4),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Z-scores compare a child\'s measurements (BMI-for-age, weight-for-age, height-for-age) to expected values for healthy growth:',
+                style: TextStyle(fontSize: 13, height: 1.4),
+              ),
+              SizedBox(height: 8),
+              Text('• Within Range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
+              Text('• Slightly Below/Above (Orange): between 1 and 2 standard deviations.', style: TextStyle(fontSize: 13, color: AppColors.warning, fontWeight: FontWeight.w600)),
+              Text('• Below/Above Range (Red): more than 2 standard deviations (indicates wasting, stunting, or high deviation).', style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: AppColors.brandPrimary, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   String _describeZScore(double? zscore) {
@@ -788,12 +847,13 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
           image: null,
           title: getChildName(),
           subtitle: calculateAge(),
+          sex: childSex,
           showWeekBadge: false,
           showHeartRow: false,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
         _buildTabBar(),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
         _buildMetricCard(
           label: 'BMI',
           value: latestBMI > 0 ? latestBMI.toStringAsFixed(1) : 'n/a',
@@ -913,7 +973,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
               onTap: () => setState(() => activeTab = index),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
                   color: isActive ? AppColors.brandPrimary : Colors.transparent,
                   borderRadius: BorderRadius.circular(16),
@@ -968,7 +1028,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
       duration: const Duration(milliseconds: 200),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -1002,6 +1062,17 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                     color: AppColors.textSecondary,
                   ),
                 ),
+                if (label == 'BMI') ...[
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: _showReferenceDialog,
+                    child: const Icon(
+                      Icons.help_outline_rounded,
+                      color: AppColors.textSecondary,
+                      size: 16,
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 16),

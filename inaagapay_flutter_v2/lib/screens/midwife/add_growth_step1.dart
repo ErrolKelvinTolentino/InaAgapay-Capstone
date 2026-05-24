@@ -1,4 +1,4 @@
-﻿// lib/screens/midwife/add_growth_step1.dart
+// lib/screens/midwife/add_growth_step1.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +13,8 @@ import '../../widgets/dialog_box.dart';
 import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/validation_message.dart';
 import '../../services/growth_calculator.dart';
+import '../../services/groq_service.dart';
+import '../../widgets/profile_helpers.dart';
 
 class AddGrowthStep1 extends StatefulWidget {
   final int childId;
@@ -32,10 +34,32 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   final TextEditingController _bmiController = TextEditingController();
   final TextEditingController _remarksController = TextEditingController();
 
+  final TextEditingController _aiEnglishCtrl = TextEditingController();
+  final TextEditingController _aiFilipinoCtrl = TextEditingController();
+
   Map<String, dynamic>? _childData;
   Map<String, dynamic>? _previousGrowth;
+  List<Map<String, dynamic>> _growthRecords = [];
+  DateTime? _birthdate;
+  final GroqService _groqService = GroqService();
+  String _savingStatus = 'Saving growth record...';
+
+  int _step = 0;
+  static const int _totalSteps = 2;
+
+  String _aiOriginalEnglish = '';
+  String _aiOriginalFilipino = '';
+
+  String _backupEnglish = '';
+  String _backupFilipino = '';
+
+  bool _isEditingAi = false;
+  bool _aiResponseApproved = false;
+  String _selectedLanguage = 'filipino';
+
   bool _loading = true;
   int _ageInWeeks = 0;
+  bool _hasBirthdate = false;
   String _gender = '';
 
   double? _weightZScore;
@@ -47,6 +71,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
   bool _isFormValid = false;
   String? _validationMessage;
+  ValidationType _validationMessageType = ValidationType.error;
   bool _isSaving = false;
 
   @override
@@ -79,21 +104,22 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
       if (birthdate != null) {
         final birth = DateTime.parse(birthdate);
+        _birthdate = birth;
         final now = DateTime.now();
         _ageInWeeks = (now.difference(birth).inDays / 7).floor();
+        _hasBirthdate = true;
       }
 
       _gender = childResponse['sex']?.toString().toLowerCase() ?? '';
 
-      final previousGrowthResponse = await Supabase.instance.client
+      final growthResponse = await Supabase.instance.client
           .from('child_details')
           .select('*')
           .eq('child_id', widget.childId)
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
+          .order('created_at', ascending: true);
 
-      _previousGrowth = previousGrowthResponse;
+      _growthRecords = List<Map<String, dynamic>>.from(growthResponse);
+      _previousGrowth = _growthRecords.isNotEmpty ? _growthRecords.last : null;
 
       if (mounted) {
         setState(() {
@@ -133,6 +159,19 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     debugPrint('Age in weeks: $_ageInWeeks');
     debugPrint('Gender: $_gender');
 
+    // Always recalculate height/weight z-scores so they never get stuck
+    if (_hasBirthdate && _gender.isNotEmpty) {
+      _heightZScore = heightCm != null && heightCm > 0
+          ? GrowthCalculator.calculateHeightZScore(heightCm, _ageInWeeks, _gender)
+          : null;
+      _weightZScore = weightKg != null && weightKg > 0
+          ? GrowthCalculator.calculateWeightZScore(weightKg, _ageInWeeks, _gender)
+          : null;
+    } else {
+      _heightZScore = null;
+      _weightZScore = null;
+    }
+
     if (heightCm == null ||
         weightKg == null ||
         heightCm == 0 ||
@@ -156,7 +195,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       _bmiController.text = bmi.toStringAsFixed(1);
     });
 
-    if (_ageInWeeks > 0 && _gender.isNotEmpty) {
+    if (_hasBirthdate && _gender.isNotEmpty) {
       // Calculate BMI Z-score
       _bmiZScore =
           GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
@@ -164,64 +203,65 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       debugPrint('BMI Z-Score: $_bmiZScore');
 
       // Update status based on Z-score
-      _updateBMICategory(_bmiZScore!);
+      _updateBMICategory(_bmiZScore);
     } else {
       debugPrint(
           'Cannot calculate Z-score: Age in weeks=$_ageInWeeks, Gender=$_gender');
+      setState(() {
+        _bmiZScore = null;
+        _bmiCategoryText = 'n/a';
+        _bmiCategoryColor = AppColors.textSecondary;
+      });
     }
   }
 
-  void _updateBMICategory(double zScore) {
+  void _updateBMICategory(double? zScore) {
     debugPrint('Updating BMI category for Z-Score: $zScore');
 
     setState(() {
+      if (zScore == null) {
+        _bmiCategoryText = 'n/a';
+        _bmiCategoryColor = AppColors.textSecondary;
+        debugPrint('Category: n/a (zScore is null)');
+        return;
+      }
       if (zScore < -2) {
-        _bmiCategoryText = 'Underweight';
-        _bmiCategoryColor = AppColors.warning;
-        debugPrint('Category: Underweight (zScore < -2)');
+        _bmiCategoryText = 'Below Range';
+        _bmiCategoryColor = AppColors.error;
+        debugPrint('Category: Below Range (zScore < -2)');
       } else if (zScore < -1) {
-        _bmiCategoryText = 'Mildly Underweight';
-        _bmiCategoryColor = Colors.orange;
-        debugPrint('Category: Mildly Underweight (-2 < zScore < -1)');
+        _bmiCategoryText = 'Slightly Below';
+        _bmiCategoryColor = AppColors.warning;
+        debugPrint('Category: Slightly Below (-2 < zScore < -1)');
       } else if (zScore <= 1) {
-        _bmiCategoryText = 'Normal';
-        _bmiCategoryColor = AppColors.textPrimary;
-        debugPrint('Category: Normal (-1 <= zScore <= 1)');
+        _bmiCategoryText = 'Within Range';
+        _bmiCategoryColor = AppColors.success;
+        debugPrint('Category: Within Range (-1 <= zScore <= 1)');
       } else if (zScore <= 2) {
-        _bmiCategoryText = 'Overweight';
-        _bmiCategoryColor = Colors.orange;
-        debugPrint('Category: Overweight (1 < zScore <= 2)');
+        _bmiCategoryText = 'Slightly Above';
+        _bmiCategoryColor = AppColors.warning;
+        debugPrint('Category: Slightly Above (1 < zScore <= 2)');
       } else if (zScore <= 3) {
-        _bmiCategoryText = 'Obese';
+        _bmiCategoryText = 'Above Range';
         _bmiCategoryColor = AppColors.error;
-        debugPrint('Category: Obese (2 < zScore <= 3)');
+        debugPrint('Category: Above Range (2 < zScore <= 3)');
       } else {
-        _bmiCategoryText = 'Severely Obese';
+        _bmiCategoryText = 'Far Above Range';
         _bmiCategoryColor = AppColors.error;
-        debugPrint('Category: Severely Obese (zScore > 3)');
+        debugPrint('Category: Far Above Range (zScore > 3)');
       }
     });
   }
 
   void _calculateZScores() {
-    final double? heightCm = double.tryParse(_heightController.text);
-    final double? weightKg = double.tryParse(_weightController.text);
+    // Height and weight z-scores are now always calculated in _updateBMIAndStatus().
+    // This method only handles the BMI z-score update from the form validation path.
     final double? bmi = double.tryParse(_bmiController.text);
 
-    if (heightCm != null && _ageInWeeks > 0 && _gender.isNotEmpty) {
-      _heightZScore = GrowthCalculator.calculateHeightZScore(
-          heightCm, _ageInWeeks, _gender);
-    }
-
-    if (weightKg != null && _ageInWeeks > 0 && _gender.isNotEmpty) {
-      _weightZScore = GrowthCalculator.calculateWeightZScore(
-          weightKg, _ageInWeeks, _gender);
-    }
-
-    if (bmi != null && _ageInWeeks > 0 && _gender.isNotEmpty) {
+    if (bmi != null && _hasBirthdate && _gender.isNotEmpty) {
       _bmiZScore =
           GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, _gender);
-      _updateBMICategory(_bmiZScore!);
+      _updateBMICategory(_bmiZScore);
     }
   }
 
@@ -240,8 +280,8 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     if (height == null || weight == null) {
       setState(() {
         _isFormValid = false;
-        _validationMessage =
-            'Please enter valid numbers for height and weight.';
+        _validationMessageType = ValidationType.error;
+        _validationMessage = 'Please enter valid numbers for height and weight.';
       });
       return;
     }
@@ -249,7 +289,26 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     if (height <= 0 || weight <= 0) {
       setState(() {
         _isFormValid = false;
+        _validationMessageType = ValidationType.error;
         _validationMessage = 'Height and weight must be greater than zero.';
+      });
+      return;
+    }
+
+    if (height < 20 || height > 200) {
+      setState(() {
+        _isFormValid = false;
+        _validationMessageType = ValidationType.error;
+        _validationMessage = 'Height must be between 20 cm and 200 cm.';
+      });
+      return;
+    }
+
+    if (weight < 0.5 || weight > 120) {
+      setState(() {
+        _isFormValid = false;
+        _validationMessageType = ValidationType.error;
+        _validationMessage = 'Weight must be between 0.5 kg and 120 kg.';
       });
       return;
     }
@@ -265,9 +324,11 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       final weightText =
           'Weight should be ${weightRange.min.toStringAsFixed(1)}–${weightRange.max.toStringAsFixed(1)} kg.';
       setState(() {
-        _isFormValid = false;
+        _isFormValid = true;
+        _validationMessageType = ValidationType.info;
         _validationMessage =
-            'This measurement is outside the typical range for the child\'s age. $heightText $weightText';
+            'Warning: This measurement is outside the typical range for a child aged $_ageInWeeks weeks. Please double check values before continuing. $heightText $weightText';
+        _calculateZScores();
       });
       return;
     }
@@ -279,23 +340,253 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     });
   }
 
-  Future<bool> _saveGrowthRecord() async {
+  double _calculateBMI(double heightCm, double weightKg) {
+    if (heightCm <= 0 || weightKg <= 0) return 0;
+    final heightM = heightCm / 100.0;
+    return weightKg / (heightM * heightM);
+  }
+
+  int _ageInWeeksForDate(DateTime date) {
+    if (!_hasBirthdate || _birthdate == null) return 0;
+    final difference = date.difference(_birthdate!);
+    return (difference.inDays / 7).round();
+  }
+
+  String _buildGrowthAiPrompt({
+    required String childName,
+    required String sex,
+    required int ageWeeks,
+    required double height,
+    required double weight,
+    required double bmi,
+    required double? heightZ,
+    required double? weightZ,
+    required double? bmiZ,
+    required List<Map<String, dynamic>> allGrowthRecords,
+  }) {
+    final recordsSummary = allGrowthRecords.map((record) {
+      final heightVal = (record['child_height'] as num?)?.toDouble() ?? 0;
+      final weightVal = (record['child_weight'] as num?)?.toDouble() ?? 0;
+      final bmiVal = _calculateBMI(heightVal, weightVal);
+      final recordCreatedAt = record['created_at'] != null
+          ? DateTime.parse(record['created_at'].toString())
+          : DateTime.now();
+      final weeks = _ageInWeeksForDate(recordCreatedAt);
+      return '- Week $weeks: ${heightVal.toStringAsFixed(1)} cm, ${weightVal.toStringAsFixed(1)} kg, BMI ${bmiVal.toStringAsFixed(1)}';
+    }).join('\n');
+
+    return '''
+You are a warm, caring assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
+Your tone must be gentle, comforting, and encouraging. Use simple, non-clinical language.
+Do not use cold/technical terms (avoid z-scores, percentiles, or medical jargon). Focus on what the measurements mean for everyday care and reassuring the parent.
+Refer to the child by their first name or as "your little one" ("iyong munting anak" in Filipino) to make it personal and comforting.
+Provide the response in both English and Filipino. Only one language will be shown at a time.
+Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
+
+Child: $childName
+Sex: ${sex.toLowerCase()}
+Current age: $ageWeeks weeks
+
+Latest measurements:
+Height: ${height.toStringAsFixed(1)} cm
+Weight: ${weight.toStringAsFixed(1)} kg
+
+Recent growth:
+$recordsSummary
+
+Output format:
+
+## English
+## Baby Growth Summary
+- A short, gentle, and comforting explanation of how the child is growing.
+
+### Current Measurements
+- Length: ${height.toStringAsFixed(1)} cm
+- Weight: ${weight.toStringAsFixed(1)} kg
+
+### What This Means
+- Simple, reassuring explanation of the numbers. Compare to expected healthy ranges in a friendly way.
+
+### Helpful Note
+- Reassuring tip or encouragement for the parents.
+
+## Filipino
+## Buod ng Paglaki ng Bata
+- Maikling, banayad, at nakapapawing-pagod na paliwanag kung paano lumalago ang bata.
+
+### Kasalukuyang Sukat
+- Haba: ${height.toStringAsFixed(1)} cm
+- Timbang: ${weight.toStringAsFixed(1)} kg
+
+### Ano ang Kahulugan Nito
+- Simpleng paliwanag na nagbibigay-linaw at nagpapakalma sa magulang tungkol sa timbang at haba ng bata.
+
+### Paalala
+- Banayad na paalala at suporta mula sa isang mapagkalingang ate o midwife.
+
+Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for everyday care and follow-up.
+''';
+  }
+
+  void _splitPromptResponse(String text) {
+    String english = '';
+    String filipino = '';
+    final normalized = text.replaceAll('\r\n', '\n');
+
+    final englishRegex = RegExp(
+      r'(?:^|\n)(?:#+\s*|\*+|\[)?English(?:#+\s*|\*+|\[)?:?\s*?\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?(?:Filipino|Tagalog)(?:#+\s*|\*+|\[)?:?|$)',
+      caseSensitive: false,
+    );
+    final filipinoRegex = RegExp(
+      r'(?:^|\n)(?:#+\s*|\*+|\[)?(?:Filipino|Tagalog)(?:#+\s*|\*+|\[)?:?\s*?\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?English(?:#+\s*|\*+|\[)?:?|$)',
+      caseSensitive: false,
+    );
+
+    final englishMatch = englishRegex.firstMatch(normalized);
+    final filipinoMatch = filipinoRegex.firstMatch(normalized);
+
+    if (englishMatch != null) {
+      english = englishMatch.group(1)?.trim() ?? '';
+    }
+    if (filipinoMatch != null) {
+      filipino = filipinoMatch.group(1)?.trim() ?? '';
+    }
+
+    if (english.isEmpty && filipino.isEmpty) {
+      english = normalized.trim();
+      filipino = normalized.trim();
+    } else if (english.isEmpty) {
+      english = filipino;
+    } else if (filipino.isEmpty) {
+      filipino = english;
+    }
+
+    _aiEnglishCtrl.text = english;
+    _aiFilipinoCtrl.text = filipino;
+    _aiOriginalEnglish = english;
+    _aiOriginalFilipino = filipino;
+  }
+
+  Future<void> _generateAIInsight() async {
+    setState(() {
+      _isSaving = true;
+      _savingStatus = 'Generating AI growth analysis...';
+    });
+
     try {
       final height = double.parse(_heightController.text);
       final weight = double.parse(_weightController.text);
-      // BMI and remarks are NOT saved to database
+      final bmi = double.parse(_bmiController.text);
+      final childName =
+          '${_childData?['first_name'] ?? ''} ${_childData?['last_name'] ?? ''}'
+              .trim();
+      final sex = _gender;
 
-      await Supabase.instance.client.from('child_details').insert({
+      final heightZ =
+          GrowthCalculator.calculateHeightZScore(height, _ageInWeeks, sex);
+      final weightZ =
+          GrowthCalculator.calculateWeightZScore(weight, _ageInWeeks, sex);
+      final bmiZ = GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, sex);
+
+      final tempNewRecord = {
+        'child_height': height,
+        'child_weight': weight,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+      final allRecords = [..._growthRecords, tempNewRecord];
+
+      final prompt = _buildGrowthAiPrompt(
+        childName: childName,
+        sex: sex,
+        ageWeeks: _ageInWeeks,
+        height: height,
+        weight: weight,
+        bmi: bmi,
+        heightZ: heightZ,
+        weightZ: weightZ,
+        bmiZ: bmiZ,
+        allGrowthRecords: allRecords,
+      );
+
+      final generated = await _groqService.generateTextInsight(
+        prompt: prompt,
+        systemPrompt: GroqService.childGrowthSystemPrompt,
+        temperature: 0.2,
+        maxOutputTokens: 2048,
+      );
+
+      final responseText = generated.trim();
+      _splitPromptResponse(responseText);
+
+      setState(() {
+        _isSaving = false;
+        _aiResponseApproved = false;
+        _step = 1;
+      });
+    } catch (e) {
+      debugPrint('Error generating AI analysis: $e');
+
+      final height = double.parse(_heightController.text);
+      final weight = double.parse(_weightController.text);
+      final childName =
+          '${_childData?['first_name'] ?? ''} ${_childData?['last_name'] ?? ''}'
+              .trim();
+      final fallbackResponse = '''
+## English
+## Baby Growth Summary
+- We are currently unable to generate a detailed AI summary for $childName, but we are actively tracking their growth details.
+
+### Current Measurements
+- Length: ${height.toStringAsFixed(1)} cm
+- Weight: ${weight.toStringAsFixed(1)} kg
+
+### What This Means
+- Please consult your local health worker or midwife to review the length and weight measurements of your child.
+
+### Helpful Note
+- Every baby grows at their own pace. Continue providing loving care and nutrition.
+
+## Filipino
+## Buod ng Paglaki ng Bata
+- Sa kasalukuyan ay hindi natin makagawa ng detalyadong AI summary para kay $childName, ngunit patuloy nating sinusubaybayan ang kanilang paglaki.
+
+### Kasalukuyang Sukat
+- Haba: ${height.toStringAsFixed(1)} cm
+- Timbang: ${weight.toStringAsFixed(1)} kg
+
+### Ano ang Kahulugan Nito
+- Mangyaring kumonsulta sa inyong midwife o tagapangalaga ng kalusugan upang suriin ang haba at timbang ng inyong anak.
+
+### Paalala
+- Ang bawat sanggol ay lumalaki sa sarili nilang bilis. Ipagpatuloy ang mapagkalingang pag-aalaga at natrisyon.
+''';
+
+      _splitPromptResponse(fallbackResponse);
+
+      setState(() {
+        _isSaving = false;
+        _aiResponseApproved = false;
+        _step = 1;
+      });
+    }
+  }
+
+  Future<int?> _saveGrowthRecord() async {
+    try {
+      final height = double.parse(_heightController.text);
+      final weight = double.parse(_weightController.text);
+
+      final insertResult = await Supabase.instance.client.from('child_details').insert({
         'child_id': widget.childId,
         'child_height': height,
         'child_weight': weight,
         'created_at': DateTime.now().toIso8601String(),
-      });
+      }).select('child_details_id').single();
 
-      return true;
+      return insertResult['child_details_id'] as int;
     } catch (e) {
       debugPrint('Error saving growth record: $e');
-      return false;
+      return null;
     }
   }
 
@@ -334,16 +625,43 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
 
     if (confirm != true) return;
 
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+      _savingStatus = 'Saving growth record...';
+    });
 
     try {
-      final success = await _saveGrowthRecord();
+      final childDetailsId = await _saveGrowthRecord();
 
-      setState(() => _isSaving = false);
+      if (childDetailsId != null) {
+        final combinedText =
+            '## English\n${_aiEnglishCtrl.text.trim()}\n\n## Filipino\n${_aiFilipinoCtrl.text.trim()}';
 
-      if (success && mounted) {
-        Navigator.pop(context, true);
+        final wasEdited = _aiEnglishCtrl.text.trim() != _aiOriginalEnglish ||
+            _aiFilipinoCtrl.text.trim() != _aiOriginalFilipino;
+
+        final values = {
+          'reference_table': 'child_details',
+          'reference_id': childDetailsId,
+          'response_type': 'growth_analysis',
+          'response_category': 'growth',
+          'generated_by_ai': true,
+          'ai_model': 'groq',
+          'status': wasEdited ? 'edited' : 'generated',
+          'response': combinedText,
+          'updated_at': DateTime.now().toIso8601String(),
+          'created_at': DateTime.now().toIso8601String(),
+        };
+
+        await Supabase.instance.client.from('ai_responses').insert(values);
+
+        setState(() => _isSaving = false);
+
+        if (mounted) {
+          Navigator.pop(context, true);
+        }
       } else {
+        setState(() => _isSaving = false);
         _showErrorDialog('Failed to save growth record. Please try again.');
       }
     } catch (e) {
@@ -369,6 +687,56 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       return '$metric is slightly above the expected range';
     }
     return '$metric is above the expected range';
+  }
+
+  Color _zScoreColor(double? zScore) {
+    if (zScore == null) return AppColors.textSecondary;
+    if (zScore < -2 || zScore > 2) return AppColors.error;
+    if (zScore < -1 || zScore > 1) return AppColors.warning;
+    return AppColors.success;
+  }
+
+  void _showReferenceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.info_outline, color: AppColors.brandPrimary),
+            SizedBox(width: 8),
+            Text('Growth Reference'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                'Our growth indicators are based on the World Health Organization (WHO) Child Growth Standards.',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, height: 1.4),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Z-scores compare a child\'s measurements (BMI-for-age, weight-for-age, height-for-age) to expected values for healthy growth:',
+                style: TextStyle(fontSize: 13, height: 1.4),
+              ),
+              SizedBox(height: 8),
+              Text('• Within Range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
+              Text('• Slightly Below/Above (Orange): between 1 and 2 standard deviations.', style: TextStyle(fontSize: 13, color: AppColors.warning, fontWeight: FontWeight.w600)),
+              Text('• Below/Above Range (Red): more than 2 standard deviations (indicates wasting, stunting, or high deviation).', style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: AppColors.brandPrimary, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   String? _calculatePreviousBMI() {
@@ -414,7 +782,814 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
     _weightController.dispose();
     _bmiController.dispose();
     _remarksController.dispose();
+    _aiEnglishCtrl.dispose();
+    _aiFilipinoCtrl.dispose();
     super.dispose();
+  }
+
+  Widget _stepTitle() {
+    const labels = [
+      'Growth Record',
+      'AI Growth Review',
+    ];
+    const subtitles = [
+      'Enter the child\'s height and weight measurements',
+      'Review and approve the AI growth summary before saving',
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            labels[_step],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandText,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitles[_step],
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepContent() {
+    if (_step == 0) {
+      return _buildStep0();
+    }
+    return _buildStep1();
+  }
+
+  Widget _buildStep0() {
+    final childName =
+        '${_childData?['first_name'] ?? ''} ${_childData?['last_name'] ?? ''}'
+            .trim();
+    final ageText = '$_ageInWeeks weeks old';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+
+        // Child Info Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.borderPrimary),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: _gender == 'female'
+                    ? Colors.pink.shade100
+                    : Colors.blue.shade100,
+                child: Text(
+                  childName.isNotEmpty ? childName[0].toUpperCase() : 'C',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: _gender == 'female' ? Colors.pink : Colors.blue,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      childName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      ageText,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Height Input
+        AppInputField(
+          hintText: 'Height (cm)',
+          controller: _heightController,
+          leadingIcon: Icons.height,
+          keyboardType:
+              const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
+          ],
+          onChanged: (_) => _onMeasurementChanged(),
+          isRequired: true,
+        ),
+
+        if (_previousGrowth != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(
+              'Previous height: ${(_previousGrowth!['child_height'] as num?)?.toStringAsFixed(1) ?? 'n/a'} cm • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+
+        if (_heightZScore != null) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(
+              _growthStatusDescription('Height', _heightZScore),
+              style: TextStyle(
+                fontSize: 12,
+                color: _zScoreColor(_heightZScore),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 16),
+
+        // Weight Input
+        AppInputField(
+          hintText: 'Weight (kg)',
+          controller: _weightController,
+          leadingIcon: Icons.monitor_weight,
+          keyboardType:
+              const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
+          ],
+          onChanged: (_) => _onMeasurementChanged(),
+          isRequired: true,
+        ),
+
+        if (_previousGrowth != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(
+              'Previous weight: ${(_previousGrowth!['child_weight'] as num?)?.toStringAsFixed(1) ?? 'n/a'} kg • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+
+        if (_weightZScore != null) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(
+              _growthStatusDescription('Weight', _weightZScore),
+              style: TextStyle(
+                fontSize: 12,
+                color: _zScoreColor(_weightZScore),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 16),
+
+        // BMI Display
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.brandPrimary.withValues(alpha: 0.3),
+              width: 1.4,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.calculate,
+                    color: AppColors.brandPrimary,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Text(
+                          _bmiController.text.isEmpty
+                              ? 'BMI: ---'
+                              : 'BMI: ${_bmiController.text}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: _bmiController.text.isEmpty
+                                ? AppColors.textSecondary
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: _showReferenceDialog,
+                          child: const Icon(
+                            Icons.help_outline_rounded,
+                            color: AppColors.textSecondary,
+                            size: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_bmiController.text.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _bmiCategoryColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _bmiCategoryText,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _bmiCategoryColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              if (_bmiZScore != null && _bmiController.text.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    _growthStatusDescription('BMI', _bmiZScore),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _bmiCategoryColor.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (_previousGrowth != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(
+              'Previous BMI: ${_calculatePreviousBMI() ?? 'n/a'} • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppColors.borderPrimary.withValues(alpha: 0.4),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Icon(
+                Icons.help_outline,
+                size: 18,
+                color: AppColors.textSecondary,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Measurement guide: enter height in cm and weight in kg. Use the child\'s age range to choose realistic values and double-check the measuring tool if numbers seem unusual.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: AppColors.textSecondary.withValues(alpha: 0.22),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(
+                    Icons.notes_rounded,
+                    size: 18,
+                    color: AppColors.textSecondary,
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    'Remarks (optional)',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _remarksController,
+                minLines: 4,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  hintText: 'Add optional notes to describe the measurement context',
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 0),
+                ),
+                style: TextStyle(
+                  color: AppColors.textPrimary.withValues(alpha: 0.85),
+                  fontSize: 15,
+                ),
+                cursorColor: AppColors.brandPrimary,
+              ),
+            ],
+          ),
+        ),
+
+        if (_validationMessage != null) ...[
+          const SizedBox(height: 12),
+          ValidationMessage(
+            message: _validationMessage!,
+            type: _validationMessageType,
+          ),
+        ],
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildStep1() {
+    final activeInsight = _selectedLanguage == 'filipino'
+        ? _aiFilipinoCtrl.text.trim()
+        : _aiEnglishCtrl.text.trim();
+
+    final content = activeInsight.isEmpty
+        ? (_selectedLanguage == 'filipino'
+            ? 'Kamusta mommy? Ang pag-analisa sa paglaki ng bata ay magsisimula sa sandaling makuha ang AI assessment...'
+            : 'The care insight will appear here once generated...')
+        : activeInsight;
+
+    final lineCount = '\n'.allMatches(content).length + 1;
+    final editorLines = (lineCount + 2).clamp(5, 18);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+
+        // A. Mother-Facing Info Banner
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: AppColors.brandPrimary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.15)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Icon(
+                Icons.info_outline,
+                color: AppColors.brandPrimary,
+                size: 20,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'This Care Insight is what the parent will see on their mobile app. It is written in a warm, reassuring tone to guide and support them.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.inputText,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Main Card
+        Container(
+          width: double.infinity,
+          clipBehavior: Clip.hardEdge,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.borderPrimary),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                  border: const Border(
+                      bottom: BorderSide(color: AppColors.borderPrimary)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome,
+                        color: AppColors.brandPrimary, size: 20),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Growth Insight for Parent',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _generateAIInsight,
+                      child: const Icon(Icons.refresh_rounded,
+                          size: 18, color: AppColors.brandPrimary),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Body
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Language Toggle
+                    Align(
+                      alignment: Alignment.center,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgSecondary,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                              color: AppColors.borderPrimary, width: 1.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedLanguage = 'filipino';
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _selectedLanguage == 'filipino'
+                                      ? AppColors.brandPrimary
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'Filipino (Conversational)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _selectedLanguage == 'filipino'
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    color: _selectedLanguage == 'filipino'
+                                        ? Colors.white
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedLanguage = 'english';
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _selectedLanguage == 'english'
+                                      ? AppColors.brandPrimary
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'English',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _selectedLanguage == 'english'
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    color: _selectedLanguage == 'english'
+                                        ? Colors.white
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // AI Insight Text
+                    if (!_isEditingAi)
+                      buildFormattedAiText(content)
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.faintWhite,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.borderPrimary),
+                        ),
+                        child: TextField(
+                          key: ValueKey(_selectedLanguage),
+                          controller: _selectedLanguage == 'filipino'
+                              ? _aiFilipinoCtrl
+                              : _aiEnglishCtrl,
+                          minLines: editorLines,
+                          maxLines: editorLines,
+                          decoration: InputDecoration(
+                            hintText: _selectedLanguage == 'filipino'
+                                ? 'Isulat ang growth message para sa magulang (Filipino)...'
+                                : 'Write the growth message for the parent (English)...',
+                            hintStyle: const TextStyle(
+                                color: AppColors.textSecondary, fontSize: 13),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.all(14),
+                          ),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.inputText,
+                            height: 1.65,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Action Buttons
+        if (_isEditingAi) ...[
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      _aiFilipinoCtrl.text = _backupFilipino;
+                      _aiEnglishCtrl.text = _backupEnglish;
+                      _isEditingAi = false;
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.borderPrimary),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: FilledButton(
+                  onPressed: () {
+                    final nextFilText = _aiFilipinoCtrl.text.trim();
+                    final nextEngText = _aiEnglishCtrl.text.trim();
+                    if (nextFilText.isEmpty || nextEngText.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Both Filipino and English insights are required.')),
+                      );
+                      return;
+                    }
+                    setState(() {
+                      _aiResponseApproved = false;
+                      _isEditingAi = false;
+                    });
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Save Changes'),
+                ),
+              ),
+            ],
+          ),
+        ] else if (_aiResponseApproved) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border:
+                  Border.all(color: AppColors.success.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded,
+                    color: AppColors.success, size: 24),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Growth insight approved! This insight is ready and will be saved when you submit.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _aiResponseApproved = false;
+                    });
+                  },
+                  child: const Text(
+                    'Re-edit',
+                    style: TextStyle(
+                      color: AppColors.brandPrimary,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: (content.isEmpty || activeInsight.isEmpty)
+                      ? null
+                      : () {
+                          setState(() {
+                            _aiResponseApproved = true;
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Insight approved! You can now save the growth record.')),
+                          );
+                        },
+                  icon:
+                      const Icon(Icons.check_circle_outline_rounded, size: 18),
+                  label: const Text('Approve Care Insight'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _backupFilipino = _aiFilipinoCtrl.text;
+                          _backupEnglish = _aiEnglishCtrl.text;
+                          _isEditingAi = true;
+                          _aiResponseApproved = false;
+                        });
+                      },
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Edit Insight'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        side: const BorderSide(color: AppColors.borderPrimary),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 24),
+      ],
+    );
   }
 
   @override
@@ -430,31 +1605,35 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       );
     }
 
-    final childName =
-        '${_childData?['first_name'] ?? ''} ${_childData?['last_name'] ?? ''}'
-            .trim();
-    final ageText = '$_ageInWeeks weeks old';
-
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: SecondaryHeader(
           title: 'Add Growth Record',
-          onBack: () => Navigator.pop(context),
+          onBack: () {
+            if (_step > 0 && !_isSaving) {
+              setState(() {
+                _isEditingAi = false;
+                _step = 0;
+              });
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
       ),
       body: SafeArea(
         child: _isSaving
-            ? const Center(
+            ? Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(color: AppColors.brandPrimary),
-                    SizedBox(height: 20),
+                    const CircularProgressIndicator(color: AppColors.brandPrimary),
+                    const SizedBox(height: 20),
                     Text(
-                      'Saving growth record...',
-                      style: TextStyle(
+                      _savingStatus,
+                      style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -463,382 +1642,82 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
                   ],
                 ),
               )
-            : SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 16),
-
-                    // Child Info Card
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.borderPrimary),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 24,
-                            backgroundColor: _gender == 'female'
-                                ? Colors.pink.shade100
-                                : Colors.blue.shade100,
-                            child: Text(
-                              childName.isNotEmpty
-                                  ? childName[0].toUpperCase()
-                                  : 'C',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: _gender == 'female'
-                                    ? Colors.pink
-                                    : Colors.blue,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  childName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  ageText,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+            : Column(
+                children: [
+                  LinearProgressIndicator(
+                    value: (_step + 1) / _totalSteps,
+                    backgroundColor: AppColors.borderPrimary,
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(AppColors.brandPrimary),
+                    minHeight: 3,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: _stepTitle(),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _buildStepContent(),
                     ),
-                    const SizedBox(height: 20),
-
-                    // Height Input
-                    AppInputField(
-                      hintText: 'Height (cm)',
-                      controller: _heightController,
-                      leadingIcon: Icons.height,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d*\.?\d*$')),
-                      ],
-                      onChanged: (_) => _onMeasurementChanged(),
-                      isRequired: true,
-                    ),
-
-                    if (_previousGrowth != null) ...[
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16),
-                        child: Text(
-                          'Previous height: ${(_previousGrowth!['child_height'] as num?)?.toStringAsFixed(1) ?? 'n/a'} cm • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    if (_heightZScore != null) ...[
-                      const SizedBox(height: 4),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16),
-                        child: Text(
-                          _growthStatusDescription('Height', _heightZScore),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 16),
-
-                    // Weight Input
-                    AppInputField(
-                      hintText: 'Weight (kg)',
-                      controller: _weightController,
-                      leadingIcon: Icons.monitor_weight,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d*\.?\d*$')),
-                      ],
-                      onChanged: (_) => _onMeasurementChanged(),
-                      isRequired: true,
-                    ),
-
-                    if (_previousGrowth != null) ...[
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16),
-                        child: Text(
-                          'Previous weight: ${(_previousGrowth!['child_weight'] as num?)?.toStringAsFixed(1) ?? 'n/a'} kg • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    if (_weightZScore != null) ...[
-                      const SizedBox(height: 4),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16),
-                        child: Text(
-                          _growthStatusDescription('Weight', _weightZScore),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 16),
-
-                    // BMI Display with Real-time Status (calculated in app, NOT saved)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppColors.brandPrimary.withValues(alpha: 0.3),
-                          width: 1.4,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.03),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.calculate,
-                                color: AppColors.brandPrimary,
-                                size: 22,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _bmiController.text.isEmpty
-                                      ? 'BMI: ---'
-                                      : 'BMI: ${_bmiController.text}',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: _bmiController.text.isEmpty
-                                        ? AppColors.textSecondary
-                                        : AppColors.textPrimary,
-                                  ),
-                                ),
-                              ),
-                              if (_bmiController.text.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: _bmiCategoryColor.withValues(
-                                        alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    _bmiCategoryText,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: _bmiCategoryColor,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          if (_bmiZScore != null &&
-                              _bmiController.text.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                _growthStatusDescription('BMI', _bmiZScore),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color:
-                                      _bmiCategoryColor.withValues(alpha: 0.7),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (_previousGrowth != null) ...[
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16),
-                        child: Text(
-                          'Previous BMI: ${_calculatePreviousBMI() ?? 'n/a'} • ${_formatDate(_previousGrowth!['created_at']?.toString() ?? '')}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: AppColors.borderPrimary.withValues(alpha: 0.4),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.help_outline,
-                            size: 18,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Measurement guide: enter height in cm and weight in kg. Use the child\'s age range to choose realistic values and double-check the measuring tool if numbers seem unusual.',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color:
-                              AppColors.textSecondary.withValues(alpha: 0.22),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: const [
-                              Icon(
-                                Icons.notes_rounded,
-                                size: 18,
-                                color: AppColors.textSecondary,
-                              ),
-                              SizedBox(width: 10),
-                              Text(
-                                'Remarks (optional)',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _remarksController,
-                            minLines: 4,
-                            maxLines: 6,
-                            decoration: const InputDecoration(
-                              hintText:
-                                  'Add optional notes to describe the measurement context',
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(vertical: 0),
-                            ),
-                            style: TextStyle(
-                              color:
-                                  AppColors.textPrimary.withValues(alpha: 0.85),
-                              fontSize: 15,
-                            ),
-                            cursorColor: AppColors.brandPrimary,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    if (_validationMessage != null) ...[
-                      const SizedBox(height: 12),
-                      ValidationMessage(
-                        message: _validationMessage!,
-                        type: ValidationType.error,
-                      ),
-                    ],
-
-                    const SizedBox(height: 28),
-
-                    MainButton(
-                      label: 'Add Growth Record',
-                      onPressed: _isFormValid ? _submit : null,
-                    ),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
+                  ),
+                ],
               ),
       ),
+      bottomNavigationBar: _isSaving
+          ? null
+          : Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.07),
+                    blurRadius: 14,
+                    offset: const Offset(0, -4))
+                ],
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Row(
+                    children: [
+                      if (_step > 0) ...[
+                        Expanded(
+                          child: MainButton(
+                            label: 'Back',
+                            leftIcon: Icons.arrow_back_ios_new_rounded,
+                            isWhiteVariant: true,
+                            onPressed: () => setState(() {
+                              _isEditingAi = false;
+                              _step = 0;
+                            }),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        flex: (_step > 0) ? 2 : 1,
+                        child: _step == _totalSteps - 1
+                            ? MainButton(
+                                label: _aiResponseApproved
+                                    ? 'Save Growth Record'
+                                    : 'Approve AI to Save',
+                                rightIcon: _aiResponseApproved
+                                    ? Icons.check_rounded
+                                    : Icons.arrow_forward_ios_rounded,
+                                onPressed: _aiResponseApproved ? _submit : null,
+                              )
+                            : MainButton(
+                                label: 'Next',
+                                rightIcon: Icons.arrow_forward_ios_rounded,
+                                onPressed: _isFormValid ? _generateAIInsight : null,
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
     );
   }
 }

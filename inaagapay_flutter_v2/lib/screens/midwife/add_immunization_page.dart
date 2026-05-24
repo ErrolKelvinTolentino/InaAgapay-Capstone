@@ -527,12 +527,12 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
         ),
         const SizedBox(height: 4),
         // Legend
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
           children: [
             _legendDot(AppColors.success, 'Given'),
-            const SizedBox(width: 12),
             _legendDot(AppColors.warning, 'Recommended'),
-            const SizedBox(width: 12),
             _legendDot(AppColors.textSecondary, 'Not due yet'),
           ],
         ),

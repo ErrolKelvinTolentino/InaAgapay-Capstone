@@ -17,6 +17,7 @@ class MotherChildVaccinePage extends StatefulWidget {
   final int childId;
   final String childName;
   final String childAge;
+  final String childGender;
 
   const MotherChildVaccinePage({
     super.key,
@@ -24,6 +25,7 @@ class MotherChildVaccinePage extends StatefulWidget {
     required this.childId,
     required this.childName,
     required this.childAge,
+    required this.childGender,
   });
 
   @override
@@ -156,6 +158,7 @@ class _MotherChildVaccinePageState extends State<MotherChildVaccinePage> {
                           image: null,
                           title: widget.childName,
                           subtitle: widget.childAge,
+                          sex: widget.childGender,
                           showWeekBadge: false,
                           showHeartRow: false,
                         ),

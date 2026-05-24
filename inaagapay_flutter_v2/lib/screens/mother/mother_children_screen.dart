@@ -145,18 +145,38 @@ class _MotherChildrenScreenState extends State<MotherChildrenScreen> {
     final now = DateTime.now();
     int years = now.year - birthdate.year;
     int months = now.month - birthdate.month;
+    int days = now.day - birthdate.day;
 
+    if (days < 0) {
+      months -= 1;
+      final prevMonthDate = DateTime(now.year, now.month, 0);
+      days += prevMonthDate.day;
+    }
     if (months < 0) {
-      years--;
+      years -= 1;
       months += 12;
     }
 
     if (LanguageService.isFilipino) {
-      if (years <= 0) {
-        return '$months ${months == 1 ? 'buwan' : 'buwan'} gulang';
+      if (years > 0) {
+        final monthPart = months > 0 ? ' at $months buwan' : '';
+        return '$years taon$monthPart gulang';
+      } else if (months > 0) {
+        final weeks = days ~/ 7;
+        final weekPart = weeks > 0 ? ' at $weeks linggo' : '';
+        return '$months buwan$weekPart gulang';
+      } else {
+        if (days >= 7) {
+          final weeks = days ~/ 7;
+          final remainingDays = days % 7;
+          final dayPart = remainingDays > 0 ? ' at $remainingDays araw' : '';
+          return '$weeks linggo$dayPart gulang';
+        } else if (days > 0) {
+          return '$days araw gulang';
+        } else {
+          return 'Bagong Silang';
+        }
       }
-      final monthPart = months > 0 ? ' $months buwan' : '';
-      return '$years ${years == 1 ? 'taon' : 'taon'}$monthPart gulang';
     }
 
     return child.ageText;

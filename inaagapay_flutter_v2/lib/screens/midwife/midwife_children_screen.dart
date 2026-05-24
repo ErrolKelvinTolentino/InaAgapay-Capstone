@@ -335,16 +335,36 @@ class _MidwifeChildrenScreenState extends State<MidwifeChildrenScreen> {
     final now = DateTime.now();
     int years = now.year - birthdate.year;
     int months = now.month - birthdate.month;
-    
+    int days = now.day - birthdate.day;
+
+    if (days < 0) {
+      months -= 1;
+      final prevMonthDate = DateTime(now.year, now.month, 0);
+      days += prevMonthDate.day;
+    }
     if (months < 0) {
-      years--;
+      years -= 1;
       months += 12;
     }
-    
-    if (years <= 0) {
-      return '$months month${months != 1 ? 's' : ''} old';
+
+    if (years > 0) {
+      final monthPart = months > 0 ? ', $months month${months != 1 ? 's' : ''}' : '';
+      return '$years year${years != 1 ? 's' : ''}$monthPart old';
+    } else if (months > 0) {
+      final weeks = days ~/ 7;
+      final weekPart = weeks > 0 ? ', $weeks week${weeks != 1 ? 's' : ''}' : '';
+      return '$months month${months != 1 ? 's' : ''}$weekPart old';
     } else {
-      return '$years year${years != 1 ? 's' : ''} ${months > 0 ? '$months month${months != 1 ? 's' : ''}' : ''} old'.trim();
+      if (days >= 7) {
+        final weeks = days ~/ 7;
+        final remainingDays = days % 7;
+        final dayPart = remainingDays > 0 ? ', $remainingDays day${remainingDays != 1 ? 's' : ''}' : '';
+        return '$weeks week${weeks != 1 ? 's' : ''}$dayPart old';
+      } else if (days > 0) {
+        return '$days day${days != 1 ? 's' : ''} old';
+      } else {
+        return 'Newborn';
+      }
     }
   }
 

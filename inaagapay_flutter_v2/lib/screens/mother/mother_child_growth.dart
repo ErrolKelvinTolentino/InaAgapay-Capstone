@@ -70,10 +70,6 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
     return LanguageService.translate(english, filipino);
   }
 
-  String _genderLabel() {
-    return widget.childGender == 'female' ? _t('Girl', 'Babae') : _t('Boy', 'Lalaki');
-  }
-
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<AppLanguage>(
@@ -231,7 +227,8 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
           HeroCard(
             image: null,
             title: widget.childName,
-            subtitle: '${widget.childAge} • ${_genderLabel()}',
+            subtitle: widget.childAge,
+            sex: widget.childGender,
             showWeekBadge: false,
             showHeartRow: false,
           ),
@@ -265,15 +262,23 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
 
   String _generateAIAnalysis(List<double> values, String unit, String? gain, String childName) {
     if (values.isEmpty) {
-      return _t(
-          'No growth data available yet. Add growth records to see AI analysis.',
-          'Wala pang growth data. Magdagdag ng growth records para makita ang AI analysis.');
+      return '''
+## English
+No growth data available yet. Add growth records to see AI analysis.
+
+## Filipino
+Wala pang growth data. Magdagdag ng growth records para makita ang AI analysis.
+''';
     }
     
     if (values.length < 2) {
-      return _t(
-          'Need at least 2 measurements for trend analysis. Current: ${values.length} record(s).',
-          'Kailangan ng hindi bababa sa 2 sukat para sa trend analysis. Kasalukuyan: ${values.length} record(s).');
+      return '''
+## English
+Need at least 2 measurements for trend analysis. Current: ${values.length} record(s).
+
+## Filipino
+Kailangan ng hindi bababa sa 2 sukat para sa trend analysis. Kasalukuyan: ${values.length} record(s).
+''';
     }
     
     final first = values.first;
@@ -283,31 +288,55 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
     
     if (unit == 'cm') {
       if (change > 5) {
-        return _t(
-            '$childName has shown excellent height growth of ${change.toStringAsFixed(1)} cm (${percentChange.toStringAsFixed(0)}% increase). This indicates healthy physical development.',
-            'Nagpakita si $childName ng mahusay na paglaki sa taas na ${change.toStringAsFixed(1)} cm (${percentChange.toStringAsFixed(0)}% pagtaas). Ipinapakita nito ang malusog na pisikal na pag-unlad.');
+        return '''
+## English
+$childName has shown excellent height growth of ${change.toStringAsFixed(1)} cm (${percentChange.toStringAsFixed(0)}% increase). This indicates healthy physical development.
+
+## Filipino
+Nagpakita si $childName ng mahusay na paglaki sa taas na ${change.toStringAsFixed(1)} cm (${percentChange.toStringAsFixed(0)}% pagtaas). Ipinapakita nito ang malusog na pisikal na pag-unlad.
+''';
       } else if (change > 2) {
-        return _t(
-            '$childName is showing steady height growth of ${change.toStringAsFixed(1)} cm. Growth is progressing within expected ranges.',
-            'Patuloy ang paglaki ng taas ni $childName ng ${change.toStringAsFixed(1)} cm. Nasa inaasahang saklaw ang paglaki.');
+        return '''
+## English
+$childName is showing steady height growth of ${change.toStringAsFixed(1)} cm. Growth is progressing within expected ranges.
+
+## Filipino
+Patuloy ang paglaki ng taas ni $childName ng ${change.toStringAsFixed(1)} cm. Nasa inaasahang saklaw ang paglaki.
+''';
       } else {
-        return _t(
-            '$childName\'s height growth has been minimal (${change.toStringAsFixed(1)} cm). Continue monitoring and ensure proper nutrition.',
-            'Kaunti lang ang paglaki ng taas ni $childName (${change.toStringAsFixed(1)} cm). Ipagpatuloy ang pagsubaybay at siguraduhin ang tamang nutrisyon.');
+        return '''
+## English
+$childName's height growth has been minimal (${change.toStringAsFixed(1)} cm). Continue monitoring and ensure proper nutrition.
+
+## Filipino
+Kaunti lang ang paglaki ng taas ni $childName (${change.toStringAsFixed(1)} cm). Ipagpatuloy ang pagsubaybay at siguraduhin ang tamang nutrisyon.
+''';
       }
     } else {
       if (change > 2) {
-        return _t(
-            '$childName has gained ${change.toStringAsFixed(1)} kg (${percentChange.toStringAsFixed(0)}% increase). Weight gain is appropriate for age.',
-            'Nadagdagan ang timbang ni $childName ng ${change.toStringAsFixed(1)} kg (${percentChange.toStringAsFixed(0)}% pagtaas). Ang pagdagdag ng timbang ay angkop sa edad.');
+        return '''
+## English
+$childName has gained ${change.toStringAsFixed(1)} kg (${percentChange.toStringAsFixed(0)}% increase). Weight gain is appropriate for age.
+
+## Filipino
+Nadagdagan ang timbang ni $childName ng ${change.toStringAsFixed(1)} kg (${percentChange.toStringAsFixed(0)}% pagtaas). Ang pagdagdag ng timbang ay angkop sa edad.
+''';
       } else if (change > 0.5) {
-        return _t(
-            '$childName is maintaining steady weight gain of ${change.toStringAsFixed(1)} kg. Continue regular monitoring.',
-            'Patuloy ang pagdagdag ng timbang ni $childName ng ${change.toStringAsFixed(1)} kg. Ipagpatuloy ang regular na pagsubaybay.');
+        return '''
+## English
+$childName is maintaining steady weight gain of ${change.toStringAsFixed(1)} kg. Continue regular monitoring.
+
+## Filipino
+Patuloy ang pagdagdag ng timbang ni $childName ng ${change.toStringAsFixed(1)} kg. Ipagpatuloy ang regular na pagsubaybay.
+''';
       } else {
-        return _t(
-            '$childName\'s weight gain has been minimal (${change.toStringAsFixed(1)} kg). Consult healthcare provider if concerned.',
-            'Kaunti lang ang pagdagdag ng timbang ni $childName (${change.toStringAsFixed(1)} kg). Kumonsulta sa healthcare provider kung may alalahanin.');
+        return '''
+## English
+$childName's weight gain has been minimal (${change.toStringAsFixed(1)} kg). Consult healthcare provider if concerned.
+
+## Filipino
+Kaunti lang ang pagdagdag ng timbang ni $childName (${change.toStringAsFixed(1)} kg). Kumonsulta sa healthcare provider kung may alalahanin.
+''';
       }
     }
   }
