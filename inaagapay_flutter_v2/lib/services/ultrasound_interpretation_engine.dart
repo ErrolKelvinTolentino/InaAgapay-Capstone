@@ -116,13 +116,14 @@ class UltrasoundInterpretationEngine {
 
     for (final status in measurementStatuses) {
       final upper = status.toUpperCase().trim();
-      if (upper == 'ABNORMAL' ||
-          upper == 'CONCERNING' ||
-          upper == 'REVIEW') {
+      if (upper.contains('ABNORMAL') ||
+          upper.contains('CONCERNING') ||
+          upper.contains('REVIEW')) {
         concerningCount++;
-      } else if (upper == 'BORDERLINE' ||
-          upper == 'MONITOR' ||
-          upper == 'OBSERVE') {
+      } else if (upper.contains('BORDERLINE') ||
+          upper.contains('MONITOR') ||
+          upper.contains('OBSERVE') ||
+          upper.contains('REQUIRES')) {
         borderlineCount++;
       }
     }
