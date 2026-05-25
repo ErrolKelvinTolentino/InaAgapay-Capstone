@@ -1,6 +1,7 @@
 // lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/mother_profile_service.dart';
@@ -3077,7 +3078,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   // ── Editable profile controllers ────────────────────────────────────────
 
-  void _initializePersonalControllers(Map<String, dynamic> profile) {
+  void _initializePersonalControllers(Map<String, dynamic> profile, Map<String, dynamic>? currentPregnancy) {
     // Dispose existing controllers before creating new ones
     for (final c in _personalControllers.values) {
       c.dispose();
@@ -3088,16 +3089,39 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         TextEditingController(text: profile['height']?.toString() ?? '');
     _personalControllers['weight'] =
         TextEditingController(text: profile['weight']?.toString() ?? '');
+
+    final ppw = currentPregnancy?['pre_pregnancy_weight'];
+    _personalControllers['pre_pregnancy_weight'] =
+        TextEditingController(text: ppw?.toString() ?? '');
+
     _editingBloodType = profile['blood_type'] ?? '';
   }
 
   Future<void> _savePersonalInfo() async {
     final bloodType = _editingBloodType;
+    final ppwText = _personalControllers['pre_pregnancy_weight']?.text.trim() ?? '';
+    final double? ppw = ppwText.isEmpty ? null : double.tryParse(ppwText);
 
     try {
+      // 1. Update blood type in mothers table
       await SupabaseService.client.from('mothers').update({
         'blood_type': bloodType.isEmpty ? null : bloodType,
       }).eq('mother_id', widget.motherId);
+
+      // 2. Update pre-pregnancy weight in pregnancies table for ongoing pregnancy
+      final ongoingPregnancy = await SupabaseService.client
+          .from('pregnancies')
+          .select('pregnancy_id')
+          .eq('mother_id', widget.motherId)
+          .eq('status', 'ongoing')
+          .maybeSingle();
+
+      if (ongoingPregnancy != null) {
+        final pregnancyId = ongoingPregnancy['pregnancy_id'] as int;
+        await SupabaseService.client.from('pregnancies').update({
+          'pre_pregnancy_weight': ppw,
+        }).eq('pregnancy_id', pregnancyId);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4286,6 +4310,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                           : 'Not set'),
                   const SizedBox(height: 8),
                   _buildInfoRow(
+                      'Pre-Pregnancy Weight',
+                      _personalControllers['pre_pregnancy_weight']?.text.isNotEmpty == true
+                          ? '${_personalControllers['pre_pregnancy_weight']!.text} kg'
+                          : 'Unknown'),
+                  const SizedBox(height: 8),
+                  _buildInfoRow(
                       'Blood Type', profile['blood_type'] ?? 'Not set'),
                   if (!widget.readOnly) ...[
                     const SizedBox(height: 16),
@@ -4350,6 +4380,15 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           hintText: 'Weight (kg)',
           readOnly: true,
           keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 12),
+        AppInputField(
+          controller: _personalControllers['pre_pregnancy_weight']!,
+          hintText: 'Pre-Pregnancy Weight (kg) - leave empty if unknown',
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d{0,3}(\.\d{0,2})?$')),
+          ],
         ),
         const SizedBox(height: 12),
         AppDropdownField<String>(
@@ -4550,7 +4589,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
     // FIX #1: initialise controllers only once per profile load
     if (!_controllersInitialized) {
-      _initializePersonalControllers(profile);
+      _initializePersonalControllers(profile, currentPregnancy);
       _initializeAddressControllers(profile);
       _controllersInitialized = true;
     }
