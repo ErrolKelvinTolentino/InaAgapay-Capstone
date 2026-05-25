@@ -65,6 +65,25 @@ const List<String> _commonConditions = [
   'Hepatitis',
   'Other',
 ];
+const List<String> _commonAllergens = [
+  'Peanuts',
+  'Penicillin',
+  'Dust Mites',
+  'Pollen',
+  'Shellfish',
+  'Pet Dander',
+  'Fish',
+  'Milk',
+  'Eggs',
+  'Soy',
+  'Wheat',
+  'Latex',
+  'Insect Stings',
+  'Mold',
+  'Fragrances',
+  'Nickel',
+  'Other'
+];
 
 class _EmergencyContact {
   String firstName = '';
@@ -2162,10 +2181,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     if (confirm == true) setState(() => _medicalConditions.removeAt(index));
   }
 
-  Future<void> _showAddAllergy({int? editIndex}) async {
+  Future<void> _showAddAllergy({int? editIndex, String? prefill}) async {
     _Allergy? existing = editIndex != null ? _allergies[editIndex] : null;
 
-    final allergenCtrl = TextEditingController(text: existing?.allergen ?? '');
+    final allergenCtrl = TextEditingController(text: existing?.allergen ?? prefill ?? '');
     DateTime? diagDate = existing?.diagnosisDate;
     String status = existing?.status ?? 'active';
     final treatmentCtrl =
@@ -3741,6 +3760,10 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: value,
+                    style: const TextStyle(
+                      color: AppColors.inputText,
+                      fontSize: 16,
+                    ),
                     hint: Text(hint,
                         style: const TextStyle(
                             color: AppColors.textSecondary, fontSize: 14)),
@@ -3750,8 +3773,14 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                         items.length,
                         (i) => DropdownMenuItem<String>(
                             value: items[i],
-                            child: Text(labels[i],
-                                overflow: TextOverflow.ellipsis))),
+                            child: Text(
+                              labels[i],
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.inputText,
+                                fontSize: 16,
+                              ),
+                            ))),
                     onChanged: onChanged,
                   ),
                 ),
@@ -3766,6 +3795,116 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                   style:
                       const TextStyle(fontSize: 11, color: AppColors.error))),
       ],
+    );
+  }
+
+  bool _isConditionAdded(String name) {
+    return _medicalConditions.any((e) => e.conditionName.toLowerCase() == name.toLowerCase());
+  }
+
+  bool _isAllergyAdded(String name) {
+    return _allergies.any((e) => e.allergen.toLowerCase() == name.toLowerCase());
+  }
+
+  int _getConditionIndex(String name) {
+    return _medicalConditions.indexWhere((e) => e.conditionName.toLowerCase() == name.toLowerCase());
+  }
+
+  int _getAllergyIndex(String name) {
+    return _allergies.indexWhere((e) => e.allergen.toLowerCase() == name.toLowerCase());
+  }
+
+  Widget _buildPillOption({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.brandPrimary : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppColors.brandPrimary : AppColors.borderPrimary,
+            width: 1.5,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : AppColors.inputText,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeightToggleCard({
+    required String title,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.brandPrimary.withValues(alpha: 0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? AppColors.brandPrimary : Colors.black.withValues(alpha: 0.1),
+            width: isSelected ? 2.0 : 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: isSelected ? AppColors.brandPrimary : AppColors.textSecondary,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? AppColors.brandPrimary : AppColors.inputText,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -4647,6 +4786,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       children: [
         _sectionLabel('Body Measurements'),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: AppInputField(
@@ -5037,6 +5177,30 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _sectionLabel('Quick Add - Common Allergens'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _commonAllergens.map((allergen) {
+            final isAdded = _isAllergyAdded(allergen);
+            return _buildPillOption(
+              label: allergen,
+              isSelected: isAdded,
+              onTap: () {
+                if (isAdded) {
+                  final idx = _getAllergyIndex(allergen);
+                  if (idx != -1) {
+                    _confirmDeleteAllergy(idx);
+                  }
+                } else {
+                  _showAddAllergy(prefill: allergen == 'Other' ? null : allergen);
+                }
+              },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 24),
         _sectionLabel('Allergies List'),
         const SizedBox(height: 16),
         if (_allergies.isEmpty)

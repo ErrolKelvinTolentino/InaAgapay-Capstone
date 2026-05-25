@@ -1876,6 +1876,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Widget _buildUltrasoundMetricsSummaryCard(String title, List<String> lines) {
+    final isUltrasound = widget.title.toLowerCase().contains('ultrasound');
     if (lines.isEmpty) return _buildAiSectionCard(title, lines);
 
     final rows = lines
@@ -1968,7 +1969,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                             ),
                           ),
                           child: Text(
-                            row.status,
+                            _friendlyStatusLabel(row.status, isUltrasound),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -2098,7 +2099,6 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       ),
     );
   }
-
   Widget _buildStructuredAiInsights(String text) {
     final sections = _extractAiSections(text);
     if (sections.isEmpty) return _buildFormattedAiText(text);
@@ -2152,7 +2152,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       }
     }
 
-    final widgets = <Widget>[];
+    final isUltrasound = widget.title.toLowerCase().contains('ultrasound');
+    final summaryWidgets = <Widget>[];
+    final detailedWidgets = <Widget>[];
+
     for (final entry in orderedEntries) {
       if (entry.key == 'RELEVANCE CHECK' || entry.key == 'RELEVANCE REASON') {
         continue;
@@ -2167,31 +2170,72 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       }
 
       if (entry.key == 'LABORATORY RESULTS') {
-        widgets.add(_buildLabResultsSummaryCard(sections));
+        summaryWidgets.add(_buildLabResultsSummaryCard(sections));
         continue;
       }
 
-      if (entry.key == 'DETAILED MEASUREMENTS ASSESSMENT' ||
-          entry.key == 'ANATOMICAL ASSESSMENT' ||
-          entry.key == 'ABNORMAL FINDINGS' ||
-          entry.key == 'NORMAL RANGES') {
-        if ((entry.key == 'ABNORMAL FINDINGS' ||
-                entry.key == 'NORMAL RANGES') &&
+      final keyUpper = entry.key.toUpperCase();
+      final isDetailedData = keyUpper == 'DETAILED MEASUREMENTS ASSESSMENT' ||
+          keyUpper == 'ANATOMICAL ASSESSMENT' ||
+          keyUpper == 'ABNORMAL FINDINGS' ||
+          keyUpper == 'NORMAL RANGES';
+
+      if (isDetailedData) {
+        if ((keyUpper == 'ABNORMAL FINDINGS' || keyUpper == 'NORMAL RANGES') &&
             sections.containsKey('LABORATORY RESULTS')) {
           continue;
         }
-        widgets.add(_buildUltrasoundMetricsSummaryCard(entry.key, entry.value));
-        continue;
+        final card = _buildUltrasoundMetricsSummaryCard(entry.key, entry.value);
+        if (isUltrasound) {
+          detailedWidgets.add(card);
+        } else {
+          summaryWidgets.add(card);
+        }
+      } else {
+        summaryWidgets.add(_buildAiSectionCard(entry.key, entry.value));
       }
-
-      widgets.add(_buildAiSectionCard(entry.key, entry.value));
     }
 
-    if (widgets.isEmpty) return _buildFormattedAiText(text);
+    if (isUltrasound && detailedWidgets.isNotEmpty) {
+      summaryWidgets.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 8),
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              title: Row(
+                children: [
+                  const Icon(Icons.settings_outlined, color: AppColors.brandPrimary, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _t(
+                        'Detailed Ultrasound Findings (Healthcare Personnel View)',
+                        'Detalyadong Resulta ng Ultrasound (Para sa Midwife)',
+                      ),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(top: 8),
+              children: detailedWidgets,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (summaryWidgets.isEmpty) return _buildFormattedAiText(text);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: widgets,
+      children: summaryWidgets,
     );
   }
 
@@ -2258,6 +2302,22 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       return _t('Requires Closer Monitoring', 'Kailangan ng Masusing Pagsubaybay');
     }
     return val.toUpperCase();
+  }
+
+  String _friendlyStatusLabel(String status, bool isUltrasound) {
+    final s = status.toUpperCase();
+    if (isUltrasound) {
+      if (s == 'NORMAL') {
+        return _t('Within Expected Range', 'Nasa Inaasahang Saklaw');
+      }
+      if (s == 'ABNORMAL' || s == 'CONCERNING' || s == 'MONITOR') {
+        return _t('Requires Monitoring', 'Kailangan ng Pagsubaybay');
+      }
+      if (s == 'OBSERVE' || s == 'BORDERLINE') {
+        return _t('Requires Monitoring', 'Kailangan ng Pagsubaybay');
+      }
+    }
+    return status;
   }
 
   Widget _buildPrenatalRiskSummaryCard() {
