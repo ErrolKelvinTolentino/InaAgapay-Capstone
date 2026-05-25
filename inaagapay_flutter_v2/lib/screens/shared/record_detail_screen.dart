@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../theme/app_colors.dart';
 import '../../services/language_service.dart';
 import '../../widgets/full_screen_image_viewer.dart';
+import '../../widgets/secondary_header.dart';
 
 class RecordDetailScreen extends StatefulWidget {
   const RecordDetailScreen({
@@ -42,7 +43,6 @@ class RecordDetailScreen extends StatefulWidget {
 class _RecordDetailScreenState extends State<RecordDetailScreen> {
   final Set<String> _expandedLabInsightAspects = <String>{};
   bool _showAiInFilipino = LanguageService.isFilipino;
-  bool _weightGainDisclaimerExpanded = false;
 
   // Section accent colors — pink palette variations
   static const _accentRecord = Color(0xFFE6398D); // deep rose
@@ -182,298 +182,92 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0.5,
-        title: Text(widget.title),
-        iconTheme: const IconThemeData(color: AppColors.textPrimary),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.copy_all_rounded),
-            tooltip: _t('Export Report', 'I-export ang Report'),
-            onPressed: _exportReport,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(widget.icon, color: AppColors.brandPrimary),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.title,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          if (widget.subtitle != null &&
-                              widget.subtitle!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              widget.subtitle!.trim(),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (widget.imageUrls != null && widget.imageUrls!.isNotEmpty) ...[
-                _buildImageGallery(widget.imageUrls!),
-                const SizedBox(height: 14),
-              ],
-              _buildDetailsCard(),
-              if (widget.weightGainEval != null) ...[
-                const SizedBox(height: 14),
-                _buildWeightGainCard(widget.weightGainEval!),
-              ],
-              if (isPrenatal && _shouldShowPrenatalRiskSummary()) ...[
-                const SizedBox(height: 14),
-                _buildPrenatalRiskSummaryCard(),
-              ],
-              if (hasAi) ...[
-                const SizedBox(height: 14),
-                _buildAiCard(widget.aiAnalysis!.trim()),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWeightGainCard(Map<String, dynamic> eval) {
-    final rawStatus = eval['status']?.toString() ?? 'UNKNOWN';
-    final mode = eval['mode']?.toString() ?? 'TREND';
-    final message = eval['message']?.toString() ?? '';
-    final bmiCat = eval['bmi_category']?.toString() ?? '';
-
-    String displayStatus;
-    switch (rawStatus.toUpperCase()) {
-      case 'NORMAL':
-        displayStatus = 'Within expected monitoring range';
-        break;
-      case 'LOW':
-        displayStatus = 'Slightly Below expected monitoring range';
-        break;
-      case 'HIGH':
-        displayStatus = 'Slightly Above expected monitoring range';
-        break;
-      default:
-        displayStatus = rawStatus;
-    }
-    
-    final isHigh = rawStatus == 'HIGH';
-    final isLow = rawStatus == 'LOW';
-    final isInsufficient = rawStatus == 'INSUFFICIENT';
-    
-    final color = isHigh ? const Color(0xFFEF5350) : (isLow ? Colors.amber : AppColors.success);
-    final icon = isHigh ? Icons.trending_up : (isLow ? Icons.trending_down : (isInsufficient ? Icons.hourglass_empty : Icons.check_circle));
-    
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      body: Column(
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 16, color: color),
-              ),
-              Text(
-                _t('Weight Gain Monitor', 'Pagsubaybay sa Timbang'),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  displayStatus,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.bgSecondary,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.borderPrimary),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Analysis Mode:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                    Text(mode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('BMI Category:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                    Text(bmiCat, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const Divider(height: 16),
-                Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textPrimary,
-                    height: 1.4,
-                  ),
-                ),
-              ],
+          SecondaryHeader(
+            title: widget.title,
+            onBack: () => Navigator.pop(context),
+            trailing: IconButton(
+              icon: const Icon(Icons.copy_all_rounded),
+              tooltip: _t('Export Report', 'I-export ang Report'),
+              onPressed: _exportReport,
+              color: AppColors.brandPrimary,
             ),
           ),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: () {
-              setState(() {
-                _weightGainDisclaimerExpanded = !_weightGainDisclaimerExpanded;
-              });
-            },
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber.shade100),
-              ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.info_outline, size: 14, color: Colors.amber),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _t('Disclaimer & Reference', 'Pahayag at Sanggunian'),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSecondary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(widget.icon, color: AppColors.brandPrimary),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.title,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              if (widget.subtitle != null &&
+                                  widget.subtitle!.trim().isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  widget.subtitle!.trim(),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                      ),
-                      Icon(
-                        _weightGainDisclaimerExpanded ? Icons.expand_less : Icons.expand_more,
-                        size: 16,
-                        color: Colors.amber,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  if (_weightGainDisclaimerExpanded) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      mode.toUpperCase() == 'FULL'
-                          ? _t(
-                              'Disclaimer: For monitoring only. Do not replace professional medical advice. Always consult your healthcare provider.',
-                              'Pahayag: Para sa pagsubaybay lamang. Huwag gawing kapalit ng propesyonal na payong medikal. Palaging kumonsulta sa iyong doktor.',
-                            )
-                          : _t(
-                              'Disclaimer: Pre-pregnancy BMI is unknown; weight gain evaluation is estimated based on current weight trend and LMP. For monitoring only; consult your healthcare provider.',
-                              'Pahayag: Hindi alam ang pre-pregnancy BMI; ang pagtimbang ay tinatantya batay sa kasalukuyang trend at LMP. Para sa pagsubaybay lamang; kumonsulta sa iyong doktor.',
-                            ),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textSecondary,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _t(
-                        'Reference: Computation based on the Institute of Medicine (IOM) 2009 Guidelines for Gestational Weight Gain.',
-                        'Sanggunian: Ang pagtutuos ay batay sa Institute of Medicine (IOM) 2009 Guidelines para sa Dagdag-Timbang sa Pagbubuntis.',
-                      ),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.textSecondary,
-                        height: 1.4,
-                      ),
-                    ),
+                  const SizedBox(height: 14),
+                  if (widget.imageUrls != null && widget.imageUrls!.isNotEmpty) ...[
+                    _buildImageGallery(widget.imageUrls!),
+                    const SizedBox(height: 14),
+                  ],
+                  _buildDetailsCard(),
+                  if (isPrenatal && _shouldShowPrenatalRiskSummary()) ...[
+                    const SizedBox(height: 14),
+                    _buildPrenatalRiskSummaryCard(),
+                  ],
+                  if (hasAi) ...[
+                    const SizedBox(height: 14),
+                    _buildAiCard(widget.aiAnalysis!.trim()),
                   ],
                 ],
               ),
@@ -781,7 +575,6 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
         'Vitals': vitals,
         if (fetal.isNotEmpty) 'Fetal Assessment': fetal,
         if (symptoms.isNotEmpty) 'Symptoms': symptoms,
-        if (meds.isNotEmpty) 'Medications & Supplements': meds,
         if (schedule.isNotEmpty) 'Schedule & Remarks': schedule,
       };
     }
@@ -886,7 +679,61 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               ),
               const SizedBox(height: 12),
               for (int i = 0; i < rows.length; i++) ...[
-                _buildDetailRow(rows[i].key, rows[i].value),
+                if (title == 'Symptoms' && _labelKey(rows[i].key) == 'symptoms') ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        rows[i].key,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: rows[i].value
+                            .split(',')
+                            .map((s) => s.trim())
+                            .where((s) => s.isNotEmpty)
+                            .map((symptom) {
+                          final isNone = symptom.toLowerCase() == 'none' ||
+                              symptom.toLowerCase() == 'no symptoms' ||
+                              symptom.toLowerCase() == 'walang sintomas' ||
+                              symptom.toLowerCase() == 'hindi nailagay' ||
+                              symptom.toLowerCase() == 'not provided';
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isNone
+                                  ? Colors.grey.shade100
+                                  : accent.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isNone
+                                    ? Colors.grey.shade300
+                                    : accent.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Text(
+                              symptom,
+                              style: TextStyle(
+                                color: isNone ? AppColors.textSecondary : accent,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  _buildDetailRow(rows[i].key, rows[i].value),
+                ],
                 if (i < rows.length - 1)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1041,13 +888,81 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               ),
               const SizedBox(height: 10),
               // Language toggle for AI insights
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildAiLanguageButton('English', !_showAiInFilipino),
-                  const SizedBox(width: 8),
-                  _buildAiLanguageButton('Filipino', _showAiInFilipino),
-                ],
+              Align(
+                alignment: Alignment.center,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                        color: _aiCardBorder.withValues(alpha: 0.25), width: 1.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _showAiInFilipino = false;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: !_showAiInFilipino
+                                ? const Color(0xFF7E57C2)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'English',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: !_showAiInFilipino
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              color: !_showAiInFilipino
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _showAiInFilipino = true;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _showAiInFilipino
+                                ? const Color(0xFF7E57C2)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'Filipino',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: _showAiInFilipino
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              color: _showAiInFilipino
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               if (isPrenatal)
@@ -1056,27 +971,29 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                 _buildStructuredAiInsights(_getAiTextForLanguage(aiText))
               else
                 _buildFormattedAiText(_getAiTextForLanguage(aiText)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.white.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _aiCardBorder.withValues(alpha: 0.15)),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.info_outline, size: 12, color: AppColors.textSecondary),
-                    const SizedBox(width: 6),
+                    const Icon(Icons.gpp_maybe_outlined, size: 14, color: Color(0xFF7E57C2)),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _t(
-                          'This is AI-generated analysis for informational purposes. Always consult your healthcare provider.',
-                          'Ang pagsusuring ito ay gawa ng AI para sa impormasyon lamang. Kumonsulta palagi sa iyong healthcare provider.',
+                          'This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation.',
+                          'Ang AI-assisted na interpretasyong ito ay gabay lamang para sa pagsubaybay sa kalusugan at hindi pamalit sa konsultasyon sa doktor o midwife.',
                         ),
                         style: const TextStyle(
                           fontSize: 10,
                           color: AppColors.textSecondary,
-                          fontStyle: FontStyle.italic,
+                          height: 1.4,
                         ),
                       ),
                     ),
@@ -1096,49 +1013,20 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     );
   }
 
-  Widget _buildAiLanguageButton(String label, bool selected) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _showAiInFilipino = label == 'Filipino';
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected
-              ? const Color(0xFF7E57C2).withValues(alpha: 0.15)
-              : Colors.white.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected
-                ? const Color(0xFF7E57C2).withValues(alpha: 0.4)
-                : AppColors.borderPrimary,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: selected ? const Color(0xFF5E35B1) : AppColors.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-
   /// Extract the language-appropriate section from AI text.
   /// If the text has ## English / ## Filipino sections, returns the appropriate one.
   /// Otherwise returns the full text.
   String _getAiTextForLanguage(String fullText) {
     final normalized = fullText.replaceAll('\r\n', '\n');
+
+    // Matches both "=== ENGLISH ===" and "## English" style headings
     final englishMatch = RegExp(
-      r'## English\s*([\s\S]*?)(?=(## Filipino|$))',
+      r'(?:===|##)\s*English\s*(?:===)?\s*([\s\S]*?)(?=(?:===|##)\s*Filipino\s*(?:===)?|$)',
       caseSensitive: false,
     ).firstMatch(normalized);
+    
     final filipinoMatch = RegExp(
-      r'## Filipino\s*([\s\S]*?)(?=(## English|$))',
+      r'(?:===|##)\s*Filipino\s*(?:===)?\s*([\s\S]*?)(?=(?:===|##)\s*English\s*(?:===)?|$)',
       caseSensitive: false,
     ).firstMatch(normalized);
 
@@ -1315,6 +1203,22 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
         displayText = displayText.substring(prefix.length).trim();
         break;
       }
+    }
+
+    // Strip any duplicate disclaimers from the text itself
+    final disclaimersToStrip = [
+      'This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation.',
+      'Ang AI-assisted na interpretasyong ito ay gabay lamang para sa pagsubaybay sa kalusugan at hindi pamalit sa konsultasyon sa doktor o midwife.',
+      'Ang AI-assisted interpretation na ito ay gabay lamang para sa pagsubaybay sa kalusugan at hindi pamalit sa konsultasyon sa inyong doktor o midwife.',
+      'Ang AI-assisted interpretation na ito ay gabay lamang para sa pagsubaybay sa kalusugan at hindi pamalit sa konsultasyon sa inyong doktor o midwife',
+      'This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation',
+      'This AI-assisted interpretation is a guide for health monitoring only and is not a substitute for consultation with a doctor or midwife.',
+      'This AI-assisted interpretation is a guide for health monitoring only and is not a substitute for consultation with a doctor or midwife'
+    ];
+
+    for (final disc in disclaimersToStrip) {
+      final reg = RegExp(RegExp.escape(disc), caseSensitive: false);
+      displayText = displayText.replaceAll(reg, '').trim();
     }
 
     return Container(
