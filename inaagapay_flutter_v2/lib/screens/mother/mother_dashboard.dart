@@ -62,6 +62,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
   WeightGainResult? _weightGainResult;
   double? _prePregnancyWeight;
   double? _heightCm;
+  DateTime? _nextScheduleDate;
 
   static const Map<int, Map<String, String>> _babySizeByWeek = {
     4: {'fruit': 'Poppy seed', 'image': 'poppy.png'},
@@ -193,6 +194,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
     _weightGainResult = null;
     _prePregnancyWeight = null;
     _heightCm = null;
+    _nextScheduleDate = null;
   }
 
   bool _requiresDeliveryDetails(String outcome) {
@@ -529,6 +531,24 @@ class _MotherDashboardState extends State<MotherDashboard> {
         );
       } else {
         _weightGainResult = null;
+      }
+
+      // Fetch next scheduled checkup (future or today)
+      final todayStr = DateTime.now().toIso8601String().split('T')[0];
+      final nextCheckup = await SupabaseService.client
+          .from('prenatal_checkups')
+          .select('next_schedule')
+          .eq('pregnancy_id', _pregnancyId)
+          .not('next_schedule', 'is', null)
+          .gte('next_schedule', todayStr)
+          .order('next_schedule', ascending: true)
+          .limit(1)
+          .maybeSingle();
+
+      if (nextCheckup != null && nextCheckup['next_schedule'] != null) {
+        _nextScheduleDate = DateTime.tryParse(nextCheckup['next_schedule'].toString());
+      } else {
+        _nextScheduleDate = null;
       }
     } catch (e) {
       debugPrint('Error loading latest vitals/evaluation: $e');
@@ -1229,6 +1249,108 @@ class _MotherDashboardState extends State<MotherDashboard> {
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNextScheduleCard() {
+    if (_nextScheduleDate == null) return const SizedBox.shrink();
+
+    String formatScheduledDate(DateTime date) {
+      final dayName = DateFormat('EEEE').format(date);
+      final monthName = DateFormat('MMMM').format(date);
+      final day = DateFormat('d').format(date);
+      final year = DateFormat('yyyy').format(date);
+
+      final dayEnToTl = {
+        'Monday': 'Lunes',
+        'Tuesday': 'Martes',
+        'Wednesday': 'Miyerkules',
+        'Thursday': 'Huwebes',
+        'Friday': 'Biyernes',
+        'Saturday': 'Sabado',
+        'Sunday': 'Linggo',
+      };
+
+      final monthEnToTl = {
+        'January': 'Enero',
+        'February': 'Pebrero',
+        'March': 'Marso',
+        'April': 'Abril',
+        'May': 'Mayo',
+        'June': 'Hunyo',
+        'July': 'Hulyo',
+        'August': 'Agosto',
+        'September': 'Setyembre',
+        'October': 'Oktubre',
+        'November': 'Nobyembre',
+        'December': 'Disyembre',
+      };
+
+      final translatedDay = _t(dayName, dayEnToTl[dayName] ?? dayName);
+      final translatedMonth = _t(monthName, monthEnToTl[monthName] ?? monthName);
+
+      return '$translatedDay, $translatedMonth $day, $year';
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.brandPrimary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.calendar_month,
+              color: AppColors.brandPrimary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _t('Next Scheduled Checkup', 'Susunod na Nakatakdang Checkup'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  formatScheduledDate(_nextScheduleDate!),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ],
@@ -2239,6 +2361,11 @@ class _MotherDashboardState extends State<MotherDashboard> {
                               _buildVitalsIncompleteBanner(),
                             ],
 
+                            if (_nextScheduleDate != null) ...[
+                              const SizedBox(height: 16),
+                              _buildNextScheduleCard(),
+                            ],
+
                             const SizedBox(height: 20),
 
                             HeroCard(
@@ -2638,223 +2765,266 @@ class _MotherDashboardState extends State<MotherDashboard> {
     final result = _weightGainResult;
     if (result == null) return const SizedBox.shrink();
 
+    Color statusColor;
+    switch (result.status) {
+      case WeightGainStatus.normal:
+        statusColor = AppColors.success;
+        break;
+      case WeightGainStatus.low:
+        statusColor = AppColors.warning;
+        break;
+      case WeightGainStatus.high:
+        statusColor = AppColors.error;
+        break;
+      case WeightGainStatus.insufficient:
+        statusColor = AppColors.textSecondary;
+        break;
+    }
 
-    Color bmiColor;
-    switch (result.bmiCategory) {
-      case 'Underweight':
-        bmiColor = Colors.amber;
-        break;
-      case 'Normal':
-        bmiColor = AppColors.success;
-        break;
-      case 'Overweight':
-        bmiColor = Colors.orange;
-        break;
-      case 'Obese':
-        bmiColor = const Color(0xFFEF5350);
-        break;
-      default:
-        bmiColor = AppColors.textSecondary;
+    String getStatusDisplayLabel(WeightGainStatus status) {
+      switch (status) {
+        case WeightGainStatus.normal:
+          return _t('Within expected monitoring range', 'Nasa loob ng inaasahang saklaw ng pagsubaybay');
+        case WeightGainStatus.low:
+          return _t('Slightly lower than expected monitoring range', 'Bahagyang mas mababa sa inaasahang saklaw');
+        case WeightGainStatus.high:
+          return _t('Slightly above expected monitoring range', 'Bahagyang mas mataas sa inaasahang saklaw');
+        case WeightGainStatus.insufficient:
+          return _t('Insufficient data', 'Kulang na data');
+      }
+    }
+
+    String getBmiCategoryLabel(String category) {
+      switch (category) {
+        case 'Underweight':
+          return _t('Underweight', 'Mababa ang Timbang');
+        case 'Normal':
+          return _t('Normal', 'Normal');
+        case 'Overweight':
+          return _t('Overweight', 'Sobra sa Timbang');
+        case 'Obese':
+          return _t('Obese', 'Mataba');
+        default:
+          return _t(category, category);
+      }
     }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        color: AppColors.cardColorOf(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(color: Colors.grey.shade100),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.monitor_weight_outlined,
-                  color: AppColors.error,
-                  size: 20,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            final motherId = await AuthStorage.getMotherId();
+            if (motherId == null || !mounted) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MotherVitalsPage(
+                  motherId: motherId,
+                  pregnancyId: _pregnancyId,
+                  lastMenstrualPeriod: _lmpDate != null ? _dateIso(_lmpDate!) : null,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _t('Weight Gain Analysis', 'Pagsusuri sa Timbang'),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+            ).then((_) => _loadDashboardData());
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.08),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
                   ),
                 ),
-              ),
-              GestureDetector(
-                onTap: () async {
-                  final motherId = await AuthStorage.getMotherId();
-                  if (motherId == null || !mounted) return;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => MotherVitalsPage(
-                        motherId: motherId,
-                        pregnancyId: _pregnancyId,
-                        lastMenstrualPeriod: _lmpDate != null ? _dateIso(_lmpDate!) : null,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.monitor_weight_outlined,
+                            color: statusColor, size: 22),
+                        const SizedBox(width: 8),
+                        Text(
+                          _t('Weight Gain Analysis', 'Pagsusuri sa Timbang'),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    // Status badge
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: statusColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        getStatusDisplayLabel(result.status),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: statusColor,
+                        ),
                       ),
                     ),
-                  ).then((_) => _loadDashboardData());
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _t('Full Analysis', 'Buong Pagsusuri'),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
+                  ],
+                ),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _weightInfoRow(
+                      _t('BMI Category', 'Kategorya ng BMI'),
+                      getBmiCategoryLabel(result.bmiCategory),
                     ),
-                  ),
+                    _weightInfoRow(
+                      _t('Current Weight', 'Kasalukuyang Timbang'),
+                      '${result.currentWeight.toStringAsFixed(1)} kg',
+                    ),
+                    if (result.baselineWeight != null)
+                      _weightInfoRow(
+                        result.mode == WeightGainMode.full
+                            ? _t('Pre-Pregnancy Weight', 'Timbang Bago Mabuntis')
+                            : _t('Baseline Weight', 'Baseline na Timbang'),
+                        '${result.baselineWeight!.toStringAsFixed(1)} kg',
+                      ),
+                    if (result.actualGain != null)
+                      _weightInfoRow(
+                        _t('Actual Gain', 'Aktwal na Dagdag'),
+                        '${result.actualGain! >= 0 ? '+' : ''}${result.actualGain!.toStringAsFixed(1)} kg',
+                      ),
+                    if (result.expectedGainMin != null && result.expectedGainMax != null)
+                      _weightInfoRow(
+                        _t('Expected Gain', 'Inaasahang Dagdag'),
+                        '${result.expectedGainMin!.toStringAsFixed(1)} - ${result.expectedGainMax!.toStringAsFixed(1)} kg',
+                      )
+                    else if (result.expectedGain != null)
+                      _weightInfoRow(
+                        _t('Expected Gain', 'Inaasahang Dagdag'),
+                        '${result.expectedGain!.toStringAsFixed(1)} kg',
+                      ),
+                    if (result.weeklyGain != null)
+                      _weightInfoRow(
+                        _t('Weekly Gain Rate', 'Antas ng Lingguhang Dagdag'),
+                        '${result.weeklyGain!.toStringAsFixed(3)} kg/wk',
+                      ),
+
+                    const SizedBox(height: 12),
+                    // Flags
+                    if (result.hasFlags) ...[
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: result.flags.map((flag) {
+                          String label;
+                          Color flagColor = AppColors.error;
+                          if (flag == 'weight_loss') {
+                            label = _t('⚠️ Weight Loss Detected', '⚠️ May Bawas sa Timbang');
+                          } else if (flag == 'plateau') {
+                            label = _t('ℹ️ Weight Plateau', 'ℹ️ Patag na Timbang');
+                            flagColor = AppColors.warning;
+                          } else if (flag == 'abnormal_spike') {
+                            label = _t('⚠️ Rapid Weight Gain Spike', '⚠️ Mabilis na Pagtaas ng Timbang');
+                          } else {
+                            label = flag.replaceAll('_', ' ').toUpperCase();
+                          }
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: flagColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: flagColor,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+
+                    // Engine message
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Text(
+                        result.message,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Navigation prompt
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _t('Tap to view details and progression chart →', 'I-tap para makita ang mga detalye at progression chart →'),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brandPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          
-          // Badges Row
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: bmiColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: bmiColor.withValues(alpha: 0.4)),
-                ),
-                child: Text(
-                  _t(result.bmiCategory, result.bmiCategory),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: bmiColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _buildStatusBadge(result.status),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Detail rows
-          _weightInfoRow(_t('Current Weight', 'Kasalukuyang Timbang'), '${result.currentWeight.toStringAsFixed(1)} kg'),
-          if (result.baselineWeight != null)
-            _weightInfoRow(
-              result.mode == WeightGainMode.full
-                  ? _t('Pre-Pregnancy Weight', 'Timbang Bago Mabuntis')
-                  : _t('Baseline Weight', 'Baseline na Timbang'),
-              '${result.baselineWeight!.toStringAsFixed(1)} kg',
-            ),
-          if (result.actualGain != null)
-            _weightInfoRow(
-              _t('Actual Gain', 'Aktwal na Dagdag'),
-              '${result.actualGain! >= 0 ? '+' : ''}${result.actualGain!.toStringAsFixed(1)} kg',
-            ),
-          if (result.expectedGainMin != null && result.expectedGainMax != null)
-            _weightInfoRow(
-              _t('Expected Gain', 'Inaasahang Dagdag'),
-              '${result.expectedGainMin!.toStringAsFixed(1)} - ${result.expectedGainMax!.toStringAsFixed(1)} kg',
-            )
-          else if (result.expectedGain != null)
-            _weightInfoRow(
-              _t('Expected Gain', 'Inaasahang Dagdag'),
-              '${result.expectedGain!.toStringAsFixed(1)} kg',
-            ),
-          if (result.weeklyGain != null)
-            _weightInfoRow(
-              _t('Weekly Gain Rate', 'Antas ng Lingguhang Dagdag'),
-              '${result.weeklyGain!.toStringAsFixed(3)} kg/wk',
-            ),
-
-          const SizedBox(height: 14),
-
-          // Advisory message box
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Text(
-              result.message,
-              style: const TextStyle(
-                fontSize: 12,
-                height: 1.5,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(WeightGainStatus status) {
-    Color fg;
-    String label;
-
-    switch (status) {
-      case WeightGainStatus.normal:
-        fg = AppColors.success;
-        label = _t('NORMAL', 'NORMAL');
-        break;
-      case WeightGainStatus.low:
-        fg = Colors.amber;
-        label = _t('LOW', 'MABABA');
-        break;
-      case WeightGainStatus.high:
-        fg = const Color(0xFFEF5350);
-        label = _t('HIGH', 'MATAAS');
-        break;
-      case WeightGainStatus.insufficient:
-        fg = Colors.grey.shade600;
-        label = _t('INSUFFICIENT', 'KULANG');
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: fg.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: fg.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: fg,
         ),
       ),
     );
   }
+
+
 
   Widget _weightInfoRow(String label, String value) {
     return Padding(

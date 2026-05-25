@@ -129,7 +129,7 @@ final _trimesterContent = [
       _WarningSigns('Signs of depression or anxiety'),
     ],
     medicalVisits: [
-      'First prenatal visit (confirm pregnancy, blood tests)',
+      'First prenatal visit (blood tests)',
       'Ultrasound dating scan (Weeks 8–12)',
       'Nuchal translucency screening (Weeks 11–13)',
       'Blood pressure and weight baseline',
@@ -593,8 +593,8 @@ const _contentTranslationsFilipino = {
       'Pinrosesong junk food at labis na asukal',
 
   // Medical visits
-  'First prenatal visit (confirm pregnancy, blood tests)':
-      'Unang prenatal visit (kumpirmasyon ng pagbubuntis, blood tests)',
+  'First prenatal visit (blood tests)':
+      'Unang prenatal visit (pagsusuri sa dugo)',
   'Ultrasound dating scan (Weeks 8–12)': 'Ultrasound dating scan (Linggo 8–12)',
   'Nuchal translucency screening (Weeks 11–13)':
       'Nuchal translucency screening (Linggo 11–13)',
