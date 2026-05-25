@@ -1,8 +1,7 @@
-// lib/screens/midwife/add_immunization_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
@@ -12,6 +11,8 @@ import '../../widgets/main_button.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/validation_message.dart';
+import '../../services/groq_service.dart';
+import 'immunization_ocr_review_page.dart';
 
 class AddImmunizationPage extends StatefulWidget {
   final int childId;
@@ -38,6 +39,185 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
   Set<int> _takenVaccineIds = {};
   String? _errorMessage;
   DateTime? _childBirthdate;
+  final GroqService _groqService = GroqService();
+
+  void _showSourcePicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded, color: AppColors.brandPrimary),
+              title: const Text('Take Photo with Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppColors.brandPrimary),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: source,
+        imageQuality: 88,
+      );
+
+      if (image != null) {
+        _processImage(image);
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _processImage(XFile imageFile) async {
+    setState(() => _isLoading = true);
+
+    // Show a custom OCR loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: AppColors.brandPrimary),
+                  SizedBox(height: 16),
+                  Text(
+                    'Scanning immunization record...',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Reading card table and handwritten dates via Groq Vision...',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final extractionResult = await _groqService.extractImmunizationCardData(imageFile);
+
+      if (mounted) {
+        // Dismiss loading dialog
+        Navigator.pop(context);
+      }
+
+      final relevanceCheck = extractionResult['relevance_check']?.toString().toUpperCase() ?? 'RELATED';
+      if (relevanceCheck == 'UNRELATED') {
+        final reason = extractionResult['relevance_reason']?.toString() ?? 'The uploaded image does not appear to be an immunization record.';
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => DialogBox(
+              type: DialogType.error,
+              title: 'Invalid Image',
+              content: reason,
+              buttonText: 'OK',
+              onPressed: () => Navigator.pop(context),
+            ),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final administeredList = extractionResult['administered_vaccines'] as List<dynamic>? ?? [];
+      if (administeredList.isEmpty) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => DialogBox(
+              type: DialogType.info,
+              title: 'No Records Found',
+              content: 'We could not detect any administered vaccine records with valid dates in the uploaded photo. Please verify the photo is clear and contains handwritten dates.',
+              buttonText: 'OK',
+              onPressed: () => Navigator.pop(context),
+            ),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Convert extracted data into strongly-typed list
+      final extractedData = List<Map<String, dynamic>>.from(
+        administeredList.map((item) => Map<String, dynamic>.from(item)),
+      );
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        // Navigate to the review page
+        final bool? recorded = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ImmunizationOcrReviewPage(
+              childId: widget.childId,
+              extractedVaccines: extractedData,
+              allVaccines: _vaccines,
+              takenVaccineIds: _takenVaccineIds,
+            ),
+          ),
+        );
+
+        if (recorded == true) {
+          // Success! Reload data to reflect the changes
+          _loadData();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        // Dismiss loading dialog if open
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (_) => DialogBox(
+            type: DialogType.error,
+            title: 'Scan Failed',
+            content: 'An error occurred during scanning: $e',
+            buttonText: 'OK',
+            onPressed: () => Navigator.pop(context),
+          ),
+        );
+      }
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   void initState() {
@@ -727,6 +907,75 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Visual OCR Trigger Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.brandPrimary, AppColors.brandAccent],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: const [
+                        Icon(Icons.document_scanner_rounded, color: Colors.white, size: 24),
+                        SizedBox(width: 10),
+                        Text(
+                          'Scan Immunization Card',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Upload a photo of the baby book to automatically extract, verify, and batch-record multiple vaccine doses at once.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white70,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _showSourcePicker,
+                        icon: const Icon(Icons.photo_library_rounded, size: 18),
+                        label: const Text('Select or Capture Image'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: AppColors.brandAccent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 0,
+                          textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
               // Show error if any
               if (_errorMessage != null)
