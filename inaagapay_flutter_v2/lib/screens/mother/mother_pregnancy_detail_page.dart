@@ -129,7 +129,7 @@ final _trimesterContent = [
       _WarningSigns('Signs of depression or anxiety'),
     ],
     medicalVisits: [
-      'First prenatal visit (confirm pregnancy, blood tests)',
+      'First prenatal visit (blood tests)',
       'Ultrasound dating scan (Weeks 8–12)',
       'Nuchal translucency screening (Weeks 11–13)',
       'Blood pressure and weight baseline',
@@ -286,7 +286,7 @@ final _trimesterContent = [
 
 const _weeklyFacts = <int, String>{
   4: 'Your baby is the size of a poppy seed.',
-  5: 'Heart is beginning to form.',
+  5: 'Your baby is the size of a sesame seed and the heart is beginning to form.',
   6: 'Heartbeat detectable by ultrasound.',
   7: 'Brain growing quickly.',
   8: 'All major organs are forming.',
@@ -354,7 +354,7 @@ const _trimesterNoteFilipino = [
 
 const _weeklyFactsFilipino = <int, String>{
   4: 'Kasing laki ng buto ng poppy ang iyong sanggol.',
-  5: 'Nagsisimulang mabuo ang puso.',
+  5: 'Kasing laki ng linga ang iyong sanggol at nagsisimulang mabuo ang puso.',
   6: 'Maaaring marinig ang tibok ng puso sa ultrasound.',
   7: 'Mabilis na lumalaki ang utak.',
   8: 'Ang lahat ng pangunahing organ ay nabubuo.',
@@ -593,8 +593,8 @@ const _contentTranslationsFilipino = {
       'Pinrosesong junk food at labis na asukal',
 
   // Medical visits
-  'First prenatal visit (confirm pregnancy, blood tests)':
-      'Unang prenatal visit (kumpirmasyon ng pagbubuntis, blood tests)',
+  'First prenatal visit (blood tests)':
+      'Unang prenatal visit (pagsusuri sa dugo)',
   'Ultrasound dating scan (Weeks 8–12)': 'Ultrasound dating scan (Linggo 8–12)',
   'Nuchal translucency screening (Weeks 11–13)':
       'Nuchal translucency screening (Linggo 11–13)',

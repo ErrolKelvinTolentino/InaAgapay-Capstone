@@ -60,6 +60,152 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
     return int.tryParse(value.toString());
   }
 
+  Map<String, double> _getRecommendedRangeAt({
+    required double aogWeeks,
+    required String bmiCategory,
+    required double baselineWeight,
+    required double baselineWeek,
+    required int fetalCount,
+  }) {
+    if (aogWeeks <= baselineWeek) {
+      return {'min': baselineWeight, 'max': baselineWeight};
+    }
+
+    final isTwin = fetalCount >= 2;
+    final double firstTrimesterGain;
+    final double totalMin;
+    final double totalMax;
+    final double weeklyMin;
+    final double weeklyMax;
+
+    if (isTwin) {
+      switch (bmiCategory) {
+        case 'Underweight':
+        case 'Normal':
+          firstTrimesterGain = 2.0;
+          totalMin = 16.8;
+          totalMax = 24.5;
+          weeklyMin = 0.47;
+          weeklyMax = 0.67;
+          break;
+        case 'Overweight':
+          firstTrimesterGain = 1.0;
+          totalMin = 14.1;
+          totalMax = 22.7;
+          weeklyMin = 0.41;
+          weeklyMax = 0.60;
+          break;
+        case 'Obese':
+          firstTrimesterGain = 0.8;
+          totalMin = 11.3;
+          totalMax = 19.1;
+          weeklyMin = 0.33;
+          weeklyMax = 0.53;
+          break;
+        default:
+          firstTrimesterGain = 2.0;
+          totalMin = 16.8;
+          totalMax = 24.5;
+          weeklyMin = 0.47;
+          weeklyMax = 0.67;
+      }
+    } else {
+      switch (bmiCategory) {
+        case 'Underweight':
+          firstTrimesterGain = 2.0;
+          totalMin = 12.5;
+          totalMax = 18.0;
+          weeklyMin = 0.44;
+          weeklyMax = 0.58;
+          break;
+        case 'Normal':
+          firstTrimesterGain = 1.6;
+          totalMin = 11.5;
+          totalMax = 16.0;
+          weeklyMin = 0.35;
+          weeklyMax = 0.50;
+          break;
+        case 'Overweight':
+          firstTrimesterGain = 0.9;
+          totalMin = 7.0;
+          totalMax = 11.5;
+          weeklyMin = 0.23;
+          weeklyMax = 0.33;
+          break;
+        case 'Obese':
+          firstTrimesterGain = 0.7;
+          totalMin = 5.0;
+          totalMax = 9.0;
+          weeklyMin = 0.17;
+          weeklyMax = 0.27;
+          break;
+        default:
+          firstTrimesterGain = 1.6;
+          totalMin = 11.5;
+          totalMax = 16.0;
+          weeklyMin = 0.35;
+          weeklyMax = 0.50;
+      }
+    }
+
+    double expectedGainMin;
+    double expectedGainMax;
+
+    if (aogWeeks <= 13) {
+      final fraction = aogWeeks / 13.0;
+      final expectedGainMid = firstTrimesterGain * fraction;
+      expectedGainMin = expectedGainMid * 0.7;
+      expectedGainMax = expectedGainMid * 1.3;
+    } else {
+      final firstTrimesterMin = firstTrimesterGain * 0.7;
+      final firstTrimesterMax = firstTrimesterGain * 1.3;
+
+      if (aogWeeks <= 40) {
+        final progressFraction = (aogWeeks - 13) / 27.0;
+        expectedGainMin = firstTrimesterMin + (totalMin - firstTrimesterMin) * progressFraction;
+        expectedGainMax = firstTrimesterMax + (totalMax - firstTrimesterMax) * progressFraction;
+      } else {
+        final weeksAfterForty = aogWeeks - 40;
+        expectedGainMin = totalMin + (weeksAfterForty * weeklyMin);
+        expectedGainMax = totalMax + (weeksAfterForty * weeklyMax);
+      }
+    }
+
+    double relativeGainMin = expectedGainMin;
+    double relativeGainMax = expectedGainMax;
+
+    if (baselineWeek > 0) {
+      double baselineExpectedMin;
+      double baselineExpectedMax;
+      if (baselineWeek <= 13) {
+        final fraction = baselineWeek / 13.0;
+        final baselineExpectedMid = firstTrimesterGain * fraction;
+        baselineExpectedMin = baselineExpectedMid * 0.7;
+        baselineExpectedMax = baselineExpectedMid * 1.3;
+      } else {
+        final firstTrimesterMin = firstTrimesterGain * 0.7;
+        final firstTrimesterMax = firstTrimesterGain * 1.3;
+        if (baselineWeek <= 40) {
+          final progressFraction = (baselineWeek - 13) / 27.0;
+          baselineExpectedMin = firstTrimesterMin + (totalMin - firstTrimesterMin) * progressFraction;
+          baselineExpectedMax = firstTrimesterMax + (totalMax - firstTrimesterMax) * progressFraction;
+        } else {
+          final weeksAfterForty = baselineWeek - 40;
+          baselineExpectedMin = totalMin + (weeksAfterForty * weeklyMin);
+          baselineExpectedMax = totalMax + (weeksAfterForty * weeklyMax);
+        }
+      }
+      
+      relativeGainMin = expectedGainMin - baselineExpectedMin;
+      relativeGainMax = expectedGainMax - baselineExpectedMax;
+    }
+
+    return {
+      'min': baselineWeight + relativeGainMin,
+      'max': baselineWeight + relativeGainMax,
+    };
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
 
@@ -458,6 +604,7 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
   }
 
   Widget _buildWeightChart() {
+    final result = _weightGainResult;
     // Filter and prepare weights chronologically ascending
     final chartVitals = _allVitals
         .where((v) => v['weight_kg'] != null && v['age_of_gestation'] != null)
@@ -465,14 +612,37 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
         .reversed
         .toList();
 
-    if (chartVitals.length < 2) {
+    final List<FlSpot> actualSpots = [];
+    if (result != null && result.mode == WeightGainMode.full && result.baselineWeight != null) {
+      actualSpots.add(FlSpot(0, result.baselineWeight!));
+    }
+
+    for (final v in chartVitals) {
+      final double aog = (v['age_of_gestation'] as num).toDouble();
+      final double weight = (v['weight_kg'] as num).toDouble();
+      if (actualSpots.isNotEmpty && (aog - actualSpots.last.x).abs() < 0.1) {
+        continue;
+      }
+      actualSpots.add(FlSpot(aog, weight));
+    }
+
+    actualSpots.sort((a, b) => a.x.compareTo(b.x));
+
+    if (result == null || actualSpots.length < 2) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.cardColorOf(context),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade100),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           children: [
@@ -488,103 +658,251 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
       );
     }
 
-    final spots = chartVitals.map((v) {
-      final double aog = (v['age_of_gestation'] as num).toDouble();
-      final double weight = (v['weight_kg'] as num).toDouble();
-      return FlSpot(aog, weight);
-    }).toList();
+    final maxAog = actualSpots.last.x;
+    final endWeek = maxAog > 40 ? maxAog : 40.0;
+    final startWeek = result.baselineWeek ?? 0.0;
 
-    final minY = spots.map((s) => s.y).reduce((a, b) => a < b ? a : b) - 2;
-    final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) + 2;
-    final minX = spots.map((s) => s.x).reduce((a, b) => a < b ? a : b);
-    final maxX = spots.map((s) => s.x).reduce((a, b) => a > b ? a : b);
+    final List<FlSpot> minSpots = [];
+    final List<FlSpot> maxSpots = [];
+
+    if (result.baselineWeight != null && result.baselineWeek != null) {
+      for (double w = startWeek; w <= endWeek; w += 2) {
+        final range = _getRecommendedRangeAt(
+          aogWeeks: w,
+          bmiCategory: result.bmiCategory,
+          baselineWeight: result.baselineWeight!,
+          baselineWeek: result.baselineWeek!,
+          fetalCount: _fetalCount,
+        );
+        minSpots.add(FlSpot(w, range['min']!));
+        maxSpots.add(FlSpot(w, range['max']!));
+      }
+      // Ensure endWeek is included
+      final endRange = _getRecommendedRangeAt(
+        aogWeeks: endWeek,
+        bmiCategory: result.bmiCategory,
+        baselineWeight: result.baselineWeight!,
+        baselineWeek: result.baselineWeek!,
+        fetalCount: _fetalCount,
+      );
+      if (minSpots.isEmpty || minSpots.last.x != endWeek) {
+        minSpots.add(FlSpot(endWeek, endRange['min']!));
+        maxSpots.add(FlSpot(endWeek, endRange['max']!));
+      }
+    }
+
+    final allSpots = [...actualSpots, ...minSpots, ...maxSpots];
+    final minY = allSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b) - 2;
+    final maxY = allSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b) + 2;
+    final minX = startWeek;
+    final maxX = endWeek;
+
+    String getBmiCategoryLabel(String category) {
+      switch (category) {
+        case 'Underweight':
+          return _t('Underweight', 'Mababa ang Timbang');
+        case 'Normal':
+          return _t('Normal', 'Normal');
+        case 'Overweight':
+          return _t('Overweight', 'Sobra sa Timbang');
+        case 'Obese':
+          return _t('Obese', 'Mataba');
+        default:
+          return _t(category, category);
+      }
+    }
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 20, 20, 16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardColorOf(context),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(color: Colors.grey.shade100),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _t('Weight Progression (kg)', 'Progreso ng Timbang (kg)'),
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          Row(
+            children: [
+              const Icon(Icons.show_chart,
+                  size: 20, color: AppColors.brandPrimary),
+              const SizedBox(width: 8),
+              Text(
+                _t('Weight Gain Progression Chart', 'Tsart ng Progression ng Timbang'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 4),
+          Text(
+            _t('Total maternal weight (kg) plotted against recommended bounds',
+               'Aktwal na timbang (kg) kumpara sa inirerekomendang saklaw ng IOM'),
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          
+          // Legend row
+          Row(
+            children: [
+              Container(
+                width: 14,
+                height: 3,
+                color: AppColors.brandPrimary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _t('Actual Weight', 'Aktwal na Timbang'),
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 16),
+              Row(
+                children: List.generate(
+                  3,
+                  (index) => Container(
+                    width: 4,
+                    height: 1.5,
+                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '${_t('IOM Recommended Bounds', 'Inirerekomendang Saklaw ng IOM')} (${getBmiCategoryLabel(result.bmiCategory)})',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
           SizedBox(
-            height: 180,
+            height: 200,
             child: LineChart(
               LineChartData(
-                minX: minX - 0.5,
-                maxX: maxX + 0.5,
+                minX: minX,
+                maxX: maxX,
                 minY: minY,
                 maxY: maxY,
                 gridData: FlGridData(
                   show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (val) => FlLine(
-                    color: Colors.grey.shade100,
+                  drawVerticalLine: true,
+                  horizontalInterval: ((maxY - minY) / 5).clamp(1.0, 10.0),
+                  verticalInterval: 4.0,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
+                    strokeWidth: 1,
+                  ),
+                  getDrawingVerticalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
                     strokeWidth: 1,
                   ),
                 ),
                 titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 36,
-                      getTitlesWidget: (val, meta) => Text(
-                        val.toStringAsFixed(1),
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-                      ),
-                    ),
-                  ),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 22,
-                      getTitlesWidget: (val, meta) => Text(
-                        'W${val.toStringAsFixed(0)}',
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                      reservedSize: 28,
+                      interval: 4.0,
+                      getTitlesWidget: (value, meta) => Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'W${value.toInt()}',
+                          style: const TextStyle(
+                              fontSize: 10, color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      interval: ((maxY - minY) / 5).clamp(1.0, 10.0),
+                      getTitlesWidget: (value, meta) => Text(
+                        '${value.toInt()} kg',
+                        style: const TextStyle(
+                            fontSize: 10, color: AppColors.textSecondary),
                       ),
                     ),
                   ),
                 ),
                 borderData: FlBorderData(show: false),
                 lineBarsData: [
+                  // Actual spots
                   LineChartBarData(
-                    spots: spots,
+                    spots: actualSpots,
                     isCurved: true,
                     color: AppColors.brandPrimary,
                     barWidth: 3,
-                    isStrokeCapRound: true,
                     dotData: FlDotData(
                       show: true,
-                      getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                      getDotPainter: (spot, percent, barData, index) =>
+                          FlDotCirclePainter(
                         radius: 4,
                         color: Colors.white,
-                        strokeColor: AppColors.brandPrimary,
                         strokeWidth: 2,
+                        strokeColor: AppColors.brandPrimary,
                       ),
                     ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                    ),
                   ),
+                  // Recommended Min
+                  if (minSpots.isNotEmpty)
+                    LineChartBarData(
+                      spots: minSpots,
+                      isCurved: true,
+                      color: Colors.grey.shade400,
+                      barWidth: 1.5,
+                      dashArray: [5, 5],
+                      dotData: const FlDotData(show: false),
+                    ),
+                  // Recommended Max
+                  if (maxSpots.isNotEmpty)
+                    LineChartBarData(
+                      spots: maxSpots,
+                      isCurved: true,
+                      color: Colors.grey.shade400,
+                      barWidth: 1.5,
+                      dashArray: [5, 5],
+                      dotData: const FlDotData(show: false),
+                    ),
                 ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        String prefix = '';
+                        if (spot.barIndex == 0) {
+                          prefix = _t('Actual: ', 'Aktwal: ');
+                        } else if (spot.barIndex == 1) {
+                          prefix = _t('IOM Min: ', 'IOM Min: ');
+                        } else if (spot.barIndex == 2) {
+                          prefix = _t('IOM Max: ', 'IOM Max: ');
+                        }
+                        final weekStr = _t('Week', 'Linggo');
+                        return LineTooltipItem(
+                          '$prefix$weekStr ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)} kg',
+                          const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
               ),
             ),
           ),
@@ -593,46 +911,6 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
     );
   }
 
-  Widget _buildStatusBadge(WeightGainStatus status) {
-    Color fg;
-    String label;
-
-    switch (status) {
-      case WeightGainStatus.normal:
-        fg = AppColors.success;
-        label = _t('NORMAL', 'NORMAL');
-        break;
-      case WeightGainStatus.low:
-        fg = Colors.amber;
-        label = _t('LOW', 'MABABA');
-        break;
-      case WeightGainStatus.high:
-        fg = const Color(0xFFEF5350);
-        label = _t('HIGH', 'MATAAS');
-        break;
-      case WeightGainStatus.insufficient:
-        fg = Colors.grey.shade600;
-        label = _t('INSUFFICIENT', 'KULANG');
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: fg.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: fg.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: fg,
-        ),
-      ),
-    );
-  }
 
   Widget _buildSourceBadge(String source) {
     Color bg;
@@ -679,188 +957,263 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
     final result = _weightGainResult;
     if (result == null) return const SizedBox.shrink();
 
+    Color statusColor;
+    switch (result.status) {
+      case WeightGainStatus.normal:
+        statusColor = AppColors.success;
+        break;
+      case WeightGainStatus.low:
+        statusColor = AppColors.warning;
+        break;
+      case WeightGainStatus.high:
+        statusColor = AppColors.error;
+        break;
+      case WeightGainStatus.insufficient:
+        statusColor = AppColors.textSecondary;
+        break;
+    }
 
-    Color bmiColor;
-    switch (result.bmiCategory) {
-      case 'Underweight':
-        bmiColor = Colors.amber;
-        break;
-      case 'Normal':
-        bmiColor = AppColors.success;
-        break;
-      case 'Overweight':
-        bmiColor = Colors.orange;
-        break;
-      case 'Obese':
-        bmiColor = const Color(0xFFEF5350);
-        break;
-      default:
-        bmiColor = AppColors.textSecondary;
+    String getStatusDisplayLabel(WeightGainStatus status) {
+      switch (status) {
+        case WeightGainStatus.normal:
+          return _t('Within expected monitoring range', 'Nasa loob ng inaasahang saklaw ng pagsubaybay');
+        case WeightGainStatus.low:
+          return _t('Slightly lower than expected monitoring range', 'Bahagyang mas mababa sa inaasahang saklaw');
+        case WeightGainStatus.high:
+          return _t('Slightly above expected monitoring range', 'Bahagyang mas mataas sa inaasahang saklaw');
+        case WeightGainStatus.insufficient:
+          return _t('Insufficient data', 'Kulang na data');
+      }
+    }
+
+    String getBmiCategoryLabel(String category) {
+      switch (category) {
+        case 'Underweight':
+          return _t('Underweight', 'Mababa ang Timbang');
+        case 'Normal':
+          return _t('Normal', 'Normal');
+        case 'Overweight':
+          return _t('Overweight', 'Sobra sa Timbang');
+        case 'Obese':
+          return _t('Obese', 'Mataba');
+        default:
+          return _t(category, category);
+      }
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        color: AppColors.cardColorOf(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(color: Colors.grey.shade100),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.monitor_weight_outlined,
-                  color: AppColors.error,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _t('Weight Gain Analysis', 'Pagsusuri sa Timbang'),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Badges Row
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: bmiColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: bmiColor.withValues(alpha: 0.4)),
-                ),
-                child: Text(
-                  _t(result.bmiCategory, result.bmiCategory),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: bmiColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _buildStatusBadge(result.status),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Detail rows
-          _weightInfoRow(_t('Current Weight', 'Kasalukuyang Timbang'), '${result.currentWeight.toStringAsFixed(1)} kg'),
-          if (result.baselineWeight != null)
-            _weightInfoRow(
-              result.mode == WeightGainMode.full
-                  ? _t('Pre-Pregnancy Weight', 'Timbang Bago Mabuntis')
-                  : _t('Baseline Weight', 'Baseline na Timbang'),
-              '${result.baselineWeight!.toStringAsFixed(1)} kg',
-            ),
-          if (result.actualGain != null)
-            _weightInfoRow(
-              _t('Actual Gain', 'Aktwal na Dagdag'),
-              '${result.actualGain! >= 0 ? '+' : ''}${result.actualGain!.toStringAsFixed(1)} kg',
-            ),
-          if (result.expectedGainMin != null && result.expectedGainMax != null)
-            _weightInfoRow(
-              _t('Expected Gain', 'Inaasahang Dagdag'),
-              '${result.expectedGainMin!.toStringAsFixed(1)} - ${result.expectedGainMax!.toStringAsFixed(1)} kg',
-            )
-          else if (result.expectedGain != null)
-            _weightInfoRow(
-              _t('Expected Gain', 'Inaasahang Dagdag'),
-              '${result.expectedGain!.toStringAsFixed(1)} kg',
-            ),
-          if (result.weeklyGain != null)
-            _weightInfoRow(
-              _t('Weekly Gain Rate', 'Antas ng Lingguhang Dagdag'),
-              '${result.weeklyGain!.toStringAsFixed(3)} kg/wk',
-            ),
-
-          const SizedBox(height: 14),
-
-          // Advisory message box
+          // Header
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Text(
-              result.message,
-              style: const TextStyle(
-                fontSize: 12,
-                height: 1.5,
-                color: AppColors.textSecondary,
+              color: statusColor.withValues(alpha: 0.08),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
               ),
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.monitor_weight_outlined,
+                        color: statusColor, size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      _t('Weight Gain Analysis', 'Pagsusuri sa Timbang'),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+                // Status badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: statusColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    getStatusDisplayLabel(result.status),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
-          if (result.hasFlags) ...[
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: result.flags.map((flag) {
-                String label;
-                Color flagColor;
-                if (flag == 'weight_loss') {
-                  label = _t('⚠️ Weight Loss Detected', '⚠️ May Bawas sa Timbang');
-                  flagColor = AppColors.error;
-                } else if (flag == 'plateau') {
-                  label = _t('ℹ️ Weight Plateau', 'ℹ️ Patag na Timbang');
-                  flagColor = AppColors.warning;
-                } else if (flag == 'abnormal_spike') {
-                  label = _t('⚠️ Rapid Weight Gain Spike', '⚠️ Mabilis na Pagtaas ng Timbang');
-                  flagColor = AppColors.error;
-                } else {
-                  label = flag;
-                  flagColor = AppColors.textSecondary;
-                }
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _weightInfoRow(
+                  _t('BMI Category', 'Kategorya ng BMI'),
+                  getBmiCategoryLabel(result.bmiCategory),
+                ),
+                _weightInfoRow(
+                  _t('Current Weight', 'Kasalukuyang Timbang'),
+                  '${result.currentWeight.toStringAsFixed(1)} kg',
+                ),
+                if (result.baselineWeight != null)
+                  _weightInfoRow(
+                    result.mode == WeightGainMode.full
+                        ? _t('Pre-Pregnancy Weight', 'Timbang Bago Mabuntis')
+                        : _t('Baseline Weight', 'Baseline na Timbang'),
+                    '${result.baselineWeight!.toStringAsFixed(1)} kg',
+                  ),
+                if (result.actualGain != null)
+                  _weightInfoRow(
+                    _t('Actual Gain', 'Aktwal na Dagdag'),
+                    '${result.actualGain! >= 0 ? '+' : ''}${result.actualGain!.toStringAsFixed(1)} kg',
+                  ),
+                if (result.expectedGainMin != null && result.expectedGainMax != null)
+                  _weightInfoRow(
+                    _t('Expected Gain', 'Inaasahang Dagdag'),
+                    '${result.expectedGainMin!.toStringAsFixed(1)} - ${result.expectedGainMax!.toStringAsFixed(1)} kg',
+                  )
+                else if (result.expectedGain != null)
+                  _weightInfoRow(
+                    _t('Expected Gain', 'Inaasahang Dagdag'),
+                    '${result.expectedGain!.toStringAsFixed(1)} kg',
+                  ),
+                if (result.weeklyGain != null)
+                  _weightInfoRow(
+                    _t('Weekly Gain Rate', 'Antas ng Lingguhang Dagdag'),
+                    '${result.weeklyGain!.toStringAsFixed(3)} kg/wk',
+                  ),
+
+                const SizedBox(height: 12),
+                // Flags
+                if (result.hasFlags) ...[
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: result.flags.map((flag) {
+                      String label;
+                      Color flagColor = AppColors.error;
+                      if (flag == 'weight_loss') {
+                        label = _t('⚠️ Weight Loss Detected', '⚠️ May Bawas sa Timbang');
+                      } else if (flag == 'plateau') {
+                        label = _t('ℹ️ Weight Plateau', 'ℹ️ Patag na Timbang');
+                        flagColor = AppColors.warning;
+                      } else if (flag == 'abnormal_spike') {
+                        label = _t('⚠️ Rapid Weight Gain Spike', '⚠️ Mabilis na Pagtaas ng Timbang');
+                      } else {
+                        label = flag.replaceAll('_', ' ').toUpperCase();
+                      }
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: flagColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: flagColor,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                // Advisory message box
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: flagColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: flagColor.withValues(alpha: 0.2)),
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
                   ),
                   child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: flagColor,
+                    result.message,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                );
-              }).toList(),
+                ),
+                const SizedBox(height: 8),
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    title: Text(
+                      _t('Clinical Disclaimer & References', 'Klinikal na Disclaimer at mga Sanggunian'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brandPrimary,
+                      ),
+                    ),
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(top: 4, bottom: 8),
+                    dense: true,
+                    children: [
+                      Text(
+                        _t(
+                          'Disclaimer: This analysis is based on the Institute of Medicine (IOM) 2009 Guidelines. It is for monitoring and educational support only and does not substitute for professional medical advice, clinical assessment, or diagnosis.',
+                          'Disclaimer: Ang pagsusuring ito ay batay sa Institute of Medicine (IOM) 2009 Guidelines. Ito ay para sa pagsubaybay at suportang pang-edukasyon lamang at hindi pamalit sa propesyonal na payong medikal, klinikal na pagtatasa, o diagnosis.',
+                        ),
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _t(
+                          'References:\n• Institute of Medicine (IOM) & National Research Council (NRC). (2009). Weight Gain During Pregnancy: Reexamining the Guidelines. Washington, DC: The National Academies Press.',
+                          'Mga Sanggunian:\n• Institute of Medicine (IOM) & National Research Council (NRC). (2009). Weight Gain During Pregnancy: Reexamining the Guidelines. Washington, DC: The National Academies Press.',
+                        ),
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
