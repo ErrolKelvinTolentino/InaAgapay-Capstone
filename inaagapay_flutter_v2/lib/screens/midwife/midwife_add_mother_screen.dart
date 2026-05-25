@@ -3207,7 +3207,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text(
-                'Form autofilled from OCR scan. Please review & edit as needed.'),
+                'Form autofilled from scan. Please review & edit as needed.'),
             behavior: SnackBarBehavior.floating,
             backgroundColor: Color(0xFF4CAF50)));
       }
@@ -5756,7 +5756,7 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
               trailing: TextButton.icon(
                 onPressed: _startOcrFlow,
                 icon: const Icon(Icons.document_scanner_outlined, size: 18),
-                label: const Text('OCR'),
+                label: const Text('Scan'),
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.brandPrimary,
                 ),

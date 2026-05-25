@@ -92,6 +92,7 @@ class RecordsDisplayCard extends StatelessWidget {
 class RecordItem {
   final IconData leadingIcon;
   final String label;
+  final String? subLabel;
   final String value;
   final Widget? trailingWidget;
   final VoidCallback? onTap;
@@ -99,6 +100,7 @@ class RecordItem {
   const RecordItem({
     required this.leadingIcon,
     required this.label,
+    this.subLabel,
     required this.value,
     this.trailingWidget,
     this.onTap,
@@ -118,12 +120,28 @@ class RecordItem {
             const SizedBox(width: 8),
             Expanded(
               flex: 2,
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  if (subLabel != null && subLabel!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subLabel!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textSecondary.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             Expanded(

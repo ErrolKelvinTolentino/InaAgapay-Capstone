@@ -40,6 +40,7 @@ class ImmunizationOcrReviewPage extends StatefulWidget {
   final List<Map<String, dynamic>> extractedVaccines;
   final List<Map<String, dynamic>> allVaccines;
   final Set<int> takenVaccineIds;
+  final DateTime? childBirthdate;
 
   const ImmunizationOcrReviewPage({
     super.key,
@@ -47,6 +48,7 @@ class ImmunizationOcrReviewPage extends StatefulWidget {
     required this.extractedVaccines,
     required this.allVaccines,
     required this.takenVaccineIds,
+    this.childBirthdate,
   });
 
   @override
@@ -152,12 +154,68 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
     }
   }
 
+  String _getRecommendedAgeText(ReviewItem item) {
+    if (item.matchedVaccineId == null) return '';
+    final vaccine = widget.allVaccines.firstWhere(
+      (v) => v['vaccine_id'] == item.matchedVaccineId,
+      orElse: () => <String, dynamic>{},
+    );
+    if (vaccine.isEmpty) return '';
+    final rec = (vaccine['recommended_age_months'] as num?)?.toDouble() ?? 0.0;
+    if (rec == 0.0) return 'At birth';
+    if (rec == 1.5) return '6 weeks';
+    if (rec == 2.5) return '10 weeks';
+    if (rec == 3.5) return '14 weeks';
+    
+    if (rec % 1 == 0) {
+      final monthsInt = rec.toInt();
+      return '$monthsInt month${monthsInt != 1 ? 's' : ''}';
+    } else {
+      return '$rec months';
+    }
+  }
+
+  String? _getAgeValidationWarning(ReviewItem item) {
+    if (item.vaccinationDate == null || item.matchedVaccineId == null) {
+      return null;
+    }
+    
+    if (widget.childBirthdate == null) {
+      return null;
+    }
+    
+    if (item.vaccinationDate!.isBefore(widget.childBirthdate!)) {
+      return "Vaccination date cannot be before the child's birthdate.";
+    }
+    
+    final vaccine = widget.allVaccines.firstWhere(
+      (v) => v['vaccine_id'] == item.matchedVaccineId,
+      orElse: () => <String, dynamic>{},
+    );
+    if (vaccine.isEmpty) return null;
+    
+    final recommendedAge = (vaccine['recommended_age_months'] as num?)?.toDouble() ?? 0.0;
+    
+    final ageDays = item.vaccinationDate!.difference(widget.childBirthdate!).inDays;
+    final ageMonths = ageDays / 30.44;
+    
+    if (ageMonths < (recommendedAge - 0.25)) {
+      final recText = _getRecommendedAgeText(item);
+      return "Vaccination date is before the recommended age ($recText).";
+    }
+    
+    return null;
+  }
+
   bool get _isFormValid {
     final selectedItems = _reviewItems.where((item) => item.isSelected).toList();
     if (selectedItems.isEmpty) return false;
 
     for (final item in selectedItems) {
       if (item.matchedVaccineId == null || item.vaccinationDate == null) {
+        return false;
+      }
+      if (widget.childBirthdate != null && item.vaccinationDate!.isBefore(widget.childBirthdate!)) {
         return false;
       }
     }
@@ -175,20 +233,6 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
       final List<Map<String, dynamic>> recordsToInsert = [];
 
       for (final item in selectedItems) {
-        // Double check duplicate insertion
-        final existing = await client
-            .from('immunization_record')
-            .select('immunization_record_id')
-            .eq('child_id', widget.childId)
-            .eq('vaccine_id', item.matchedVaccineId!)
-            .maybeSingle();
-
-        if (existing != null) {
-          throw Exception(
-            'One or more selected vaccines (ID: ${item.matchedVaccineId}) have already been recorded for this child.',
-          );
-        }
-
         recordsToInsert.add({
           'child_id': widget.childId,
           'vaccine_id': item.matchedVaccineId!,
@@ -237,14 +281,34 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
   }
 
   void _confirmSave() {
+    final hasAgeWarning = _reviewItems.any((item) =>
+        item.isSelected &&
+        _getAgeValidationWarning(item) != null &&
+        !_getAgeValidationWarning(item)!.contains('birthdate'));
+
+    final hasAlreadyTakenWarning = _reviewItems.any((item) =>
+        item.isSelected && item.alreadyTaken);
+
+    final hasWarning = hasAgeWarning || hasAlreadyTakenWarning;
+
+    String subtitle = 'Please review all vaccine matches and dates. Growth and immunization records cannot be modified once added.';
+    if (hasWarning) {
+      if (hasAlreadyTakenWarning) {
+        subtitle = 'Warning: One or more selected vaccines have already been recorded for this child. Are you sure you want to save them?';
+      } else {
+        subtitle = 'Warning: One or more selected vaccines are scheduled before their recommended age. Are you sure you want to save them?';
+      }
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => ConfirmationDialogBox(
-        title: 'Confirm Bulk Record',
-        subtitle: 'Please review all vaccine matches and dates. Growth and immunization records cannot be modified once added.',
+        title: 'Confirm Bulk Save',
+        subtitle: subtitle,
         confirmText: 'Save Records',
         cancelText: 'Cancel',
+        accentColor: hasWarning ? AppColors.warning : AppColors.brandPrimary,
         onCancel: () => Navigator.pop(context),
         onConfirm: () {
           Navigator.pop(context);
@@ -257,6 +321,35 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
   @override
   Widget build(BuildContext context) {
     final selectedCount = _reviewItems.where((item) => item.isSelected).toList().length;
+
+    // Partition review items for separation and grouping
+    final beforeBirth = _reviewItems.where((item) {
+      return widget.childBirthdate != null && 
+             item.vaccinationDate != null && 
+             item.vaccinationDate!.isBefore(widget.childBirthdate!);
+    }).toList();
+
+    final earlyDoses = _reviewItems.where((item) {
+      if (widget.childBirthdate == null || item.vaccinationDate == null || item.matchedVaccineId == null) {
+        return false;
+      }
+      if (item.vaccinationDate!.isBefore(widget.childBirthdate!)) {
+        return false;
+      }
+      final vaccine = widget.allVaccines.firstWhere(
+        (v) => v['vaccine_id'] == item.matchedVaccineId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (vaccine.isEmpty) return false;
+      final recommendedAge = (vaccine['recommended_age_months'] as num?)?.toDouble() ?? 0.0;
+      final ageDays = item.vaccinationDate!.difference(widget.childBirthdate!).inDays;
+      final ageMonths = ageDays / 30.44;
+      return ageMonths < (recommendedAge - 0.25);
+    }).toList();
+
+    final validMatches = _reviewItems.where((item) {
+      return !beforeBirth.contains(item) && !earlyDoses.contains(item);
+    }).toList();
 
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
@@ -309,13 +402,37 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
                   ),
 
                   Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _reviewItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _reviewItems[index];
-                        return _buildReviewCard(item);
-                      },
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      children: [
+                        if (validMatches.isNotEmpty) ...[
+                          _buildSectionHeader(
+                            'Standard Schedule Matches',
+                            'These matches align with the standard recommended age schedule.',
+                            AppColors.success,
+                            icon: Icons.check_circle_outline_rounded,
+                          ),
+                          ...validMatches.map((item) => _buildReviewCard(item)),
+                        ],
+                        if (earlyDoses.isNotEmpty) ...[
+                          _buildSectionHeader(
+                            'Outside Recommended Age Doses',
+                            'These vaccines were administered earlier than the standard recommended age. Please verify before saving.',
+                            AppColors.warning,
+                            icon: Icons.warning_amber_rounded,
+                          ),
+                          ...earlyDoses.map((item) => _buildReviewCard(item)),
+                        ],
+                        if (beforeBirth.isNotEmpty) ...[
+                          _buildSectionHeader(
+                            'Invalid Doses (Before Birth)',
+                            'These vaccination dates are before the child\'s birthdate and cannot be saved.',
+                            AppColors.error,
+                            icon: Icons.error_outline_rounded,
+                          ),
+                          ...beforeBirth.map((item) => _buildReviewCard(item)),
+                        ],
+                      ],
                     ),
                   ),
 
@@ -368,23 +485,164 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
     );
   }
 
-  Widget _buildReviewCard(ReviewItem item) {
-    // Check if the system vaccines contains appropriate dropdown options
-    // Filter to only include untaken vaccines OR the currently matched vaccine
-    final dropdownOptions = widget.allVaccines.where((v) {
-      final vaccineId = v['vaccine_id'] as int;
-      final isAlreadyTaken = widget.takenVaccineIds.contains(vaccineId);
-      return !isAlreadyTaken || vaccineId == item.matchedVaccineId;
-    }).toList();
+  Widget _buildSectionHeader(String title, String disclaimer, Color color, {IconData? icon}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: color, size: 18),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          if (disclaimer.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              disclaimer,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
-    // Map system dropdown values
-    final optionList = dropdownOptions.map((v) {
+  Widget _buildStatusTag(ReviewItem item) {
+    if (item.alreadyTaken) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.success.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_rounded, color: AppColors.success, size: 10),
+            SizedBox(width: 4),
+            Text(
+              'Already recorded',
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                color: AppColors.success,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (widget.childBirthdate != null &&
+        item.vaccinationDate != null &&
+        item.vaccinationDate!.isBefore(widget.childBirthdate!)) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.error.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          'Invalid Date',
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+            color: AppColors.error,
+          ),
+        ),
+      );
+    }
+
+    if (item.matchedVaccineId != null && item.vaccinationDate != null) {
+      final warningMsg = _getAgeValidationWarning(item);
+      if (warningMsg != null) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppColors.warning.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Text(
+            'Outside Rec. Age',
+            style: TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFB78103),
+            ),
+          ),
+        );
+      } else {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppColors.success.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Text(
+            'Schedule Match',
+            style: TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              color: AppColors.success,
+            ),
+          ),
+        );
+      }
+    }
+
+    if (item.matchedVaccineId == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: Colors.grey.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          'Unmatched',
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildReviewCard(ReviewItem item) {
+    final warningMsg = _getAgeValidationWarning(item);
+
+    // Map system dropdown values using all vaccines in the system
+    final optionList = widget.allVaccines.map((v) {
       final id = v['vaccine_id'] as int;
       final name = v['vaccine_name']?.toString() ?? '';
       final dose = v['dose_number']?.toString() ?? '';
       final notes = v['notes']?.toString() ?? '';
+      final isAlreadyTaken = widget.takenVaccineIds.contains(id);
+
       final parts = <String>['$name (Dose $dose)'];
       if (notes.isNotEmpty) parts.add(notes);
+      if (isAlreadyTaken) parts.add('(Already Recorded)');
+
       return MapEntry(id, parts.join(' - '));
     }).toList();
 
@@ -427,13 +685,11 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   value: item.isSelected,
-                  onChanged: item.alreadyTaken
-                      ? null
-                      : (val) {
-                          setState(() {
-                            item.isSelected = val ?? false;
-                          });
-                        },
+                  onChanged: (val) {
+                    setState(() {
+                      item.isSelected = val ?? false;
+                    });
+                  },
                 ),
                 Expanded(
                   child: Column(
@@ -453,29 +709,7 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
                             ),
                           ),
                           const Spacer(),
-                          if (item.alreadyTaken)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: AppColors.success.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.check_circle_rounded,
-                                      color: AppColors.success, size: 10),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Already recorded',
-                                    style: TextStyle(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.success,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          _buildStatusTag(item),
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -519,17 +753,12 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
                   child: DropdownButton<int>(
                     isExpanded: true,
                     hint: const Text('Select vaccine match'),
-                    value: item.matchedVaccineId,
+                    value: optionList.any((opt) => opt.key == item.matchedVaccineId) ? item.matchedVaccineId : null,
                     onChanged: (id) {
                       setState(() {
                         item.matchedVaccineId = id;
                         // check already taken
-                        if (id != null && widget.takenVaccineIds.contains(id)) {
-                          item.alreadyTaken = true;
-                          item.isSelected = false;
-                        } else {
-                          item.alreadyTaken = false;
-                        }
+                        item.alreadyTaken = id != null && widget.takenVaccineIds.contains(id);
                       });
                     },
                     items: optionList.map((opt) {
@@ -644,6 +873,49 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
                   ),
                 ],
               ),
+              if (warningMsg != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: warningMsg.contains('birthdate')
+                        ? AppColors.error.withValues(alpha: 0.1)
+                        : AppColors.warning.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: warningMsg.contains('birthdate')
+                          ? AppColors.error.withValues(alpha: 0.3)
+                          : AppColors.warning.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        warningMsg.contains('birthdate')
+                            ? Icons.error_outline_rounded
+                            : Icons.warning_amber_rounded,
+                        color: warningMsg.contains('birthdate')
+                            ? AppColors.error
+                            : AppColors.warning,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          warningMsg,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: warningMsg.contains('birthdate')
+                                ? AppColors.error
+                                : const Color(0xFFB78103),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ],
         ),
@@ -651,3 +923,4 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
     );
   }
 }
+

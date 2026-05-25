@@ -638,9 +638,11 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                       ]
                     : immunizations.map((imm) {
                         final vaccine = imm['vaccine'] as Map<String, dynamic>?;
+                        final doseNum = vaccine?['dose_number'];
                         return RecordItem(
                           leadingIcon: Icons.vaccines,
                           label: vaccine?['vaccine_name'] ?? 'Unknown Vaccine',
+                          subLabel: doseNum != null ? 'Dose $doseNum' : null,
                           value: formatDate(imm['vaccination_date']),
                           trailingWidget: StatusIndicator(
                             status: StatusIndicatorType.onTime,
