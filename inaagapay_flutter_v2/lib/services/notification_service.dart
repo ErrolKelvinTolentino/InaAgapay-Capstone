@@ -37,6 +37,29 @@ class NotificationService {
         .eq('is_read', false);
   }
 
+  /// Insert a notification row into the `notifications` table.
+  /// This automatically triggers the DB trigger `trg_send_push_notification`
+  /// which invokes the Edge Function to deliver a push notification via FCM.
+  ///
+  /// [accountId] – the mother's account_id (the notification recipient).
+  /// [title]     – notification title shown in the push.
+  /// [message]   – notification body text.
+  /// [type]      – one of 'checkup_reminder', 'vaccine_reminder', or 'general'.
+  static Future<void> createNotification({
+    required int accountId,
+    required String title,
+    required String message,
+    String type = 'general',
+  }) async {
+    await _client.from('notifications').insert({
+      'account_id': accountId,
+      'title': title,
+      'message': message,
+      'type': type,
+      'is_read': false,
+    });
+  }
+
   static RealtimeChannel subscribeToNotifications(int accountId, void Function(Map<String, dynamic>) onNew) {
     return _client
         .channel('notifications:$accountId')

@@ -10,6 +10,7 @@ import '../../widgets/main_button.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/confirmation_dialog_box.dart';
 import '../../services/sms_service.dart';
+import '../../services/notification_service.dart';
 
 class ReviewItem {
   final String vaccineNameRaw;
@@ -265,6 +266,37 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
             childId: widget.childId,
             recordedVaccines: recordedVaccines,
           );
+
+          // ── Push notification for the mother ──────────────────────
+          try {
+            final childRow = await client
+                .from('children')
+                .select('mother_id')
+                .eq('child_id', widget.childId)
+                .maybeSingle();
+            final motherId = childRow?['mother_id'] as int?;
+            if (motherId != null) {
+              final motherRow = await client
+                  .from('mothers')
+                  .select('account_id')
+                  .eq('mother_id', motherId)
+                  .maybeSingle();
+              final motherAccountId = motherRow?['account_id'] as int?;
+              if (motherAccountId != null) {
+                final vaccineList = recordedVaccines.length <= 3
+                    ? recordedVaccines.join(', ')
+                    : '${recordedVaccines.take(3).join(', ')} and ${recordedVaccines.length - 3} more';
+                await NotificationService.createNotification(
+                  accountId: motherAccountId,
+                  title: 'Vaccines Recorded',
+                  message: '$vaccineList ${recordedVaccines.length == 1 ? 'has' : 'have'} been recorded for your child.',
+                  type: 'vaccine_reminder',
+                );
+              }
+            }
+          } catch (pushError) {
+            debugPrint('Error sending vaccine push notification: $pushError');
+          }
         }
       } catch (smsError) {
         debugPrint('Error triggering automated vaccine SMS: $smsError');

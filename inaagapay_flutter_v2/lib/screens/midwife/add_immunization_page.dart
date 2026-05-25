@@ -14,6 +14,7 @@ import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/validation_message.dart';
 import '../../services/groq_service.dart';
 import '../../services/sms_service.dart';
+import '../../services/notification_service.dart';
 import 'immunization_ocr_review_page.dart';
 
 class AddImmunizationPage extends StatefulWidget {
@@ -926,6 +927,34 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
                   childId: widget.childId,
                   recordedVaccines: [vFull],
                 );
+
+                // ── Push notification for the mother ──────────────────
+                try {
+                  final childRow = await Supabase.instance.client
+                      .from('children')
+                      .select('mother_id')
+                      .eq('child_id', widget.childId)
+                      .maybeSingle();
+                  final motherId = childRow?['mother_id'] as int?;
+                  if (motherId != null) {
+                    final motherRow = await Supabase.instance.client
+                        .from('mothers')
+                        .select('account_id')
+                        .eq('mother_id', motherId)
+                        .maybeSingle();
+                    final motherAccountId = motherRow?['account_id'] as int?;
+                    if (motherAccountId != null) {
+                      await NotificationService.createNotification(
+                        accountId: motherAccountId,
+                        title: 'Vaccine Recorded',
+                        message: '$vFull has been recorded for your child.',
+                        type: 'vaccine_reminder',
+                      );
+                    }
+                  }
+                } catch (pushError) {
+                  debugPrint('Error sending vaccine push notification: $pushError');
+                }
               }
             } catch (smsError) {
               debugPrint('Error triggering automated vaccine SMS: $smsError');

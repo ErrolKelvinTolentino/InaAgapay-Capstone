@@ -17,6 +17,7 @@ import '../../widgets/secondary_header.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/app_dropdown_field.dart';
 import '../../services/sms_service.dart';
+import '../../services/notification_service.dart';
 
 class AddPrenatalCheckupScreen extends StatefulWidget {
   const AddPrenatalCheckupScreen({
@@ -2564,6 +2565,33 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
         } catch (smsError) {
           debugPrint('Error sending automated checkup SMS: $smsError');
         }
+      }
+
+      // ── Push notification for the mother ──────────────────────────────
+      try {
+        final motherAcct = await Supabase.instance.client
+            .from('mothers')
+            .select('account_id')
+            .eq('mother_id', widget.motherId)
+            .maybeSingle();
+        final motherAccountId = motherAcct?['account_id'] as int?;
+        if (motherAccountId != null) {
+          final nextDateStr = _nextSchedule != null
+              ? DateFormat('MMMM d, yyyy').format(_nextSchedule!)
+              : null;
+          final pushTitle = 'Prenatal Checkup Recorded';
+          final pushMessage = nextDateStr != null
+              ? 'Your prenatal checkup has been recorded. Your next schedule is on $nextDateStr.'
+              : 'Your prenatal checkup has been recorded. Keep up the great care, mommy!';
+          await NotificationService.createNotification(
+            accountId: motherAccountId,
+            title: pushTitle,
+            message: pushMessage,
+            type: 'checkup_reminder',
+          );
+        }
+      } catch (pushError) {
+        debugPrint('Error sending checkup push notification: $pushError');
       }
 
       if (!mounted) return;
