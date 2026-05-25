@@ -7,6 +7,7 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../../theme/app_colors.dart';
 import '../../services/auth_storage.dart';
+import 'midwife_sms_reminders_screen.dart';
 
 class MidwifeSchedulesScreen extends StatefulWidget {
   const MidwifeSchedulesScreen({super.key});
@@ -530,6 +531,25 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const MidwifeSmsRemindersScreen(),
+            ),
+          );
+        },
+        backgroundColor: AppColors.brandPrimary,
+        icon: const Icon(Icons.sms_rounded, color: Colors.white),
+        label: const Text(
+          'SMS Reminders',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),

@@ -20,6 +20,8 @@ import '../../services/weight_gain_engine.dart';
 import '../../models/weight_gain_models.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../widgets/mother_qr_code.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/app_dropdown_field.dart';
 
 // Blood type options
 const List<String> _bloodTypeOptions = [
@@ -34,15 +36,49 @@ const List<String> _bloodTypeOptions = [
   'Unknown'
 ];
 
-// Extension name options
-const List<String> _extensionOptions = [
-  '',
-  'Jr.',
-  'Sr.',
-  'II',
-  'III',
-  'IV',
-  'V'
+const List<String> _commonConditions = [
+  'Anemia',
+  'Diabetes',
+  'Hypertension',
+  'Asthma',
+  'Thyroid Disorder',
+  'Heart Disease',
+  'Kidney Disease',
+  'Epilepsy',
+  'Hepatitis',
+  'Other'
+];
+
+const List<String> _commonAllergens = [
+  'Peanuts',
+  'Penicillin',
+  'Dust Mites',
+  'Pollen',
+  'Shellfish',
+  'Pet Dander',
+  'Fish',
+  'Milk',
+  'Eggs',
+  'Soy',
+  'Wheat',
+  'Latex',
+  'Insect Stings',
+  'Mold',
+  'Fragrances',
+  'Nickel',
+  'Other'
+];
+
+const List<String> _relationshipOptions = [
+  'Spouse/Partner',
+  'Parent',
+  'Child',
+  'Sibling',
+  'Relative',
+  'Friend',
+  'Neighbor',
+  'Coworker',
+  'Other',
 ];
 
 class MotherProfilePage extends StatefulWidget {
@@ -91,11 +127,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
   // Dropdown selections for editing
   String _editingBloodType = '';
-  String _editingExtension = '';
 
   // Editable medical conditions & allergies
   bool _isEditingConditions = false;
   bool _isEditingAllergies = false;
+  bool _isEditingContacts = false;
+  List<dynamic> _currentMedicalConditions = [];
+  List<dynamic> _currentAllergies = [];
 
   // Profile picture
   String? _profilePictureUrl;
@@ -390,25 +428,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         break;
     }
 
-    // BMI badge color
-    Color bmiColor;
-    switch (result.bmiCategory) {
-      case 'Underweight':
-        bmiColor = Colors.blue;
-        break;
-      case 'Normal':
-        bmiColor = AppColors.success;
-        break;
-      case 'Overweight':
-        bmiColor = AppColors.warning;
-        break;
-      case 'Obese':
-        bmiColor = AppColors.error;
-        break;
-      default:
-        bmiColor = AppColors.textSecondary;
-    }
-
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -428,6 +447,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         children: [
           // Header
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: statusColor.withValues(alpha: 0.08),
@@ -436,29 +456,41 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 topRight: Radius.circular(16),
               ),
             ),
-            child: Row(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Icon(Icons.monitor_weight_outlined,
-                    color: statusColor, size: 22),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Weight Gain Analysis',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.monitor_weight_outlined,
+                        color: statusColor, size: 22),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Weight Gain Analysis',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                  ],
                 ),
-                // Mode badge
+                // Status badge
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(10),
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: statusColor.withValues(alpha: 0.3)),
                   ),
                   child: Text(
-                    result.modeLabel,
-                    style: const TextStyle(
-                        fontSize: 10, fontWeight: FontWeight.w600),
+                    result.statusDisplayLabel,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
                   ),
                 ),
               ],
@@ -470,52 +502,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Row: BMI badge + Status badge
-                Row(
-                  children: [
-                    // BMI category badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: bmiColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border:
-                            Border.all(color: bmiColor.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        result.bmiCategory,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: bmiColor,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Status badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: statusColor.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        result.statusLabel,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
                 // Weight info rows
                 _weightInfoRow(
                   'Current Weight',
@@ -533,7 +519,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     'Actual Gain',
                     '${result.actualGain! >= 0 ? '+' : ''}${result.actualGain!.toStringAsFixed(1)} kg',
                   ),
-                if (result.expectedGain != null)
+                if (result.expectedGainMin != null && result.expectedGainMax != null)
+                  _weightInfoRow(
+                    'Expected Gain',
+                    '${result.expectedGainMin!.toStringAsFixed(1)} - ${result.expectedGainMax!.toStringAsFixed(1)} kg',
+                  )
+                else if (result.expectedGain != null)
                   _weightInfoRow(
                     'Expected Gain',
                     '${result.expectedGain!.toStringAsFixed(1)} kg',
@@ -590,6 +581,42 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    title: const Text(
+                      'Clinical Disclaimer & References',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brandPrimary,
+                      ),
+                    ),
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(top: 4, bottom: 8),
+                    dense: true,
+                    children: [
+                      Text(
+                        'Disclaimer: This analysis is based on the Institute of Medicine (IOM) 2009 Guidelines. It is for monitoring and educational support only and does not substitute for professional medical advice, clinical assessment, or diagnosis.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'References:\n• Institute of Medicine (IOM) & National Research Council (NRC). (2009). Weight Gain During Pregnancy: Reexamining the Guidelines. Washington, DC: The National Academies Press.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -615,8 +642,155 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     );
   }
 
-  /// Weight trend chart — plots checkup weights over gestational weeks.
-  Widget _buildWeightTrendChart(List<Map<String, dynamic>> checkups) {
+  Map<String, double> _getRecommendedRangeAt({
+    required double aogWeeks,
+    required String bmiCategory,
+    required double baselineWeight,
+    required double baselineWeek,
+    required int fetalCount,
+  }) {
+    if (aogWeeks <= baselineWeek) {
+      return {'min': baselineWeight, 'max': baselineWeight};
+    }
+
+    final isTwin = fetalCount >= 2;
+    final double firstTrimesterGain;
+    final double totalMin;
+    final double totalMax;
+    final double weeklyMin;
+    final double weeklyMax;
+
+    if (isTwin) {
+      switch (bmiCategory) {
+        case 'Underweight':
+        case 'Normal':
+          firstTrimesterGain = 2.0;
+          totalMin = 16.8;
+          totalMax = 24.5;
+          weeklyMin = 0.47;
+          weeklyMax = 0.67;
+          break;
+        case 'Overweight':
+          firstTrimesterGain = 1.0;
+          totalMin = 14.1;
+          totalMax = 22.7;
+          weeklyMin = 0.41;
+          weeklyMax = 0.60;
+          break;
+        case 'Obese':
+          firstTrimesterGain = 0.8;
+          totalMin = 11.3;
+          totalMax = 19.1;
+          weeklyMin = 0.33;
+          weeklyMax = 0.53;
+          break;
+        default:
+          firstTrimesterGain = 2.0;
+          totalMin = 16.8;
+          totalMax = 24.5;
+          weeklyMin = 0.47;
+          weeklyMax = 0.67;
+      }
+    } else {
+      switch (bmiCategory) {
+        case 'Underweight':
+          firstTrimesterGain = 2.0;
+          totalMin = 12.5;
+          totalMax = 18.0;
+          weeklyMin = 0.44;
+          weeklyMax = 0.58;
+          break;
+        case 'Normal':
+          firstTrimesterGain = 1.6;
+          totalMin = 11.5;
+          totalMax = 16.0;
+          weeklyMin = 0.35;
+          weeklyMax = 0.50;
+          break;
+        case 'Overweight':
+          firstTrimesterGain = 0.9;
+          totalMin = 7.0;
+          totalMax = 11.5;
+          weeklyMin = 0.23;
+          weeklyMax = 0.33;
+          break;
+        case 'Obese':
+          firstTrimesterGain = 0.7;
+          totalMin = 5.0;
+          totalMax = 9.0;
+          weeklyMin = 0.17;
+          weeklyMax = 0.27;
+          break;
+        default:
+          firstTrimesterGain = 1.6;
+          totalMin = 11.5;
+          totalMax = 16.0;
+          weeklyMin = 0.35;
+          weeklyMax = 0.50;
+      }
+    }
+
+    double expectedGainMin;
+    double expectedGainMax;
+
+    if (aogWeeks <= 13) {
+      final fraction = aogWeeks / 13.0;
+      final expectedGainMid = firstTrimesterGain * fraction;
+      expectedGainMin = expectedGainMid * 0.7;
+      expectedGainMax = expectedGainMid * 1.3;
+    } else {
+      final firstTrimesterMin = firstTrimesterGain * 0.7;
+      final firstTrimesterMax = firstTrimesterGain * 1.3;
+
+      if (aogWeeks <= 40) {
+        final progressFraction = (aogWeeks - 13) / 27.0;
+        expectedGainMin = firstTrimesterMin + (totalMin - firstTrimesterMin) * progressFraction;
+        expectedGainMax = firstTrimesterMax + (totalMax - firstTrimesterMax) * progressFraction;
+      } else {
+        final weeksAfterForty = aogWeeks - 40;
+        expectedGainMin = totalMin + (weeksAfterForty * weeklyMin);
+        expectedGainMax = totalMax + (weeksAfterForty * weeklyMax);
+      }
+    }
+
+    double relativeGainMin = expectedGainMin;
+    double relativeGainMax = expectedGainMax;
+
+    if (baselineWeek > 0) {
+      double baselineExpectedMin;
+      double baselineExpectedMax;
+      if (baselineWeek <= 13) {
+        final fraction = baselineWeek / 13.0;
+        final baselineExpectedMid = firstTrimesterGain * fraction;
+        baselineExpectedMin = baselineExpectedMid * 0.7;
+        baselineExpectedMax = baselineExpectedMid * 1.3;
+      } else {
+        final firstTrimesterMin = firstTrimesterGain * 0.7;
+        final firstTrimesterMax = firstTrimesterGain * 1.3;
+        if (baselineWeek <= 40) {
+          final progressFraction = (baselineWeek - 13) / 27.0;
+          baselineExpectedMin = firstTrimesterMin + (totalMin - firstTrimesterMin) * progressFraction;
+          baselineExpectedMax = firstTrimesterMax + (totalMax - firstTrimesterMax) * progressFraction;
+        } else {
+          final weeksAfterForty = baselineWeek - 40;
+          baselineExpectedMin = totalMin + (weeksAfterForty * weeklyMin);
+          baselineExpectedMax = totalMax + (weeksAfterForty * weeklyMax);
+        }
+      }
+      
+      relativeGainMin = expectedGainMin - baselineExpectedMin;
+      relativeGainMax = expectedGainMax - baselineExpectedMax;
+    }
+
+    return {
+      'min': baselineWeight + relativeGainMin,
+      'max': baselineWeight + relativeGainMax,
+    };
+  }
+
+  /// Weight trend chart — plots checkup weights over gestational weeks against guidelines.
+  Widget _buildWeightTrendChart(
+      List<Map<String, dynamic>> checkups, WeightGainResult result, int fetalCount) {
     // Filter checkups that have both weight and AOG
     final validCheckups = checkups.where((c) {
       final w = c['checkup_weight'];
@@ -624,23 +798,70 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       return w != null && a != null && (w as num) > 0 && (a as num) > 0;
     }).toList();
 
-    if (validCheckups.length < 2) return const SizedBox.shrink();
-
-    // Sort by AOG ascending
+    // Chronological sort
     validCheckups.sort((a, b) =>
         (a['age_of_gestation'] as num).compareTo(b['age_of_gestation'] as num));
 
-    final spots = validCheckups
-        .map((c) => FlSpot(
-              (c['age_of_gestation'] as num).toDouble(),
-              (c['checkup_weight'] as num).toDouble(),
-            ))
-        .toList();
+    // Construct actual weight spots
+    final List<FlSpot> actualSpots = [];
 
-    final minY = spots.map((s) => s.y).reduce((a, b) => a < b ? a : b) - 2;
-    final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) + 2;
-    final minX = spots.first.x;
-    final maxX = spots.last.x;
+    // Add pre-pregnancy weight if available (week 0)
+    if (result.mode == WeightGainMode.full && result.baselineWeight != null) {
+      actualSpots.add(FlSpot(0, result.baselineWeight!));
+    }
+
+    // Add checkup weights
+    for (final c in validCheckups) {
+      final w = (c['age_of_gestation'] as num).toDouble();
+      final weight = (c['checkup_weight'] as num).toDouble();
+      if (actualSpots.isNotEmpty && (w - actualSpots.last.x).abs() < 0.1) {
+        continue;
+      }
+      actualSpots.add(FlSpot(w, weight));
+    }
+
+    actualSpots.sort((a, b) => a.x.compareTo(b.x));
+
+    if (actualSpots.length < 2) return const SizedBox.shrink();
+
+    final maxAog = actualSpots.last.x;
+    final endWeek = maxAog > 40 ? maxAog : 40.0;
+    final startWeek = result.baselineWeek ?? 0.0;
+
+    final List<FlSpot> minSpots = [];
+    final List<FlSpot> maxSpots = [];
+
+    if (result.baselineWeight != null && result.baselineWeek != null) {
+      for (double w = startWeek; w <= endWeek; w += 2) {
+        final range = _getRecommendedRangeAt(
+          aogWeeks: w,
+          bmiCategory: result.bmiCategory,
+          baselineWeight: result.baselineWeight!,
+          baselineWeek: result.baselineWeek!,
+          fetalCount: fetalCount,
+        );
+        minSpots.add(FlSpot(w, range['min']!));
+        maxSpots.add(FlSpot(w, range['max']!));
+      }
+      // Ensure endWeek is included
+      final endRange = _getRecommendedRangeAt(
+        aogWeeks: endWeek,
+        bmiCategory: result.bmiCategory,
+        baselineWeight: result.baselineWeight!,
+        baselineWeek: result.baselineWeek!,
+        fetalCount: fetalCount,
+      );
+      if (minSpots.isEmpty || minSpots.last.x != endWeek) {
+        minSpots.add(FlSpot(endWeek, endRange['min']!));
+        maxSpots.add(FlSpot(endWeek, endRange['max']!));
+      }
+    }
+
+    final allSpots = [...actualSpots, ...minSpots, ...maxSpots];
+    final minY = allSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b) - 2;
+    final maxY = allSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b) + 2;
+    final minX = startWeek;
+    final maxX = endWeek;
 
     return Container(
       width: double.infinity,
@@ -666,17 +887,52 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   size: 20, color: AppColors.brandPrimary),
               const SizedBox(width: 8),
               const Text(
-                'Weight Trend',
+                'Weight Gain Progression Chart',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            'Weight (kg) over gestational weeks',
+            'Total maternal weight (kg) plotted against recommended bounds',
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
+          const SizedBox(height: 12),
+          
+          // Legend row
+          Row(
+            children: [
+              Container(
+                width: 14,
+                height: 3,
+                color: AppColors.brandPrimary,
+              ),
+              const SizedBox(width: 4),
+              const Text(
+                'Actual Weight',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 16),
+              Row(
+                children: List.generate(
+                  3,
+                  (index) => Container(
+                    width: 4,
+                    height: 1.5,
+                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'IOM Recommended Bounds (${result.bmiCategory})',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
+
           SizedBox(
             height: 200,
             child: LineChart(
@@ -687,9 +943,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 maxY: maxY,
                 gridData: FlGridData(
                   show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: ((maxY - minY) / 4).clamp(1.0, 10.0),
+                  drawVerticalLine: true,
+                  horizontalInterval: ((maxY - minY) / 5).clamp(1.0, 10.0),
+                  verticalInterval: 4.0,
                   getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
+                    strokeWidth: 1,
+                  ),
+                  getDrawingVerticalLine: (value) => FlLine(
                     color: Colors.grey.shade200,
                     strokeWidth: 1,
                   ),
@@ -703,7 +964,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 28,
-                      interval: ((maxX - minX) / 4).ceilToDouble().clamp(1, 10),
+                      interval: 4.0,
                       getTitlesWidget: (value, meta) => Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
@@ -718,9 +979,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 40,
-                      interval: ((maxY - minY) / 4).clamp(1.0, 10.0),
+                      interval: ((maxY - minY) / 5).clamp(1.0, 10.0),
                       getTitlesWidget: (value, meta) => Text(
-                        '${value.toInt()}',
+                        '${value.toInt()} kg',
                         style: TextStyle(
                             fontSize: 10, color: AppColors.textSecondary),
                       ),
@@ -729,8 +990,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ),
                 borderData: FlBorderData(show: false),
                 lineBarsData: [
+                  // Actual spots
                   LineChartBarData(
-                    spots: spots,
+                    spots: actualSpots,
                     isCurved: true,
                     color: AppColors.brandPrimary,
                     barWidth: 3,
@@ -744,18 +1006,42 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                         strokeColor: AppColors.brandPrimary,
                       ),
                     ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: AppColors.brandPrimary.withValues(alpha: 0.08),
-                    ),
                   ),
+                  // Recommended Min
+                  if (minSpots.isNotEmpty)
+                    LineChartBarData(
+                      spots: minSpots,
+                      isCurved: true,
+                      color: Colors.grey.shade400,
+                      barWidth: 1.5,
+                      dashArray: [5, 5],
+                      dotData: const FlDotData(show: false),
+                    ),
+                  // Recommended Max
+                  if (maxSpots.isNotEmpty)
+                    LineChartBarData(
+                      spots: maxSpots,
+                      isCurved: true,
+                      color: Colors.grey.shade400,
+                      barWidth: 1.5,
+                      dashArray: [5, 5],
+                      dotData: const FlDotData(show: false),
+                    ),
                 ],
                 lineTouchData: LineTouchData(
                   touchTooltipData: LineTouchTooltipData(
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
+                        String prefix = '';
+                        if (spot.barIndex == 0) {
+                          prefix = 'Actual: ';
+                        } else if (spot.barIndex == 1) {
+                          prefix = 'IOM Min: ';
+                        } else if (spot.barIndex == 2) {
+                          prefix = 'IOM Max: ';
+                        }
                         return LineTooltipItem(
-                          'Week ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)} kg',
+                          '${prefix}Week ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)} kg',
                           const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
@@ -2803,29 +3089,13 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     _personalControllers['weight'] =
         TextEditingController(text: profile['weight']?.toString() ?? '');
     _editingBloodType = profile['blood_type'] ?? '';
-
-    final account = profile['account'] as Map<String, dynamic>? ?? {};
-    _editingExtension = account['extension_name'] ?? '';
   }
 
   Future<void> _savePersonalInfo() async {
-    final accountId = await AuthStorage.getUserId();
-    if (accountId == null) return;
-
-    // Capture the values before any async gaps
-    final heightText = _personalControllers['height']?.text.trim() ?? '';
-    final weightText = _personalControllers['weight']?.text.trim() ?? '';
     final bloodType = _editingBloodType;
-    final extensionName = _editingExtension;
 
     try {
-      await SupabaseService.client.from('accounts').update({
-        'extension_name': extensionName.isEmpty ? null : extensionName,
-      }).eq('account_id', accountId);
-
       await SupabaseService.client.from('mothers').update({
-        'height': double.tryParse(heightText),
-        'weight': double.tryParse(weightText),
         'blood_type': bloodType.isEmpty ? null : bloodType,
       }).eq('mother_id', widget.motherId);
 
@@ -2835,7 +3105,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               content: Text('Medical information updated'),
               backgroundColor: AppColors.success),
         );
-        // FIX: Force controllers to re-initialize on next build with fresh data
         setState(() {
           _isEditingPersonal = false;
           _controllersInitialized = false;
@@ -2903,45 +3172,338 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
-  // ── Add/Remove medical conditions ─────────────────────────────────────
-  Future<void> _addMedicalCondition() async {
-    final nameController = TextEditingController();
-    final result = await showDialog<String>(
+  // ── Date Picker Helper ────────────────────────────────────────────────
+  Future<DateTime?> _showBrandedDatePicker({
+    required BuildContext context,
+    required DateTime initialDate,
+    required DateTime firstDate,
+    required DateTime lastDate,
+  }) {
+    DateTime clampedInitial = initialDate;
+    if (clampedInitial.isBefore(firstDate)) {
+      clampedInitial = firstDate;
+    } else if (clampedInitial.isAfter(lastDate)) {
+      clampedInitial = lastDate;
+    }
+
+    return showDatePicker(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Medical Condition'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'Condition Name',
-            hintText: 'e.g. Gestational Diabetes',
-            border: OutlineInputBorder(),
+      initialDate: clampedInitial,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.brandPrimary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.brandText,
+              secondary: AppColors.brandPrimary,
+              surface: Colors.white,
+            ),
+            dialogTheme: DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 4,
+              surfaceTintColor: Colors.transparent,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, nameController.text.trim()),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandPrimary),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+          child: child!,
+        );
+      },
     );
-    nameController.dispose();
-    if (result != null && result.isNotEmpty) {
+  }
+
+  // ── Add/Edit/Remove medical conditions ───────────────────────────────────
+  Future<void> _showMedicalConditionDialog({Map<String, dynamic>? prefill}) async {
+    final nameCtrl = TextEditingController(text: prefill?['condition_name'] ?? '');
+    DateTime? diagDate = prefill?['diagnosis_date'] != null ? DateTime.tryParse(prefill!['diagnosis_date'].toString()) : null;
+    String status = prefill?['status'] ?? 'active';
+    final remarksCtrl = TextEditingController(text: prefill?['remarks'] ?? '');
+    final diagDateCtrl = TextEditingController(
+        text: diagDate != null ? DateFormat('MMMM d, yyyy').format(diagDate) : '');
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Container(
+            width: MediaQuery.of(ctx).size.width * 0.9,
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: StatefulBuilder(
+              builder: (dialogCtx, setDialogState) {
+                final inputName = nameCtrl.text.trim();
+                final alreadyAdded = _currentMedicalConditions
+                    .where((c) =>
+                        prefill == null ||
+                        c['medical_condition_id'] != prefill['medical_condition_id'])
+                    .map((c) => c['condition_name']?.toString().toLowerCase())
+                    .toSet();
+                
+                final isDuplicate = alreadyAdded.contains(inputName.toLowerCase());
+                final isFormValid = inputName.isNotEmpty && !isDuplicate;
+
+                final displayedConditions = _commonConditions.where((cond) {
+                  if (cond == 'Other') return true;
+                  return !alreadyAdded.contains(cond.toLowerCase());
+                }).toList();
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close,
+                              color: AppColors.brandText),
+                          onPressed: () => Navigator.pop(dialogCtx, false),
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              prefill != null ? 'Edit Medical Condition' : 'Medical Condition',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: AppColors.brandText,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (displayedConditions.isNotEmpty) ...[
+                              const Text('Common Conditions',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary)),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: displayedConditions.map((cond) {
+                                  final isSelected = inputName.toLowerCase() ==
+                                      cond.toLowerCase();
+                                  return ActionChip(
+                                    label: Text(cond,
+                                        style: TextStyle(
+                                            color: isSelected
+                                                ? Colors.white
+                                                : AppColors.brandPrimary,
+                                            fontSize: 12)),
+                                    backgroundColor: isSelected
+                                        ? AppColors.brandPrimary
+                                        : Colors.white,
+                                    side:
+                                        const BorderSide(color: AppColors.brandPrimary),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20)),
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        if (cond == 'Other') {
+                                          nameCtrl.clear();
+                                        } else {
+                                          nameCtrl.text = cond;
+                                        }
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                            AppInputField(
+                              controller: nameCtrl,
+                              hintText: 'Condition Name',
+                              isRequired: true,
+                              leadingIcon: Icons.medical_services_outlined,
+                              errorText: isDuplicate
+                                  ? 'Condition already added'
+                                  : null,
+                              onChanged: (val) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            AppInputField(
+                              controller: diagDateCtrl,
+                              hintText: 'Diagnosis Date (Optional)',
+                              readOnly: true,
+                              leadingIcon: Icons.calendar_today_outlined,
+                              onTap: () async {
+                                final picked = await _showBrandedDatePicker(
+                                  context: dialogCtx,
+                                  initialDate: diagDate ?? DateTime.now(),
+                                  firstDate: DateTime(1900),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    diagDate = picked;
+                                    diagDateCtrl.text = DateFormat('MMMM d, yyyy').format(picked);
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            const Text('Status',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary)),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        setDialogState(() => status = 'active'),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: status == 'active'
+                                            ? AppColors.brandPrimary
+                                                .withValues(alpha: 0.1)
+                                            : Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: status == 'active'
+                                                ? AppColors.brandPrimary
+                                                : AppColors.borderPrimary),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text('Active',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: status == 'active'
+                                                  ? AppColors.brandPrimary
+                                                  : AppColors.textSecondary)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setDialogState(
+                                        () => status = 'resolved'),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: status == 'resolved'
+                                            ? AppColors.brandPrimary
+                                                .withValues(alpha: 0.1)
+                                            : Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: status == 'resolved'
+                                                ? AppColors.brandPrimary
+                                                : AppColors.borderPrimary),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text('Resolved',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: status == 'resolved'
+                                                  ? AppColors.brandPrimary
+                                                  : AppColors.textSecondary)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            AppInputField(
+                              controller: remarksCtrl,
+                              hintText: 'Remarks (Optional)',
+                              leadingIcon: Icons.notes_outlined,
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isFormValid
+                            ? () => Navigator.pop(dialogCtx, true)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          prefill != null ? 'Save Changes' : 'Add Condition',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    nameCtrl.dispose();
+    remarksCtrl.dispose();
+    diagDateCtrl.dispose();
+
+    if (result == true) {
       try {
-        await SupabaseService.client.from('medical_conditions').insert({
-          'mother_id': widget.motherId,
-          'condition_name': result,
-          'status': 'active',
-          'diagnosis_date': DateTime.now().toIso8601String().split('T')[0],
-        });
+        final Map<String, dynamic> data = {
+          'condition_name': nameCtrl.text.trim(),
+          'status': status,
+          'diagnosis_date': diagDate?.toIso8601String().split('T')[0],
+          'remarks': remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim(),
+        };
+
+        if (prefill != null) {
+          final condId = prefill['medical_condition_id'];
+          await SupabaseService.client
+              .from('medical_conditions')
+              .update(data)
+              .eq('medical_condition_id', condId);
+        } else {
+          data['mother_id'] = widget.motherId;
+          await SupabaseService.client
+              .from('medical_conditions')
+              .insert(data);
+        }
         _refresh();
       } catch (e) {
         if (mounted) {
@@ -2952,6 +3514,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         }
       }
     }
+  }
+
+  Future<void> _addMedicalCondition() async {
+    await _showMedicalConditionDialog();
+  }
+
+  Future<void> _editMedicalCondition(Map<String, dynamic> condition) async {
+    await _showMedicalConditionDialog(prefill: condition);
   }
 
   Future<void> _removeMedicalCondition(Map<String, dynamic> condition) async {
@@ -2967,7 +3537,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               child: const Text('Cancel')),
           ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+              ),
               child: const Text('Remove')),
         ],
       ),
@@ -2991,45 +3568,293 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     }
   }
 
-  // ── Add/Remove allergies ──────────────────────────────────────────────
-  Future<void> _addAllergy() async {
-    final nameController = TextEditingController();
-    final result = await showDialog<String>(
+  // ── Add/Edit/Remove allergies ───────────────────────────────────────────
+  Future<void> _showAllergyDialog({Map<String, dynamic>? prefill}) async {
+    final allergenCtrl = TextEditingController(text: prefill?['allergen'] ?? '');
+    DateTime? diagDate = prefill?['diagnosis_date'] != null ? DateTime.tryParse(prefill!['diagnosis_date'].toString()) : null;
+    String status = prefill?['status'] ?? 'active';
+    final treatmentCtrl = TextEditingController(text: prefill?['treatment'] ?? '');
+    final remarksCtrl = TextEditingController(text: prefill?['remarks'] ?? '');
+    final diagDateCtrl = TextEditingController(
+        text: diagDate != null ? DateFormat('MMMM d, yyyy').format(diagDate) : '');
+
+    final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Allergy'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'Allergen',
-            hintText: 'e.g. Penicillin',
-            border: OutlineInputBorder(),
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Container(
+            width: MediaQuery.of(ctx).size.width * 0.9,
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: StatefulBuilder(
+              builder: (dialogCtx, setDialogState) {
+                final inputName = allergenCtrl.text.trim();
+                final alreadyAdded = _currentAllergies
+                    .where((a) =>
+                        prefill == null ||
+                        a['allergy_id'] != prefill['allergy_id'])
+                    .map((a) => a['allergen']?.toString().toLowerCase())
+                    .toSet();
+                
+                final isDuplicate = alreadyAdded.contains(inputName.toLowerCase());
+                final isFormValid = inputName.isNotEmpty && !isDuplicate;
+
+                final displayedAllergens = _commonAllergens.where((cond) {
+                  if (cond == 'Other') return true;
+                  return !alreadyAdded.contains(cond.toLowerCase());
+                }).toList();
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close,
+                              color: AppColors.brandText),
+                          onPressed: () => Navigator.pop(dialogCtx, false),
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              prefill != null ? 'Edit Allergy' : 'Add Allergy',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: AppColors.brandText,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (displayedAllergens.isNotEmpty) ...[
+                              const Text('Common Allergens',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary)),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: displayedAllergens.map((cond) {
+                                  final isSelected = inputName.toLowerCase() ==
+                                      cond.toLowerCase();
+                                  return ActionChip(
+                                    label: Text(cond,
+                                        style: TextStyle(
+                                            color: isSelected
+                                                ? Colors.white
+                                                : AppColors.brandPrimary,
+                                            fontSize: 12)),
+                                    backgroundColor: isSelected
+                                        ? AppColors.brandPrimary
+                                        : Colors.white,
+                                    side:
+                                        const BorderSide(color: AppColors.brandPrimary),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20)),
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        allergenCtrl.text = cond;
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                            AppInputField(
+                              controller: allergenCtrl,
+                              hintText: 'Allergen Name',
+                              isRequired: true,
+                              leadingIcon: Icons.warning_amber_rounded,
+                              errorText: isDuplicate
+                                  ? 'Allergen already added'
+                                  : null,
+                              onChanged: (val) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            AppInputField(
+                              controller: diagDateCtrl,
+                              hintText: 'Diagnosis Date (Optional)',
+                              readOnly: true,
+                              leadingIcon: Icons.calendar_today_outlined,
+                              onTap: () async {
+                                final picked = await _showBrandedDatePicker(
+                                  context: dialogCtx,
+                                  initialDate: diagDate ?? DateTime.now(),
+                                  firstDate: DateTime(1900),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    diagDate = picked;
+                                    diagDateCtrl.text = DateFormat('MMMM d, yyyy').format(picked);
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            const Text('Status',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary)),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        setDialogState(() => status = 'active'),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: status == 'active'
+                                            ? AppColors.brandPrimary
+                                                .withValues(alpha: 0.1)
+                                            : Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: status == 'active'
+                                                ? AppColors.brandPrimary
+                                                : AppColors.borderPrimary),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text('Active',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: status == 'active'
+                                                  ? AppColors.brandPrimary
+                                                  : AppColors.textSecondary)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setDialogState(
+                                        () => status = 'resolved'),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: status == 'resolved'
+                                            ? AppColors.brandPrimary
+                                                .withValues(alpha: 0.1)
+                                            : Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: status == 'resolved'
+                                                ? AppColors.brandPrimary
+                                                : AppColors.borderPrimary),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text('Resolved',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: status == 'resolved'
+                                                  ? AppColors.brandPrimary
+                                                  : AppColors.textSecondary)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            AppInputField(
+                              controller: treatmentCtrl,
+                              hintText: 'Treatment (Optional)',
+                              leadingIcon: Icons.medical_services_outlined,
+                            ),
+                            const SizedBox(height: 16),
+                            AppInputField(
+                              controller: remarksCtrl,
+                              hintText: 'Remarks (Optional)',
+                              leadingIcon: Icons.notes_outlined,
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isFormValid
+                            ? () => Navigator.pop(dialogCtx, true)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          prefill != null ? 'Save Changes' : 'Add Allergy',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, nameController.text.trim()),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandPrimary),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+        );
+      },
     );
-    nameController.dispose();
-    if (result != null && result.isNotEmpty) {
+
+    allergenCtrl.dispose();
+    treatmentCtrl.dispose();
+    remarksCtrl.dispose();
+    diagDateCtrl.dispose();
+
+    if (result == true) {
       try {
-        await SupabaseService.client.from('allergies').insert({
-          'mother_id': widget.motherId,
-          'allergen': result,
-          'status': 'active',
-          'diagnosis_date': DateTime.now().toIso8601String().split('T')[0],
-        });
+        final Map<String, dynamic> data = {
+          'allergen': allergenCtrl.text.trim(),
+          'status': status,
+          'diagnosis_date': diagDate?.toIso8601String().split('T')[0],
+          'treatment': treatmentCtrl.text.trim().isEmpty ? null : treatmentCtrl.text.trim(),
+          'remarks': remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim(),
+        };
+
+        if (prefill != null) {
+          final allergyId = prefill['allergy_id'];
+          await SupabaseService.client
+              .from('allergies')
+              .update(data)
+              .eq('allergy_id', allergyId);
+        } else {
+          data['mother_id'] = widget.motherId;
+          await SupabaseService.client
+              .from('allergies')
+              .insert(data);
+        }
         _refresh();
       } catch (e) {
         if (mounted) {
@@ -3040,6 +3865,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         }
       }
     }
+  }
+
+  Future<void> _addAllergy() async {
+    await _showAllergyDialog();
+  }
+
+  Future<void> _editAllergy(Map<String, dynamic> allergy) async {
+    await _showAllergyDialog(prefill: allergy);
   }
 
   Future<void> _removeAllergy(Map<String, dynamic> allergy) async {
@@ -3055,7 +3888,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               child: const Text('Cancel')),
           ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+              ),
               child: const Text('Remove')),
         ],
       ),
@@ -3067,6 +3907,308 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           await SupabaseService.client
               .from('allergies')
               .update({'status': 'resolved'}).eq('allergy_id', allergyId);
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error: $e'), backgroundColor: AppColors.error),
+          );
+        }
+      }
+    }
+  }
+
+  // ── Add/Edit/Remove emergency contacts ───────────────────────────────────
+  Future<void> _showEmergencyContactDialog({Map<String, dynamic>? prefill}) async {
+    final relationshipOptionsNoOther = [
+      'Spouse/Partner',
+      'Parent',
+      'Child',
+      'Sibling',
+      'Relative',
+      'Friend',
+      'Neighbor',
+      'Coworker'
+    ];
+    final isCustomRel = prefill != null &&
+        !relationshipOptionsNoOther.contains(prefill['affiliation']);
+
+    final firstNameCtrl = TextEditingController(text: prefill?['first_name'] ?? '');
+    final lastNameCtrl = TextEditingController(text: prefill?['last_name'] ?? '');
+    final phoneCtrl = TextEditingController(text: prefill?['phone_number'] ?? '');
+    final relationshipCtrl = TextEditingController(
+        text: isCustomRel
+            ? 'Other'
+            : (prefill != null ? (prefill['affiliation']?.toString() ?? '') : ''));
+    final customRelationshipCtrl = TextEditingController(
+        text: isCustomRel ? (prefill['affiliation']?.toString() ?? '') : '');
+
+    bool showRelationshipDropdown = false;
+    String? phoneError;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Container(
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: StatefulBuilder(
+              builder: (dialogCtx, setDialogState) {
+                void validatePhone(String val) {
+                  final normalized = val.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+                  final isValid = RegExp(r'^(\+?63|0)9\d{9}$').hasMatch(normalized);
+                  setDialogState(() {
+                    phoneError = val.isEmpty
+                        ? null
+                        : (isValid ? null : 'Enter a valid PH mobile number');
+                  });
+                }
+
+                final isPhoneValid = phoneCtrl.text.trim().isNotEmpty && phoneError == null;
+                final isRelationshipValid = relationshipCtrl.text.trim().isNotEmpty &&
+                    (relationshipCtrl.text.trim() != 'Other' ||
+                        customRelationshipCtrl.text.trim().isNotEmpty);
+                final isFormValid = firstNameCtrl.text.trim().isNotEmpty &&
+                    lastNameCtrl.text.trim().isNotEmpty &&
+                    isPhoneValid &&
+                    isRelationshipValid;
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.brandText),
+                          onPressed: () => Navigator.pop(dialogCtx, false),
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              prefill != null ? 'Edit Emergency Contact' : 'Add Emergency Contact',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: AppColors.brandText,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AppInputField(
+                              controller: firstNameCtrl,
+                              hintText: 'First Name',
+                              isRequired: true,
+                              onChanged: (val) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            AppInputField(
+                              controller: lastNameCtrl,
+                              hintText: 'Last Name',
+                              isRequired: true,
+                              onChanged: (val) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            AppInputField(
+                              controller: phoneCtrl,
+                              hintText: 'Contact Number',
+                              isRequired: true,
+                              keyboardType: TextInputType.phone,
+                              errorText: phoneError,
+                              onChanged: (val) {
+                                validatePhone(val);
+                                setDialogState(() {});
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            AppInputField(
+                              controller: relationshipCtrl,
+                              hintText: 'Relationship',
+                              isRequired: true,
+                              readOnly: true,
+                              trailingIcon: Icons.keyboard_arrow_down_rounded,
+                              onTrailingTap: () {
+                                setDialogState(() {
+                                  showRelationshipDropdown = !showRelationshipDropdown;
+                                });
+                              },
+                              onTap: () {
+                                setDialogState(() {
+                                  showRelationshipDropdown = !showRelationshipDropdown;
+                                });
+                              },
+                            ),
+                            if (showRelationshipDropdown) ...[
+                              const SizedBox(height: 4),
+                              Card(
+                                elevation: 4,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                color: Colors.white,
+                                child: Container(
+                                  constraints: const BoxConstraints(maxHeight: 200),
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount: _relationshipOptions.length,
+                                    itemBuilder: (context, idx) {
+                                      final rel = _relationshipOptions[idx];
+                                      return ListTile(
+                                        title: Text(rel, style: const TextStyle(fontSize: 14)),
+                                        dense: true,
+                                        onTap: () {
+                                          setDialogState(() {
+                                            relationshipCtrl.text = rel;
+                                            showRelationshipDropdown = false;
+                                            if (rel != 'Other') {
+                                              customRelationshipCtrl.clear();
+                                            }
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (relationshipCtrl.text == 'Other') ...[
+                              const SizedBox(height: 16),
+                              AppInputField(
+                                controller: customRelationshipCtrl,
+                                hintText: 'Specify Relationship',
+                                isRequired: true,
+                                onChanged: (val) => setDialogState(() {}),
+                              ),
+                            ],
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isFormValid ? () => Navigator.pop(dialogCtx, true) : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          prefill != null ? 'Save Changes' : 'Add Contact',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    firstNameCtrl.dispose();
+    lastNameCtrl.dispose();
+    phoneCtrl.dispose();
+    relationshipCtrl.dispose();
+    customRelationshipCtrl.dispose();
+
+    if (result == true) {
+      final finalRel = relationshipCtrl.text == 'Other'
+          ? customRelationshipCtrl.text.trim()
+          : relationshipCtrl.text.trim();
+
+      try {
+        final Map<String, dynamic> data = {
+          'first_name': firstNameCtrl.text.trim(),
+          'last_name': lastNameCtrl.text.trim(),
+          'phone_number': phoneCtrl.text.trim(),
+          'affiliation': finalRel,
+        };
+
+        if (prefill != null) {
+          final contactId = prefill['emergency_contact_id'];
+          await SupabaseService.client
+              .from('emergency_contacts')
+              .update(data)
+              .eq('emergency_contact_id', contactId);
+        } else {
+          data['mother_id'] = widget.motherId;
+          data['status'] = 'active';
+          await SupabaseService.client
+              .from('emergency_contacts')
+              .insert(data);
+        }
+        _refresh();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _removeEmergencyContact(Map<String, dynamic> contact) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Emergency Contact'),
+        content: Text(
+            'Remove "${contact['first_name']} ${contact['last_name']}"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+              ),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        final contactId = contact['emergency_contact_id'];
+        if (contactId != null) {
+          await SupabaseService.client
+              .from('emergency_contacts')
+              .delete()
+              .eq('emergency_contact_id', contactId);
           _refresh();
         }
       } catch (e) {
@@ -3145,9 +4287,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   const SizedBox(height: 8),
                   _buildInfoRow(
                       'Blood Type', profile['blood_type'] ?? 'Not set'),
-                  const SizedBox(height: 8),
-                  _buildInfoRow(
-                      'Extension Name', profile['extension_name'] ?? 'None'),
                   if (!widget.readOnly) ...[
                     const SizedBox(height: 16),
                     Align(
@@ -3169,17 +4308,20 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                       Row(
                         children: [
                           Expanded(
-                              child: OutlinedButton(
-                                  onPressed: () => setState(
-                                      () => _isEditingPersonal = false),
-                                  child: const Text('Cancel'))),
+                            child: MainButton(
+                              label: 'Cancel',
+                              isWhiteVariant: true,
+                              onPressed: () => setState(
+                                  () => _isEditingPersonal = false),
+                            ),
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
-                              child: ElevatedButton(
-                                  onPressed: _savePersonalInfo,
-                                  style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.brandPrimary),
-                                  child: const Text('Save Changes'))),
+                            child: MainButton(
+                              label: 'Save Changes',
+                              onPressed: _savePersonalInfo,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -3196,40 +4338,26 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   Widget _buildEditableMedicalForm() {
     return Column(
       children: [
-        TextField(
-          controller: _personalControllers['height'],
-          decoration: const InputDecoration(
-              labelText: 'Height (cm)', border: OutlineInputBorder()),
+        AppInputField(
+          controller: _personalControllers['height']!,
+          hintText: 'Height (cm)',
+          readOnly: true,
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _personalControllers['weight'],
-          decoration: const InputDecoration(
-              labelText: 'Weight (kg)', border: OutlineInputBorder()),
+        AppInputField(
+          controller: _personalControllers['weight']!,
+          hintText: 'Weight (kg)',
+          readOnly: true,
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: _editingBloodType.isEmpty ? null : _editingBloodType,
-          decoration: const InputDecoration(
-              labelText: 'Blood Type', border: OutlineInputBorder()),
-          items: _bloodTypeOptions
-              .map((type) => DropdownMenuItem(value: type, child: Text(type)))
-              .toList(),
-          onChanged: (value) => setState(() => _editingBloodType = value ?? ''),
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: _editingExtension.isEmpty ? null : _editingExtension,
-          decoration: const InputDecoration(
-              labelText: 'Extension Name', border: OutlineInputBorder()),
-          items: _extensionOptions
-              .map((ext) => DropdownMenuItem(
-                  value: ext.isEmpty ? null : ext,
-                  child: Text(ext.isEmpty ? 'None' : ext)))
-              .toList(),
-          onChanged: (value) => setState(() => _editingExtension = value ?? ''),
+        AppDropdownField<String>(
+          hintText: 'Blood Type',
+          options: _bloodTypeOptions,
+          displayStringForOption: (type) => type,
+          value: _editingBloodType.isEmpty ? null : _editingBloodType,
+          onSelected: (value) => setState(() => _editingBloodType = value),
         ),
       ],
     );
@@ -3238,34 +4366,29 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   Widget _buildEditableAddressForm() {
     return Column(
       children: [
-        TextField(
-          controller: _addressControllers['house_number'],
-          decoration: const InputDecoration(
-              labelText: 'House Number', border: OutlineInputBorder()),
+        AppInputField(
+          controller: _addressControllers['house_number']!,
+          hintText: 'House Number',
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _addressControllers['street'],
-          decoration: const InputDecoration(
-              labelText: 'Street', border: OutlineInputBorder()),
+        AppInputField(
+          controller: _addressControllers['street']!,
+          hintText: 'Street',
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _addressControllers['barangay'],
-          decoration: const InputDecoration(
-              labelText: 'Barangay', border: OutlineInputBorder()),
+        AppInputField(
+          controller: _addressControllers['barangay']!,
+          hintText: 'Barangay',
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _addressControllers['city'],
-          decoration: const InputDecoration(
-              labelText: 'City/Municipality', border: OutlineInputBorder()),
+        AppInputField(
+          controller: _addressControllers['city']!,
+          hintText: 'City/Municipality',
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _addressControllers['province'],
-          decoration: const InputDecoration(
-              labelText: 'Province', border: OutlineInputBorder()),
+        AppInputField(
+          controller: _addressControllers['province']!,
+          hintText: 'Province',
         ),
       ],
     );
@@ -3422,6 +4545,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     List children,
     Map<String, dynamic>? currentPregnancy,
   ) {
+    _currentMedicalConditions = medicalConditions;
+    _currentAllergies = allergies;
+
     // FIX #1: initialise controllers only once per profile load
     if (!_controllersInitialized) {
       _initializePersonalControllers(profile);
@@ -3500,17 +4626,20 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   Row(
                     children: [
                       Expanded(
-                          child: OutlinedButton(
-                              onPressed: () =>
-                                  setState(() => _isEditingAddress = false),
-                              child: const Text('Cancel'))),
+                        child: MainButton(
+                          label: 'Cancel',
+                          isWhiteVariant: true,
+                          onPressed: () =>
+                              setState(() => _isEditingAddress = false),
+                        ),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
-                          child: ElevatedButton(
-                              onPressed: _saveAddress,
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.brandPrimary),
-                              child: const Text('Save Address'))),
+                        child: MainButton(
+                          label: 'Save Changes',
+                          onPressed: _saveAddress,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -3557,17 +4686,26 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 ],
                               ),
                             ),
-                            if (!widget.readOnly &&
-                                _isEditingConditions &&
-                                c['status'] == 'active')
+                            if (!widget.readOnly && _isEditingConditions) ...[
                               IconButton(
-                                icon: const Icon(Icons.remove_circle_outline,
-                                    color: AppColors.error, size: 20),
-                                onPressed: () => _removeMedicalCondition(
+                                icon: const Icon(Icons.edit_outlined,
+                                    color: AppColors.brandPrimary, size: 20),
+                                onPressed: () => _editMedicalCondition(
                                     c as Map<String, dynamic>),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
+                              const SizedBox(width: 8),
+                              if (c['status'] == 'active')
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline,
+                                      color: AppColors.error, size: 20),
+                                  onPressed: () => _removeMedicalCondition(
+                                      c as Map<String, dynamic>),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                            ],
                           ],
                         ),
                       )),
@@ -3638,17 +4776,26 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 ],
                               ),
                             ),
-                            if (!widget.readOnly &&
-                                _isEditingAllergies &&
-                                a['status'] == 'active')
+                            if (!widget.readOnly && _isEditingAllergies) ...[
                               IconButton(
-                                icon: const Icon(Icons.remove_circle_outline,
-                                    color: AppColors.error, size: 20),
-                                onPressed: () =>
-                                    _removeAllergy(a as Map<String, dynamic>),
+                                icon: const Icon(Icons.edit_outlined,
+                                    color: AppColors.brandPrimary, size: 20),
+                                onPressed: () => _editAllergy(
+                                    a as Map<String, dynamic>),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
+                              const SizedBox(width: 8),
+                              if (a['status'] == 'active')
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline,
+                                      color: AppColors.error, size: 20),
+                                  onPressed: () =>
+                                      _removeAllergy(a as Map<String, dynamic>),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                            ],
                           ],
                         ),
                       )),
@@ -3684,49 +4831,97 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             _buildExpandableSection(
               'Emergency Contacts',
               Icons.contacts_outlined,
-              emergencyContacts.isEmpty
-                  ? [
-                      const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Text('No emergency contacts',
-                              style: TextStyle(color: AppColors.textSecondary)))
-                    ]
-                  : emergencyContacts
-                      .map<Widget>((c) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                    [
-                                      c['first_name'],
-                                      c['middle_name'],
-                                      c['last_name'],
-                                      c['extension_name']
-                                    ].whereType<String>().join(' '),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600)),
-                                const SizedBox(height: 4),
-                                Row(children: [
-                                  const Icon(Icons.phone_outlined,
-                                      size: 14, color: AppColors.textSecondary),
-                                  const SizedBox(width: 4),
-                                  Text(c['phone_number'] ?? '-')
-                                ]),
-                                if (c['affiliation'] != null) ...[
-                                  const SizedBox(height: 2),
+              [
+                if (emergencyContacts.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text('No emergency contacts',
+                          style: TextStyle(color: AppColors.textSecondary)))
+                else
+                  ...emergencyContacts.map<Widget>((c) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      [
+                                        c['first_name'],
+                                        c['middle_name'],
+                                        c['last_name'],
+                                        c['extension_name']
+                                      ].whereType<String>().join(' '),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 4),
                                   Row(children: [
-                                    const Icon(Icons.business,
-                                        size: 14,
-                                        color: AppColors.textSecondary),
+                                    const Icon(Icons.phone_outlined,
+                                        size: 14, color: AppColors.textSecondary),
                                     const SizedBox(width: 4),
-                                    Text(c['affiliation'].toString())
+                                    Text(c['phone_number'] ?? '-')
                                   ]),
+                                  if (c['affiliation'] != null) ...[
+                                    const SizedBox(height: 2),
+                                    Row(children: [
+                                      const Icon(Icons.business,
+                                          size: 14,
+                                          color: AppColors.textSecondary),
+                                      const SizedBox(width: 4),
+                                      Text(c['affiliation'].toString())
+                                    ]),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ))
-                      .toList(),
+                            if (!widget.readOnly && _isEditingContacts) ...[
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined,
+                                    color: AppColors.brandPrimary, size: 20),
+                                onPressed: () => _showEmergencyContactDialog(
+                                    prefill: c as Map<String, dynamic>),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline,
+                                    color: AppColors.error, size: 20),
+                                onPressed: () => _removeEmergencyContact(
+                                    c as Map<String, dynamic>),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      )),
+                if (!widget.readOnly) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => setState(
+                            () => _isEditingContacts = !_isEditingContacts),
+                        icon: Icon(
+                            _isEditingContacts
+                                ? Icons.check
+                                : Icons.edit_outlined,
+                            size: 16),
+                        label: Text(_isEditingContacts ? 'Done' : 'Edit'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: () => _showEmergencyContactDialog(),
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 12),
 
@@ -4170,8 +5365,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ],
 
             // Weight trend chart
-            if (!_loadingWeightGain && _weightCheckups.length >= 2) ...[
-              _buildWeightTrendChart(_weightCheckups),
+            if (!_loadingWeightGain && _weightGainResult != null) ...[
+              _buildWeightTrendChart(
+                _weightCheckups,
+                _weightGainResult!,
+                int.tryParse(pregnancy['fetal_count']?.toString() ?? '') ?? 1,
+              ),
               const SizedBox(height: 12),
             ],
 

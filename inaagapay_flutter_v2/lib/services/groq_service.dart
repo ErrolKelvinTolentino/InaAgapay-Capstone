@@ -539,6 +539,69 @@ Rules:
     return OcrResult.fromJson(json);
   }
 
+  Future<Map<String, dynamic>> extractImmunizationCardData(XFile imageFile) async {
+    final apiKey = _getApiKey();
+    _log('💉 Extracting immunization card data...');
+
+    const prompt = r'''
+You are an expert medical OCR assistant that reads child immunization cards / baby books (handwritten or printed).
+Analyze the uploaded image of the immunization card. Extract all vaccines that have dates written next to them (which indicates they have been administered).
+
+Return ONLY a single JSON object — no markdown, no prose, no code fence.
+
+Output schema:
+{
+  "administered_vaccines": [
+    {
+      "vaccine_name_raw": "string (e.g. 'BCG Vaccine', 'Pentavalent Vaccine', 'Oral Polio Vaccine', 'Rotavirus')",
+      "dose_number": number (e.g. 1, 2, 3),
+      "date_raw": "string (exactly as written, e.g. '12-6-24', '1-25-25')",
+      "parsed_date": "YYYY-MM-DD (standardized ISO date format, inferring 20XX for 2-digit years. E.g. '12-6-24' -> '2024-12-06', '1-25-25' -> '2025-01-25'. Use null if date is illegible)",
+      "remarks": "string (remarks or next-dose dates written in that row/cell, or null)"
+    }
+  ],
+  "image_quality": "CLEAR|MODERATE|POOR",
+  "relevance_check": "RELATED|UNRELATED",
+  "relevance_reason": "string (if unrelated or poor quality)"
+}
+
+Rules:
+- Dates on Philippine baby books are typically written in MM-DD-YY or M-D-YY format (e.g. 12-6-24 represents December 6, 2024). Carefully parse these into standard YYYY-MM-DD.
+- Extract ONLY the doses that have a date written (administered). Do not list rows that are empty.
+- Look out for hand-written vaccine names added at the bottom (like 'Rotavirus' with date '1-25-25').
+- Return ONLY the JSON object.
+''';
+
+    final preparedImage = await _prepareImageForGroq(imageFile);
+    final base64Image = base64Encode(preparedImage.bytes);
+
+    final raw = await _sendChatCompletion(
+      messages: [
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'text', 'text': prompt},
+            {
+              'type': 'image_url',
+              'image_url': {
+                'url': 'data:${preparedImage.mimeType};base64,$base64Image'
+              }
+            }
+          ]
+        }
+      ],
+      apiKey: apiKey,
+      model: _visionModel,
+      temperature: 0.1,
+      maxOutputTokens: 4096,
+    );
+
+    final cleaned = _stripMarkdownFences(raw);
+    final json = _parseJsonResponse(cleaned);
+    _log('✅ Immunization data extracted');
+    return json;
+  }
+
   // ════════════════════════════════════════════════════════════════════════
   // PROMPT BUILDERS
   // ════════════════════════════════════════════════════════════════════════

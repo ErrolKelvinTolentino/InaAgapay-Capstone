@@ -313,6 +313,17 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       return;
     }
 
+    // Block ridiculous entries where the Z-score indicates it's outside any realistic possible range (outside -5 to 5)
+    if ((_heightZScore != null && (_heightZScore! < -5 || _heightZScore! > 5)) ||
+        (_weightZScore != null && (_weightZScore! < -5 || _weightZScore! > 5))) {
+      setState(() {
+        _isFormValid = false;
+        _validationMessageType = ValidationType.error;
+        _validationMessage = 'Error: Height or weight is outside the possible range for a child of this age. Please verify that the entries are correct.';
+      });
+      return;
+    }
+
     final heightRange = _heightRangeForAge();
     final weightRange = _weightRangeForAge();
     final heightValid = height >= heightRange.min && height <= heightRange.max;
@@ -673,6 +684,9 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
   String _growthStatusDescription(String metric, double? zScore) {
     if (zScore == null) {
       return '$metric status unavailable';
+    }
+    if (zScore < -5 || zScore > 5) {
+      return '$metric is outside the possible range';
     }
     if (zScore < -2) {
       return '$metric is below the expected range';

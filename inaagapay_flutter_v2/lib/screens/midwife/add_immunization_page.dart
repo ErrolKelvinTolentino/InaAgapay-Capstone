@@ -1,8 +1,8 @@
-// lib/screens/midwife/add_immunization_page.dart
-
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../theme/app_colors.dart';
 import '../../widgets/secondary_header.dart';
@@ -12,6 +12,10 @@ import '../../widgets/main_button.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/validation_message.dart';
+import '../../services/groq_service.dart';
+import '../../services/sms_service.dart';
+import '../../services/notification_service.dart';
+import 'immunization_ocr_review_page.dart';
 
 class AddImmunizationPage extends StatefulWidget {
   final int childId;
@@ -38,6 +42,425 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
   Set<int> _takenVaccineIds = {};
   String? _errorMessage;
   DateTime? _childBirthdate;
+  final GroqService _groqService = GroqService();
+  bool _anyRecordAdded = false;
+
+  Future<ImageSource?> _showOcrSourcePicker() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.borderPrimary,
+                    borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            const Text('Scan Card',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 4),
+            const Text('Choose an image source to extract immunization records',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const CircleAvatar(
+                  backgroundColor: Color(0x1AFF68A5),
+                  child: Icon(Icons.camera_alt_outlined,
+                      color: AppColors.brandPrimary)),
+              title: const Text('Camera'),
+              subtitle: const Text('Take a photo of the card'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                  backgroundColor: Color(0x1AFF68A5),
+                  child: Icon(Icons.photo_library_outlined,
+                      color: AppColors.brandPrimary)),
+              title: const Text('Gallery'),
+              subtitle: const Text('Choose an existing photo'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startOcrFlow() async {
+    final source = await _showOcrSourcePicker();
+    if (source == null || !mounted) return;
+
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: source,
+        imageQuality: 88,
+      );
+
+      if (image != null) {
+        _showScanProcessDialog(image);
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showScanProcessDialog(XFile imageFile) async {
+    String dialogState = 'loading';
+    String? scanError;
+    StateSetter? setS;
+
+    void startScan() {
+      _groqService.extractImmunizationCardData(imageFile).then((extractionResult) {
+        final relevanceCheck = extractionResult['relevance_check']?.toString().toUpperCase() ?? 'RELATED';
+        if (relevanceCheck == 'UNRELATED') {
+          final reason = extractionResult['relevance_reason']?.toString() ?? 'The uploaded image does not appear to be an immunization record.';
+          setS?.call(() {
+            scanError = reason;
+            dialogState = 'error';
+          });
+          return;
+        }
+
+        final administeredList = extractionResult['administered_vaccines'] as List<dynamic>? ?? [];
+        if (administeredList.isEmpty) {
+          setS?.call(() {
+            scanError = 'We could not detect any administered vaccine records with valid dates in the uploaded photo. Please verify the photo is clear and contains handwritten dates.';
+            dialogState = 'error';
+          });
+          return;
+        }
+
+        final extractedData = List<Map<String, dynamic>>.from(
+          administeredList.map((item) => Map<String, dynamic>.from(item)),
+        );
+
+        if (mounted) {
+          // Success! Pop the dialog and return the extracted data
+          Navigator.pop(context, extractedData);
+        }
+      }).catchError((dynamic e) {
+        setS?.call(() {
+          scanError = e.toString().replaceFirst('Exception: ', '');
+          dialogState = 'error';
+        });
+      });
+    }
+
+    startScan();
+
+    final extractedData = await showDialog<List<Map<String, dynamic>>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateCallback) {
+          setS = setStateCallback;
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Dialog Header
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.brandPrimary, Color(0xFFE91E8C)],
+                    ),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        dialogState == 'loading'
+                            ? Icons.cloud_upload_outlined
+                            : Icons.error_outline_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              dialogState == 'loading' ? 'Scanning Document...' : 'Scan Failed',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Text(
+                              dialogState == 'loading'
+                                  ? 'Uploading and analysing with Groq...'
+                                  : 'An error occurred during scanning',
+                              style: const TextStyle(color: Colors.white70, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (dialogState != 'loading')
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx, null),
+                          icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: dialogState == 'loading'
+                        ? _scanLoadingBody(imageFile)
+                        : _scanErrorBody(scanError ?? 'Unknown error'),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: AppColors.borderPrimary),
+                    ),
+                  ),
+                  child: dialogState == 'loading'
+                      ? const SizedBox.shrink()
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.pop(ctx, null),
+                                child: const Text('Dismiss'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  setStateCallback(() {
+                                    dialogState = 'loading';
+                                    scanError = null;
+                                  });
+                                  startScan();
+                                },
+                                icon: const Icon(Icons.refresh_rounded, size: 16),
+                                label: const Text('Retry'),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    if (extractedData != null && mounted) {
+      // Navigate to the review page
+      final bool? recorded = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ImmunizationOcrReviewPage(
+            childId: widget.childId,
+            extractedVaccines: extractedData,
+            allVaccines: _vaccines,
+            takenVaccineIds: _takenVaccineIds,
+            childBirthdate: _childBirthdate,
+          ),
+        ),
+      );
+
+      if (recorded == true) {
+        setState(() {
+          _anyRecordAdded = true;
+        });
+        _loadData();
+      }
+    }
+  }
+
+  Widget _scanLoadingBody(XFile imageFile) => Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: FutureBuilder<Uint8List>(
+              future: imageFile.readAsBytes(),
+              builder: (ctx, snap) {
+                if (snap.hasData) {
+                  return Image.memory(
+                    snap.data!,
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  );
+                }
+                return Container(
+                  height: 180,
+                  color: AppColors.bgSecondary,
+                  child: const Center(
+                    child: CircularProgressIndicator(color: AppColors.brandPrimary),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
+          const CircularProgressIndicator(color: AppColors.brandPrimary, strokeWidth: 3),
+          const SizedBox(height: 16),
+          const Text(
+            'Analysing with Groq AI...',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Extracting immunization records from the card image',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 20),
+          _scanStep(number: 1, label: 'Image uploaded', done: true),
+          _scanStep(number: 2, label: 'Groq reading document...', loading: true),
+          _scanStep(number: 3, label: 'Mapping vaccine matches'),
+        ],
+      );
+
+  Widget _scanStep({
+    required int number,
+    required String label,
+    bool done = false,
+    bool loading = false,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: done
+                  ? const Icon(Icons.check_circle_rounded, color: Color(0xFF4CAF50), size: 20)
+                  : loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.brandPrimary,
+                          ),
+                        )
+                      : CircleAvatar(
+                          radius: 10,
+                          backgroundColor: AppColors.borderPrimary,
+                          child: Text(
+                            '$number',
+                            style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                          ),
+                        ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: (done || loading) ? AppColors.textPrimary : AppColors.textSecondary,
+                fontWeight: loading ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _scanErrorBody(String message) => Column(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.error,
+            size: 48,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Scan Failed',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.bgSecondary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tips for a better scan:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _scanTip('Ensure the immunization card is well lit'),
+                _scanTip('Keep the camera steady and in focus'),
+                _scanTip('Ensure the handwritten dates are clearly readable'),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  Widget _scanTip(String tip) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(
+                tip,
+                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      );
 
   @override
   void initState() {
@@ -160,22 +583,7 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
   /// - Age-appropriate (child age >= recommended_age_months)
   /// - Prerequisite doses met
   List<Map<String, dynamic>> _getAvailableVaccines() {
-    final childAgeMonths = _getChildAgeMonths();
-    return _vaccines.where((v) {
-      final vaccineId = v['vaccine_id'] as int;
-      final recommendedAge = (v['recommended_age_months'] as num?)?.toDouble() ?? 0;
-
-      // Must not already be taken
-      if (_takenVaccineIds.contains(vaccineId)) return false;
-
-      // Must be age-appropriate
-      if (childAgeMonths < recommendedAge) return false;
-
-      // Must have prerequisite dose taken
-      if (!_isPrerequisiteMet(v)) return false;
-
-      return true;
-    }).toList();
+    return _vaccines;
   }
 
   /// Determines the status of a vaccine for the roadmap display.
@@ -254,20 +662,29 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
 
     final availableVaccines = _getAvailableVaccines();
 
-    if (availableVaccines.isEmpty) {
-      showDialog(
-        context: context,
-        builder: (_) => DialogBox(
-          type: DialogType.info,
-          title: 'No Vaccines Available',
-          content: 'All age-appropriate vaccines have already been administered, '
-              'or the child has not yet reached the recommended age for remaining vaccines.',
-          buttonText: 'OK',
-          onPressed: () => Navigator.pop(context),
-        ),
-      );
-      return;
-    }
+    final childAgeMonths = _getChildAgeMonths();
+
+    // 1. Already Taken
+    final alreadyTakenVaccines = availableVaccines.where((v) {
+      final vaccineId = v['vaccine_id'] as int;
+      return _takenVaccineIds.contains(vaccineId);
+    }).toList();
+
+    // 2. Recommended (Not taken, age-appropriate, prerequisite met)
+    final recommendedVaccines = availableVaccines.where((v) {
+      final vaccineId = v['vaccine_id'] as int;
+      if (_takenVaccineIds.contains(vaccineId)) return false;
+
+      final recommendedAge = (v['recommended_age_months'] as num?)?.toDouble() ?? 0;
+      return childAgeMonths >= recommendedAge && _isPrerequisiteMet(v);
+    }).toList();
+
+    // 3. Outside Recommended Range (Not taken, but too early or prerequisite pending)
+    final outsideRangeVaccines = availableVaccines.where((v) {
+      final vaccineId = v['vaccine_id'] as int;
+      if (_takenVaccineIds.contains(vaccineId)) return false;
+      return !recommendedVaccines.contains(v);
+    }).toList();
 
     showModalBottomSheet(
       context: context,
@@ -294,7 +711,7 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
-                  'Showing ${availableVaccines.length} age-appropriate, untaken vaccines',
+                  'Showing all ${availableVaccines.length} vaccines',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
@@ -304,48 +721,94 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
               const SizedBox(height: 8),
               const Divider(),
               Expanded(
-                child: ListView.builder(
-                  itemCount: availableVaccines.length,
-                  itemBuilder: (context, index) {
-                    final vaccine = availableVaccines[index];
-                    final vaccineName = vaccine['vaccine_name']?.toString() ?? '';
-                    final doseNumber = vaccine['dose_number']?.toString() ?? '';
-                    final notes = vaccine['notes']?.toString() ?? '';
-                    final recommendedAge = (vaccine['recommended_age_months'] as num?)?.toDouble() ?? 0;
-                    final ageText = _formatRecommendedAge(recommendedAge);
-                    // Build display name, avoiding duplicate info when notes
-                    // already matches the age label (e.g. "At birth" / "At birth").
-                    final parts = <String>['$vaccineName (Dose $doseNumber)'];
-                    if (ageText.isNotEmpty) {
-                      parts.add(ageText);
-                    }
-                    if (notes.isNotEmpty &&
-                        notes.toLowerCase() != ageText.toLowerCase()) {
-                      parts.add(notes);
-                    }
-                    final displayName = parts.join(' - ');
-
-                    return ListTile(
-                      leading: const Icon(Icons.vaccines, color: AppColors.brandPrimary),
-                      title: Text(
-                        displayName,
-                        style: const TextStyle(fontSize: 14),
+                child: ListView(
+                  children: [
+                    if (recommendedVaccines.isNotEmpty) ...[
+                      _buildDropdownSectionHeader(
+                        'Recommended (Age-Appropriate & Ready)',
+                        AppColors.success,
                       ),
-                      onTap: () {
-                        setState(() {
-                          _selectedVaccineId = vaccine['vaccine_id'] as int;
-                          _vaccineController.text = displayName;
-                        });
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
+                      ...recommendedVaccines.map((v) => _buildVaccineTile(v)),
+                    ],
+                    if (outsideRangeVaccines.isNotEmpty) ...[
+                      _buildDropdownSectionHeader(
+                        'Outside Recommended Range (Too Early / Pending)',
+                        const Color(0xFFB78103),
+                      ),
+                      ...outsideRangeVaccines.map((v) => _buildVaccineTile(v)),
+                    ],
+                    if (alreadyTakenVaccines.isNotEmpty) ...[
+                      _buildDropdownSectionHeader(
+                        'Already Administered (Taken)',
+                        AppColors.textSecondary,
+                      ),
+                      ...alreadyTakenVaccines.map((v) => _buildVaccineTile(v, isAlreadyTaken: true)),
+                    ],
+                  ],
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDropdownSectionHeader(String title, Color color) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: color.withValues(alpha: 0.08),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: color,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVaccineTile(Map<String, dynamic> vaccine, {bool isAlreadyTaken = false}) {
+    final vaccineName = vaccine['vaccine_name']?.toString() ?? '';
+    final doseNumber = vaccine['dose_number']?.toString() ?? '';
+    final notes = vaccine['notes']?.toString() ?? '';
+    final recommendedAge = (vaccine['recommended_age_months'] as num?)?.toDouble() ?? 0;
+    final ageText = _formatRecommendedAge(recommendedAge);
+    
+    final parts = <String>['$vaccineName (Dose $doseNumber)'];
+    if (ageText.isNotEmpty) {
+      parts.add(ageText);
+    }
+    if (notes.isNotEmpty && notes.toLowerCase() != ageText.toLowerCase()) {
+      parts.add(notes);
+    }
+    if (isAlreadyTaken) {
+      parts.add('(Already Recorded)');
+    }
+    final displayName = parts.join(' - ');
+
+    return ListTile(
+      leading: Icon(
+        isAlreadyTaken ? Icons.check_circle_rounded : Icons.vaccines,
+        color: isAlreadyTaken ? AppColors.success : AppColors.brandPrimary,
+      ),
+      title: Text(
+        displayName,
+        style: TextStyle(
+          fontSize: 14,
+          color: isAlreadyTaken ? AppColors.textSecondary : AppColors.textPrimary,
+        ),
+      ),
+      onTap: () {
+        setState(() {
+          _selectedVaccineId = vaccine['vaccine_id'] as int;
+          _vaccineController.text = displayName;
+        });
+        Navigator.pop(context);
+      },
     );
   }
 
@@ -369,30 +832,6 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
     }
 
     try {
-      // Check if vaccine already given to this child
-      final existing = await Supabase.instance.client
-          .from('immunization_record')
-          .select('immunization_record_id')
-          .eq('child_id', widget.childId)
-          .eq('vaccine_id', _selectedVaccineId!)
-          .maybeSingle();
-
-      if (existing != null) {
-        throw Exception('This vaccine has already been administered to this child.');
-      }
-
-      // Enforce prerequisite check at submission time as well
-      final selectedVaccine = _vaccines.firstWhere(
-        (v) => v['vaccine_id'] == _selectedVaccineId,
-        orElse: () => <String, dynamic>{},
-      );
-      if (selectedVaccine.isNotEmpty && !_isPrerequisiteMet(selectedVaccine)) {
-        throw Exception(
-          'The previous dose has not been administered yet. '
-          'Please administer doses in sequential order.',
-        );
-      }
-
       await Supabase.instance.client
           .from('immunization_record')
           .insert({
@@ -402,6 +841,10 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
             'remarks': _remarksController.text.trim().isEmpty ? null : _remarksController.text.trim(),
             'created_at': DateTime.now().toIso8601String(),
           });
+
+      setState(() {
+        _anyRecordAdded = true;
+      });
 
       return true;
     } catch (e) {
@@ -423,14 +866,43 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
   }
 
   void _submit() {
+    final selectedVaccine = _vaccines.firstWhere(
+      (v) => v['vaccine_id'] == _selectedVaccineId,
+      orElse: () => <String, dynamic>{},
+    );
+    final recommendedAge = (selectedVaccine['recommended_age_months'] as num?)?.toDouble() ?? 0;
+    final childAgeMonths = _getChildAgeMonths();
+    final isTooEarly = childAgeMonths < recommendedAge;
+    final isPrereqPending = !_isPrerequisiteMet(selectedVaccine);
+    final isAlreadyTaken = _takenVaccineIds.contains(_selectedVaccineId);
+    final hasWarning = isTooEarly || isPrereqPending || isAlreadyTaken;
+
+    String subtitle = 'Please review the details carefully. Immunization records cannot be edited once added.';
+    List<String> warnings = [];
+    if (isTooEarly) {
+      warnings.add('this vaccine is scheduled before the recommended age');
+    }
+    if (isPrereqPending) {
+      warnings.add('a previous dose for this vaccine is pending');
+    }
+    if (isAlreadyTaken) {
+      warnings.add('this vaccine has already been administered to this child');
+    }
+
+    if (warnings.isNotEmpty) {
+      final warningStr = warnings.map((w) => w[0].toUpperCase() + w.substring(1)).join(', ');
+      subtitle = 'Warning: $warningStr. Are you sure you want to save?';
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => ConfirmationDialogBox(
         title: 'Confirm Immunization',
-        subtitle: 'Please review the details carefully. Immunization records cannot be edited once added.',
+        subtitle: subtitle,
         confirmText: 'Confirm',
         cancelText: 'Cancel',
+        accentColor: hasWarning ? AppColors.warning : AppColors.brandPrimary,
         onCancel: () => Navigator.pop(context),
         onConfirm: () async {
           Navigator.pop(context);
@@ -440,6 +912,54 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
           final success = await _submitImmunization();
 
           setState(() => _isLoading = false);
+
+          if (success) {
+            try {
+              final selectedVaccine = _vaccines.firstWhere(
+                (v) => v['vaccine_id'] == _selectedVaccineId,
+                orElse: () => <String, dynamic>{},
+              );
+              if (selectedVaccine.isNotEmpty) {
+                final vName = selectedVaccine['vaccine_name']?.toString() ?? '';
+                final vDose = selectedVaccine['dose_number']?.toString() ?? '';
+                final vFull = '$vName (Dose $vDose)';
+                SmsService.sendAutomatedVaccineSms(
+                  childId: widget.childId,
+                  recordedVaccines: [vFull],
+                );
+
+                // ── Push notification for the mother ──────────────────
+                try {
+                  final childRow = await Supabase.instance.client
+                      .from('children')
+                      .select('mother_id')
+                      .eq('child_id', widget.childId)
+                      .maybeSingle();
+                  final motherId = childRow?['mother_id'] as int?;
+                  if (motherId != null) {
+                    final motherRow = await Supabase.instance.client
+                        .from('mothers')
+                        .select('account_id')
+                        .eq('mother_id', motherId)
+                        .maybeSingle();
+                    final motherAccountId = motherRow?['account_id'] as int?;
+                    if (motherAccountId != null) {
+                      await NotificationService.createNotification(
+                        accountId: motherAccountId,
+                        title: 'Vaccine Recorded',
+                        message: '$vFull has been recorded for your child.',
+                        type: 'vaccine_reminder',
+                      );
+                    }
+                  }
+                } catch (pushError) {
+                  debugPrint('Error sending vaccine push notification: $pushError');
+                }
+              }
+            } catch (smsError) {
+              debugPrint('Error triggering automated vaccine SMS: $smsError');
+            }
+          }
 
           if (success && mounted) {
             showDialog(
@@ -672,7 +1192,7 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
 
   Future<void> _confirmDiscardAndPop() async {
     if (!_hasEnteredData) {
-      Navigator.pop(context);
+      Navigator.pop(context, _anyRecordAdded);
       return;
     }
     final discard = await showDialog<bool>(
@@ -695,7 +1215,7 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
       ),
     );
     if (discard == true && mounted) {
-      Navigator.pop(context);
+      Navigator.pop(context, _anyRecordAdded);
     }
   }
 
@@ -704,13 +1224,27 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
     final availableVaccines = _getAvailableVaccines();
     final hasAvailableVaccines = availableVaccines.isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimary,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        _confirmDiscardAndPop();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.bgPrimary,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: SecondaryHeader(
           title: 'Add Immunization',
           onBack: _confirmDiscardAndPop,
+          trailing: TextButton.icon(
+            onPressed: _startOcrFlow,
+            icon: const Icon(Icons.document_scanner_outlined, size: 18),
+            label: const Text('Scan'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.brandPrimary,
+            ),
+          ),
         ),
       ),
       body: SafeArea(
@@ -728,7 +1262,7 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
               ),
               const SizedBox(height: 16),
 
-              // Show error if any
+              const SizedBox(height: 16),
               if (_errorMessage != null)
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -855,6 +1389,6 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
           ),
         ),
       ),
-    );
+    ) );
   }
 }
