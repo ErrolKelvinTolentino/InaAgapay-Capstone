@@ -4025,10 +4025,6 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
       return const SizedBox.shrink();
     }
 
-    final displayStatusText = _monitoringClassification == MonitoringClassification.withinExpectedRange
-        ? 'Within Expected Monitoring Range'
-        : 'Requires Closer Monitoring';
-
     return Container(
       width: double.infinity,
       clipBehavior: Clip.hardEdge,
@@ -4200,105 +4196,106 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                           if (_combinedResponse != null)
                             _buildClinicalReferenceTile(),
                           const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                          // Header + Edit option + structured insights
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Clinical Findings (Original)',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
-                                ),
+                    // Header + Edit option + structured insights (placed outside the ExpansionTile)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Clinical Findings',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: AppColors.borderPrimary.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              Row(
+                              child: Row(
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(3),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.borderPrimary.withValues(alpha: 0.5),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              _selectedLanguage = 'filipino';
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              'Tagalog',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
-                                                color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
-                                              ),
-                                            ),
-                                          ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedLanguage = 'filipino';
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _selectedLanguage == 'filipino' ? AppColors.brandPrimary : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        'Tagalog',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: _selectedLanguage == 'filipino' ? FontWeight.w600 : FontWeight.w500,
+                                          color: _selectedLanguage == 'filipino' ? Colors.white : AppColors.textSecondary,
                                         ),
-                                        const SizedBox(width: 2),
-                                        GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              _selectedLanguage = 'english';
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              'English',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
-                                                color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  TextButton.icon(
-                                    onPressed: _enterEditMode,
-                                    icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.brandPrimary),
-                                    label: const Text(
-                                      'Edit',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.brandPrimary,
                                       ),
                                     ),
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedLanguage = 'english';
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _selectedLanguage == 'english' ? AppColors.brandPrimary : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        'English',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: _selectedLanguage == 'english' ? FontWeight.w600 : FontWeight.w500,
+                                          color: _selectedLanguage == 'english' ? Colors.white : AppColors.textSecondary,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          _buildStructuredInsights(_healthSummaryController.text),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              onPressed: _enterEditMode,
+                              icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.brandPrimary),
+                              label: const Text(
+                                'Edit',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.brandPrimary,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 10),
+                    _buildStructuredInsights(_healthSummaryController.text),
+                    const SizedBox(height: 16),
                   ] else ...[
                     // Premium Modular Sectioned Editor
                     Column(

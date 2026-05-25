@@ -1,7 +1,6 @@
 // lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/mother_profile_service.dart';
@@ -114,6 +113,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
     _profileFuture = MotherProfileService.fetchMotherProfile(widget.motherId);
     _loadProfilePicture();
     _loadLatestGrowthData();
@@ -768,150 +772,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         ],
       ),
     );
-  }
-
-  /// Shows a dialog for mothers to log their current weight.
-  Future<void> _showLogWeightDialog() async {
-    final weightController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    final result = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.monitor_weight_outlined, color: AppColors.brandPrimary),
-            const SizedBox(width: 8),
-            const Text('Log Weight', style: TextStyle(fontSize: 18)),
-          ],
-        ),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Enter your current weight in kilograms.',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: weightController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,1}')),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'Weight (kg)',
-                  hintText: 'e.g. 58.5',
-                  suffixText: 'kg',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Please enter your weight';
-                  final parsed = double.tryParse(v);
-                  if (parsed == null || parsed < 20 || parsed > 200) {
-                    return 'Enter a valid weight (20-200 kg)';
-                  }
-                  return null;
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandPrimary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(ctx, double.parse(weightController.text));
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == null) return;
-
-    try {
-      // Get ongoing pregnancy
-      final pregnancyRow = await SupabaseService.client
-          .from('pregnancies')
-          .select('pregnancy_id, last_menstrual_period')
-          .eq('mother_id', widget.motherId)
-          .eq('status', 'ongoing')
-          .maybeSingle();
-
-      if (pregnancyRow == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No active pregnancy found.')),
-          );
-        }
-        return;
-      }
-
-      final pregnancyId = pregnancyRow['pregnancy_id'] as int;
-
-      // Compute AOG from LMP
-      double? aogWeeks;
-      if (pregnancyRow['last_menstrual_period'] != null) {
-        final lmp = DateTime.tryParse(pregnancyRow['last_menstrual_period']);
-        if (lmp != null) {
-          aogWeeks = DateTime.now().difference(lmp).inDays / 7.0;
-        }
-      }
-
-      final heightCm = await _getMotherHeight() ?? 150.0;
-
-      // Insert maternal vitals record
-      await SupabaseService.client.from('maternal_vitals').insert({
-        'pregnancy_id': pregnancyId,
-        'mother_id': widget.motherId,
-        'weight_kg': result,
-        'height_cm': heightCm,
-        'age_of_gestation': aogWeeks != null ? double.parse(aogWeeks.toStringAsFixed(1)) : null,
-        'recorded_at': DateTime.now().toIso8601String(),
-        'notes': 'Self-reported weight log by mother',
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Weight logged: ${result.toStringAsFixed(1)} kg'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-        // Refresh data
-        await _loadWeightGainData();
-        await _loadLatestGrowthData();
-      }
-    } catch (e) {
-      debugPrint('Error logging weight: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to log weight: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
   }
 
   Future<double?> _getMotherHeight() async {
@@ -3587,12 +3447,6 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             ),
             const SizedBox(height: 16),
 
-            // ── Task 5.1: Prominent pregnancy stage card ──────────────
-            if (currentPregnancy != null) ...[
-              _buildPregnancyStageCard(currentPregnancy),
-              const SizedBox(height: 16),
-            ],
-
             // Quick stats
             ProfileQuickStats(
               age: profile['birthdate'] != null
@@ -3607,66 +3461,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             const SizedBox(height: 16),
 
             // Task 5.2: Focus on what mothers need — next checkup, weight gain status
-            // (ProfileRiskCard and ProfileGrowthCard remain as they are useful)
+            // (ProfileRiskCard remains as it is useful)
             if (currentPregnancy != null)
               ProfileRiskCard(profile: profile, pregnancy: currentPregnancy),
             if (currentPregnancy != null) const SizedBox(height: 16),
-
-            ProfileGrowthCard(
-              isLoading: _loadingGrowth,
-              growthData: _latestGrowthData,
-            ),
-            const SizedBox(height: 16),
-
-            // ── Weight Gain Dashboard ──────────────────────────────────
-            if (currentPregnancy != null) ...[
-              if (_loadingWeightGain)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                )
-              else if (_weightGainResult != null)
-                _buildWeightGainDashboard(_weightGainResult!),
-              const SizedBox(height: 12),
-
-              // Weight trend chart
-              if (!_loadingWeightGain && _weightCheckups.length >= 2)
-                _buildWeightTrendChart(_weightCheckups),
-              if (!_loadingWeightGain && _weightCheckups.length >= 2)
-                const SizedBox(height: 12),
-
-              // Log Weight button
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _showLogWeightDialog,
-                  icon: const Icon(Icons.add_circle_outline, size: 18),
-                  label: const Text('Log Weight'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.brandPrimary,
-                    side: BorderSide(
-                        color: AppColors.brandPrimary.withValues(alpha: 0.4)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
 
             _buildMedicalInfoSection(profile),
             const SizedBox(height: 12),
@@ -4007,6 +3805,263 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   // CURRENT PREGNANCY TAB
   // ══════════════════════════════════════════════════════════════════════════
 
+  Widget _buildPregnancyDetailsCard({
+    required Map<String, dynamic> pregnancy,
+    required int? gestWeeks,
+    required int? daysToEdd,
+    required int checkupCount,
+  }) {
+    String trimesterLabel = '1st Trimester';
+    String trimesterDetails = 'Weeks 1–12';
+    if (gestWeeks != null) {
+      if (gestWeeks <= 12) {
+        trimesterLabel = '1st Trimester';
+        trimesterDetails = 'Weeks 1–12';
+      } else if (gestWeeks <= 27) {
+        trimesterLabel = '2nd Trimester';
+        trimesterDetails = 'Weeks 13–27';
+      } else {
+        trimesterLabel = '3rd Trimester';
+        trimesterDetails = 'Week 28+';
+      }
+    }
+
+    final rawFc = pregnancy['fetal_count']?.toString() ?? '';
+    String fetalLabel = 'Singleton';
+    if (rawFc.toLowerCase() == 'unknown') {
+      fetalLabel = 'Unknown';
+    } else {
+      final fc = int.tryParse(rawFc) ?? 1;
+      if (fc == 1) {
+        fetalLabel = 'Singleton';
+      } else if (fc == 2) {
+        fetalLabel = 'Twins';
+      } else {
+        fetalLabel = '$fc (Multiple)';
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary.withValues(alpha: 0.04),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: AppColors.brandPrimary, size: 20),
+                SizedBox(width: 10),
+                Text(
+                  'Pregnancy Information',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.brandPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDetailsItem(
+                        icon: Icons.hourglass_top_rounded,
+                        color: AppColors.brandPrimary,
+                        label: 'Trimester',
+                        value: trimesterLabel,
+                        subtext: trimesterDetails,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildDetailsItem(
+                        icon: Icons.child_care_rounded,
+                        color: Colors.purple,
+                        label: 'Fetus Count',
+                        value: fetalLabel,
+                        subtext: fetalLabel == 'Singleton' ? 'Single baby' : 'Multiple babies',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDetailsItem(
+                        icon: Icons.fact_check_outlined,
+                        color: Colors.blue,
+                        label: 'Checkups',
+                        value: '$checkupCount Completed',
+                        subtext: 'Prenatal sessions',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildDetailsItem(
+                        icon: Icons.pregnant_woman_rounded,
+                        color: Colors.teal,
+                        label: 'Status',
+                        value: pregnancy['status']?.toString().toUpperCase() ?? 'ONGOING',
+                        subtext: 'Active monitoring',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Divider(height: 1, color: Colors.grey.shade200),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Last Menstrual Period (LMP)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.event_outlined, size: 16, color: AppColors.textSecondary),
+                              const SizedBox(width: 6),
+                              Text(
+                                _formatDate(pregnancy['last_menstrual_period']),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(width: 1, height: 35, color: Colors.grey.shade200),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Expected Delivery (EDD)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.baby_changing_station_outlined, size: 16, color: AppColors.brandPrimary),
+                              const SizedBox(width: 6),
+                              Text(
+                                _formatDate(pregnancy['expected_date_of_delivery']),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.brandPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailsItem({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+    required String subtext,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.1), width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  subtext,
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCurrentPregnancyTab(
       Map<String, dynamic> profile, Map<String, dynamic>? pregnancy) {
     if (pregnancy == null) {
@@ -4070,90 +4125,55 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ProfileRiskCard(profile: profile, pregnancy: pregnancy),
+            _buildPregnancyStageCard(pregnancy),
             const SizedBox(height: 16),
 
-            // Quick stats
-            PregnancyStatsCard(
+            _buildPregnancyDetailsCard(
+              pregnancy: pregnancy,
               gestWeeks: gestWeeks,
               daysToEdd: daysToEdd,
               checkupCount: sortedCheckups.length,
-              riskLevel: pregnancy['pregnancy_risk_level']?.toString(),
             ),
             const SizedBox(height: 16),
 
-            // Quick actions (hidden in read-only / mother self-view mode)
-            if (!widget.readOnly) ...[
-              PregnancyActionsCard(
-                onAddCheckup: () async {
-                  final pregnancyId = pregnancy['pregnancy_id'];
-                  if (pregnancyId == null) return;
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AddPrenatalCheckupScreen(
-                        motherId: widget.motherId,
-                        pregnancyId: pregnancyId as int,
-                        lmp: DateTime.tryParse(
-                            pregnancy['last_menstrual_period'] ?? ''),
-                        motherWeight: _toDouble(profile['weight']),
-                      ),
-                    ),
-                  );
-                  _refresh();
-                },
-                onUltrasound: () => _goToUltrasoundAnalyzer(pregnancy),
-                onLabTest: () => _goToLabTestAnalyzer(pregnancy),
-                onConclude: () => _showConcludePregnancyDialog(pregnancy),
+            ProfileRiskCard(profile: profile, pregnancy: pregnancy),
+            const SizedBox(height: 16),
+
+            ProfileGrowthCard(
+              isLoading: _loadingGrowth,
+              growthData: _latestGrowthData,
+            ),
+            const SizedBox(height: 16),
+
+            // ── Weight Gain Dashboard ──────────────────────────────────
+            if (_loadingWeightGain) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+            ] else if (_weightGainResult != null) ...[
+              _buildWeightGainDashboard(_weightGainResult!),
+              const SizedBox(height: 12),
             ],
 
-            _buildExpandableSection(
-              'Pregnancy Details',
-              Icons.info_outline,
-              () {
-                // Compute current trimester
-                String trimesterLabel = '-';
-                if (gestWeeks != null) {
-                  if (gestWeeks <= 12) {
-                    trimesterLabel = '1st Trimester (Weeks 1–12)';
-                  } else if (gestWeeks <= 27) {
-                    trimesterLabel = '2nd Trimester (Weeks 13–27)';
-                  } else {
-                    trimesterLabel = '3rd Trimester (Week 28+)';
-                  }
-                }
-
-                // Fetal count display
-                final rawFc = pregnancy['fetal_count']?.toString() ?? '';
-                String fetalLabel;
-                if (rawFc.toLowerCase() == 'unknown') {
-                  fetalLabel = 'Unknown';
-                } else {
-                  final fc = int.tryParse(rawFc) ?? 1;
-                  if (fc == 1) {
-                    fetalLabel = 'Singleton';
-                  } else if (fc == 2) {
-                    fetalLabel = 'Twins';
-                  } else {
-                    fetalLabel = '$fc (Multiple)';
-                  }
-                }
-
-                return [
-                  _buildInfoRow(
-                      'LMP', _formatDate(pregnancy['last_menstrual_period'])),
-                  _buildInfoRow('EDD',
-                      _formatDate(pregnancy['expected_date_of_delivery'])),
-                  _buildInfoRow('Current Trimester', trimesterLabel),
-                  _buildInfoRow('Fetal Count', fetalLabel),
-                  _buildInfoRow('Status',
-                      pregnancy['status']?.toString().toUpperCase() ?? '-'),
-                ];
-              }(),
-            ),
-            const SizedBox(height: 12),
+            // Weight trend chart
+            if (!_loadingWeightGain && _weightCheckups.length >= 2) ...[
+              _buildWeightTrendChart(_weightCheckups),
+              const SizedBox(height: 12),
+            ],
 
             _buildExpandableSection(
               'Prenatal Checkups (${sortedCheckups.length})',
@@ -4249,6 +4269,47 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ];
               }(),
             ),
+            if (!widget.readOnly) ...[
+              const SizedBox(height: 24),
+              Card(
+                elevation: 0,
+                color: AppColors.error.withValues(alpha: 0.05),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: AppColors.error.withValues(alpha: 0.15),
+                    width: 1,
+                  ),
+                ),
+                child: InkWell(
+                  onTap: () => _showConcludePregnancyDialog(pregnancy),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.flag_outlined,
+                          color: AppColors.error,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Conclude Current Pregnancy',
+                          style: TextStyle(
+                            color: AppColors.error,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
           ],
         ),
       ),
@@ -4756,15 +4817,209 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   // BUILD
   // ══════════════════════════════════════════════════════════════════════════
 
+  Widget? _buildFAB(BuildContext context, Map<String, dynamic>? pregnancy, Map<String, dynamic> profile) {
+    if (widget.readOnly || pregnancy == null || _tabController.index != 1) {
+      return null;
+    }
+    return FloatingActionButton(
+      onPressed: () => _showQuickActionsMenu(context, pregnancy, profile),
+      backgroundColor: AppColors.brandPrimaryOf(context),
+      shape: const CircleBorder(),
+      child: const Icon(Icons.add, color: Colors.white, size: 28),
+    );
+  }
+
+  void _showQuickActionsMenu(BuildContext context, Map<String, dynamic> pregnancy, Map<String, dynamic> profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 12, 0, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'New Assessment & Record',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimaryOf(ctx),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Select the type of record to add to this pregnancy',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondaryOf(ctx),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildQuickActionCard(
+                  context: ctx,
+                  icon: Icons.calendar_today_outlined,
+                  title: 'Prenatal Check Up',
+                  subtitle: 'Record a regular checkup session',
+                  baseColor: AppColors.brandPrimaryOf(ctx),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final pregnancyId = pregnancy['pregnancy_id'];
+                    if (pregnancyId == null) return;
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AddPrenatalCheckupScreen(
+                          motherId: widget.motherId,
+                          pregnancyId: pregnancyId as int,
+                          lmp: DateTime.tryParse(
+                              pregnancy['last_menstrual_period'] ?? ''),
+                          motherWeight: _toDouble(profile['weight']),
+                        ),
+                      ),
+                    );
+                    _refresh();
+                  },
+                ),
+                _buildQuickActionCard(
+                  context: ctx,
+                  icon: Icons.science_outlined,
+                  title: 'Lab Test',
+                  subtitle: 'Scan or analyze CBC lab results',
+                  baseColor: const Color(0xFFFFB300), // warm amber
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _goToLabTestAnalyzer(pregnancy);
+                  },
+                ),
+                _buildQuickActionCard(
+                  context: ctx,
+                  icon: Icons.monitor_heart_outlined,
+                  title: 'Ultrasound',
+                  subtitle: 'Scan or analyze fetal ultrasound findings',
+                  baseColor: AppColors.brandAccent,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _goToUltrasoundAnalyzer(pregnancy);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickActionCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color baseColor,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: baseColor.withValues(alpha: 0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: baseColor, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400, size: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgPrimaryOf(context),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _profileFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Column(
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _profileFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: AppColors.bgPrimaryOf(context),
+            body: Column(
               children: [
                 _buildHeader(),
                 const Expanded(
@@ -4773,11 +5028,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                             valueColor: AlwaysStoppedAnimation<Color>(
                                 AppColors.brandPrimary)))),
               ],
-            );
-          }
+            ),
+          );
+        }
 
-          if (snapshot.hasError) {
-            return Column(
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: AppColors.bgPrimaryOf(context),
+            body: Column(
               children: [
                 _buildHeader(),
                 Expanded(
@@ -4804,33 +5062,38 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   ),
                 ),
               ],
-            );
-          }
+            ),
+          );
+        }
 
-          if (!snapshot.hasData) {
-            return Column(
+        if (!snapshot.hasData) {
+          return Scaffold(
+            backgroundColor: AppColors.bgPrimaryOf(context),
+            body: Column(
               children: [
                 _buildHeader(),
                 const Expanded(
                     child: Center(child: Text('No profile data found'))),
               ],
-            );
-          }
+            ),
+          );
+        }
 
-          final profile = snapshot.data!;
-          final currentPregnancy =
-              profile['current_pregnancy'] as Map<String, dynamic>?;
-          final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
-          final medicalConditions =
-              profile['medical_conditions'] as List? ?? [];
-          final allergies = profile['allergies'] as List? ?? [];
-          final emergencyContacts =
-              profile['emergency_contacts'] as List? ?? [];
-          final children = profile['children'] as List? ?? [];
+        final profile = snapshot.data!;
+        final currentPregnancy =
+            profile['current_pregnancy'] as Map<String, dynamic>?;
+        final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
+        final medicalConditions =
+            profile['medical_conditions'] as List? ?? [];
+        final allergies = profile['allergies'] as List? ?? [];
+        final emergencyContacts =
+            profile['emergency_contacts'] as List? ?? [];
+        final children = profile['children'] as List? ?? [];
 
-          // FIX #7: removed the dead DefaultTabController wrapper.
-          // _tabController is created in initState and passed directly.
-          return Column(
+        return Scaffold(
+          backgroundColor: AppColors.bgPrimaryOf(context),
+          floatingActionButton: _buildFAB(context, currentPregnancy, profile),
+          body: Column(
             children: [
               _buildHeader(),
               Expanded(
@@ -4891,9 +5154,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ),
               ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

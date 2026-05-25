@@ -78,6 +78,7 @@ class MotherProfileService {
               health_worker_name,
               health_worker_institution,
               health_worker_profession,
+              monitoring_classification,
               created_at
             ),
             lab_tests (
