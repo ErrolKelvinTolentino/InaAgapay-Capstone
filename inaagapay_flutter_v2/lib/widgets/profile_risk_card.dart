@@ -3,7 +3,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart';
 import '../theme/app_colors.dart';
 import '../services/risk_engine.dart';
 
@@ -413,9 +412,6 @@ class _ProfileRiskCardState extends State<ProfileRiskCard> {
     return clean;
   }
 
-  String _formatDateString(DateTime date) {
-    return DateFormat('MMM d, yyyy').format(date);
-  }
 
   void _showRiskDetailsModal(
     BuildContext context, {
@@ -505,26 +501,6 @@ class _ProfileRiskCardState extends State<ProfileRiskCard> {
                                       _buildDetailRow(finding, isHigh ? AppColors.error : AppColors.warning))
                                   .toList(),
                         ),
-                        const SizedBox(height: 12),
-                        _buildRiskSection(
-                          title: 'Considerable Factors',
-                          icon: Icons.event_note_rounded,
-                          iconColor: AppColors.warning,
-                          children: considerableFactors.isEmpty
-                              ? [
-                                  _buildDetailRow(
-                                    'No considerable factors recorded',
-                                    AppColors.textSecondary,
-                                  ),
-                                ]
-                              : considerableFactors
-                                  .map((factor) => _buildConsiderableFactorRow(
-                                        _formatDateString(factor.date),
-                                        factor.type,
-                                        factor.summary,
-                                      ))
-                                  .toList(),
-                        ),
                       ],
                     ),
             );
@@ -578,15 +554,17 @@ class _ProfileRiskCardState extends State<ProfileRiskCard> {
                     letterSpacing: 0.4,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  note,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textPrimary,
-                    height: 1.35,
+                if (isHigh) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    note,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textPrimary,
+                      height: 1.35,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -652,52 +630,6 @@ class _ProfileRiskCardState extends State<ProfileRiskCard> {
                 fontSize: 13,
                 color: Colors.grey.shade800,
                 height: 1.35,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConsiderableFactorRow(String date, String type, String summary) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 6),
-            width: 6,
-            height: 6,
-            decoration: const BoxDecoration(
-              color: AppColors.warning,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textPrimary,
-                  height: 1.4,
-                ),
-                children: [
-                  TextSpan(
-                    text: '$date - $type - ',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  TextSpan(
-                    text: summary,
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),

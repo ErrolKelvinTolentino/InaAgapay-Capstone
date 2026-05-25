@@ -23,6 +23,8 @@ class WeightGainResult {
   final double currentWeight;
   final double currentWeek;
   final double? expectedGain;
+  final double? expectedGainMin;
+  final double? expectedGainMax;
   final double? actualGain;
   final double? weeklyGain;
   final WeightGainStatus status;
@@ -38,6 +40,8 @@ class WeightGainResult {
     required this.currentWeight,
     required this.currentWeek,
     this.expectedGain,
+    this.expectedGainMin,
+    this.expectedGainMax,
     this.actualGain,
     this.weeklyGain,
     required this.status,
@@ -68,6 +72,19 @@ class WeightGainResult {
     }
   }
 
+  String get statusDisplayLabel {
+    switch (status) {
+      case WeightGainStatus.normal:
+        return 'Within expected monitoring range';
+      case WeightGainStatus.low:
+        return 'Slightly Below expected monitoring range';
+      case WeightGainStatus.high:
+        return 'Slightly Above expected monitoring range';
+      case WeightGainStatus.insufficient:
+        return 'Insufficient data';
+    }
+  }
+
   String get confidenceLabel {
     switch (confidence) {
       case WeightGainConfidence.high:
@@ -92,6 +109,8 @@ class WeightGainResult {
         'current_weight': currentWeight,
         'current_week': currentWeek,
         'expected_gain': expectedGain,
+        'expected_gain_min': expectedGainMin,
+        'expected_gain_max': expectedGainMax,
         'actual_gain': actualGain,
         'weekly_gain': weeklyGain,
         'status': statusLabel,
@@ -109,6 +128,8 @@ class WeightGainResult {
       currentWeight: _toDouble(json['current_weight']) ?? 0,
       currentWeek: _toDouble(json['current_week']) ?? 0,
       expectedGain: _toDouble(json['expected_gain']),
+      expectedGainMin: _toDouble(json['expected_gain_min']),
+      expectedGainMax: _toDouble(json['expected_gain_max']),
       actualGain: _toDouble(json['actual_gain']),
       weeklyGain: _toDouble(json['weekly_gain']),
       status: _parseStatus(json['status']),
