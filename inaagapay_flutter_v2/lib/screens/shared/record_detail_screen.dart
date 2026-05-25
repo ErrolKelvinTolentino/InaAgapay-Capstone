@@ -8,7 +8,7 @@ import '../../services/language_service.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 import '../../widgets/secondary_header.dart';
 import '../../services/lab_cbc_interpretation_engine.dart';
-import '../../services/ultrasound_interpretation_engine.dart' show MonitoringClassification, Trimester;
+import '../../services/ultrasound_interpretation_engine.dart' show MonitoringClassification, Trimester, UltrasoundInterpretationEngine;
 
 class RecordDetailScreen extends StatefulWidget {
   const RecordDetailScreen({
@@ -2312,6 +2312,19 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       classification = MonitoringClassification.requiresCloserMonitoring;
     } else if (classificationStr.contains('follow') || classificationStr.contains('recommend')) {
       classification = MonitoringClassification.followUpRecommended;
+    }
+
+    // Dynamic Fallback: Scan approved AI text for bracketed statuses if classification is default
+    if (classification == MonitoringClassification.withinExpectedRange) {
+      final statuses = <String>[];
+      final regExp = RegExp(r'\[(.*?)\]');
+      for (final match in regExp.allMatches(text)) {
+        statuses.add(match.group(1)!);
+      }
+      final computed = UltrasoundInterpretationEngine.classifyMonitoring(statuses);
+      if (computed != MonitoringClassification.withinExpectedRange) {
+        classification = computed;
+      }
     }
 
     // Helper to search keywords
