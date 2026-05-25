@@ -119,22 +119,25 @@ class SupabaseService {
   }
 
   // Check if contact (email or phone) exists
-  static Future<Map<String, dynamic>> findAccountByContact(String contact) async {
+  static Future<Map<String, dynamic>> findAccountByContact(
+      String contact) async {
     try {
       final isPhone = isValidPhilippineNumber(contact);
-      
+
       if (isPhone) {
         final formatted = SmsService.formatPhilippineNumber(contact);
         final result = await client
             .from('accounts')
-            .select('account_id, email_address, phone_number, account_type, is_verified, status')
+            .select(
+                'account_id, email_address, phone_number, account_type, is_verified, status')
             .eq('phone_number', formatted)
             .maybeSingle();
         return {'exists': result != null, 'data': result, 'type': 'phone'};
       } else {
         final result = await client
             .from('accounts')
-            .select('account_id, email_address, phone_number, account_type, is_verified, status')
+            .select(
+                'account_id, email_address, phone_number, account_type, is_verified, status')
             .eq('email_address', contact)
             .maybeSingle();
         return {'exists': result != null, 'data': result, 'type': 'email'};
@@ -157,10 +160,12 @@ class SupabaseService {
       if (channel == 'sms' && !isValidPhilippineNumber(contact)) {
         return {
           'success': false,
-          'message': 'Please enter a valid Philippine mobile number (e.g., 09123456789)',
+          'message':
+              'Please enter a valid Philippine mobile number (e.g., 09123456789)',
         };
       }
-      if (channel == 'email' && !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact)) {
+      if (channel == 'email' &&
+          !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(contact)) {
         return {
           'success': false,
           'message': 'Please enter a valid email address',
@@ -168,8 +173,8 @@ class SupabaseService {
       }
 
       final field = channel == 'sms' ? 'phone_number' : 'email_address';
-      final formattedContact = channel == 'sms' 
-          ? SmsService.formatPhilippineNumber(contact) 
+      final formattedContact = channel == 'sms'
+          ? SmsService.formatPhilippineNumber(contact)
           : contact;
 
       final existing = await client
@@ -179,7 +184,8 @@ class SupabaseService {
           .maybeSingle();
 
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       if (existing != null) {
         if (existing['is_verified']) {
@@ -206,13 +212,13 @@ class SupabaseService {
           'created_by': 'self',
           'created_at': DateTime.now().toIso8601String(),
         };
-        
+
         if (channel == 'sms') {
           data['phone_number'] = formattedContact;
         } else {
           data['email_address'] = formattedContact;
         }
-        
+
         await client.from('accounts').insert(data);
       }
 
@@ -225,7 +231,8 @@ class SupabaseService {
       if (!sent) {
         return {
           'success': true,
-          'message': 'Account created but failed to send $channel code. Please use "Resend Code".',
+          'message':
+              'Account created but failed to send $channel code. Please use "Resend Code".',
           'code_sent': false,
         };
       }
@@ -253,7 +260,8 @@ class SupabaseService {
 
       final isPhone = isValidPhilippineNumber(contact);
       final field = isPhone ? 'phone_number' : 'email_address';
-      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+      final formattedContact =
+          isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
 
       final account = await client
           .from('accounts')
@@ -264,12 +272,14 @@ class SupabaseService {
       if (account == null) {
         return {
           'success': false,
-          'message': 'No account found with this ${isPhone ? 'phone number' : 'email address'}.',
+          'message':
+              'No account found with this ${isPhone ? 'phone number' : 'email address'}.',
         };
       }
 
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       await client.from('accounts').update({
         'reset_code': code,
@@ -303,7 +313,8 @@ class SupabaseService {
     try {
       final isPhone = isValidPhilippineNumber(contact);
       final field = isPhone ? 'phone_number' : 'email_address';
-      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+      final formattedContact =
+          isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
 
       final account = await client
           .from('accounts')
@@ -335,7 +346,8 @@ class SupabaseService {
     try {
       final isPhone = isValidPhilippineNumber(contact);
       final field = isPhone ? 'phone_number' : 'email_address';
-      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+      final formattedContact =
+          isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
 
       final account = await client
           .from('accounts')
@@ -362,8 +374,9 @@ class SupabaseService {
     try {
       final isPhone = isValidPhilippineNumber(contact);
       final field = isPhone ? 'phone_number' : 'email_address';
-      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
-      
+      final formattedContact =
+          isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+
       final newHash = _hashPassword(newPassword);
 
       await client.from('accounts').update({
@@ -382,7 +395,8 @@ class SupabaseService {
   }
 
   // LOGIN (supports email or phone)
-  static Future<Map<String, dynamic>> login(String identifier, String password) async {
+  static Future<Map<String, dynamic>> login(
+      String identifier, String password) async {
     try {
       if (kDebugMode) debugPrint('Attempting login for: $identifier');
 
@@ -390,13 +404,15 @@ class SupabaseService {
       if (!isConnected) {
         return {
           'success': false,
-          'message': 'Cannot connect to server. Please check your internet connection.'
+          'message':
+              'Cannot connect to server. Please check your internet connection.'
         };
       }
 
       final isPhone = isValidPhilippineNumber(identifier);
       final field = isPhone ? 'phone_number' : 'email_address';
-      final formattedIdentifier = isPhone ? SmsService.formatPhilippineNumber(identifier) : identifier;
+      final formattedIdentifier =
+          isPhone ? SmsService.formatPhilippineNumber(identifier) : identifier;
 
       final accountResponse = await client.from('accounts').select('''
             account_id,
@@ -468,7 +484,9 @@ class SupabaseService {
             motherId = motherData['mother_id'] as int?;
           }
         } catch (e) {
-          if (kDebugMode) debugPrint('Error fetching mother data (non-critical): $e');
+          if (kDebugMode) {
+            debugPrint('Error fetching mother data (non-critical): $e');
+          }
         }
 
         if (createdBy == 'midwife') {
@@ -481,13 +499,16 @@ class SupabaseService {
               accountResponse['first_name'].toString().isNotEmpty;
           final hasLastName = accountResponse['last_name'] != null &&
               accountResponse['last_name'].toString().isNotEmpty;
-          final hasBirthdate = motherData != null && motherData['birthdate'] != null;
+          final hasBirthdate =
+              motherData != null && motherData['birthdate'] != null;
           final hasPhone = accountResponse['phone_number'] != null &&
               accountResponse['phone_number'].toString().isNotEmpty;
 
-          profileComplete = hasFirstName && hasLastName && hasBirthdate && hasPhone;
+          profileComplete =
+              hasFirstName && hasLastName && hasBirthdate && hasPhone;
           if (kDebugMode) {
-            debugPrint('Self-registered account - profileComplete = $profileComplete');
+            debugPrint(
+                'Self-registered account - profileComplete = $profileComplete');
           }
         }
 
@@ -502,7 +523,8 @@ class SupabaseService {
         }
       }
 
-      final token = _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
+      final token =
+          _generateOTP() + DateTime.now().millisecondsSinceEpoch.toString();
 
       try {
         await client.from('accounts').update({
@@ -567,14 +589,17 @@ class SupabaseService {
   }
 
   // Resend verification code
-  static Future<Map<String, dynamic>> resendVerificationCode(String contact) async {
+  static Future<Map<String, dynamic>> resendVerificationCode(
+      String contact) async {
     try {
       final isPhone = isValidPhilippineNumber(contact);
       final field = isPhone ? 'phone_number' : 'email_address';
-      final formattedContact = isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
+      final formattedContact =
+          isPhone ? SmsService.formatPhilippineNumber(contact) : contact;
 
       final code = _generateOTP();
-      final expires = DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
+      final expires =
+          DateTime.now().add(const Duration(minutes: 10)).toIso8601String();
 
       await client
           .from('accounts')
@@ -621,7 +646,10 @@ class SupabaseService {
       if (profileData.containsKey('email_address')) {
         updateMap['email_address'] = profileData['email_address'];
       }
-      await client.from('accounts').update(updateMap).eq('account_id', accountId);
+      await client
+          .from('accounts')
+          .update(updateMap)
+          .eq('account_id', accountId);
 
       final existingMother = await client
           .from('mothers')
@@ -691,23 +719,28 @@ class SupabaseService {
               'status': 'ongoing',
             };
             if (profileData['pre_pregnancy_weight'] != null) {
-              pregnancyInsert['pre_pregnancy_weight'] = profileData['pre_pregnancy_weight'];
+              pregnancyInsert['pre_pregnancy_weight'] =
+                  profileData['pre_pregnancy_weight'];
             }
 
-            final pregnancyRecord = await client.from('pregnancies').insert(pregnancyInsert).select('pregnancy_id').maybeSingle();
+            final pregnancyRecord = await client
+                .from('pregnancies')
+                .insert(pregnancyInsert)
+                .select('pregnancy_id')
+                .maybeSingle();
 
-            if (pregnancyRecord != null && profileData['current_weight'] != null && profileData['height'] != null) {
+            if (pregnancyRecord != null &&
+                profileData['current_weight'] != null &&
+                profileData['height'] != null) {
               final pregnancyId = pregnancyRecord['pregnancy_id'] as int;
               double? aogWeeks;
-              if (lmp != null) {
-                aogWeeks = DateTime.now().difference(lmp).inDays / 7.0;
-              }
+              aogWeeks = DateTime.now().difference(lmp).inDays / 7.0;
               await client.from('maternal_vitals').insert({
                 'pregnancy_id': pregnancyId,
                 'mother_id': motherId,
                 'weight_kg': profileData['current_weight'],
                 'height_cm': profileData['height'],
-                'age_of_gestation': aogWeeks != null ? double.parse(aogWeeks.toStringAsFixed(1)) : null,
+                'age_of_gestation': double.parse(aogWeeks.toStringAsFixed(1)),
                 'notes': 'Initial vitals entered during profile setup',
                 'recorded_at': DateTime.now().toIso8601String(),
               });
@@ -717,7 +750,9 @@ class SupabaseService {
       } else {
         final updateData = <String, dynamic>{};
         if (birthDateStr != null) updateData['birthdate'] = birthDateStr;
-        if (profileData['height'] != null) updateData['height'] = profileData['height'];
+        if (profileData['height'] != null) {
+          updateData['height'] = profileData['height'];
+        }
 
         if (updateData.isNotEmpty) {
           await client
@@ -745,9 +780,14 @@ class SupabaseService {
               'status': 'ongoing',
             };
             if (profileData['pre_pregnancy_weight'] != null) {
-              pregnancyInsert['pre_pregnancy_weight'] = profileData['pre_pregnancy_weight'];
+              pregnancyInsert['pre_pregnancy_weight'] =
+                  profileData['pre_pregnancy_weight'];
             }
-            final pregnancyRecord = await client.from('pregnancies').insert(pregnancyInsert).select('pregnancy_id').maybeSingle();
+            final pregnancyRecord = await client
+                .from('pregnancies')
+                .insert(pregnancyInsert)
+                .select('pregnancy_id')
+                .maybeSingle();
             if (pregnancyRecord != null) {
               pregnancyId = pregnancyRecord['pregnancy_id'] as int;
             }
@@ -760,17 +800,17 @@ class SupabaseService {
             }
           }
 
-          if (pregnancyId != null && profileData['current_weight'] != null && profileData['height'] != null) {
+          if (pregnancyId != null &&
+              profileData['current_weight'] != null &&
+              profileData['height'] != null) {
             double? aogWeeks;
-            if (lmp != null) {
-              aogWeeks = DateTime.now().difference(lmp).inDays / 7.0;
-            }
+            aogWeeks = DateTime.now().difference(lmp).inDays / 7.0;
             await client.from('maternal_vitals').insert({
               'pregnancy_id': pregnancyId,
               'mother_id': motherId,
               'weight_kg': profileData['current_weight'],
               'height_cm': profileData['height'],
-              'age_of_gestation': aogWeeks != null ? double.parse(aogWeeks.toStringAsFixed(1)) : null,
+              'age_of_gestation': double.parse(aogWeeks.toStringAsFixed(1)),
               'notes': 'Initial vitals entered during profile setup',
               'recorded_at': DateTime.now().toIso8601String(),
             });
@@ -1386,7 +1426,9 @@ class SupabaseService {
             : 'Mother account created but failed to send credentials. Please provide the password manually.',
       };
     } catch (e) {
-      if (kDebugMode) debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');
+      if (kDebugMode) {
+        debugPrint('addMotherFullByMidwifeWithAutoPassword error: $e');
+      }
       return {
         'success': false,
         'message': 'Failed to add mother: ${e.toString()}',

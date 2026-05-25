@@ -101,6 +101,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   String _checkupSort = 'desc';
   String _ultrasoundSort = 'desc';
   String _labSort = 'desc';
+  String _vitalSort = 'desc';
   String _childQuery = '';
   String _childSort = 'recent';
   final Set<String> _expandedLabInsightAspects = <String>{};
@@ -110,10 +111,14 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   int _checkupDisplayCount = _pageSize;
   int _ultrasoundDisplayCount = _pageSize;
   int _labTestDisplayCount = _pageSize;
+  int _vitalDisplayCount = _pageSize;
   // History tab pagination per pregnancy (keyed by pregnancy_id)
   final Map<int, int> _historyCheckupDisplayCounts = {};
   final Map<int, int> _historyUltrasoundDisplayCounts = {};
   final Map<int, int> _historyLabTestDisplayCounts = {};
+  final Map<int, int> _historyVitalDisplayCounts = {};
+
+  bool _isOpeningRecord = false;
 
   // Edit mode states
   bool _isEditingPersonal = false;
@@ -1090,9 +1095,11 @@ class _MotherProfilePageState extends State<MotherProfilePage>
       _checkupDisplayCount = _pageSize;
       _ultrasoundDisplayCount = _pageSize;
       _labTestDisplayCount = _pageSize;
+      _vitalDisplayCount = _pageSize;
       _historyCheckupDisplayCounts.clear();
       _historyUltrasoundDisplayCounts.clear();
       _historyLabTestDisplayCounts.clear();
+      _historyVitalDisplayCounts.clear();
     });
     await _loadProfilePicture();
     await _loadLatestGrowthData();
@@ -2204,111 +2211,139 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return CheckupRecordCard(
       checkup: checkup,
       onTap: () async {
-        final aog = _formatValue(checkup['age_of_gestation']);
-        final weight = _formatValue(checkup['checkup_weight']);
-        String? aiAnalysis;
-        String? riskLevel;
-        String riskFactors = '';
-        String medicationPlansSummary = 'None';
-        String givenMedicationsSummary = 'None';
-        String ferrousSummary = 'Not given';
-        String calciumSummary = 'Not given';
-        String symptomSummary = 'None recorded';
+        if (_isOpeningRecord) return;
+        setState(() => _isOpeningRecord = true);
+        bool hasClosedLoading = false;
 
-        final checkupId = checkup['prenatal_checkup_id'];
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(
+                color: AppColors.brandPrimary),
+          ),
+        );
 
-        if (checkupId is int) {
-          final checkupDetails = await _fetchCheckupDetails(
-              checkupId, checkup['checkup_datetime']);
+        try {
+          final aog = _formatValue(checkup['age_of_gestation']);
+          final weight = _formatValue(checkup['checkup_weight']);
+          String? aiAnalysis;
+          String? riskLevel;
+          String riskFactors = '';
+          String medicationPlansSummary = 'None';
+          String givenMedicationsSummary = 'None';
+          String ferrousSummary = 'Not given';
+          String calciumSummary = 'Not given';
+          String symptomSummary = 'None recorded';
 
-          if (checkupDetails != null) {
-            riskLevel = checkupDetails['riskLevel'] as String?;
-            riskFactors = checkupDetails['riskFactors'] ?? '';
-            aiAnalysis = checkupDetails['aiResponse'] as String?;
-            medicationPlansSummary =
-                checkupDetails['medicationPlans'] ?? 'None';
-            givenMedicationsSummary =
-                checkupDetails['givenMedications'] ?? 'None';
-            ferrousSummary = checkupDetails['ferrousQuantity'] ?? 'Not given';
-            calciumSummary = checkupDetails['calciumQuantity'] ?? 'Not given';
-            symptomSummary =
-                checkupDetails['symptomSummary'] ?? 'None recorded';
+          final checkupId = checkup['prenatal_checkup_id'];
+
+          if (checkupId is int) {
+            final checkupDetails = await _fetchCheckupDetails(
+                checkupId, checkup['checkup_datetime']);
+
+            if (checkupDetails != null) {
+              riskLevel = checkupDetails['riskLevel'] as String?;
+              riskFactors = checkupDetails['riskFactors'] ?? '';
+              aiAnalysis = checkupDetails['aiResponse'] as String?;
+              medicationPlansSummary =
+                  checkupDetails['medicationPlans'] ?? 'None';
+              givenMedicationsSummary =
+                  checkupDetails['givenMedications'] ?? 'None';
+              ferrousSummary = checkupDetails['ferrousQuantity'] ?? 'Not given';
+              calciumSummary = checkupDetails['calciumQuantity'] ?? 'Not given';
+              symptomSummary =
+                  checkupDetails['symptomSummary'] ?? 'None recorded';
+            }
+
+            if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
+              aiAnalysis =
+                  await MotherProfileService.getCheckupAIAnalysis(checkupId);
+            }
           }
 
           if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
-            aiAnalysis =
-                await MotherProfileService.getCheckupAIAnalysis(checkupId);
+            aiAnalysis = _generatePrenatalAIInsights(checkup);
+          } else {
+            aiAnalysis = aiAnalysis.trim();
           }
-        }
 
-        if (aiAnalysis == null || aiAnalysis.trim().isEmpty) {
-          aiAnalysis = _generatePrenatalAIInsights(checkup);
-        } else {
-          aiAnalysis = aiAnalysis.trim();
-        }
+          if (!mounted) return;
 
-        if (!mounted) return;
+          final double? height = await _getMotherHeight();
+          if (!mounted) return;
 
-        final double? height = await _getMotherHeight();
-        if (!mounted) return;
-
-        final heightText =
-            height == null ? 'Not recorded' : '${height.toStringAsFixed(1)} cm';
-        String bmiText = '—';
-        String bmiStatus = '—';
-        try {
-          final w =
-              double.tryParse(checkup['checkup_weight']?.toString() ?? '');
-          if (w != null && height != null && height > 0) {
-            final hm = height / 100;
-            final bmi = w / (hm * hm);
-            bmiText = bmi.toStringAsFixed(1);
-            if (bmi < 18.5) {
-              bmiStatus = 'Underweight';
-            } else if (bmi < 25) {
-              bmiStatus = 'Normal';
-            } else if (bmi < 30) {
-              bmiStatus = 'Overweight';
-            } else {
-              bmiStatus = 'Obese';
+          final heightText =
+              height == null ? 'Not recorded' : '${height.toStringAsFixed(1)} cm';
+          String bmiText = '—';
+          String bmiStatus = '—';
+          try {
+            final w =
+                double.tryParse(checkup['checkup_weight']?.toString() ?? '');
+            if (w != null && height != null && height > 0) {
+              final hm = height / 100;
+              final bmi = w / (hm * hm);
+              bmiText = bmi.toStringAsFixed(1);
+              if (bmi < 18.5) {
+                bmiStatus = 'Underweight';
+              } else if (bmi < 25) {
+                bmiStatus = 'Normal';
+              } else if (bmi < 30) {
+                bmiStatus = 'Overweight';
+              } else {
+                bmiStatus = 'Obese';
+              }
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
 
-        _showRecordDetails(
-          title: 'Prenatal Checkup',
-          subtitle: date,
-          icon: Icons.medical_services,
-          rows: [
-            MapEntry('Fetal Count', fetalCount.toString()),
-            MapEntry('Age of Gestation', aog),
-            MapEntry('Weight (kg)', weight),
-            MapEntry('Height', heightText),
-            MapEntry('BMI', bmiText),
-            MapEntry('BMI Status', bmiStatus),
-            MapEntry('Blood Pressure', '$bpSys/$bpDia'),
-            MapEntry('Fetal Position', _formatValue(checkup['fetal_position'])),
-            MapEntry(
-                'Fetal Heart Tone', _formatValue(checkup['fetal_heart_tone'])),
-            MapEntry(
-                'Fetal Heart Beat', _formatValue(checkup['fetal_heart_beat'])),
-            MapEntry('Symptoms', symptomSummary),
-            MapEntry('Medication Plans', medicationPlansSummary),
-            MapEntry('Given Medications', givenMedicationsSummary),
-            MapEntry('Ferrous + FA', ferrousSummary),
-            MapEntry('Calcium', calciumSummary),
-            MapEntry('TD Vaccine', _formatValue(checkup['td_vaccine_dose'])),
-            MapEntry('Edema', _formatValue(checkup['edema'])),
-            MapEntry('Remarks', _formatValue(checkup['remarks'])),
-            MapEntry('Next Schedule', _formatDate(checkup['next_schedule'])),
-          ],
-          aiAnalysis: aiAnalysis,
-          riskLevel: riskLevel,
-          riskFactors: riskFactors,
-          weightGainEval: (checkup['weight_gain'] as List?)?.isNotEmpty == true
-              ? (checkup['weight_gain'] as List).first as Map<String, dynamic>
-              : null,
-        );
+          if (mounted && !hasClosedLoading) {
+            Navigator.of(context, rootNavigator: true).pop();
+            hasClosedLoading = true;
+          }
+
+          _showRecordDetails(
+            title: 'Prenatal Checkup',
+            subtitle: date,
+            icon: Icons.medical_services,
+            rows: [
+              MapEntry('Fetal Count', fetalCount.toString()),
+              MapEntry('Age of Gestation', aog),
+              MapEntry('Weight (kg)', weight),
+              MapEntry('Height', heightText),
+              MapEntry('BMI', bmiText),
+              MapEntry('BMI Status', bmiStatus),
+              MapEntry('Blood Pressure', '$bpSys/$bpDia'),
+              MapEntry('Fetal Position', _formatValue(checkup['fetal_position'])),
+              MapEntry(
+                  'Fetal Heart Tone', _formatValue(checkup['fetal_heart_tone'])),
+              MapEntry(
+                  'Fetal Heart Beat', _formatValue(checkup['fetal_heart_beat'])),
+              MapEntry('Symptoms', symptomSummary),
+              MapEntry('Medication Plans', medicationPlansSummary),
+              MapEntry('Given Medications', givenMedicationsSummary),
+              MapEntry('Ferrous + FA', ferrousSummary),
+              MapEntry('Calcium', calciumSummary),
+              MapEntry('TD Vaccine', _formatValue(checkup['td_vaccine_dose'])),
+              MapEntry('Edema', _formatValue(checkup['edema'])),
+              MapEntry('Remarks', _formatValue(checkup['remarks'])),
+              MapEntry('Next Schedule', _formatDate(checkup['next_schedule'])),
+            ],
+            aiAnalysis: aiAnalysis,
+            riskLevel: riskLevel,
+            riskFactors: riskFactors,
+            weightGainEval: (checkup['weight_gain'] as List?)?.isNotEmpty == true
+                ? (checkup['weight_gain'] as List).first as Map<String, dynamic>
+                : null,
+          );
+        } finally {
+          if (mounted && !hasClosedLoading) {
+            Navigator.of(context, rootNavigator: true).pop();
+            hasClosedLoading = true;
+          }
+          if (mounted) {
+            setState(() => _isOpeningRecord = false);
+          }
+        }
       },
     );
   }
@@ -2319,58 +2354,86 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return UltrasoundRecordCard(
       ultrasound: ultrasound,
       onTap: () async {
-        List<String> imageUrls = [];
+        if (_isOpeningRecord) return;
+        setState(() => _isOpeningRecord = true);
+        bool hasClosedLoading = false;
 
-        if (ultrasound['ultrasound_image'] != null) {
-          final imageField = ultrasound['ultrasound_image'].toString();
-          if (imageField.contains(',')) {
-            imageUrls = imageField.split(',').map((url) => url.trim()).toList();
-          } else if (imageField.isNotEmpty) {
-            imageUrls = [imageField];
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(
+                color: AppColors.brandPrimary),
+          ),
+        );
+
+        try {
+          List<String> imageUrls = [];
+
+          if (ultrasound['ultrasound_image'] != null) {
+            final imageField = ultrasound['ultrasound_image'].toString();
+            if (imageField.contains(',')) {
+              imageUrls = imageField.split(',').map((url) => url.trim()).toList();
+            } else if (imageField.isNotEmpty) {
+              imageUrls = [imageField];
+            }
+          }
+
+          final split = _splitRemarksAndAi(ultrasound['remarks']?.toString());
+
+          String? aiAnalysis;
+          final ultrasoundId = ultrasound['ultrasound_id'];
+          if (ultrasoundId is int) {
+            aiAnalysis =
+                await MotherProfileService.getUltrasoundAIAnalysis(ultrasoundId);
+          }
+
+          if (!mounted) return;
+
+          String finalRemarks = split.cleanRemarks;
+          if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
+            finalRemarks = '';
+          }
+
+          aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
+              ? aiAnalysis.trim()
+              : split.extractedAi ?? _generateUltrasoundAIInsights(ultrasound);
+
+          if (mounted && !hasClosedLoading) {
+            Navigator.of(context, rootNavigator: true).pop();
+            hasClosedLoading = true;
+          }
+
+          _showRecordDetails(
+            title: 'Ultrasound',
+            subtitle: date,
+            icon: Icons.monitor_heart,
+            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+            rows: [
+              MapEntry(
+                  'Ultrasound Date', _formatDate(ultrasound['ultrasound_date'])),
+              MapEntry(
+                  'Location', _formatValue(ultrasound['ultrasound_location'])),
+              MapEntry(
+                  'Full Name', _formatValue(ultrasound['health_worker_name'])),
+              MapEntry('Institution',
+                  _formatValue(ultrasound['health_worker_institution'])),
+              MapEntry('Profession',
+                  _formatValue(ultrasound['health_worker_profession'])),
+              MapEntry('Remarks', _formatValue(finalRemarks)),
+            ],
+            aiAnalysis: aiAnalysis,
+            useStructuredAiInsights: aiAnalysis.isNotEmpty,
+          );
+        } finally {
+          if (mounted && !hasClosedLoading) {
+            Navigator.of(context, rootNavigator: true).pop();
+            hasClosedLoading = true;
+          }
+          if (mounted) {
+            setState(() => _isOpeningRecord = false);
           }
         }
-
-        final split = _splitRemarksAndAi(ultrasound['remarks']?.toString());
-
-        String? aiAnalysis;
-        final ultrasoundId = ultrasound['ultrasound_id'];
-        if (ultrasoundId is int) {
-          aiAnalysis =
-              await MotherProfileService.getUltrasoundAIAnalysis(ultrasoundId);
-        }
-
-        if (!mounted) return;
-
-        String finalRemarks = split.cleanRemarks;
-        if (aiAnalysis != null && aiAnalysis.trim() == finalRemarks.trim()) {
-          finalRemarks = '';
-        }
-
-        aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
-            ? aiAnalysis.trim()
-            : split.extractedAi ?? _generateUltrasoundAIInsights(ultrasound);
-
-        _showRecordDetails(
-          title: 'Ultrasound',
-          subtitle: date,
-          icon: Icons.monitor_heart,
-          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-          rows: [
-            MapEntry(
-                'Ultrasound Date', _formatDate(ultrasound['ultrasound_date'])),
-            MapEntry(
-                'Location', _formatValue(ultrasound['ultrasound_location'])),
-            MapEntry(
-                'Full Name', _formatValue(ultrasound['health_worker_name'])),
-            MapEntry('Institution',
-                _formatValue(ultrasound['health_worker_institution'])),
-            MapEntry('Profession',
-                _formatValue(ultrasound['health_worker_profession'])),
-            MapEntry('Remarks', _formatValue(finalRemarks)),
-          ],
-          aiAnalysis: aiAnalysis,
-          useStructuredAiInsights: aiAnalysis.isNotEmpty,
-        );
       },
     );
   }
@@ -2382,50 +2445,140 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     return LabTestRecordCard(
       labTest: labTest,
       onTap: () async {
-        List<String> imageUrls = [];
+        if (_isOpeningRecord) return;
+        setState(() => _isOpeningRecord = true);
+        bool hasClosedLoading = false;
 
-        if (labTest['lab_test_image'] != null) {
-          final imageField = labTest['lab_test_image'].toString();
-          if (imageField.contains(',')) {
-            imageUrls = imageField.split(',').map((url) => url.trim()).toList();
-          } else if (imageField.isNotEmpty) {
-            imageUrls = [imageField];
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(
+                color: AppColors.brandPrimary),
+          ),
+        );
+
+        try {
+          List<String> imageUrls = [];
+
+          if (labTest['lab_test_image'] != null) {
+            final imageField = labTest['lab_test_image'].toString();
+            if (imageField.contains(',')) {
+              imageUrls = imageField.split(',').map((url) => url.trim()).toList();
+            } else if (imageField.isNotEmpty) {
+              imageUrls = [imageField];
+            }
+          }
+
+          final split = _splitRemarksAndAi(labTest['remarks']?.toString());
+
+          String? aiAnalysis;
+          final labTestId = labTest['lab_test_id'];
+          if (labTestId is int) {
+            aiAnalysis =
+                await MotherProfileService.getLabTestAIAnalysis(labTestId);
+          }
+
+          if (!mounted) return;
+
+          aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
+              ? aiAnalysis.trim()
+              : split.extractedAi;
+
+          if (mounted && !hasClosedLoading) {
+            Navigator.of(context, rootNavigator: true).pop();
+            hasClosedLoading = true;
+          }
+
+          _showRecordDetails(
+            title: type,
+            subtitle: date,
+            icon: Icons.science,
+            imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+            rows: [
+              MapEntry('Lab Test Type', type),
+              MapEntry('Lab Test Date', _formatDate(labTest['lab_test_date'])),
+              MapEntry('Full Name', _formatValue(labTest['health_worker_name'])),
+              MapEntry('Institution',
+                  _formatValue(labTest['health_worker_institution'])),
+              MapEntry('Profession',
+                  _formatValue(labTest['health_worker_profession'])),
+              MapEntry('Notes', _formatValue(split.cleanRemarks)),
+            ],
+            aiAnalysis: aiAnalysis,
+            useStructuredAiInsights: aiAnalysis != null && aiAnalysis.isNotEmpty,
+          );
+        } finally {
+          if (mounted && !hasClosedLoading) {
+            Navigator.of(context, rootNavigator: true).pop();
+            hasClosedLoading = true;
+          }
+          if (mounted) {
+            setState(() => _isOpeningRecord = false);
           }
         }
+      },
+    );
+  }
 
-        final split = _splitRemarksAndAi(labTest['remarks']?.toString());
+  Widget _buildMaternalVitalCard(Map<String, dynamic> vital) {
+    return MaternalVitalRecordCard(
+      vital: vital,
+      onTap: () async {
+        if (_isOpeningRecord) return;
+        setState(() => _isOpeningRecord = true);
+        bool hasClosedLoading = false;
 
-        String? aiAnalysis;
-        final labTestId = labTest['lab_test_id'];
-        if (labTestId is int) {
-          aiAnalysis =
-              await MotherProfileService.getLabTestAIAnalysis(labTestId);
-        }
-
-        if (!mounted) return;
-
-        aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty)
-            ? aiAnalysis.trim()
-            : split.extractedAi;
-
-        _showRecordDetails(
-          title: type,
-          subtitle: date,
-          icon: Icons.science,
-          imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
-          rows: [
-            MapEntry('Lab Test Type', type),
-            MapEntry('Lab Test Date', _formatDate(labTest['lab_test_date'])),
-            MapEntry('Full Name', _formatValue(labTest['health_worker_name'])),
-            MapEntry('Institution',
-                _formatValue(labTest['health_worker_institution'])),
-            MapEntry('Profession',
-                _formatValue(labTest['health_worker_profession'])),
-            MapEntry('Notes', _formatValue(split.cleanRemarks)),
-          ],
-          aiAnalysis: aiAnalysis,
-          useStructuredAiInsights: aiAnalysis != null && aiAnalysis.isNotEmpty,
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(
+                color: AppColors.brandPrimary),
+          ),
         );
+
+        try {
+          final recDate = _formatDateTime(vital['recorded_at']);
+          
+          if (mounted && !hasClosedLoading) {
+            Navigator.of(context, rootNavigator: true).pop();
+            hasClosedLoading = true;
+          }
+
+          _showRecordDetails(
+            title: 'Self-logged Vitals',
+            subtitle: 'Recorded on $recDate',
+            icon: Icons.monitor_weight_outlined,
+            rows: [
+              MapEntry('Date', recDate),
+              MapEntry(
+                'Age of Gestation',
+                vital['age_of_gestation'] != null ? '${vital['age_of_gestation']} wks' : '-',
+              ),
+              MapEntry(
+                'Weight (kg)',
+                vital['weight_kg'] != null ? '${vital['weight_kg']} kg' : '-',
+              ),
+              MapEntry(
+                'Height (cm)',
+                vital['height_cm'] != null ? '${vital['height_cm']} cm' : '-',
+              ),
+              MapEntry(
+                'Notes',
+                _formatValue(vital['notes']),
+              ),
+            ],
+          );
+        } finally {
+          if (mounted && !hasClosedLoading) {
+            Navigator.of(context, rootNavigator: true).pop();
+            hasClosedLoading = true;
+          }
+          if (mounted) {
+            setState(() => _isOpeningRecord = false);
+          }
+        }
       },
     );
   }
@@ -5293,6 +5446,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     final checkups = (pregnancy['checkups'] as List?) ?? [];
     final ultrasounds = (pregnancy['ultrasounds'] as List?) ?? [];
     final labTests = (pregnancy['lab_tests'] as List?) ?? [];
+    final vitals = (pregnancy['maternal_vitals'] as List?) ?? [];
 
     final sortedCheckups = List<Map<String, dynamic>>.from(checkups);
     sortedCheckups.sort((a, b) {
@@ -5468,6 +5622,38 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ];
               }(),
             ),
+            const SizedBox(height: 12),
+
+            _buildExpandableSection(
+              'Self-logged Vitals (${vitals.length})',
+              Icons.monitor_weight_outlined,
+              () {
+                final sortedVitals =
+                    _sortByDate(vitals, 'recorded_at', _vitalSort);
+                return [
+                  _buildSortRow(_vitalSort,
+                      (v) => setState(() => _vitalSort = v ?? 'desc')),
+                  const SizedBox(height: 12),
+                  if (vitals.isEmpty)
+                    const Center(
+                        child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('No self-logged vitals recorded')))
+                  else ...[
+                    ...sortedVitals
+                        .take(_vitalDisplayCount)
+                        .map((v) => _buildMaternalVitalCard(v)),
+                    if (sortedVitals.length > _vitalDisplayCount)
+                      _buildLoadMoreButton(
+                        current: _vitalDisplayCount,
+                        total: sortedVitals.length,
+                        onPressed: () =>
+                            setState(() => _vitalDisplayCount += _pageSize),
+                      ),
+                  ],
+                ];
+              }(),
+            ),
             if (!widget.readOnly) ...[
               const SizedBox(height: 24),
               Card(
@@ -5575,6 +5761,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
           final checkups = (p['checkups'] as List?) ?? [];
           final ultrasounds = (p['ultrasounds'] as List?) ?? [];
           final labTests = (p['lab_tests'] as List?) ?? [];
+          final vitals = (p['maternal_vitals'] as List?) ?? [];
           final deliveries =
               (p['delivery'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
                   [];
@@ -5846,6 +6033,40 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                         _historyLabTestDisplayCounts[
                                                 pregnancyId] =
                                             histLabLimit + _pageSize),
+                                  ),
+                              ],
+                            );
+                          }(),
+                          const SizedBox(height: 8),
+                          () {
+                            final pregnancyId = int.tryParse(
+                                    p['pregnancy_id']?.toString() ?? '') ??
+                                -1;
+                            final sortedHistVitals = _sortByDate(
+                                vitals.cast<Map<String, dynamic>>(),
+                                'recorded_at',
+                                'desc');
+                            final histVitalLimit =
+                                _historyVitalDisplayCounts[pregnancyId] ??
+                                    _pageSize;
+                            return _buildHistoryRecordSection(
+                              title: 'Self-logged Vitals',
+                              icon: Icons.monitor_weight_outlined,
+                              color: Colors.teal,
+                              count: vitals.length,
+                              emptyMessage: 'No self-logged vitals records',
+                              children: [
+                                ...sortedHistVitals
+                                    .take(histVitalLimit)
+                                    .map((v) => _buildMaternalVitalCard(v)),
+                                if (sortedHistVitals.length > histVitalLimit)
+                                  _buildLoadMoreButton(
+                                    current: histVitalLimit,
+                                    total: sortedHistVitals.length,
+                                    onPressed: () => setState(() =>
+                                        _historyVitalDisplayCounts[
+                                                pregnancyId] =
+                                            histVitalLimit + _pageSize),
                                   ),
                               ],
                             );

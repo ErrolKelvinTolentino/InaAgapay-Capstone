@@ -93,6 +93,15 @@ class MotherProfileService {
               health_worker_profession,
               created_at
             ),
+            maternal_vitals (
+              vital_id,
+              recorded_at,
+              age_of_gestation,
+              weight_kg,
+              height_cm,
+              notes,
+              created_at
+            ),
             delivery:deliveries (
               delivery_id,
               delivery_date,

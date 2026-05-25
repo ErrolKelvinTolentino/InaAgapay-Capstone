@@ -137,6 +137,35 @@ class LabTestRecordCard extends StatelessWidget {
   }
 }
 
+// ── Maternal Vital Card ───────────────────────────────────────────────────
+
+class MaternalVitalRecordCard extends StatelessWidget {
+  final Map<String, dynamic> vital;
+  final VoidCallback onTap;
+
+  const MaternalVitalRecordCard({
+    super.key,
+    required this.vital,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dateCreated = formatProfileDateTime(
+        vital['created_at'] ?? vital['createdAt'] ?? vital['recorded_at']);
+
+    return _RecordCardShell(
+      accentColor: Colors.teal,
+      icon: Icons.monitor_weight_outlined,
+      title: 'Self-logged Vitals',
+      subtitle: dateCreated,
+      badges: const [],
+      onTap: onTap,
+    );
+  }
+}
+
+
 // ── Shared record card shell ──────────────────────────────────────────────
 
 class _RecordCardShell extends StatelessWidget {
