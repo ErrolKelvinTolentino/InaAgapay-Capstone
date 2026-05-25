@@ -77,9 +77,9 @@ class WeightGainResult {
       case WeightGainStatus.normal:
         return 'Within expected monitoring range';
       case WeightGainStatus.low:
-        return 'Slightly Below expected monitoring range';
+        return 'Slightly lower than expected monitoring range';
       case WeightGainStatus.high:
-        return 'Slightly Above expected monitoring range';
+        return 'Slightly above expected monitoring range';
       case WeightGainStatus.insufficient:
         return 'Insufficient data';
     }
