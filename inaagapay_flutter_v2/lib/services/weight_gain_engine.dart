@@ -130,26 +130,51 @@ class WeightGainEngine {
       midwifeBmiCategory: midwifeBmiCategory,
     );
 
-    // MODE A: Full BMI-based evaluation
-    if (prePregnancyWeight != null) {
-      return _evaluateFull(
-        currentWeight: currentWeight,
-        prePregnancyWeight: prePregnancyWeight,
-        aogWeeks: aogWeeks,
+    // IF PRE-PREGNANCY WEIGHT MISSING
+    if (prePregnancyWeight == null) {
+      final aogRound = aogWeeks.round();
+      final msg = 'At approximately $aogRound weeks of pregnancy, weight changes may vary between mothers. Since pre-pregnancy weight was not available, personalized pregnancy weight gain analysis may be limited.';
+
+      // Get baseline from earliest checkup if exists
+      double? baselineWeight;
+      double? baselineWeek;
+      if (allCheckups.isNotEmpty) {
+        final firstCheckup = allCheckups.first;
+        baselineWeight = _toDouble(firstCheckup['checkup_weight']);
+        baselineWeek = _toDouble(firstCheckup['age_of_gestation']);
+      }
+
+      // Calculate weekly gain if multiple checkups exist
+      double? weeklyGain;
+      if (allCheckups.length >= 2) {
+        weeklyGain = _calculateLatestWeeklyGain(allCheckups);
+      }
+
+      return WeightGainResult(
+        mode: WeightGainMode.trend,
         bmiCategory: bmiCategory,
-        heightCm: heightCm,
-        allCheckups: allCheckups,
-        fetalCount: fetalCount,
+        baselineWeight: baselineWeight,
+        baselineWeek: baselineWeek,
+        currentWeight: currentWeight,
+        currentWeek: aogWeeks,
+        status: WeightGainStatus.insufficient, // NO official weight gain interpretation
+        confidence: WeightGainConfidence.low,
+        message: msg,
+        expectedGain: null,
+        actualGain: baselineWeight != null ? currentWeight - baselineWeight : null,
+        weeklyGain: weeklyGain,
+        flags: const [],
       );
     }
 
-    // MODE B: Trend-based evaluation
-    return _evaluateTrend(
+    // MODE A: Full BMI-based evaluation
+    return _evaluateFull(
       currentWeight: currentWeight,
+      prePregnancyWeight: prePregnancyWeight,
       aogWeeks: aogWeeks,
-      allCheckups: allCheckups,
       bmiCategory: bmiCategory,
       heightCm: heightCm,
+      allCheckups: allCheckups,
       fetalCount: fetalCount,
     );
   }

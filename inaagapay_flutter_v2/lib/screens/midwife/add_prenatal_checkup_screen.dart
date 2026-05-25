@@ -2868,7 +2868,7 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
         currentWeight: currentWeight,
         aogWeeks: _aogWeeks!,
         allCheckups: checkupList,
-        prePregnancyWeight: baselineWeight,
+        prePregnancyWeight: prePregnancyWeight,
         heightCm: heightCm,
         fetalCount: _fetalCount ?? 1,
       );
@@ -2881,7 +2881,12 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
       IconData icon;
       String statusText;
 
-      if (isLow) {
+      if (prePregnancyWeight == null) {
+        bgColor = AppColors.textSecondary.withValues(alpha: 0.1);
+        textColor = AppColors.textSecondary;
+        icon = Icons.info_outline;
+        statusText = "Analysis limited";
+      } else if (isLow) {
         bgColor = AppColors.warning.withValues(alpha: 0.1);
         textColor = AppColors.warning;
         icon = Icons.trending_down;
@@ -2899,7 +2904,9 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
       }
 
       String detailsText = '';
-      if (result.mode == WeightGainMode.full && result.expectedGain != null && result.baselineWeight != null) {
+      if (prePregnancyWeight == null) {
+        detailsText = result.message;
+      } else if (result.mode == WeightGainMode.full && result.expectedGain != null && result.baselineWeight != null) {
         final activeGuidelines = (_fetalCount ?? 1) >= 2 
             ? WeightGainEngine.iomTwinGuidelines 
             : WeightGainEngine.iomGuidelines;

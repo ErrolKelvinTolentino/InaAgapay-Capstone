@@ -5,12 +5,10 @@ import '../theme/app_colors.dart';
 
 class MidwifeHistoryCard extends StatelessWidget {
   final List<MidwifeVisitItem> visits;
-  final VoidCallback? onTapItem;
 
   const MidwifeHistoryCard({
     super.key,
     required this.visits,
-    this.onTapItem,
   });
 
   @override
@@ -51,7 +49,7 @@ class MidwifeHistoryCard extends StatelessWidget {
             children: displayedVisits.map((visit) {
               return _VisitRow(
                 visit: visit,
-                onTap: onTapItem,
+                onTap: visit.onTap,
               );
             }).toList(),
           ),
@@ -148,10 +146,12 @@ class MidwifeVisitItem {
   final String fullName;
   final String visitType;
   final String timeLabel;
+  final VoidCallback? onTap;
 
   const MidwifeVisitItem({
     required this.fullName,
     required this.visitType,
     required this.timeLabel,
+    this.onTap,
   });
 }

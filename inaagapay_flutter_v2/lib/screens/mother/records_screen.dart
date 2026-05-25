@@ -341,6 +341,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     String? riskFactors,
     List<String>? suggestedActions,
     Map<String, dynamic>? weightGainEval,
+    String? ultrasoundClassification,
   }) {
     Navigator.push(
       context,
@@ -361,6 +362,7 @@ class _RecordsScreenState extends State<RecordsScreen>
               : null,
           suggestedActions: suggestedActions,
           weightGainEval: weightGainEval,
+          ultrasoundClassification: ultrasoundClassification,
         ),
       ),
     );
@@ -1767,11 +1769,7 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   finalRemarks = '';
                                 }
 
-                                aiAnalysis = (aiAnalysis != null &&
-                                        aiAnalysis.trim().isNotEmpty)
-                                    ? aiAnalysis.trim()
-                                    : split.extractedAi ??
-                                        _generateUltrasoundAIInsights(record);
+                                aiAnalysis = (aiAnalysis != null && aiAnalysis.trim().isNotEmpty) ? aiAnalysis.trim() : split.extractedAi;
                                 if (mounted && !hasClosedLoading) {
                                   Navigator.of(context, rootNavigator: true)
                                       .pop();
@@ -1815,8 +1813,9 @@ class _RecordsScreenState extends State<RecordsScreen>
                                         _formatValue(finalRemarks)),
                                   ],
                                   aiAnalysis: aiAnalysis,
-                                  useStructuredAiInsights:
+                                  useStructuredAiInsights: aiAnalysis != null &&
                                       aiAnalysis.isNotEmpty,
+                                  ultrasoundClassification: record['monitoring_classification']?.toString(),
                                 );
                               } else if (isLabTest) {
                                 final imageUrls =
@@ -2352,3 +2351,5 @@ class _RecordsScreenState extends State<RecordsScreen>
     );
   }
 }
+
+

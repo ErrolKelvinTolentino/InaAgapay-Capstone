@@ -1097,13 +1097,13 @@ class _MidwifeMothersScreenState extends State<MidwifeMothersScreen> {
       floatingActionButton: FloatingActionButton(
         heroTag: 'fab_mothers',
         onPressed: () async {
-          final bool? added = await Navigator.push(
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => const MidwifeAddMotherScreen(),
             ),
           );
-          if (added == true && mounted) {
+          if (mounted) {
             _refreshMothers();
           }
         },
