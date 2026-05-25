@@ -9,6 +9,7 @@ import '../../widgets/secondary_header.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/dialog_box.dart';
 import '../../widgets/confirmation_dialog_box.dart';
+import '../../services/sms_service.dart';
 
 class ReviewItem {
   final String vaccineNameRaw;
@@ -244,6 +245,30 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
 
       // Perform bulk insert
       await client.from('immunization_record').insert(recordsToInsert);
+
+      // Trigger automated vaccine SMS in the background
+      try {
+        final List<String> recordedVaccines = [];
+        for (final item in selectedItems) {
+          final vaccine = widget.allVaccines.firstWhere(
+            (v) => v['vaccine_id'] == item.matchedVaccineId,
+            orElse: () => <String, dynamic>{},
+          );
+          if (vaccine.isNotEmpty) {
+            final vName = vaccine['vaccine_name']?.toString() ?? '';
+            final vDose = vaccine['dose_number']?.toString() ?? '';
+            recordedVaccines.add('$vName (Dose $vDose)');
+          }
+        }
+        if (recordedVaccines.isNotEmpty) {
+          SmsService.sendAutomatedVaccineSms(
+            childId: widget.childId,
+            recordedVaccines: recordedVaccines,
+          );
+        }
+      } catch (smsError) {
+        debugPrint('Error triggering automated vaccine SMS: $smsError');
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);

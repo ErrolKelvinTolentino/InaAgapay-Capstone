@@ -13,6 +13,7 @@ import '../../widgets/dialog_box.dart';
 import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/validation_message.dart';
 import '../../services/groq_service.dart';
+import '../../services/sms_service.dart';
 import 'immunization_ocr_review_page.dart';
 
 class AddImmunizationPage extends StatefulWidget {
@@ -910,6 +911,26 @@ class _AddImmunizationPageState extends State<AddImmunizationPage> {
           final success = await _submitImmunization();
 
           setState(() => _isLoading = false);
+
+          if (success) {
+            try {
+              final selectedVaccine = _vaccines.firstWhere(
+                (v) => v['vaccine_id'] == _selectedVaccineId,
+                orElse: () => <String, dynamic>{},
+              );
+              if (selectedVaccine.isNotEmpty) {
+                final vName = selectedVaccine['vaccine_name']?.toString() ?? '';
+                final vDose = selectedVaccine['dose_number']?.toString() ?? '';
+                final vFull = '$vName (Dose $vDose)';
+                SmsService.sendAutomatedVaccineSms(
+                  childId: widget.childId,
+                  recordedVaccines: [vFull],
+                );
+              }
+            } catch (smsError) {
+              debugPrint('Error triggering automated vaccine SMS: $smsError');
+            }
+          }
 
           if (success && mounted) {
             showDialog(

@@ -16,6 +16,7 @@ import '../../widgets/confirmation_dialog_box.dart';
 import '../../widgets/secondary_header.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/app_dropdown_field.dart';
+import '../../services/sms_service.dart';
 
 class AddPrenatalCheckupScreen extends StatefulWidget {
   const AddPrenatalCheckupScreen({
@@ -2537,6 +2538,33 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
 
       // Weight Gain Monitoring — evaluate and persist
       await _persistWeightGainEvaluation(prenatalCheckupId, weight);
+
+      // If a next schedule is specified, send an automated SMS reminder to the mother
+      if (_nextSchedule != null) {
+        try {
+          final motherDetails = await Supabase.instance.client
+              .from('mothers')
+              .select('mother_id, account:account_id (first_name, last_name, phone_number), assigned_bhc_id, bhc:assigned_bhc_id (bhc_name)')
+              .eq('mother_id', widget.motherId)
+              .maybeSingle();
+
+          if (motherDetails != null) {
+            final account = motherDetails['account'] as Map<String, dynamic>?;
+            final phone = account?['phone_number']?.toString();
+            final firstName = account?['first_name']?.toString() ?? 'Mother';
+            final bhc = motherDetails['bhc'] as Map<String, dynamic>?;
+            final bhcName = bhc?['bhc_name']?.toString() ?? 'Health Center';
+            final nextDateStr = DateFormat('MMMM d, yyyy').format(_nextSchedule!);
+
+            if (phone != null && phone.isNotEmpty) {
+              final smsMessage = 'InaAgapay: Hello $firstName! Ang inyong susunod na prenatal check-up ay nakatakda sa $nextDateStr sa $bhcName. Mangyaring i-save ang petsang ito at mag-ingat po kayo. Salamat!';
+              await SmsService.sendSmsMessage(phone, smsMessage);
+            }
+          }
+        } catch (smsError) {
+          debugPrint('Error sending automated checkup SMS: $smsError');
+        }
+      }
 
       if (!mounted) return;
       _showMessage('Prenatal checkup saved.', type: AppSnackType.success);
