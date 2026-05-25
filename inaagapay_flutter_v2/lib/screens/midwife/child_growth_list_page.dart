@@ -498,11 +498,21 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
     if (zscore == null || zscore.isNaN || zscore.isInfinite) {
       return 'Status unavailable';
     }
-    if (zscore < -2) return 'A little below the expected range for age and sex';
-    if (zscore < -1) return 'A little below the expected range for age and sex';
+    if (zscore < -5 || zscore > 5) {
+      return 'Outside the possible range for age and sex';
+    }
+    if (zscore < -2) return 'Below the expected range for age and sex';
+    if (zscore < -1) return 'Slightly below the expected range for age and sex';
     if (zscore <= 1) return 'Within the expected range for age and sex';
-    if (zscore <= 2) return 'A little above the expected range for age and sex';
-    return 'A little above the expected range for age and sex';
+    if (zscore <= 2) return 'Slightly above the expected range for age and sex';
+    return 'Above the expected range for age and sex';
+  }
+
+  Color _zScoreColor(double? zScore) {
+    if (zScore == null) return AppColors.textSecondary;
+    if (zScore < -2 || zScore > 2) return AppColors.error;
+    if (zScore < -1 || zScore > 1) return AppColors.warning;
+    return AppColors.success;
   }
 
   // FIXED: Properly filter and validate chart values
@@ -1111,7 +1121,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.bgSecondary,
+                color: _zScoreColor(zScore).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -1121,8 +1131,8 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                       zScoreDesc,
                       style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
+                        color: _zScoreColor(zScore),
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
