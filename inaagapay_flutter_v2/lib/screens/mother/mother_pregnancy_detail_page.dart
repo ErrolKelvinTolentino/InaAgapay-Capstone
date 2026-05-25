@@ -286,7 +286,7 @@ final _trimesterContent = [
 
 const _weeklyFacts = <int, String>{
   4: 'Your baby is the size of a poppy seed.',
-  5: 'Heart is beginning to form.',
+  5: 'Your baby is the size of a sesame seed and the heart is beginning to form.',
   6: 'Heartbeat detectable by ultrasound.',
   7: 'Brain growing quickly.',
   8: 'All major organs are forming.',
@@ -354,7 +354,7 @@ const _trimesterNoteFilipino = [
 
 const _weeklyFactsFilipino = <int, String>{
   4: 'Kasing laki ng buto ng poppy ang iyong sanggol.',
-  5: 'Nagsisimulang mabuo ang puso.',
+  5: 'Kasing laki ng linga ang iyong sanggol at nagsisimulang mabuo ang puso.',
   6: 'Maaaring marinig ang tibok ng puso sa ultrasound.',
   7: 'Mabilis na lumalaki ang utak.',
   8: 'Ang lahat ng pangunahing organ ay nabubuo.',
