@@ -603,11 +603,11 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
         label = _t('NORMAL', 'NORMAL');
         break;
       case WeightGainStatus.low:
-        fg = AppColors.warning;
+        fg = Colors.amber;
         label = _t('LOW', 'MABABA');
         break;
       case WeightGainStatus.high:
-        fg = AppColors.error;
+        fg = const Color(0xFFEF5350);
         label = _t('HIGH', 'MATAAS');
         break;
       case WeightGainStatus.insufficient:
@@ -679,35 +679,20 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
     final result = _weightGainResult;
     if (result == null) return const SizedBox.shrink();
 
-    Color statusColor;
-    switch (result.status) {
-      case WeightGainStatus.normal:
-        statusColor = AppColors.success;
-        break;
-      case WeightGainStatus.low:
-        statusColor = AppColors.warning;
-        break;
-      case WeightGainStatus.high:
-        statusColor = AppColors.error;
-        break;
-      case WeightGainStatus.insufficient:
-        statusColor = AppColors.textSecondary;
-        break;
-    }
 
     Color bmiColor;
     switch (result.bmiCategory) {
       case 'Underweight':
-        bmiColor = Colors.blue;
+        bmiColor = Colors.amber;
         break;
       case 'Normal':
         bmiColor = AppColors.success;
         break;
       case 'Overweight':
-        bmiColor = AppColors.warning;
+        bmiColor = Colors.orange;
         break;
       case 'Obese':
-        bmiColor = AppColors.error;
+        bmiColor = const Color(0xFFEF5350);
         break;
       default:
         bmiColor = AppColors.textSecondary;
@@ -799,7 +784,12 @@ class _MotherVitalsPageState extends State<MotherVitalsPage> {
               _t('Actual Gain', 'Aktwal na Dagdag'),
               '${result.actualGain! >= 0 ? '+' : ''}${result.actualGain!.toStringAsFixed(1)} kg',
             ),
-          if (result.expectedGain != null)
+          if (result.expectedGainMin != null && result.expectedGainMax != null)
+            _weightInfoRow(
+              _t('Expected Gain', 'Inaasahang Dagdag'),
+              '${result.expectedGainMin!.toStringAsFixed(1)} - ${result.expectedGainMax!.toStringAsFixed(1)} kg',
+            )
+          else if (result.expectedGain != null)
             _weightInfoRow(
               _t('Expected Gain', 'Inaasahang Dagdag'),
               '${result.expectedGain!.toStringAsFixed(1)} kg',

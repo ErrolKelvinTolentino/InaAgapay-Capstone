@@ -271,6 +271,8 @@ class WeightGainEngine {
       currentWeight: currentWeight,
       currentWeek: aogWeeks,
       expectedGain: expectedGainMid,
+      expectedGainMin: expectedGainMin,
+      expectedGainMax: expectedGainMax,
       actualGain: actualGain,
       weeklyGain: weeklyGain,
       status: status,

@@ -112,7 +112,7 @@ class ProfileGrowthCard extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // Metrics row
+          // Metrics row (Height & Weight equal-sized)
           Row(
             children: [
               Expanded(
@@ -136,20 +136,83 @@ class ProfileGrowthCard extends StatelessWidget {
                   color: AppColors.info,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _GrowthMetricTile(
-                  icon: Icons.calculate_outlined,
-                  label: 'BMI',
-                  value: data['bmi'] != null
-                      ? (data['bmi'] as double).toStringAsFixed(1)
-                      : 'N/A',
-                  subtitle: data['bmi'] != null ? bmiStatusStr : null,
-                  color: bmiStatusColor,
-                ),
-              ),
             ],
           ),
+
+          // BMI row (placed on another row, pill-like classification badge)
+          if (data['bmi'] != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: bmiStatusColor.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: bmiStatusColor.withValues(alpha: 0.15)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.calculate_outlined, size: 16, color: bmiStatusColor),
+                  const SizedBox(width: 8),
+                  RichText(
+                    text: TextSpan(
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                      children: [
+                        const TextSpan(text: 'BMI: '),
+                        TextSpan(
+                          text: (data['bmi'] as double).toStringAsFixed(1),
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: bmiStatusColor,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      bmiStatusStr,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.calculate_outlined, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'BMI: Not computed',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

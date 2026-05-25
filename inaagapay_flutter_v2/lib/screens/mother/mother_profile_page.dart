@@ -4407,190 +4407,252 @@ class _MotherProfilePageState extends State<MotherProfilePage>
               ? _formatDate(normalizedOutcomes.first['outcome_date'] as String?)
               : '-';
 
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: AppColors.cardColorOf(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border(
+                left: const BorderSide(color: AppColors.brandPrimary, width: 4),
+                top: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
+                right: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
+                bottom: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
             child: Theme(
               data: Theme.of(context).copyWith(
                 dividerColor: Colors.transparent,
+                splashColor: AppColors.brandPrimary.withValues(alpha: 0.05),
+                highlightColor: Colors.transparent,
               ),
               child: ExpansionTile(
+                collapsedBackgroundColor: AppColors.bgSecondary,
+                backgroundColor: AppColors.bgSecondary,
+                iconColor: AppColors.brandPrimary,
+                collapsedIconColor: AppColors.brandPrimary.withValues(alpha: 0.7),
                 leading: CircleAvatar(
                   backgroundColor:
                       AppColors.brandPrimary.withValues(alpha: 0.1),
                   child:
-                      Icon(Icons.pregnant_woman, color: AppColors.brandPrimary),
+                      const Icon(Icons.pregnant_woman, color: AppColors.brandPrimary),
                 ),
-                title: Text(primaryOutcomeStr),
-                subtitle: Text('Ended: $primaryOutcomeDate'),
+                title: Text(
+                  primaryOutcomeStr,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                subtitle: Text(
+                  'Ended: $primaryOutcomeDate',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildInfoRow(
-                            'Gestational Age',
-                            p['gestational_age_at_end'] != null
-                                ? '${p['gestational_age_at_end']} weeks'
-                                : '-'),
-                        const SizedBox(height: 8),
-                        for (int i = 0; i < normalizedOutcomes.length; i++) ...[
-                          if (normalizedOutcomes.length > 1)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Text(
-                                  'Fetus ${normalizedOutcomes[i]['fetus_number'] ?? (i + 1)}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
+                  Container(
+                    width: double.infinity,
+                    color: AppColors.cardColorOf(context),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppColors.brandPrimary.withValues(alpha: 0.03),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                              ),
                             ),
-                          _buildInfoRow(
-                              'Outcome',
-                              _formatOutcome(
-                                  normalizedOutcomes[i]['outcome'] as String?)),
-                          _buildInfoRow(
-                              'Date',
-                              _formatDate(normalizedOutcomes[i]['outcome_date']
-                                  as String?)),
-                          ...() {
-                            final deliveryList = deliveries
-                                .where((d) =>
-                                    d['fetus_number'] ==
-                                    normalizedOutcomes[i]['fetus_number'])
-                                .toList();
-                            if (deliveryList.isNotEmpty) {
-                              final delivery = deliveryList.first;
-                              return [
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 _buildInfoRow(
-                                    'Place',
-                                    delivery['place_of_delivery']?.toString() ??
-                                        '-'),
-                                _buildInfoRow(
-                                    'Method',
-                                    delivery['delivery_method']?.toString() ??
-                                        '-'),
-                              ];
-                            }
-                            return <Widget>[];
+                                    'Gestational Age',
+                                    p['gestational_age_at_end'] != null
+                                        ? '${p['gestational_age_at_end']} weeks'
+                                        : '-'),
+                                const SizedBox(height: 6),
+                                for (int i = 0; i < normalizedOutcomes.length; i++) ...[
+                                  if (normalizedOutcomes.length > 1) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Fetus ${normalizedOutcomes[i]['fetus_number'] ?? (i + 1)}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.brandPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                  ],
+                                  _buildInfoRow(
+                                      'Outcome',
+                                      _formatOutcome(
+                                          normalizedOutcomes[i]['outcome'] as String?)),
+                                  _buildInfoRow(
+                                      'Date',
+                                      _formatDate(normalizedOutcomes[i]['outcome_date']
+                                          as String?)),
+                                  ...() {
+                                    final deliveryList = deliveries
+                                        .where((d) =>
+                                            d['fetus_number'] ==
+                                            normalizedOutcomes[i]['fetus_number'])
+                                        .toList();
+                                    if (deliveryList.isNotEmpty) {
+                                      final delivery = deliveryList.first;
+                                      return [
+                                        _buildInfoRow(
+                                            'Place',
+                                            delivery['place_of_delivery']?.toString() ??
+                                                '-'),
+                                        _buildInfoRow(
+                                            'Method',
+                                            delivery['delivery_method']?.toString() ??
+                                                '-'),
+                                      ];
+                                    }
+                                    return <Widget>[];
+                                  }(),
+                                  if (i < normalizedOutcomes.length - 1)
+                                    const SizedBox(height: 6),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const Divider(
+                              height: 24, color: AppColors.borderPrimary),
+                          () {
+                            final pregnancyId = int.tryParse(
+                                    p['pregnancy_id']?.toString() ?? '') ??
+                                -1;
+                            final sortedHistCheckups =
+                                List<Map<String, dynamic>>.from(checkups
+                                    .map((c) => c as Map<String, dynamic>))
+                                  ..sort((a, b) {
+                                    final da =
+                                        _parseDateForSort(a['checkup_datetime']);
+                                    final db =
+                                        _parseDateForSort(b['checkup_datetime']);
+                                    if (da == null || db == null) return 0;
+                                    return db.compareTo(da);
+                                  });
+                            final histCheckupLimit =
+                                _historyCheckupDisplayCounts[pregnancyId] ??
+                                    _pageSize;
+                            return _buildHistoryRecordSection(
+                              title: 'Prenatal Checkups',
+                              icon: Icons.medical_services_outlined,
+                              color: AppColors.brandPrimary,
+                              count: checkups.length,
+                              emptyMessage: 'No prenatal checkup records',
+                              children: [
+                                ...sortedHistCheckups.take(histCheckupLimit).map(
+                                    (c) => _buildCheckupCard(
+                                        c,
+                                        pregnancyId,
+                                        int.tryParse(
+                                                p['fetal_count']?.toString() ??
+                                                    '') ??
+                                            1)),
+                                if (sortedHistCheckups.length > histCheckupLimit)
+                                  _buildLoadMoreButton(
+                                    current: histCheckupLimit,
+                                    total: sortedHistCheckups.length,
+                                    onPressed: () => setState(() =>
+                                        _historyCheckupDisplayCounts[
+                                                pregnancyId] =
+                                            histCheckupLimit + _pageSize),
+                                  ),
+                              ],
+                            );
                           }(),
                           const SizedBox(height: 8),
+                          () {
+                            final pregnancyId = int.tryParse(
+                                    p['pregnancy_id']?.toString() ?? '') ??
+                                -1;
+                            final sortedHistUltrasounds = _sortByDate(
+                                ultrasounds.cast<Map<String, dynamic>>(),
+                                'ultrasound_date',
+                                'desc');
+                            final histUltrasoundLimit =
+                                _historyUltrasoundDisplayCounts[pregnancyId] ??
+                                    _pageSize;
+                            return _buildHistoryRecordSection(
+                              title: 'Ultrasound Records',
+                              icon: Icons.photo_outlined,
+                              color: AppColors.brandAccent,
+                              count: ultrasounds.length,
+                              emptyMessage: 'No ultrasound records',
+                              children: [
+                                ...sortedHistUltrasounds
+                                    .take(histUltrasoundLimit)
+                                    .map((u) => _buildUltrasoundCard(u)),
+                                if (sortedHistUltrasounds.length >
+                                    histUltrasoundLimit)
+                                  _buildLoadMoreButton(
+                                    current: histUltrasoundLimit,
+                                    total: sortedHistUltrasounds.length,
+                                    onPressed: () => setState(() =>
+                                        _historyUltrasoundDisplayCounts[
+                                                pregnancyId] =
+                                            histUltrasoundLimit + _pageSize),
+                                  ),
+                              ],
+                            );
+                          }(),
+                          const SizedBox(height: 8),
+                          () {
+                            final pregnancyId = int.tryParse(
+                                    p['pregnancy_id']?.toString() ?? '') ??
+                                -1;
+                            final sortedHistLabTests = _sortByDate(
+                                labTests.cast<Map<String, dynamic>>(),
+                                'lab_test_date',
+                                'desc');
+                            final histLabLimit =
+                                _historyLabTestDisplayCounts[pregnancyId] ??
+                                    _pageSize;
+                            return _buildHistoryRecordSection(
+                              title: 'Lab Test Records',
+                              icon: Icons.science_outlined,
+                              color: AppColors.warning,
+                              count: labTests.length,
+                              emptyMessage: 'No lab test records',
+                              children: [
+                                ...sortedHistLabTests
+                                    .take(histLabLimit)
+                                    .map((l) => _buildLabTestCard(l)),
+                                if (sortedHistLabTests.length > histLabLimit)
+                                  _buildLoadMoreButton(
+                                    current: histLabLimit,
+                                    total: sortedHistLabTests.length,
+                                    onPressed: () => setState(() =>
+                                        _historyLabTestDisplayCounts[
+                                                pregnancyId] =
+                                            histLabLimit + _pageSize),
+                                  ),
+                              ],
+                            );
+                          }(),
                         ],
-                        const Divider(
-                            height: 24, color: AppColors.borderPrimary),
-                        () {
-                          final pregnancyId = int.tryParse(
-                                  p['pregnancy_id']?.toString() ?? '') ??
-                              -1;
-                          final sortedHistCheckups =
-                              List<Map<String, dynamic>>.from(checkups
-                                  .map((c) => c as Map<String, dynamic>))
-                                ..sort((a, b) {
-                                  final da =
-                                      _parseDateForSort(a['checkup_datetime']);
-                                  final db =
-                                      _parseDateForSort(b['checkup_datetime']);
-                                  if (da == null || db == null) return 0;
-                                  return db.compareTo(da);
-                                });
-                          final histCheckupLimit =
-                              _historyCheckupDisplayCounts[pregnancyId] ??
-                                  _pageSize;
-                          return _buildHistoryRecordSection(
-                            title: 'Prenatal Checkups',
-                            icon: Icons.medical_services_outlined,
-                            color: AppColors.brandPrimary,
-                            count: checkups.length,
-                            emptyMessage: 'No prenatal checkup records',
-                            children: [
-                              ...sortedHistCheckups.take(histCheckupLimit).map(
-                                  (c) => _buildCheckupCard(
-                                      c,
-                                      pregnancyId,
-                                      int.tryParse(
-                                              p['fetal_count']?.toString() ??
-                                                  '') ??
-                                          1)),
-                              if (sortedHistCheckups.length > histCheckupLimit)
-                                _buildLoadMoreButton(
-                                  current: histCheckupLimit,
-                                  total: sortedHistCheckups.length,
-                                  onPressed: () => setState(() =>
-                                      _historyCheckupDisplayCounts[
-                                              pregnancyId] =
-                                          histCheckupLimit + _pageSize),
-                                ),
-                            ],
-                          );
-                        }(),
-                        const SizedBox(height: 8),
-                        () {
-                          final pregnancyId = int.tryParse(
-                                  p['pregnancy_id']?.toString() ?? '') ??
-                              -1;
-                          final sortedHistUltrasounds = _sortByDate(
-                              ultrasounds.cast<Map<String, dynamic>>(),
-                              'ultrasound_date',
-                              'desc');
-                          final histUltrasoundLimit =
-                              _historyUltrasoundDisplayCounts[pregnancyId] ??
-                                  _pageSize;
-                          return _buildHistoryRecordSection(
-                            title: 'Ultrasound Records',
-                            icon: Icons.photo_outlined,
-                            color: AppColors.brandAccent,
-                            count: ultrasounds.length,
-                            emptyMessage: 'No ultrasound records',
-                            children: [
-                              ...sortedHistUltrasounds
-                                  .take(histUltrasoundLimit)
-                                  .map((u) => _buildUltrasoundCard(u)),
-                              if (sortedHistUltrasounds.length >
-                                  histUltrasoundLimit)
-                                _buildLoadMoreButton(
-                                  current: histUltrasoundLimit,
-                                  total: sortedHistUltrasounds.length,
-                                  onPressed: () => setState(() =>
-                                      _historyUltrasoundDisplayCounts[
-                                              pregnancyId] =
-                                          histUltrasoundLimit + _pageSize),
-                                ),
-                            ],
-                          );
-                        }(),
-                        const SizedBox(height: 8),
-                        () {
-                          final pregnancyId = int.tryParse(
-                                  p['pregnancy_id']?.toString() ?? '') ??
-                              -1;
-                          final sortedHistLabTests = _sortByDate(
-                              labTests.cast<Map<String, dynamic>>(),
-                              'lab_test_date',
-                              'desc');
-                          final histLabLimit =
-                              _historyLabTestDisplayCounts[pregnancyId] ??
-                                  _pageSize;
-                          return _buildHistoryRecordSection(
-                            title: 'Lab Test Records',
-                            icon: Icons.science_outlined,
-                            color: AppColors.warning,
-                            count: labTests.length,
-                            emptyMessage: 'No lab test records',
-                            children: [
-                              ...sortedHistLabTests
-                                  .take(histLabLimit)
-                                  .map((l) => _buildLabTestCard(l)),
-                              if (sortedHistLabTests.length > histLabLimit)
-                                _buildLoadMoreButton(
-                                  current: histLabLimit,
-                                  total: sortedHistLabTests.length,
-                                  onPressed: () => setState(() =>
-                                      _historyLabTestDisplayCounts[
-                                              pregnancyId] =
-                                          histLabLimit + _pageSize),
-                                ),
-                            ],
-                          );
-                        }(),
-                      ],
+                      ),
                     ),
                   ),
                 ],

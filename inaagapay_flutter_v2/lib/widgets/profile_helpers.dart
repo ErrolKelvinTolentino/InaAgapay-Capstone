@@ -95,13 +95,13 @@ String bmiSourceLabel({
 Color getBMIStatusColor(String status) {
   switch (status) {
     case 'Underweight':
-      return AppColors.warning;
+      return Colors.amber;
     case 'Normal':
       return AppColors.success;
     case 'Overweight':
-      return AppColors.warning;
+      return Colors.orange;
     case 'Obese':
-      return AppColors.error;
+      return const Color(0xFFEF5350);
     default:
       return AppColors.textSecondary;
   }

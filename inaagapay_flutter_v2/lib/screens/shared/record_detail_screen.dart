@@ -42,6 +42,7 @@ class RecordDetailScreen extends StatefulWidget {
 class _RecordDetailScreenState extends State<RecordDetailScreen> {
   final Set<String> _expandedLabInsightAspects = <String>{};
   bool _showAiInFilipino = LanguageService.isFilipino;
+  bool _weightGainDisclaimerExpanded = false;
 
   // Section accent colors — pink palette variations
   static const _accentRecord = Color(0xFFE6398D); // deep rose
@@ -282,16 +283,31 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Widget _buildWeightGainCard(Map<String, dynamic> eval) {
-    final status = eval['status']?.toString() ?? 'UNKNOWN';
+    final rawStatus = eval['status']?.toString() ?? 'UNKNOWN';
     final mode = eval['mode']?.toString() ?? 'TREND';
     final message = eval['message']?.toString() ?? '';
     final bmiCat = eval['bmi_category']?.toString() ?? '';
+
+    String displayStatus;
+    switch (rawStatus.toUpperCase()) {
+      case 'NORMAL':
+        displayStatus = 'Within expected monitoring range';
+        break;
+      case 'LOW':
+        displayStatus = 'Slightly Below expected monitoring range';
+        break;
+      case 'HIGH':
+        displayStatus = 'Slightly Above expected monitoring range';
+        break;
+      default:
+        displayStatus = rawStatus;
+    }
     
-    final isHigh = status == 'HIGH';
-    final isLow = status == 'LOW';
-    final isInsufficient = status == 'INSUFFICIENT';
+    final isHigh = rawStatus == 'HIGH';
+    final isLow = rawStatus == 'LOW';
+    final isInsufficient = rawStatus == 'INSUFFICIENT';
     
-    final color = isHigh ? AppColors.error : (isLow ? AppColors.warning : AppColors.success);
+    final color = isHigh ? const Color(0xFFEF5350) : (isLow ? Colors.amber : AppColors.success);
     final icon = isHigh ? Icons.trending_up : (isLow ? Icons.trending_down : (isInsufficient ? Icons.hourglass_empty : Icons.check_circle));
     
     return Container(
@@ -311,7 +327,10 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.all(6),
@@ -321,15 +340,12 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                 ),
                 child: Icon(icon, size: 16, color: color),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  _t('Weight Gain Monitor', 'Pagsubaybay sa Timbang'),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+              Text(
+                _t('Weight Gain Monitor', 'Pagsubaybay sa Timbang'),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
               ),
               Container(
@@ -339,7 +355,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  status,
+                  displayStatus,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -385,6 +401,82 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _weightGainDisclaimerExpanded = !_weightGainDisclaimerExpanded;
+              });
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.shade100),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 14, color: Colors.amber),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _t('Disclaimer & Reference', 'Pahayag at Sanggunian'),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        _weightGainDisclaimerExpanded ? Icons.expand_less : Icons.expand_more,
+                        size: 16,
+                        color: Colors.amber,
+                      ),
+                    ],
+                  ),
+                  if (_weightGainDisclaimerExpanded) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      mode.toUpperCase() == 'FULL'
+                          ? _t(
+                              'Disclaimer: For monitoring only. Do not replace professional medical advice. Always consult your healthcare provider.',
+                              'Pahayag: Para sa pagsubaybay lamang. Huwag gawing kapalit ng propesyonal na payong medikal. Palaging kumonsulta sa iyong doktor.',
+                            )
+                          : _t(
+                              'Disclaimer: Pre-pregnancy BMI is unknown; weight gain evaluation is estimated based on current weight trend and LMP. For monitoring only; consult your healthcare provider.',
+                              'Pahayag: Hindi alam ang pre-pregnancy BMI; ang pagtimbang ay tinatantya batay sa kasalukuyang trend at LMP. Para sa pagsubaybay lamang; kumonsulta sa iyong doktor.',
+                            ),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _t(
+                        'Reference: Computation based on the Institute of Medicine (IOM) 2009 Guidelines for Gestational Weight Gain.',
+                        'Sanggunian: Ang pagtutuos ay batay sa Institute of Medicine (IOM) 2009 Guidelines para sa Dagdag-Timbang sa Pagbubuntis.',
+                      ),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ],

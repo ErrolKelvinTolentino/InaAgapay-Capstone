@@ -123,18 +123,22 @@ class ProfileHeaderCard extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          if (email != null && email!.isNotEmpty) ...[
-                            _ContactChip(
-                              icon: Icons.email_outlined,
-                              text: email!,
-                            ),
-                            if (phone != null && phone!.isNotEmpty)
-                              const SizedBox(width: 12),
-                          ],
-                          if (phone != null && phone!.isNotEmpty)
+                          if (phone != null && phone!.isNotEmpty) ...[
                             _ContactChip(
                               icon: Icons.phone_outlined,
                               text: phone!,
+                            ),
+                            if (email != null &&
+                                email!.isNotEmpty &&
+                                !email!.endsWith('@inaagapay.internal'))
+                              const SizedBox(width: 12),
+                          ],
+                          if (email != null &&
+                              email!.isNotEmpty &&
+                              !email!.endsWith('@inaagapay.internal'))
+                            _ContactChip(
+                              icon: Icons.email_outlined,
+                              text: email!,
                             ),
                         ],
                       ),

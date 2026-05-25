@@ -313,32 +313,60 @@ class RecordSortRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        const Text('Sort:',
-            style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500)),
+        const Text(
+          'Sort:',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(width: 6),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: AppColors.bgSecondary,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: DropdownButton<String>(
-            value: currentValue,
-            underline: const SizedBox(),
-            isDense: true,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w500,
+            color: AppColors.brandPrimary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.brandPrimary.withValues(alpha: 0.15),
+              width: 1,
             ),
-            items: const [
-              DropdownMenuItem(value: 'desc', child: Text('Newest')),
-              DropdownMenuItem(value: 'asc', child: Text('Oldest')),
-            ],
-            onChanged: onChanged,
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: currentValue,
+              isDense: true,
+              borderRadius: BorderRadius.circular(12),
+              dropdownColor: Colors.white,
+              elevation: 4,
+              icon: const Icon(
+                Icons.expand_more,
+                size: 16,
+                color: AppColors.brandPrimary,
+              ),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.brandPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'desc',
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Text('Newest'),
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'asc',
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Text('Oldest'),
+                  ),
+                ),
+              ],
+              onChanged: onChanged,
+            ),
           ),
         ),
       ],
@@ -393,8 +421,6 @@ class RecordLoadMoreButton extends StatelessWidget {
   }
 }
 
-// ── History record sub-section ────────────────────────────────────────────
-
 class HistoryRecordSection extends StatelessWidget {
   final String title;
   final IconData icon;
@@ -416,36 +442,64 @@ class HistoryRecordSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: AppColors.bgSecondary,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: color.withValues(alpha: 0.15),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+          splashColor: color.withValues(alpha: 0.05),
+          highlightColor: Colors.transparent,
+        ),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          iconColor: color,
+          collapsedIconColor: color.withValues(alpha: 0.7),
           leading: Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 16),
           ),
           title: Row(
             children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
-              const SizedBox(width: 6),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: count > 0
-                      ? color.withValues(alpha: 0.15)
-                      : AppColors.borderPrimary,
-                  borderRadius: BorderRadius.circular(999),
+                      ? color.withValues(alpha: 0.10)
+                      : AppColors.bgSecondary,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: count > 0
+                        ? color.withValues(alpha: 0.25)
+                        : AppColors.borderPrimary,
+                    width: 1,
+                  ),
                 ),
                 child: Text(
                   '$count',
@@ -460,20 +514,30 @@ class HistoryRecordSection extends StatelessWidget {
           ),
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
               child: count == 0
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                  ? Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSecondary.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.borderPrimary),
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.info_outline,
-                              size: 16, color: AppColors.textSecondary),
+                          Icon(Icons.info_outline,
+                              size: 16, color: color.withValues(alpha: 0.6)),
                           const SizedBox(width: 8),
-                          Text(emptyMessage,
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary)),
+                          Text(
+                            emptyMessage,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                     )
