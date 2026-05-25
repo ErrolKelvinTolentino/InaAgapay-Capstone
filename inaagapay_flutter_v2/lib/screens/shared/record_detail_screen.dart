@@ -50,8 +50,8 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   static const _accentNotes = Color(0xFFC7607E); // warm coral-pink
 
   // Visual hierarchy card colors
-  static const _aiCardBg = Color(0xFFEDE7F6); // light purple for AI
-  static const _aiCardBorder = Color(0xFF9575CD); // purple border
+  static const _aiCardBg = Color(0xFFFFF5F8); // light brand pink background
+  static const _aiCardBorder = Color(0xFFFF68A5); // brand primary pink border
   static const _recommendCardBg = Color(0xFFE8F5E9); // light green
   static const _recommendCardBorder = Color(0xFF66BB6A); // green border
   static const _riskHighCardBg = Color(0xFFFBE9E7); // light red/orange
@@ -404,8 +404,8 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
       if (t == 'vitals') return const Color(0xFFE6398D);
       if (t == 'fetal assessment') return const Color(0xFFD44B8A);
       if (t == 'symptoms') return const Color(0xFFF06292);
-      if (t == 'medications & supplements') return const Color(0xFFBA68C8);
-      if (t == 'schedule & remarks') return const Color(0xFF9575CD);
+      if (t == 'medications & supplements') return const Color(0xFFF06292);
+      if (t == 'schedule & remarks') return const Color(0xFFC7607E);
     }
 
     final t = title.toLowerCase();
@@ -856,7 +856,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.psychology_rounded,
-                        size: 16, color: Color(0xFF7E57C2)),
+                        size: 16, color: AppColors.brandAccent),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -865,14 +865,14 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF5E35B1),
+                        color: AppColors.brandText,
                       ),
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF7E57C2).withValues(alpha: 0.12),
+                      color: AppColors.brandPrimary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -880,7 +880,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                       style: const TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF7E57C2),
+                        color: AppColors.brandText,
                       ),
                     ),
                   ),
@@ -913,7 +913,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                               horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
                             color: !_showAiInFilipino
-                                ? const Color(0xFF7E57C2)
+                                ? AppColors.brandPrimary
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -942,7 +942,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                               horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
                             color: _showAiInFilipino
-                                ? const Color(0xFF7E57C2)
+                                ? AppColors.brandPrimary
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -982,7 +982,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.gpp_maybe_outlined, size: 14, color: Color(0xFF7E57C2)),
+                    const Icon(Icons.gpp_maybe_outlined, size: 14, color: AppColors.brandAccent),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -2401,20 +2401,27 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: riskFactors.map((factor) {
-                  final parts = factor.split(':');
-                  final factorName =
-                      parts.length > 1 ? parts[0].trim() : factor;
-                  final isHigh = factor.toLowerCase().contains('high') ||
-                      (parts.length > 1 &&
-                          parts[1].trim().toLowerCase() == 'high');
+                  // Resolve "Condition" showing by stripping generic prefixes.
+                  String factorName = factor;
+                  if (factor.contains(':')) {
+                    final parts = factor.split(':');
+                    final prefix = parts[0].trim().toLowerCase();
+                    if (prefix == 'condition' || prefix == 'severe symptom') {
+                      factorName = parts.sublist(1).join(':').trim();
+                    } else {
+                      factorName = parts[0].trim();
+                    }
+                  }
+
+                  final isHigh = factor.toLowerCase().contains('high');
                   return Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: isHigh
                           ? AppColors.error.withValues(alpha: 0.1)
                           : AppColors.warning.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: isHigh
                             ? AppColors.error.withValues(alpha: 0.3)
