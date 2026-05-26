@@ -1,6 +1,7 @@
 // lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
@@ -6045,6 +6046,22 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   // ══════════════════════════════════════════════════════════════════════════
 
   Widget _buildHistoryTab(List pastPregnancies) {
+    // ── DEBUG: inspect what data the History tab receives ──
+    if (kDebugMode) {
+      print('═══ HISTORY TAB DEBUG ═══');
+      print('pastPregnancies count: ${pastPregnancies.length}');
+      for (int i = 0; i < pastPregnancies.length; i++) {
+        final p = pastPregnancies[i] as Map;
+        print('  [$i] pregnancy_id=${p['pregnancy_id']}, status=${p['status']}');
+        print('       outcomes=${p['outcomes']}');
+        print('       outcome=${p['outcome']}, outcome_date=${p['outcome_date']}');
+        print('       delivery=${p['delivery']}');
+        print('       checkups count=${(p['checkups'] as List?)?.length ?? 0}');
+      }
+      print('═════════════════════════');
+    }
+    // ── END DEBUG ──
+
     if (pastPregnancies.isEmpty) {
       return Center(
         child: Padding(
@@ -6077,19 +6094,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         padding: const EdgeInsets.all(16),
         itemCount: pastPregnancies.length,
         itemBuilder: (context, index) {
-          final p = pastPregnancies[index] as Map<String, dynamic>;
+          final p = Map<String, dynamic>.from(pastPregnancies[index] as Map);
           final checkups = (p['checkups'] as List?) ?? [];
           final ultrasounds = (p['ultrasounds'] as List?) ?? [];
           final labTests = (p['lab_tests'] as List?) ?? [];
           final vitals = (p['maternal_vitals'] as List?) ?? [];
-          final deliveries =
-              (p['delivery'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
-                  [];
-          final outcomesList =
-              (p['outcomes'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
-                  [];
+          final deliveries = (p['delivery'] as List?)
+                  ?.map((item) => Map<String, dynamic>.from(item as Map))
+                  .toList() ??
+              [];
+          final outcomesList = (p['outcomes'] as List?)
+                  ?.map((item) => Map<String, dynamic>.from(item as Map))
+                  .toList() ??
+              [];
 
-          // FIX #3: use normalizedOutcomes consistently for both
+           // FIX #3: use normalizedOutcomes consistently for both
           // display string and date — not the raw outcomesList
           final normalizedOutcomes = outcomesList.isNotEmpty
               ? outcomesList
@@ -6103,15 +6122,42 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     ]
                   : <Map<String, dynamic>>[];
 
-          final primaryOutcomeStr = normalizedOutcomes.isNotEmpty
-              ? normalizedOutcomes
-                  .map((o) => _formatOutcome(o['outcome'] as String?))
-                  .join(', ')
-              : '-';
+          // ── Build a meaningful title ──
+          // When outcomes exist, show them (e.g. "Live Birth").
+          // Otherwise, build a label from the pregnancy dates.
+          final String primaryOutcomeStr;
+          if (normalizedOutcomes.isNotEmpty) {
+            primaryOutcomeStr = normalizedOutcomes
+                .map((o) => _formatOutcome(o['outcome'] as String?))
+                .join(', ');
+          } else {
+            // Fallback: use LMP or EDD to give context
+            final lmpStr = _formatDate(p['last_menstrual_period']);
+            if (lmpStr != '-') {
+              primaryOutcomeStr = 'Past Pregnancy (LMP: $lmpStr)';
+            } else {
+              primaryOutcomeStr = 'Past Pregnancy #${index + 1}';
+            }
+          }
 
-          final primaryOutcomeDate = normalizedOutcomes.isNotEmpty
-              ? _formatDate(normalizedOutcomes.first['outcome_date'] as String?)
-              : '-';
+          // ── Build a meaningful subtitle ──
+          // Prefer outcome date → ended_at → status
+          final String primaryOutcomeDate;
+          if (normalizedOutcomes.isNotEmpty) {
+            primaryOutcomeDate = _formatDate(
+                normalizedOutcomes.first['outcome_date'] as String?);
+          } else if (p['ended_at'] != null) {
+            primaryOutcomeDate = _formatDate(p['ended_at']);
+          } else {
+            primaryOutcomeDate = '-';
+          }
+
+          // Subtitle text: show "Ended: date" or "Status: ended" etc.
+          final subtitleText = primaryOutcomeDate != '-'
+              ? 'Ended: $primaryOutcomeDate'
+              : normalizedOutcomes.isEmpty
+                  ? 'Status: ${(p['status'] as String? ?? 'ended').replaceAll('_', ' ')}'
+                  : 'Ended: -';
 
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
@@ -6119,11 +6165,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             decoration: BoxDecoration(
               color: AppColors.cardColorOf(context),
               borderRadius: BorderRadius.circular(16),
-              border: Border(
-                left: const BorderSide(color: AppColors.brandPrimary, width: 4),
-                top: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
-                right: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
-                bottom: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
+              border: Border.all(
+                color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                width: 1,
               ),
               boxShadow: [
                 BoxShadow(
@@ -6133,7 +6177,21 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ),
               ],
             ),
-            child: Theme(
+            child: Row(
+              children: [
+                // Left accent stripe
+                Container(
+                  width: 4,
+                  decoration: const BoxDecoration(
+                    color: AppColors.brandPrimary,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(15),
+                      bottomLeft: Radius.circular(15),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Theme(
               data: Theme.of(context).copyWith(
                 dividerColor: Colors.transparent,
                 splashColor: AppColors.brandPrimary.withValues(alpha: 0.05),
@@ -6159,7 +6217,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   ),
                 ),
                 subtitle: Text(
-                  'Ended: $primaryOutcomeDate',
+                  subtitleText,
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
@@ -6249,7 +6307,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 -1;
                             final sortedHistCheckups =
                                 List<Map<String, dynamic>>.from(checkups
-                                    .map((c) => c as Map<String, dynamic>))
+                                    .map((c) => Map<String, dynamic>.from(c as Map)))
                                   ..sort((a, b) {
                                     final da =
                                         _parseDateForSort(a['checkup_datetime']);
@@ -6294,7 +6352,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     p['pregnancy_id']?.toString() ?? '') ??
                                 -1;
                             final sortedHistUltrasounds = _sortByDate(
-                                ultrasounds.cast<Map<String, dynamic>>(),
+                                ultrasounds.map((u) => Map<String, dynamic>.from(u as Map)).toList(),
                                 'ultrasound_date',
                                 'desc');
                             final histUltrasoundLimit =
@@ -6329,7 +6387,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     p['pregnancy_id']?.toString() ?? '') ??
                                 -1;
                             final sortedHistLabTests = _sortByDate(
-                                labTests.cast<Map<String, dynamic>>(),
+                                labTests.map((l) => Map<String, dynamic>.from(l as Map)).toList(),
                                 'lab_test_date',
                                 'desc');
                             final histLabLimit =
@@ -6363,7 +6421,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                     p['pregnancy_id']?.toString() ?? '') ??
                                 -1;
                             final sortedHistVitals = _sortByDate(
-                                vitals.cast<Map<String, dynamic>>(),
+                                vitals.map((v) => Map<String, dynamic>.from(v as Map)).toList(),
                                 'recorded_at',
                                 'desc');
                             final histVitalLimit =
@@ -6398,6 +6456,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ],
               ),
             ),
+              ), // end Expanded
+              ], // end Row children
+            ), // end Row
           );
         },
       ),
@@ -6882,8 +6943,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
         }
 
         final profile = snapshot.data!;
-        final currentPregnancy =
-            profile['current_pregnancy'] as Map<String, dynamic>?;
+        final currentPregnancyRaw = profile['current_pregnancy'];
+        final currentPregnancy = currentPregnancyRaw != null
+            ? Map<String, dynamic>.from(currentPregnancyRaw as Map)
+            : null;
         final pastPregnancies = profile['past_pregnancies'] as List? ?? [];
         final medicalConditions =
             profile['medical_conditions'] as List? ?? [];
