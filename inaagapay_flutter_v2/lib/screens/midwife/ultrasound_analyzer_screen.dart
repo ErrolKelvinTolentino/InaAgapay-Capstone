@@ -4051,19 +4051,26 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
               color: AppColors.brandPrimary.withValues(alpha: 0.08),
               border: const Border(bottom: BorderSide(color: AppColors.borderPrimary)),
             ),
-            child: Row(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Icon(Icons.auto_awesome, color: AppColors.brandPrimary, size: 20),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Ultrasound AI-Assisted Assessment',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.brandPrimary,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.auto_awesome, color: AppColors.brandPrimary, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Ultrasound AI-Assisted Assessment',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brandPrimary,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -4885,8 +4892,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       Expanded(
                         flex: 2,
                         child: MainButton(
-                          label: 'Back',
-                          leftIcon: Icons.arrow_back_ios_new_rounded,
+                          label: '<',
                           isWhiteVariant: true,
                           fontSize: 13,
                           onPressed: _isSaving ? null : _prevStep,
@@ -4896,10 +4902,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       Expanded(
                         flex: 4,
                         child: MainButton(
-                          label: 'Skip AI Analysis',
+                          label: 'Skip Analysis',
                           isWhiteVariant: true,
                           fontSize: 13,
                           onPressed: _isSaving ? null : () {
+                            if (!_validateStep2()) return;
                             setState(() {
                               _aiAnalysisSkipped = true;
                               _combinedResponse = null;
@@ -4915,8 +4922,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                       Expanded(
                         flex: 4,
                         child: MainButton(
-                          label: 'Run AI Analysis',
-                          rightIcon: Icons.auto_awesome,
+                          label: 'Analyze',
                           fontSize: 13,
                           onPressed: _isSaving ? null : _analyzeImages,
                         ),
@@ -4930,8 +4936,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
                     if (_step > 0) ...[
                       Expanded(
                         child: MainButton(
-                          label: 'Back',
-                          leftIcon: Icons.arrow_back_ios_new_rounded,
+                          label: '<',
                           isWhiteVariant: true,
                           onPressed: _isSaving ? null : _prevStep,
                         ),
@@ -4963,9 +4968,10 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
         children: [
           Expanded(
             child: MainButton(
-              label: 'Skip AI Analysis',
+              label: 'Skip Analysis',
               isWhiteVariant: true,
               onPressed: _isSaving ? null : () {
+                if (!_validateStep2()) return;
                 setState(() {
                   _aiAnalysisSkipped = true;
                   _combinedResponse = null;
@@ -4980,8 +4986,7 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: MainButton(
-              label: 'Run AI Analysis',
-              rightIcon: Icons.auto_awesome,
+              label: 'Analyze',
               onPressed: _isSaving ? null : _analyzeImages,
             ),
           ),

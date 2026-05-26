@@ -3279,20 +3279,27 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
               border: const Border(
                   bottom: BorderSide(color: AppColors.borderPrimary)),
             ),
-            child: Row(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Icon(Icons.auto_awesome,
-                    color: AppColors.brandPrimary, size: 20),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Lab Test AI-Assisted Assessment',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.brandPrimary,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.auto_awesome,
+                        color: AppColors.brandPrimary, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Lab Test AI-Assisted Assessment',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brandPrimary,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -4274,28 +4281,33 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      _showSecondaryDetails
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.brandPrimary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _selectedLanguage == 'filipino'
-                          ? (_showSecondaryDetails ? 'Itago ang Detalyadong Resulta' : 'Ipakita ang Detalyadong Resulta (Personnel View)')
-                          : (_showSecondaryDetails ? 'Hide Detailed Laboratory Values' : 'Detailed Laboratory Values (Healthcare Personnel View)'),
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.brandText,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(
+                        _showSecondaryDetails
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: AppColors.brandPrimary,
+                        size: 20,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _selectedLanguage == 'filipino'
+                              ? (_showSecondaryDetails ? 'Itago ang Detalyadong Resulta' : 'Ipakita ang Detalyadong Resulta (Personnel View)')
+                              : (_showSecondaryDetails ? 'Hide Detailed Laboratory Values' : 'Detailed Laboratory Values (Healthcare Personnel View)'),
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.brandText,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
@@ -4667,8 +4679,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       Expanded(
                         flex: 2,
                         child: MainButton(
-                          label: 'Back',
-                          leftIcon: Icons.arrow_back_ios_new_rounded,
+                          label: '<',
                           isWhiteVariant: true,
                           fontSize: 13,
                           onPressed: _isSaving ? null : _prevStep,
@@ -4678,10 +4689,11 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       Expanded(
                         flex: 4,
                         child: MainButton(
-                          label: 'Skip AI Analysis',
+                          label: 'Skip Analysis',
                           isWhiteVariant: true,
                           fontSize: 13,
                           onPressed: _isSaving ? null : () {
+                            if (!_validateStep2()) return;
                             setState(() {
                               _aiAnalysisSkipped = true;
                               _combinedResponse = null; // Clear old AI results!
@@ -4697,8 +4709,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                       Expanded(
                         flex: 4,
                         child: MainButton(
-                          label: 'Run AI Analysis',
-                          rightIcon: Icons.auto_awesome,
+                          label: 'Analyze',
                           fontSize: 13,
                           onPressed: _isSaving ? null : _analyzeImages,
                         ),
@@ -4712,8 +4723,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
                     if (_step > 0) ...[
                       Expanded(
                         child: MainButton(
-                          label: 'Back',
-                          leftIcon: Icons.arrow_back_ios_new_rounded,
+                          label: '<',
                           isWhiteVariant: true,
                           onPressed: _isSaving ? null : _prevStep,
                         ),
