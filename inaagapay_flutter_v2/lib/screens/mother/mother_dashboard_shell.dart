@@ -851,82 +851,87 @@ class _HotlinesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            LanguageService.translate(
-              'Emergency Hotlines',
-              'Mga Emergency Hotline',
-            ),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimaryOf(context),
-            ),
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageService.selectedLanguage,
+      builder: (context, _, __) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                LanguageService.translate(
+                  'Emergency Hotlines',
+                  'Mga Emergency Hotline',
+                ),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimaryOf(context),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                LanguageService.translate(
+                  'Tap to call the number. Long press to copy to clipboard.',
+                  'I-tap para tawagan ang numero. Pindutin nang matagal para kopyahin sa clipboard.',
+                ),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondaryOf(context),
+                ),
+              ),
+              const SizedBox(height: 20),
+              _HotlineButton(
+                label: LanguageService.translate(
+                    'National Emergency Hotline', 'Pambansang Emergency Hotline'),
+                number: '911',
+                icon: Icons.local_hospital,
+                color: AppColors.error,
+              ),
+              const SizedBox(height: 12),
+              _HotlineButton(
+                label: LanguageService.translate(
+                    'DOH Health Hotline', 'DOH Health Hotline'),
+                number: '1555',
+                icon: Icons.phone,
+                color: AppColors.brandPrimary,
+              ),
+              const SizedBox(height: 12),
+              _HotlineButton(
+                label: LanguageService.translate(
+                    'Philippine Red Cross', 'Philippine Red Cross'),
+                number: '143',
+                icon: Icons.health_and_safety,
+                color: const Color(0xFFD32F2F),
+              ),
+              const SizedBox(height: 12),
+              _HotlineButton(
+                label: LanguageService.translate('PNP Emergency', 'PNP Emergency'),
+                number: '117',
+                icon: Icons.shield,
+                color: const Color(0xFF1565C0),
+              ),
+              const SizedBox(height: 12),
+              _HotlineButton(
+                label: LanguageService.translate(
+                    'Bureau of Fire Protection', 'Bureau of Fire Protection'),
+                number: '160',
+                icon: Icons.local_fire_department,
+                color: const Color(0xFFE65100),
+              ),
+              const SizedBox(height: 12),
+              _HotlineButton(
+                label: LanguageService.translate(
+                    'Mental Health Crisis Line', 'Mental Health Crisis Line'),
+                number: '1553',
+                icon: Icons.psychology,
+                color: const Color(0xFF7B1FA2),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            LanguageService.translate(
-              'Tap to call the number. Long press to copy to clipboard.',
-              'I-tap para tawagan ang numero. Pindutin nang matagal para kopyahin sa clipboard.',
-            ),
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondaryOf(context),
-            ),
-          ),
-          const SizedBox(height: 20),
-          _HotlineButton(
-            label: LanguageService.translate(
-                'National Emergency Hotline', 'Pambansang Emergency Hotline'),
-            number: '911',
-            icon: Icons.local_hospital,
-            color: AppColors.error,
-          ),
-          const SizedBox(height: 12),
-          _HotlineButton(
-            label: LanguageService.translate(
-                'DOH Health Hotline', 'DOH Health Hotline'),
-            number: '1555',
-            icon: Icons.phone,
-            color: AppColors.brandPrimary,
-          ),
-          const SizedBox(height: 12),
-          _HotlineButton(
-            label: LanguageService.translate(
-                'Philippine Red Cross', 'Philippine Red Cross'),
-            number: '143',
-            icon: Icons.health_and_safety,
-            color: const Color(0xFFD32F2F),
-          ),
-          const SizedBox(height: 12),
-          _HotlineButton(
-            label: LanguageService.translate('PNP Emergency', 'PNP Emergency'),
-            number: '117',
-            icon: Icons.shield,
-            color: const Color(0xFF1565C0),
-          ),
-          const SizedBox(height: 12),
-          _HotlineButton(
-            label: LanguageService.translate(
-                'Bureau of Fire Protection', 'Bureau of Fire Protection'),
-            number: '160',
-            icon: Icons.local_fire_department,
-            color: const Color(0xFFE65100),
-          ),
-          const SizedBox(height: 12),
-          _HotlineButton(
-            label: LanguageService.translate(
-                'Mental Health Crisis Line', 'Mental Health Crisis Line'),
-            number: '1553',
-            icon: Icons.psychology,
-            color: const Color(0xFF7B1FA2),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
