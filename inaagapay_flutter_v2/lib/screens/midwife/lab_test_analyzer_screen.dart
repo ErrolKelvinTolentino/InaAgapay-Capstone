@@ -3876,21 +3876,15 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
   }) {
     final statusColor = status == CbcComponentStatus.expected
         ? AppColors.success
-        : (status == CbcComponentStatus.monitor
-            ? AppColors.warning
-            : AppColors.error);
+        : AppColors.warning;
 
     final statusText = _selectedLanguage == 'filipino'
         ? (status == CbcComponentStatus.expected
-            ? '✅ Maayos (Normal na Antas)'
-            : (status == CbcComponentStatus.monitor
-                ? '⚠️ Iminumungkahi ang Pagsubaybay'
-                : '🚨 Nangangailangan ng Pagsusuri'))
+            ? '✅ Nasa Inaasahang Saklaw'
+            : '⚠️ Kailangan ng Masusing Pagsubaybay')
         : (status == CbcComponentStatus.expected
             ? '✅ Within Expected Monitoring Range'
-            : (status == CbcComponentStatus.monitor
-                ? '⚠️ Monitoring Recommended'
-                : '🚨 Clinical Follow-Up Recommended'));
+            : '⚠️ Requires Closer Monitoring');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -3992,9 +3986,7 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
     final overallColor = _monitoringClassification == MonitoringClassification.withinExpectedRange
         ? AppColors.success
-        : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
-            ? AppColors.warning
-            : AppColors.error);
+        : AppColors.warning;
 
     final overallTitle = _selectedLanguage == 'filipino'
         ? 'Pangkalahatang Buod ng Pagsusuri sa Dugo'
@@ -4002,63 +3994,43 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
 
     final overallBadge = _selectedLanguage == 'filipino'
         ? (_monitoringClassification == MonitoringClassification.withinExpectedRange
-            ? '✅ Maayos at Normal na Antas'
-            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
-                ? '⚠️ Iminumungkahi ang Masusing Pagsubaybay'
-                : '🚨 Konsultasyon sa Doktor ay Iminumungkahi'))
+            ? '✅ Nasa Inaasahang Saklaw ng Pagsubaybay'
+            : '⚠️ Kailangan ng Masusing Pagsubaybay')
         : (_monitoringClassification == MonitoringClassification.withinExpectedRange
             ? '✅ Within Expected Monitoring Range'
-            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
-                ? '⚠️ Monitoring Recommended'
-                : '🚨 Clinical Follow-Up Recommended'));
+            : '⚠️ Requires Closer Monitoring');
 
     final overallDesc = _selectedLanguage == 'filipino'
         ? (_monitoringClassification == MonitoringClassification.withinExpectedRange
             ? 'Ang iyong kabuuang resulta ng pagsusuri sa dugo ay maayos at angkop para sa iyong yugto ng pagbubuntis.'
-            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
-                ? 'Iminumungkahi ang masusing pagsubaybay sa ilang antas ng iyong dugo kasama ang iyong midwife o doktor.'
-                : 'Lubhang iminumungkahi ang agarang konsultasyon sa iyong doktor o midwife upang masuri ang mga antas ng iyong dugo.'))
+            : 'Iminumungkahi ang masusing pagsubaybay sa ilang antas ng iyong dugo kasama ang iyong midwife o doktor.')
         : (_monitoringClassification == MonitoringClassification.withinExpectedRange
             ? 'Your overall blood monitoring results generally appear consistent with the expected range for this stage of pregnancy.'
-            : (_monitoringClassification == MonitoringClassification.requiresCloserMonitoring
-                ? 'A closer monitoring of certain blood levels is recommended in coordination with your midwife or doctor.'
-                : 'A prompt follow-up consultation with your doctor or midwife is highly recommended to evaluate your blood levels.'));
+            : 'A closer monitoring of certain blood levels is recommended in coordination with your midwife or doctor.');
 
     final oxygenDesc = _selectedLanguage == 'filipino'
         ? (oxygenStatus == CbcComponentStatus.expected
-            ? 'Ang iyong mga antas na may kinalaman sa pagdadala ng oxygen sa dugo (tulad ng Hemoglobin at Hematocrit) ay maayos at nasa normal na antas para sa iyong yugto ng pagbubuntis.'
-            : (oxygenStatus == CbcComponentStatus.monitor
-                ? 'May kaunting pagbabago sa iyong mga resulta para sa oxygen support. Ipagpatuloy ang pag-inom ng prenatal vitamins at kumonsulta sa iyong midwife.'
-                : 'May mga antas sa oxygen support na nangangailangan ng masusing pagsusuri ng midwife o doktor upang maiwasan ang anemia o matinding pagkapagod.'))
+            ? 'Ang iyong dugo ay may sapat na oxygen para sa iyong katawan at kay baby. Ipagpatuloy ang pagkain ng masusustansyang pagkain upang maiwasan ang panghihina.'
+            : 'May kaunting pagbabago o pagbaba sa mga antas na may kinalaman sa iyong dugo. Iminumungkahi naming kumain ng mga pagkaing mayaman sa iron tulad ng gulay at karne, at ipagpatuloy ang pag-inom ng iyong prenatal vitamins upang maiwasan ang matinding pagod o anemia.')
         : (oxygenStatus == CbcComponentStatus.expected
-            ? 'Your blood monitoring results related to oxygen support (such as Hemoglobin and Hematocrit) appear generally consistent and within the expected range for this stage of pregnancy.'
-            : (oxygenStatus == CbcComponentStatus.monitor
-                ? 'Your blood monitoring results related to oxygen support show some slight variations. It is recommended to observe these and correlate them with your midwife.'
-                : 'Your oxygen support levels indicate variations that require clinical review by your midwife or doctor to prevent anemia.'));
+            ? 'Your blood is carrying plenty of oxygen for you and your baby. Keep eating healthy, iron-rich foods to stay strong and energetic.'
+            : 'Your oxygen-carrying blood levels show some variations. We recommend eating iron-rich foods like leafy greens and meat, and continuing your prenatal vitamins to help you stay energetic and avoid anemia.');
 
     final immuneDesc = _selectedLanguage == 'filipino'
         ? (immuneStatus == CbcComponentStatus.expected
-            ? 'Ang mga naitalang antas na may kinalaman sa immune response o paglaban sa impeksyon (WBC o White Blood Cells) ay maayos at nagpapakita ng malusog na proteksyon.'
-            : (immuneStatus == CbcComponentStatus.monitor
-                ? 'May katamtamang pagbabago sa immune monitoring. Ito ay karaniwang reaksyon ng katawan habang nagbubuntis, ngunit iminumungkahi ang patuloy na pagsubaybay.'
-                : 'Nangangailangan ng karagdagang pagsusuri ang iyong immune response levels upang masigurong ligtas ka at si baby sa anumang impeksyon.'))
+            ? 'Ang iyong mga White Blood Cells ay nasa maayos na antas. Ito ay nagpapakita na ang iyong katawan ay may malakas na proteksyon laban sa sakit at impeksyon.'
+            : 'May kaunting pagbabago sa iyong mga White Blood Cells. Ipinapayo namin ang paghuhugas ng kamay, pag-iwas sa mga taong may sakit, at pagpahinga nang maayos upang mapanatili ang iyong kalusugan habang nag-aadjust ang iyong katawan.')
         : (immuneStatus == CbcComponentStatus.expected
-            ? 'The recorded blood monitoring values related to immune response and infection monitoring (WBC) appear generally reassuring and expected.'
-            : (immuneStatus == CbcComponentStatus.monitor
-                ? 'The immune monitoring results show moderate variations. While often normal during pregnancy, continued monitoring is recommended.'
-                : 'Your immune response levels indicate a need for further clinical review to ensure safety from any infection.'));
+            ? 'Your infection-fighting cells are at a great level. This shows your body has a strong shield to protect you and your baby from getting sick.'
+            : 'Your immune levels show slight changes. We recommend standard safety habits like regular handwashing, getting plenty of rest, and staying away from sick individuals to keep your immune system strong.');
 
     final clottingDesc = _selectedLanguage == 'filipino'
         ? (clottingStatus == CbcComponentStatus.expected
-            ? 'Ang mga naitalang antas na may kinalaman sa pagpigil sa pagdurugo (Platelets) ay maayos, ligtas, at handa para sa iyong panganganak.'
-            : (clottingStatus == CbcComponentStatus.monitor
-                ? 'May kaunting pagbabago sa platelet count. Subaybayan ito sa tulong ng iyong midwife upang manatiling ligtas at malusog.'
-                : 'Ang mga antas para sa pagpigil sa pagdurugo ay nangangailangan ng pagsusuri ng doktor upang masigurong ligtas ang iyong panganganak at maiwasan ang komplikasyon.'))
+            ? 'Ang iyong mga Platelet ay nasa ligtas at normal na antas. Ito ay nangangahulugang ang iyong dugo ay handa at ligtas para sa iyong panganganak.'
+            : 'May kaunting pagbabago sa platelet count. Iminumungkahi namin ang patuloy na pag-monitor kasama ang iyong komadrona upang masiguro ang ligtas na panganganak at maiwasan ang labis na pagdurugo.')
         : (clottingStatus == CbcComponentStatus.expected
-            ? 'The recorded blood monitoring values related to platelet activity and blood clotting support (Platelets) appear stable and within expected ranges.'
-            : (clottingStatus == CbcComponentStatus.monitor
-                ? 'There are minor variations in your platelet levels. Continued observation with your midwife is recommended.'
-                : 'Your blood clotting support levels indicate variations that require professional medical review for a safe delivery.'));
+            ? 'Your platelet levels are safe and normal. This means your blood is healthy and fully prepared for a safe delivery when your baby arrives.'
+            : 'Your blood-clotting platelet levels show some variations. Continued monitoring with your midwife is recommended to keep you safe and ensure a smooth, worry-free delivery.');
 
     final highPriorityComponents = {'Hemoglobin', 'Hematocrit', 'WBC', 'Platelets', 'MCV'};
     final highPriorityWidgets = <Widget>[];
@@ -4090,12 +4062,11 @@ class _LabTestAnalyzerScreenState extends State<LabTestAnalyzerScreen> {
         final statusColor =
             interpretation.status == CbcComponentStatus.expected
                 ? AppColors.success
-                : (interpretation.status == CbcComponentStatus.monitor
-                    ? AppColors.warning
-                    : AppColors.error);
+                : AppColors.warning;
 
-        final statusLabel = LabCbcInterpretationEngine.statusLabel(
-            interpretation.status);
+        final statusLabel = interpretation.status == CbcComponentStatus.expected
+            ? (_selectedLanguage == 'filipino' ? 'Nasa Inaasahang Saklaw' : 'Within Expected Monitoring Range')
+            : (_selectedLanguage == 'filipino' ? 'Kailangan ng Masusing Pagsubaybay' : 'Requires Closer Monitoring');
 
         final widget = Container(
           margin: const EdgeInsets.only(bottom: 12),

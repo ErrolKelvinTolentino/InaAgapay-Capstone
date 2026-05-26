@@ -911,11 +911,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           isWarning: growthWarning,
           desc: isFilipino
               ? (growthWarning
-                  ? 'May kaunting pagkakaiba sa sukat ni baby kumpara sa karaniwang sukat sa kanyang yugto. Ipinapayo ang patuloy na pagsubaybay sa kanyang paglaki.'
-                  : 'Ang sukat ng ulo, tiyan, at hita ni baby ay umaayon sa kanyang linggo sa sinapupunan. Ito ay nagpapakita ng malusog na paglaki.')
+                  ? 'May kaunting pagkakaiba sa sukat ni baby para sa kanyang linggo sa sinapupunan. Huwag mag-alala, Mommy! Ipinapayo namin ang patuloy na pag-monitor kasama ang iyong komadrona upang masubaybayan nang maayos ang kanyang paglaki.'
+                  : 'Ang sukat ng ulo, tiyan, at hita ni baby ay maganda at sakto sa kanyang linggo sa sinapupunan. Ito ay nagpapakita ng malusog na paglaki ni baby!')
               : (growthWarning
-                  ? "Some measurements show minor variations from the average size for this stage. Continued monitoring of your baby's growth is recommended."
-                  : "Your baby's head, tummy, and thigh measurements are matching up beautifully with the expected growth for this week of pregnancy."),
+                  ? "Some of your baby's measurements show slight variations. Don't worry, Mommy! We recommend keeping track of her growth during your regular midwife visits to make sure she grows healthy."
+                  : "Your baby's head, tummy, and leg measurements are perfect for her stage of pregnancy. She is growing healthy and beautifully!"),
         ),
         const SizedBox(height: 12),
 
@@ -928,11 +928,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           isWarning: heartWarning,
           desc: isFilipino
               ? (heartWarning
-                  ? 'May nakitang kaunting pagkakaiba sa bilis o ritmo ng tibok ng puso ni baby. Inirerekomenda ang regular na pag-monitor.'
-                  : 'Ang tibok ng puso ni baby ay malakas at nasa ligtas at normal na bilis. Ito ay napakagandang senyales.')
+                  ? 'May nakitang kaunting pagbabago sa tibok ng puso ni baby. Inirerekomenda namin ang patuloy na pag-monitor sa iyong susunod na checkup upang masiguro ang kanyang kaligtasan.'
+                  : 'Napakaganda ng tibok ng puso ni baby! Ito ay malakas, malusog, at nasa ligtas na bilis. Napakagandang senyales nito ng isang masiglang sanggol!')
               : (heartWarning
-                  ? "A minor variation in your baby's heart rhythm or rate was observed. We recommend keeping a close watch during your next visits."
-                  : "Your baby's heartbeat is strong and beating at a safe, healthy rate. This is a wonderful sign of a thriving baby."),
+                  ? "We noticed a slight variation in your baby's heartbeat. We recommend keeping a close watch during your next prenatal visits to ensure baby stays safe and active."
+                  : "Your baby's heartbeat is perfectly strong, healthy, and beating at a safe speed. This is a wonderful sign of a happy and thriving baby!"),
         ),
         const SizedBox(height: 12),
 
@@ -945,11 +945,11 @@ class _UltrasoundAnalyzerScreenState extends State<UltrasoundAnalyzerScreen> {
           isWarning: envWarning,
           desc: isFilipino
               ? (envWarning
-                  ? 'May nakitang indikasyon ng mababa o mataas na antas ng tubig o mababang posisyon ng inunan. Kailangan ng masusing paggabay at pag-iingat.'
-                  : 'Sapat ang dami ng tubig (amniotic fluid) sa iyong sinapupunan para malayang makagalaw si baby, at ang inunan ay nasa tamang posisyon.')
+                  ? 'May kaunting pagbabago sa dami ng tubig (amniotic fluid) o sa pwesto ng inunan (placenta). Pinapayuhan ka naming magpahinga nang mabuti, umiwas sa mabibigat na gawain, at sumunod sa payo ng iyong midwife.'
+                  : 'Sapat na sapat ang dami ng tubig sa iyong sinapupunan para malayang makalaro at makagalaw si baby, at ang inunan ay nasa ligtas na pwesto.')
               : (envWarning
-                  ? "There is a slight variation in the fluid level or the placement of the placenta. Rest and guidance on safe movements are advised."
-                  : "Your baby has plenty of amniotic fluid to swim safely, and the placenta is securely positioned to deliver oxygen and nutrients."),
+                  ? "There is a slight change in your water level (amniotic fluid) or the position of your placenta. We advise you to get plenty of rest, avoid heavy lifting, and follow your midwife's guidance."
+                  : "Your baby has plenty of water to swim and play safely, and your placenta is in a perfect position to give her all the strength she needs."),
         ),
       ],
     );
