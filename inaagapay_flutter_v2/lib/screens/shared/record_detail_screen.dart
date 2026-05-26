@@ -3,6 +3,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:http/http.dart' as http;
+
 import '../../theme/app_colors.dart';
 import '../../services/language_service.dart';
 import '../../widgets/full_screen_image_viewer.dart';
@@ -182,6 +187,601 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
     }
   }
 
+  Future<void> _exportToPdf() async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 20,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                color: AppColors.brandPrimary,
+                strokeWidth: 3,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _t('Generating PDF report...', 'Gumagawa ng PDF report...'),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // ── Brand colors for PDF ──
+      const brandPink = PdfColor.fromInt(0xFFFF68A5);
+      const brandAccent = PdfColor.fromInt(0xFFE6398D);
+      const brandText = PdfColor.fromInt(0xFFC73578);
+      const textPrimary = PdfColor.fromInt(0xFF2D2D2D);
+      const textSecondary = PdfColor.fromInt(0xFF8A8A8A);
+      const bgSecondary = PdfColor.fromInt(0xFFFFF5F8);
+      const successColor = PdfColor.fromInt(0xFF68CBB8);
+      const warningColor = PdfColor.fromInt(0xFFFFB562);
+      const errorColor = PdfColor.fromInt(0xFFE57373);
+      const borderLight = PdfColor.fromInt(0xFFF0F0F0);
+
+      // ── Download images from network ──
+      final List<Uint8List> imageDataList = [];
+      if (widget.imageUrls != null && widget.imageUrls!.isNotEmpty) {
+        for (final url in widget.imageUrls!) {
+          try {
+            final response = await http.get(Uri.parse(url));
+            if (response.statusCode == 200) {
+              imageDataList.add(response.bodyBytes);
+            }
+          } catch (_) {
+            // Skip images that fail to download
+          }
+        }
+      }
+
+      // ── Build the PDF document ──
+      final pdf = pw.Document();
+
+      // Helper: Section Title widget
+      pw.Widget pdfSectionTitle(String title, {PdfColor color = brandAccent}) {
+        return pw.Container(
+          margin: const pw.EdgeInsets.only(top: 14, bottom: 6),
+          padding: const pw.EdgeInsets.only(left: 8, bottom: 4),
+          decoration: pw.BoxDecoration(
+            border: pw.Border(
+              left: pw.BorderSide(color: color, width: 3),
+            ),
+          ),
+          child: pw.Text(
+            title,
+            style: pw.TextStyle(
+              fontSize: 13,
+              fontWeight: pw.FontWeight.bold,
+              color: color,
+            ),
+          ),
+        );
+      }
+
+      // Helper: Detail row (label: value)
+      pw.Widget pdfDetailRow(String label, String value) {
+        return pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 2),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: 160,
+                child: pw.Text(
+                  label,
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    color: textSecondary,
+                  ),
+                ),
+              ),
+              pw.Expanded(
+                child: pw.Text(
+                  value,
+                  style: const pw.TextStyle(
+                    fontSize: 11,
+                    color: textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // Helper: Info box
+      pw.Widget pdfInfoBox(String text, {PdfColor bg = bgSecondary, PdfColor border = brandPink}) {
+        return pw.Container(
+          width: double.infinity,
+          margin: const pw.EdgeInsets.only(top: 4, bottom: 4),
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            color: bg,
+            border: pw.Border.all(color: border, width: 0.5),
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Text(
+            text,
+            style: const pw.TextStyle(fontSize: 10, color: textPrimary),
+          ),
+        );
+      }
+
+      // Helper: Risk chip
+      pw.Widget pdfRiskChip(String label, PdfColor color) {
+        return pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          margin: const pw.EdgeInsets.only(right: 6, bottom: 4),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: color, width: 0.8),
+            borderRadius: pw.BorderRadius.circular(12),
+          ),
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontSize: 9,
+              fontWeight: pw.FontWeight.bold,
+              color: color,
+            ),
+          ),
+        );
+      }
+
+      // ── Collect all content widgets ──
+      final List<pw.Widget> content = [];
+
+      // ── HEADER ──
+      content.add(
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.all(16),
+          decoration: pw.BoxDecoration(
+            color: bgSecondary,
+            borderRadius: pw.BorderRadius.circular(8),
+            border: pw.Border.all(color: brandPink, width: 1),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'INAAGAPAY',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                  color: brandAccent,
+                  letterSpacing: 2,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'Maternal & Child Health Information System',
+                style: const pw.TextStyle(
+                  fontSize: 9,
+                  color: textSecondary,
+                ),
+              ),
+              pw.Divider(color: brandPink, thickness: 0.5, height: 16),
+              pw.Text(
+                widget.title.toUpperCase(),
+                style: pw.TextStyle(
+                  fontSize: 15,
+                  fontWeight: pw.FontWeight.bold,
+                  color: brandText,
+                ),
+              ),
+              if (widget.subtitle != null && widget.subtitle!.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  widget.subtitle!.trim(),
+                  style: const pw.TextStyle(
+                    fontSize: 10,
+                    color: textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+
+      // ── ATTACHED IMAGES ──
+      if (imageDataList.isNotEmpty) {
+        content.add(pdfSectionTitle(_t('Attached Images', 'Mga Kalakip na Larawan')));
+
+        final List<pw.Widget> imageWidgets = [];
+        for (final imgBytes in imageDataList) {
+          try {
+            final image = pw.MemoryImage(imgBytes);
+            imageWidgets.add(
+              pw.Container(
+                width: 160,
+                height: 160,
+                margin: const pw.EdgeInsets.only(right: 8, bottom: 8),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: borderLight, width: 0.5),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.ClipRRect(
+                  horizontalRadius: 6,
+                  verticalRadius: 6,
+                  child: pw.Image(image, fit: pw.BoxFit.cover),
+                ),
+              ),
+            );
+          } catch (_) {
+            // Skip invalid images
+          }
+        }
+
+        if (imageWidgets.isNotEmpty) {
+          content.add(
+            pw.Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: imageWidgets,
+            ),
+          );
+        }
+      }
+
+      // ── RECORD DETAILS (grouped) ──
+      final rows = _normalizedDisplayRows();
+      final sections = _groupRows(rows);
+      for (final entry in sections.entries) {
+        if (entry.value.isEmpty) continue;
+        content.add(pdfSectionTitle(_localizedSectionTitle(entry.key)));
+        for (final row in entry.value) {
+          content.add(pdfDetailRow(row.key, row.value));
+        }
+      }
+
+      // ── WEIGHT GAIN EVALUATION ──
+      if (widget.weightGainEval != null) {
+        final eval = widget.weightGainEval!;
+        content.add(pdfSectionTitle(
+          _t('Weight Gain Monitor', 'Pagsubaybay sa Timbang'),
+          color: const PdfColor.fromInt(0xFF4CAF50),
+        ));
+        final weightBuf = StringBuffer();
+        if (eval['status'] != null) weightBuf.writeln('Status: ${eval['status']}');
+        if (eval['bmi_category'] != null) weightBuf.writeln('BMI Category: ${eval['bmi_category']}');
+        if (eval['message'] != null) weightBuf.writeln(eval['message']);
+        content.add(pdfInfoBox(
+          weightBuf.toString().trim(),
+          bg: const PdfColor.fromInt(0xFFE8F5E9),
+          border: const PdfColor.fromInt(0xFF66BB6A),
+        ));
+      }
+
+      // ── PRENATAL RISK SUMMARY ──
+      if (widget.riskLevel != null && widget.riskLevel!.trim().isNotEmpty) {
+        final isHighRisk = widget.riskLevel!.toLowerCase().contains('high');
+        final riskColor = isHighRisk ? errorColor : successColor;
+        content.add(pdfSectionTitle(
+          _t('Prenatal Risk Summary', 'Buod ng Prenatal Risk'),
+          color: riskColor,
+        ));
+
+        content.add(
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(10),
+            margin: const pw.EdgeInsets.only(bottom: 6),
+            decoration: pw.BoxDecoration(
+              color: isHighRisk
+                  ? const PdfColor.fromInt(0xFFFBE9E7)
+                  : const PdfColor.fromInt(0xFFE8F5E9),
+              border: pw.Border.all(color: riskColor, width: 0.5),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  '${_t("Risk Level", "Antas ng Panganib")}: ${widget.riskLevel!.toUpperCase()}',
+                  style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: riskColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      if (widget.riskFactors != null && widget.riskFactors!.isNotEmpty) {
+        content.add(
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(left: 8, bottom: 4),
+            child: pw.Text(
+              _t('Risk Factors:', 'Mga Salik ng Panganib:'),
+              style: pw.TextStyle(
+                fontSize: 10,
+                fontWeight: pw.FontWeight.bold,
+                color: textSecondary,
+              ),
+            ),
+          ),
+        );
+        content.add(
+          pw.Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: widget.riskFactors!.map((f) {
+              final isHigh = f.toLowerCase().contains('high');
+              return pdfRiskChip(f, isHigh ? errorColor : warningColor);
+            }).toList(),
+          ),
+        );
+      }
+
+      if (widget.suggestedActions != null && widget.suggestedActions!.isNotEmpty) {
+        content.add(
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(left: 8, top: 8, bottom: 4),
+            child: pw.Text(
+              _t('Suggested Actions:', 'Mga Iminumungkahing Aksyon:'),
+              style: pw.TextStyle(
+                fontSize: 10,
+                fontWeight: pw.FontWeight.bold,
+                color: textSecondary,
+              ),
+            ),
+          ),
+        );
+        for (int i = 0; i < widget.suggestedActions!.length; i++) {
+          content.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(left: 16, bottom: 2),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    '${i + 1}. ',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      color: brandAccent,
+                    ),
+                  ),
+                  pw.Expanded(
+                    child: pw.Text(
+                      widget.suggestedActions![i],
+                      style: const pw.TextStyle(fontSize: 10, color: textPrimary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      }
+
+      // ── AI ANALYSIS ──
+      if (widget.aiAnalysis != null && widget.aiAnalysis!.trim().isNotEmpty) {
+        final aiText = _getAiTextForLanguage(widget.aiAnalysis!.trim());
+        content.add(pdfSectionTitle(
+          _tAi('AI Analysis', 'AI na Pagsusuri'),
+          color: brandText,
+        ));
+
+        // AI badge
+        content.add(
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(12),
+            margin: const pw.EdgeInsets.only(bottom: 6),
+            decoration: pw.BoxDecoration(
+              color: bgSecondary,
+              border: pw.Border.all(
+                color: const PdfColor.fromInt(0xFFFF68A5),
+                width: 0.5,
+              ),
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  margin: const pw.EdgeInsets.only(bottom: 8),
+                  decoration: pw.BoxDecoration(
+                    color: const PdfColor.fromInt(0xFFFFE4EE),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Text(
+                    _tAi('AI Generated', 'Gawa ng AI'),
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                      color: brandText,
+                    ),
+                  ),
+                ),
+                pw.Text(
+                  aiText,
+                  style: const pw.TextStyle(
+                    fontSize: 10,
+                    color: textPrimary,
+                    lineSpacing: 4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        // Recommendations
+        final recommendations = _extractRecommendations(aiText);
+        if (recommendations.isNotEmpty) {
+          content.add(pdfSectionTitle(
+            _tAi('Recommendations', 'Mga Rekomendasyon'),
+            color: const PdfColor.fromInt(0xFF2E7D32),
+          ));
+          content.add(
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: const PdfColor.fromInt(0xFFE8F5E9),
+                border: pw.Border.all(
+                  color: const PdfColor.fromInt(0xFF66BB6A),
+                  width: 0.5,
+                ),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: recommendations.asMap().entries.map((entry) {
+                  return pw.Padding(
+                    padding: const pw.EdgeInsets.only(bottom: 4),
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          '${entry.key + 1}. ',
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            color: const PdfColor.fromInt(0xFF2E7D32),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: pw.Text(
+                            entry.value,
+                            style: const pw.TextStyle(
+                              fontSize: 10,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          );
+        }
+      }
+
+      // ── DISCLAIMER ──
+      content.add(pw.SizedBox(height: 12));
+      content.add(
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            color: const PdfColor.fromInt(0xFFFFF8E1),
+            border: pw.Border.all(
+              color: const PdfColor.fromInt(0xFFFFB562),
+              width: 0.5,
+            ),
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Text(
+            _tAi(
+              'Disclaimer: This AI-assisted interpretation is intended only for healthcare monitoring support and does not replace professional medical consultation. This document is not a medical prescription.',
+              'Paunawa: Ang AI-assisted na interpretasyong ito ay gabay lamang para sa pagsubaybay sa kalusugan at hindi pamalit sa konsultasyon sa doktor o midwife. Ang dokumentong ito ay hindi medikal na reseta.',
+            ),
+            style: const pw.TextStyle(
+              fontSize: 8.5,
+              color: textSecondary,
+            ),
+          ),
+        ),
+      );
+
+      // ── Build Multi-Page PDF ──
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          footer: (pw.Context ctx) {
+            return pw.Container(
+              alignment: pw.Alignment.center,
+              padding: const pw.EdgeInsets.only(top: 8),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(
+                  top: pw.BorderSide(color: borderLight, width: 0.5),
+                ),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Generated by InaAgapay Health System',
+                    style: const pw.TextStyle(fontSize: 8, color: textSecondary),
+                  ),
+                  pw.Text(
+                    'Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                    style: const pw.TextStyle(fontSize: 8, color: textSecondary),
+                  ),
+                ],
+              ),
+            );
+          },
+          build: (pw.Context context) => content,
+        ),
+      );
+
+      // ── Share / Save the PDF ──
+      final pdfBytes = await pdf.save();
+
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss loading dialog
+      }
+
+      final sanitizedTitle = widget.title
+          .replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), '')
+          .replaceAll(RegExp(r'\s+'), '_')
+          .toLowerCase();
+      final fileName = 'inaagapay_${sanitizedTitle}_report.pdf';
+
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_t(
+              'Failed to generate PDF. Please try again.',
+              'Hindi nagawa ang PDF. Pakisubukan muli.',
+            )),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasAi =
@@ -195,11 +795,22 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           SecondaryHeader(
             title: widget.title,
             onBack: () => Navigator.pop(context),
-            trailing: IconButton(
-              icon: const Icon(Icons.copy_all_rounded),
-              tooltip: _t('Export Report', 'I-export ang Report'),
-              onPressed: _exportReport,
-              color: AppColors.brandPrimary,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.copy_all_rounded),
+                  tooltip: _t('Copy Report', 'Kopyahin ang Report'),
+                  onPressed: _exportReport,
+                  color: AppColors.brandPrimary,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.picture_as_pdf_rounded),
+                  tooltip: _t('Export to PDF', 'I-export sa PDF'),
+                  onPressed: _exportToPdf,
+                  color: AppColors.brandPrimary,
+                ),
+              ],
             ),
           ),
           Expanded(
