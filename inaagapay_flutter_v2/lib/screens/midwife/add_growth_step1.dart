@@ -301,37 +301,6 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
       return;
     }
 
-    // Block ridiculous entries where the Z-score indicates it's outside any realistic possible range (outside -5 to 5)
-    if ((_heightZScore != null && (_heightZScore! < -5 || _heightZScore! > 5)) ||
-        (_weightZScore != null && (_weightZScore! < -5 || _weightZScore! > 5))) {
-      setState(() {
-        _isFormValid = false;
-        _validationMessageType = ValidationType.error;
-        _validationMessage = 'Error: Height or weight is outside the possible range for a child of this age. Please verify that the entries are correct.';
-      });
-      return;
-    }
-
-    final heightRange = _heightRangeForAge();
-    final weightRange = _weightRangeForAge();
-    final heightValid = height >= heightRange.min && height <= heightRange.max;
-    final weightValid = weight >= weightRange.min && weight <= weightRange.max;
-
-    if (!heightValid || !weightValid) {
-      final heightText =
-          'Height should be ${heightRange.min.toStringAsFixed(0)}–${heightRange.max.toStringAsFixed(0)} cm.';
-      final weightText =
-          'Weight should be ${weightRange.min.toStringAsFixed(1)}–${weightRange.max.toStringAsFixed(1)} kg.';
-      setState(() {
-        _isFormValid = true;
-        _validationMessageType = ValidationType.info;
-        _validationMessage =
-            'Warning: This measurement is outside the typical range for a child aged $_ageInWeeks weeks. Please double check values before continuing. $heightText $weightText';
-        _calculateZScores();
-      });
-      return;
-    }
-
     setState(() {
       _isFormValid = true;
       _validationMessage = null;
@@ -858,18 +827,47 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
     }
   }
 
-  _Range _heightRangeForAge() {
-    if (_ageInWeeks < 13) return _Range(40, 70);
-    if (_ageInWeeks < 26) return _Range(45, 80);
-    if (_ageInWeeks < 52) return _Range(50, 90);
-    return _Range(60, 140);
-  }
+  String? _getBmiExplanation() {
+    if (_bmiZScore == null || _bmiController.text.isEmpty) return null;
 
-  _Range _weightRangeForAge() {
-    if (_ageInWeeks < 13) return _Range(2, 6);
-    if (_ageInWeeks < 26) return _Range(2.5, 10);
-    if (_ageInWeeks < 52) return _Range(3, 12);
-    return _Range(4, 35);
+    final double? heightCm = double.tryParse(_heightController.text);
+    final double? weightKg = double.tryParse(_weightController.text);
+    if (heightCm == null || weightKg == null || heightCm <= 0 || weightKg <= 0) return null;
+
+    final String status = _bmiCategoryText;
+
+    if (status == 'Slightly below standard range') {
+      if (_weightZScore != null && _weightZScore! < -1 && _heightZScore != null && _heightZScore! > 1) {
+        return 'Both the child\'s weight is slightly below expected range and height is slightly above expected range, contributing to the lower BMI.';
+      }
+      if (_weightZScore != null && _weightZScore! < -1) {
+        return 'The child\'s weight is slightly below the standard range for their age, contributing to the lower BMI.';
+      }
+      if (_heightZScore != null && _heightZScore! > 1) {
+        return 'The child\'s height is slightly above the standard range for their age, which contributes to a lower BMI relative to their frame.';
+      }
+      if (_weightZScore != null && _weightZScore! >= -1 && _heightZScore != null && _heightZScore! <= 1) {
+        return 'Although the child\'s height and weight are both individually within expected ranges, the weight is on the lower side relative to their height, resulting in a slightly lower BMI.';
+      }
+      return 'The child\'s weight is lower than typical for their height at this age, resulting in a lower BMI.';
+    } else if (status == 'Slightly above standard range') {
+      if (_weightZScore != null && _weightZScore! > 1 && _heightZScore != null && _heightZScore! < -1) {
+        return 'Both the child\'s weight is slightly above expected range and height is slightly below expected range, contributing to the higher BMI.';
+      }
+      if (_weightZScore != null && _weightZScore! > 1) {
+        return 'The child\'s weight is slightly above the standard range for their age, contributing to the higher BMI.';
+      }
+      if (_heightZScore != null && _heightZScore! < -1) {
+        return 'The child\'s height is slightly below the standard range for their age, which contributes to a higher BMI relative to their frame.';
+      }
+      if (_weightZScore != null && _weightZScore! <= 1 && _heightZScore != null && _heightZScore! >= -1) {
+        return 'Although the child\'s height and weight are both individually within expected ranges, the weight is on the higher side relative to their height, resulting in a slightly higher BMI.';
+      }
+      return 'The child\'s weight is higher than typical for their height at this age, resulting in a higher BMI.';
+    } else if (status == 'Within expected standard range') {
+      return 'The child\'s height and weight are both within the expected standard range for this age, resulting in a healthy BMI.';
+    }
+    return null;
   }
 
   @override
@@ -1020,20 +1018,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
           ),
         ],
 
-        if (_heightZScore != null) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: Text(
-              _growthStatusDescription('Height', _heightZScore),
-              style: TextStyle(
-                fontSize: 12,
-                color: _zScoreColor(_heightZScore),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+
 
         const SizedBox(height: 16),
 
@@ -1065,20 +1050,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
           ),
         ],
 
-        if (_weightZScore != null) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: Text(
-              _growthStatusDescription('Weight', _weightZScore),
-              style: TextStyle(
-                fontSize: 12,
-                color: _zScoreColor(_weightZScore),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+
 
         const SizedBox(height: 16),
 
@@ -1168,6 +1140,23 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                     ),
                   ),
                 ),
+                if (_getBmiExplanation() != null) ...[
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: _bmiCategoryColor.withValues(alpha: 0.2)),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _getBmiExplanation()!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: _bmiCategoryColor,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ],
           ),
@@ -1779,37 +1768,12 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   child: Row(
                     children: [
-                      if (_step > 0) ...[
-                        Expanded(
-                          child: MainButton(
-                            label: 'Back',
-                            leftIcon: Icons.arrow_back_ios_new_rounded,
-                            isWhiteVariant: true,
-                            onPressed: () => setState(() {
-                              _isEditingAi = false;
-                              _step = 0;
-                            }),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
                       Expanded(
-                        flex: (_step > 0) ? 2 : 1,
-                        child: _step == _totalSteps - 1
-                            ? MainButton(
-                                label: _aiResponseApproved
-                                    ? 'Save Growth Record'
-                                    : 'Approve AI to Save',
-                                rightIcon: _aiResponseApproved
-                                    ? Icons.check_rounded
-                                    : Icons.arrow_forward_ios_rounded,
-                                onPressed: _aiResponseApproved ? _submit : null,
-                              )
-                            : MainButton(
-                                label: 'Next',
-                                rightIcon: Icons.arrow_forward_ios_rounded,
-                                onPressed: _isFormValid ? _generateAIInsight : null,
-                              ),
+                        child: MainButton(
+                          label: 'Save Growth Record',
+                          rightIcon: Icons.check_rounded,
+                          onPressed: _isFormValid ? _submit : null,
+                        ),
                       ),
                     ],
                   ),
@@ -1818,10 +1782,4 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
             ),
     );
   }
-}
-
-class _Range {
-  final double min;
-  final double max;
-  const _Range(this.min, this.max);
 }
