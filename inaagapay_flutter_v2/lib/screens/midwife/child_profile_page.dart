@@ -971,6 +971,11 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
     final heightLabel = heightZ == null ? 'Within expected range' : (heightZ < -1 ? 'Slightly Below' : (heightZ <= 1 ? 'Within expected range' : 'Slightly Above'));
     final weightLabel = weightZ == null ? 'Within expected range' : (weightZ < -1 ? 'Slightly Below' : (weightZ <= 1 ? 'Within expected range' : 'Slightly Above'));
 
+    final isWeightExpected = weightZ == null || (weightZ >= -1 && weightZ <= 1);
+    final isHeightExpected = heightZ == null || (heightZ >= -1 && heightZ <= 1);
+    final weightSuffix = isWeightExpected ? '' : ' ($weightLabel)';
+    final heightSuffix = isHeightExpected ? '' : ' ($heightLabel)';
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -982,7 +987,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
@@ -998,94 +1002,105 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandPrimary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.trending_up_rounded,
-                    color: AppColors.brandPrimary,
-                    size: 20,
-                  ),
+            // Styled Header mimicking weight gain analysis
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: bmiColor.withValues(alpha: 0.08),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(18),
+                  topRight: Radius.circular(18),
                 ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Growth Statistics (Click to View Chart)',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.trending_up_rounded,
+                          color: bmiColor, size: 22),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Growth Statistics',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Status badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: bmiColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: bmiColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      status,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: bmiColor,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            
-            // Badges Row
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: bmiColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    status,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: bmiColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Detail rows
-            _growthInfoRow('Current Weight', '${latestWeight.toStringAsFixed(1)} kg ($weightLabel)'),
-            _growthInfoRow('Current Length', '${latestHeight.toStringAsFixed(1)} cm ($heightLabel)'),
-            _growthInfoRow('Current BMI', '${latestBMI?.toStringAsFixed(1) ?? 'N/A'} kg/m²'),
-            _growthInfoRow('Age in Weeks', '$latestAgeWeeks weeks old'),
-
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 10),
-            
-            // Dynamic interpretation text matching add growth record wording
-            Text(
-              _getBmiExplanationForDash(latestBMI, latestWeight, latestHeight, latestAgeWeeks, childSex, status),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: bmiColor,
-                height: 1.4,
+                ],
               ),
             ),
             
-            const SizedBox(height: 12),
-            const Align(
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Detail rows
+                  _growthInfoRow('Current Weight', '${latestWeight.toStringAsFixed(1)} kg$weightSuffix'),
+                  _growthInfoRow('Current Length', '${latestHeight.toStringAsFixed(1)} cm$heightSuffix'),
+                  _growthInfoRow('Current BMI', '${latestBMI?.toStringAsFixed(1) ?? 'N/A'} kg/m²'),
+                  _growthInfoRow('Age in Weeks', '$latestAgeWeeks weeks old'),
+
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  const SizedBox(height: 10),
+                  
+                  // Dynamic interpretation text matching add growth record wording
                   Text(
-                    'View History & Charts',
+                    _getBmiExplanationForDash(latestBMI, latestWeight, latestHeight, latestAgeWeeks, childSex, status),
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.brandPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: bmiColor,
+                      height: 1.4,
                     ),
                   ),
-                  SizedBox(width: 4),
-                  Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.brandPrimary),
+                  
+                  const SizedBox(height: 12),
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'View History & Charts',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.brandPrimary,
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.brandPrimary),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1148,7 +1163,7 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
       }
       return 'The child\'s weight is higher than typical for their height at this age, resulting in a higher BMI.';
     } else {
-      return 'The child\'s height and weight are both within the expected standard range for this age, resulting in a healthy BMI.';
+      return 'The child\'s height and weight are both within the expected standard range for this age, resulting in a standard BMI.';
     }
   }
 
