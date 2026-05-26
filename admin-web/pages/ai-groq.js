@@ -1,20 +1,51 @@
 // pages/ai-groq.js
 // Groq AI (LLaMA 3) integration for InaAgapay Admin Portal
 
-const GROQ_API_KEY = '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';
+let GROQ_API_KEY = '';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 // Updated to the newest supported Llama model
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+// Load API key dynamically from .env file
+async function loadApiKey() {
+    if (GROQ_API_KEY) return GROQ_API_KEY;
+    try {
+        let response = await fetch('../.env');
+        if (!response.ok) {
+            response = await fetch('/.env');
+        }
+        if (!response.ok) {
+            throw new Error('Could not load .env file');
+        }
+        const text = await response.text();
+        const lines = text.split('\n');
+        for (const line of lines) {
+            const match = line.match(/^\s*GROQ_API_KEY\s*=\s*(.*)\s*$/);
+            if (match) {
+                GROQ_API_KEY = match[1].replace(/['"\r]/g, '').trim();
+                return GROQ_API_KEY;
+            }
+        }
+        throw new Error('GROQ_API_KEY not found in .env');
+    } catch (err) {
+        console.error('Failed to load API key:', err);
+        return '';
+    }
+}
 
 // --------------------------------------------------
 // 1. Core reusable analysis function
 // --------------------------------------------------
 async function analyzeWithGroq(prompt) {
     try {
+        const apiKey = await loadApiKey();
+        if (!apiKey) {
+            return '⚠️ AI analysis temporarily unavailable: GROQ_API_KEY not configured in .env file.';
+        }
         const response = await fetch(GROQ_ENDPOINT, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({

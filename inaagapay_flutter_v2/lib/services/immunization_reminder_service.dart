@@ -133,7 +133,7 @@ class ImmunizationReminderService {
       }
 
       // 5. Compute eligibility per mother
-      final motherChildReminders = <int, List<String>>{}; // mother_id -> list of vaccine descriptions
+      final motherChildReminders = <int, Map<String, List<String>>>{}; // mother_id -> {childName -> [vaccineLabels]}
       final motherMaternalEligible = <int, bool>{};       // mother_id -> is eligible for maternal vaccine
 
       // Determine child vaccine eligibility
@@ -158,7 +158,10 @@ class ImmunizationReminderService {
           if (ageMonths >= recommendedAge - 0.5 && !completed.contains(vaccineId)) {
             final doseStr = vaccine['dose_number'] != null ? ' (Dose ${vaccine['dose_number']})' : '';
             final vaccineLabel = '${vaccine['vaccine_name']}$doseStr';
-            motherChildReminders.putIfAbsent(motherId, () => []).add('$childName: $vaccineLabel');
+            motherChildReminders
+                .putIfAbsent(motherId, () => {})
+                .putIfAbsent(childName, () => [])
+                .add(vaccineLabel);
           }
         }
       }
@@ -182,7 +185,11 @@ class ImmunizationReminderService {
         final accountId = m['account_id'] as int?;
         if (accountId == null) continue;
 
-        final childReminders = motherChildReminders[motherId] ?? [];
+        final childRemindersMap = motherChildReminders[motherId] ?? {};
+        final childReminders = childRemindersMap.entries.map((e) {
+          return '${e.key}: ${e.value.join(', ')}';
+        }).toList();
+
         final hasMaternal = motherMaternalEligible[motherId] == true;
 
         if (childReminders.isEmpty && !hasMaternal) {
@@ -205,7 +212,6 @@ class ImmunizationReminderService {
         }
 
         // Construct message contents
-        final motherFirstName = account['first_name']?.toString() ?? 'Nanay';
         final phone = account['phone_number']?.toString();
 
         String notificationTitle = 'Immunization Schedule / Iskedyul ng Bakuna';
@@ -213,16 +219,16 @@ class ImmunizationReminderService {
         String msgEnglish = '';
 
         if (childReminders.isNotEmpty && hasMaternal) {
-          final vaccinesList = childReminders.join(', ');
-          msgTagalog = 'Magandang araw po Nanay $motherFirstName! Mayroon pong nakatakdang bakuna para sa inyo at sa inyong anak sa $bhcName ngayong $formattedDate. Mga bakuna para sa bata: $vaccinesList. TD vaccine naman po para sa inyo. Mangyaring bisitahin ang inyong health center. Salamat po!';
-          msgEnglish = 'Good day Mommy $motherFirstName! There is a scheduled vaccination for you and your child at $bhcName on $formattedDate. Child vaccines: $vaccinesList. TD vaccine for you. Please visit your health center. Thank you!';
+          final vaccinesList = childReminders.join('; ');
+          msgTagalog = 'Paalala mula sa $bhcName: May bakuna ngayong $formattedDate para sa inyo (TD) at sa bata: $vaccinesList. Pumunta po sa health center. Salamat!';
+          msgEnglish = 'Reminder from $bhcName: Vaccine schedule on $formattedDate for you (TD) & child: $vaccinesList. Please visit the health center. Thanks!';
         } else if (childReminders.isNotEmpty) {
-          final vaccinesList = childReminders.join(', ');
-          msgTagalog = 'Magandang araw po Nanay $motherFirstName! Mayroon pong nakatakdang bakuna para sa inyong anak sa $bhcName ngayong $formattedDate. Mga bakuna: $vaccinesList. Mangyaring pumunta sa inyong health center. Salamat po!';
-          msgEnglish = 'Good day Mommy $motherFirstName! There is a scheduled vaccination for your child at $bhcName on $formattedDate. Vaccines: $vaccinesList. Please visit your health center. Thank you!';
+          final vaccinesList = childReminders.join('; ');
+          msgTagalog = 'Paalala mula sa $bhcName: May bakuna ngayong $formattedDate para kay: $vaccinesList. Pumunta po sa health center. Salamat!';
+          msgEnglish = 'Reminder from $bhcName: Vaccine schedule on $formattedDate for: $vaccinesList. Please visit the health center. Thanks!';
         } else if (hasMaternal) {
-          msgTagalog = 'Magandang araw po Nanay $motherFirstName! Mayroon pong nakatakdang bakunang Tetanus Diptheria (TD) para sa mga buntis sa $bhcName ngayong $formattedDate. Mangyaring pumunta sa inyong health center para sa inyong bakuna. Salamat po at mag-ingat!';
-          msgEnglish = 'Good day Mommy $motherFirstName! There is a scheduled Tetanus Diptheria (TD) vaccination for pregnant mothers at $bhcName on $formattedDate. Please visit your health center. Thank you and stay safe!';
+          msgTagalog = 'Paalala mula sa $bhcName: May TD vaccine para sa buntis ngayong $formattedDate. Pumunta po sa health center. Salamat!';
+          msgEnglish = 'Reminder from $bhcName: TD vaccine schedule for pregnant mothers on $formattedDate. Please visit the health center. Thanks!';
         }
 
         final combinedMessage = '$msgTagalog\n\n$msgEnglish';
