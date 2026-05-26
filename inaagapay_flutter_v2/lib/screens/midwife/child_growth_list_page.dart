@@ -549,7 +549,7 @@ $recordsSummary
       if (count == 1) {
         labels.add(baseLabel);
       } else {
-        labels.add('$baseLabel ${DateFormat('MMM d').format(recordDate)}');
+        labels.add(DateFormat('M/d').format(recordDate));
       }
     }
 
@@ -828,7 +828,7 @@ $recordsSummary
           zScore: bmiZ,
           bmiValue: latestBMI > 0 ? latestBMI : null,
           icon: Icons.straighten,
-          color: AppColors.brandSecondary,
+          color: AppColors.brandText,
           show: activeTab == 0,
         ),
         _buildMetricCard(
@@ -915,7 +915,11 @@ $recordsSummary
         if (activeTab == 2 && heightValues.length < 2)
           _buildInsufficientDataMessage('Height'),
         const SizedBox(height: 20),
-        _buildAiInsightCard(),
+        _buildCustomInsightCard(
+          heightZ: heightZ,
+          weightZ: weightZ,
+          bmiZ: bmiZ,
+        ),
         const SizedBox(height: 24),
         _buildHistorySection(),
       ],
@@ -1139,44 +1143,97 @@ $recordsSummary
     );
   }
 
-  Widget _buildAiInsightCard() {
-    if (aiAnalysis == null && !aiLoading) return const SizedBox.shrink();
-
-    final fullText = aiAnalysis ?? '';
+  Widget _buildCustomInsightCard({
+    required double? heightZ,
+    required double? weightZ,
+    required double? bmiZ,
+  }) {
     final isFilipino = LanguageService.isFilipino;
+    String displayText = '';
 
-    // Parse out English/Filipino sections
-    final normalized = fullText.replaceAll('\r\n', '\n');
-    final englishRegex = RegExp(
-      r'(?:^|\n)(?:#+\s*|\*+|\[)?English(?:#+\s*|\*+|\])?:?\s*?\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?(?:Filipino|Tagalog)(?:#+\s*|\*+|\[)?:?|$)',
-      caseSensitive: false,
-    );
-    final filipinoRegex = RegExp(
-      r'(?:^|\n)(?:#+\s*|\*+|\[)?(?:Filipino|Tagalog)(?:#+\s*|\*+|\[)?:?\s*?\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?English(?:#+\s*|\*+|\[)?:?|$)',
-      caseSensitive: false,
-    );
+    if (activeTab == 0) {
+      // BMI
+      final z = bmiZ;
+      if (z == null || z.isNaN || z.isInfinite) {
+        displayText = isFilipino
+            ? 'Hindi sapat ang datos para sa pagsusuri ng BMI.'
+            : 'Insufficient data for BMI analysis.';
+      } else if (z < -1) {
+        displayText = isFilipino
+            ? 'Ang BMI ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ibig sabihin, medyo mababa ang timbang niya kumpara sa kaniyang tangkad, na karaniwang nangyayari kapag napaka-aktibo ng bata o mabilis na tumatangkad.'
+            : "Your child's BMI is slightly below the standard range for their age. This means their weight is relatively low compared to their height, which is common during active phases or rapid growth spurts.";
+      } else if (z <= 1) {
+        displayText = isFilipino
+            ? 'Ang BMI ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Nagpapakita ito ng malusog at balanseng ugnayan sa pagitan ng kaniyang tangkad at timbang habang patuloy siyang lumalaki.'
+            : "Your child's BMI is within the expected standard range for their age. This indicates a healthy, balanced relationship between their height and weight as they continue to grow.";
+      } else {
+        displayText = isFilipino
+            ? 'Ang BMI ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ibig sabihin, medyo mas mabigat siya kumpara sa kaniyang tangkad, na maaaring bahagi ng kaniyang normal na paglaki o hubog ng katawan.'
+            : "Your child's BMI is slightly above the standard range for their age. This means their weight is a bit higher relative to their height, which can be a temporary phase or natural body build variation.";
+      }
+    } else if (activeTab == 1) {
+      // Weight
+      final z = weightZ;
+      if (z == null || z.isNaN || z.isInfinite) {
+        displayText = isFilipino
+            ? 'Hindi sapat ang datos para sa pagsusuri ng timbang.'
+            : 'Insufficient data for weight analysis.';
+      } else if (z < -1) {
+        displayText = isFilipino
+            ? 'Ang timbang ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ipinapakita nito na medyo mas magaan siya kaysa sa karaniwan, na maaaring dahil sa kaniyang pagiging aktibo o mabilis na paglaki.'
+            : "Your child's weight is slightly below the standard range for their age. This suggests they are a bit lighter than average, which can happen if they are highly active or during a growth spurt.";
+      } else if (z <= 1) {
+        displayText = isFilipino
+            ? 'Ang timbang ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Isang magandang senyales ito na sapat ang kaniyang nutrisyon at patuloy siyang lumalaki nang malusog.'
+            : "Your child's weight is within the expected standard range for their age. This is a wonderful sign that they are receiving good nourishment and gaining weight steadily.";
+      } else {
+        displayText = isFilipino
+            ? 'Ang timbang ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ipinapakita nito na medyo mas mabigat siya kaysa sa karaniwan, na maaaring dahil sa kaniyang natural na pangangatawan.'
+            : "Your child's weight is slightly above the standard range for their age. This indicates they are a bit heavier than average for their age, which can be due to their natural body frame.";
+      }
+    } else {
+      // Height
+      final z = heightZ;
+      if (z == null || z.isNaN || z.isInfinite) {
+        displayText = isFilipino
+            ? 'Hindi sapat ang datos para sa pagsusuri ng tangkad.'
+            : 'Insufficient data for height analysis.';
+      } else if (z < -1) {
+        displayText = isFilipino
+            ? 'Ang tangkad ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ibig sabihin, medyo mas mababa siya kaysa sa karaniwan, na madalas ay dulot ng henetika o sariling takbo ng kaniyang paglaki.'
+            : "Your child's height is slightly below the standard range for their age. This means they are a bit shorter than average, which is often influenced by genetics or individual growth timing.";
+      } else if (z <= 1) {
+        displayText = isFilipino
+            ? 'Ang tangkad ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Ipinapakita nito na maganda at tuloy-tuloy ang kaniyang pagtangkad sa malusog na pamamaraan.'
+            : "Your child's height is within the expected standard range for their age. This shows they are stretching up and growing beautifully at a steady, healthy pace.";
+      } else {
+        displayText = isFilipino
+            ? 'Ang tangkad ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ibig sabihin, mas matangkad siya kaysa sa karaniwan, na nagpapakita ng magandang paglaki ng kaniyang mga buto at katawan.'
+            : "Your child's height is slightly above the standard range for their age. This indicates they are taller than average for their age, showing active bone development and growth.";
+      }
+    }
 
-    final englishMatch = englishRegex.firstMatch(normalized);
-    final filipinoMatch = filipinoRegex.firstMatch(normalized);
+    final activeColor = activeTab == 0
+        ? AppColors.brandText
+        : activeTab == 1
+            ? AppColors.brandAccent
+            : AppColors.brandPrimary;
 
-    final englishText = englishMatch?.group(1)?.trim();
-    final filipinoText = filipinoMatch?.group(1)?.trim();
-
-    final displayText = isFilipino 
-        ? (filipinoText ?? englishText ?? normalized.trim())
-        : (englishText ?? filipinoText ?? normalized.trim());
-
-    if (displayText.isEmpty && !aiLoading) return const SizedBox.shrink();
+    final headerText = activeTab == 0
+        ? (isFilipino ? 'PAGSURI NG BMI' : 'BMI INSIGHT')
+        : activeTab == 1
+            ? (isFilipino ? 'PAGSURI NG TIMBANG' : 'WEIGHT INSIGHT')
+            : (isFilipino ? 'PAGSURI NG TANGKAD' : 'HEIGHT INSIGHT');
 
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.brandPrimary.withValues(alpha: 0.05),
+        color: activeColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: AppColors.brandPrimary.withValues(alpha: 0.15),
+          color: activeColor.withValues(alpha: 0.15),
           width: 1.2,
         ),
       ),
@@ -1188,59 +1245,48 @@ $recordsSummary
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: AppColors.brandPrimary.withValues(alpha: 0.12),
+                  color: activeColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: AppColors.brandPrimary,
+                child: Icon(
+                  activeTab == 0
+                      ? Icons.straighten
+                      : activeTab == 1
+                          ? Icons.monitor_weight
+                          : Icons.height,
+                  color: activeColor,
                   size: 18,
                 ),
               ),
               const SizedBox(width: 10),
               Text(
-                isFilipino ? 'GABAY NA PANANAW SA PAGLAKI' : 'AI GROWTH INSIGHT',
-                style: const TextStyle(
+                headerText,
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.brandPrimary,
+                  color: activeColor,
                   letterSpacing: 0.8,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          if (aiLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 8.0),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: AppColors.brandPrimary,
-                  ),
-                ),
-              ),
-            )
-          else
-            Text(
-              displayText,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
-                height: 1.45,
-              ),
+          Text(
+            displayText,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textPrimary,
+              height: 1.45,
             ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildHistorySection() {
-    final previewRecords = records.reversed.take(3).toList();
+    final historyRecords = records.reversed.toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1252,7 +1298,7 @@ $recordsSummary
                 color: AppColors.brandPrimary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.history,
                 color: AppColors.brandPrimary,
                 size: 20,
@@ -1279,8 +1325,8 @@ $recordsSummary
           ],
         ),
         const SizedBox(height: 16),
-        if (previewRecords.isEmpty)
-          Center(
+        if (historyRecords.isEmpty)
+          const Center(
             child: Text(
               'No growth measurements available yet.',
               style: TextStyle(
@@ -1290,56 +1336,232 @@ $recordsSummary
             ),
           )
         else
-          ...previewRecords.map((record) {
+          ...historyRecords.map((record) {
             final height = (record['child_height'] as num?)?.toDouble() ?? 0;
             final weight = (record['child_weight'] as num?)?.toDouble() ?? 0;
             final date = record['created_at']?.toString() ?? '';
             final weeks = _ageInWeeks(DateTime.parse(date));
+            final isLatest = record == records.last;
+            final bmi = _calculateBMI(height, weight);
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: GrowthRecordCard(
+              child: _buildHistoryRecordCard(
                 height: height,
                 weight: weight,
+                bmi: bmi,
                 date: formatDate(date),
                 weekNumber: weeks,
-                isLatest: record == records.last,
+                isLatest: isLatest,
               ),
             );
           }),
-        if (records.length > 3) ...[
-          const SizedBox(height: 12),
-          Center(
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandPrimary,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+      ],
+    );
+  }
+
+  Widget _buildHistoryRecordCard({
+    required double height,
+    required double weight,
+    required double bmi,
+    required String date,
+    required int weekNumber,
+    required bool isLatest,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: isLatest
+            ? Border.all(
+                color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                width: 1.5,
+              )
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      date,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Week $weekNumber',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => GrowthHistoryScreen(
-                      records: records,
-                      birthdate: birthdate,
+              if (isLatest)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Latest',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brandPrimary,
                     ),
                   ),
-                );
-              },
-              child: const Text(
-                'View Growth Records',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (activeTab == 0) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMeasurementItem(
+                    'Height',
+                    '${height.toStringAsFixed(1)} cm',
+                    Icons.height,
+                    AppColors.brandPrimary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildMeasurementItem(
+                    'Weight',
+                    '${weight.toStringAsFixed(1)} kg',
+                    Icons.monitor_weight,
+                    AppColors.brandAccent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.brandText.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.brandText.withValues(alpha: 0.15),
+                  width: 1,
                 ),
               ),
+              child: Row(
+                children: [
+                  Icon(Icons.straighten, size: 18, color: AppColors.brandText),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Calculated BMI',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brandText,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    bmi > 0 ? bmi.toStringAsFixed(1) : 'n/a',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (activeTab == 1) ...[
+            _buildMeasurementItem(
+              'Weight',
+              '${weight.toStringAsFixed(1)} kg',
+              Icons.monitor_weight,
+              AppColors.brandAccent,
+            ),
+          ] else if (activeTab == 2) ...[
+            _buildMeasurementItem(
+              'Height',
+              '${height.toStringAsFixed(1)} cm',
+              Icons.height,
+              AppColors.brandPrimary,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeasurementItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.3,
             ),
           ),
         ],
-      ],
+      ),
     );
   }
 }
