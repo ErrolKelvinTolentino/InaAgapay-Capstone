@@ -6,8 +6,9 @@
     <title>Account Creation — InaAgapay Admin</title>
     <link rel="icon" type="image/png" href="../images/logo_icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link
@@ -18,7 +19,7 @@
   </head>
   <body>
     <div class="app-layout">
-      <!-- ── Header ── -->
+      <!-- ── Header (updated: only one logo) ── -->
       <header class="app-header">
         <div class="header-brand">
           <button class="header-sidebar-toggle" id="sidebar-toggle">
@@ -28,11 +29,6 @@
             src="../images/logo_icon.png"
             alt="InaAgapay"
             class="header-logo"
-          />
-          <img
-            src="../images/logo_with_label.png"
-            alt="InaAgapay"
-            class="header-logo-label"
           />
         </div>
         <div class="header-right">
@@ -68,10 +64,13 @@
               ><i class="fa-solid fa-user-nurse"></i> Midwife Assignment</a
             >
           </li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Patient Management</span>
+        <ul class="sidebar-nav">
           <li>
-            <a href="reports.html"
-              ><i c
-                  zlass="fa-solid fa-file-csv"></i> Reports</a
+            <a href="patient-records.html"
+              ><i class="fa-solid fa-folder-open"></i> Patient Records</a
             >
           </li>
         </ul>
@@ -104,33 +103,19 @@
             <h1 class="page-title">Create Account</h1>
             <p class="page-subtitle">Create a new admin or midwife account</p>
           </div>
-          <a href="accounts.html" class="btn btn-secondary"
+          <a href="accounts.html" class="btn btn-secondary btn-sm"
             ><i class="fa-solid fa-arrow-left"></i> Back to Accounts</a
           >
         </div>
 
-        <div
-          style="
-            display: grid;
-            grid-template-columns: 1fr 360px;
-            gap: 24px;
-            align-items: start;
-          "
-        >
+        <div class="create-account-layout">
           <!-- Form Card -->
           <div class="card">
-            <div
-              class="card-header"
-              style="
-                padding-bottom: 16px;
-                border-bottom: 1px solid var(--gray-100);
-              "
-            >
+            <div class="card-header" style="padding-bottom: 16px;">
               <div>
                 <div class="card-title">Account Details</div>
                 <div class="card-subtitle">
-                  All fields marked
-                  <span style="color: var(--pink)">*</span> are required
+                  All fields marked <span style="color: var(--brand-primary)">*</span> are required
                 </div>
               </div>
             </div>
@@ -138,7 +123,7 @@
               <div
                 id="form-alert"
                 class="alert alert-error"
-                style="display: none"
+                style="display: none; margin-bottom: 20px;"
               ></div>
 
               <form id="create-form" novalidate>
@@ -241,10 +226,11 @@
                         class="form-control"
                         type="email"
                         id="email_address"
-                        placeholder="example@email.com"
+                        placeholder="example@gmail.com"
                         required
                       />
                     </div>
+                    <span class="form-error" id="email-error" style="display: none;"></span>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="phone_number"
@@ -259,80 +245,35 @@
                         placeholder="09XX-XXX-XXXX"
                       />
                     </div>
+                    <span class="form-error" id="phone-error" style="display: none;"></span>
                   </div>
                 </div>
 
-                <!-- BHC — shown for midwife only -->
+                <!-- BHC — shown for midwife only, REQUIRED -->
                 <div class="form-group" id="bhc-group">
                   <label class="form-label" for="bhc_id"
                     >Assigned BHC <span class="req">*</span></label
                   >
-                  <select class="form-select" id="bhc_id">
+                  <select class="form-select" id="bhc_id" required>
                     <option value="">— Select Barangay Health Center —</option>
                   </select>
                   <p class="form-hint">
-                    Select the BHC this midwife will be assigned to.
+                    <strong>Important:</strong> Midwives can only be assigned to ONE Barangay Health Center. This assignment cannot be changed here - use the Midwife Assignment page to reassign.
                   </p>
                 </div>
 
-                <!-- Password -->
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label" for="password"
-                      >Password <span class="req">*</span></label
-                    >
-                    <div class="input-icon-wrap">
-                      <i class="fa-solid fa-lock"></i>
-                      <input
-                        class="form-control"
-                        type="password"
-                        id="password"
-                        placeholder="Min. 8 characters"
-                        required
-                      />
-                      <button
-                        type="button"
-                        class="pwd-toggle-btn"
-                        id="pwd1-toggle"
-                      >
-                        <i class="fa-solid fa-eye" id="pwd1-eye"></i>
-                      </button>
-                    </div>
-                    <div class="pwd-strength" id="strength-bar-wrap">
-                      <div class="pwd-strength-bar" id="strength-bar"></div>
-                    </div>
-                    <div
-                      class="pwd-strength-text"
-                      id="strength-text"
-                      style="color: var(--gray-400)"
-                    ></div>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label" for="confirm_password"
-                      >Confirm Password <span class="req">*</span></label
-                    >
-                    <div class="input-icon-wrap">
-                      <i class="fa-solid fa-lock-open"></i>
-                      <input
-                        class="form-control"
-                        type="password"
-                        id="confirm_password"
-                        placeholder="Re-enter password"
-                        required
-                      />
-                      <button
-                        type="button"
-                        class="pwd-toggle-btn"
-                        id="pwd2-toggle"
-                      >
-                        <i class="fa-solid fa-eye" id="pwd2-eye"></i>
-                      </button>
-                    </div>
-                    <div
-                      class="form-hint"
-                      id="confirm-hint"
-                      style="display: none"
-                    ></div>
+                <!-- Delivery alert (for manual copy fallback) -->
+                <div
+                  id="delivery-alert"
+                  class="alert alert-warning"
+                  style="display: none; margin-bottom: 20px; flex-direction: column; align-items: flex-start; gap: 8px;"
+                ></div>
+
+                <!-- Password Notice -->
+                <div class="card" style="border-left: 4px solid var(--brand-primary); margin-bottom: 20px; background: var(--bg-primary);">
+                  <div class="card-body" style="padding: 16px; font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+                    <i class="fa-solid fa-key" style="color: var(--brand-primary); margin-right: 8px;"></i>
+                    <strong>Temporary Password:</strong> A secure temporary password will be automatically generated. The credentials will be sent to the user via email and/or SMS, and they will be prompted to set a new password on their first login.
                   </div>
                 </div>
 
@@ -341,17 +282,17 @@
                     display: flex;
                     justify-content: flex-end;
                     gap: 10px;
-                    margin-top: 8px;
+                    margin-top: 18px;
                   "
                 >
                   <button
                     type="button"
-                    class="btn btn-secondary"
+                    class="btn btn-secondary btn-sm"
                     id="reset-btn"
                   >
                     <i class="fa-solid fa-rotate-left"></i> Reset
                   </button>
-                  <button type="submit" class="btn btn-primary" id="submit-btn">
+                  <button type="submit" class="btn btn-primary btn-sm" id="submit-btn">
                     <i class="fa-solid fa-user-plus"></i> Create Account
                   </button>
                 </div>
@@ -360,7 +301,7 @@
           </div>
 
           <!-- Info Panel -->
-          <div style="display: flex; flex-direction: column; gap: 16px">
+          <div class="create-account-aside">
             <!-- Account Preview -->
             <div class="card">
               <div
@@ -373,11 +314,7 @@
                     width: 72px;
                     height: 72px;
                     border-radius: 50%;
-                    background: linear-gradient(
-                      135deg,
-                      var(--pink),
-                      var(--pink-dark)
-                    );
+                    background: var(--brand-primary);
                     display: flex;
                     align-items: center;
                     justify-content: center;
@@ -392,7 +329,7 @@
                   style="
                     font-size: 17px;
                     font-weight: 700;
-                    color: var(--gray-800);
+                    color: var(--text-primary);
                     margin-bottom: 4px;
                   "
                 >
@@ -402,7 +339,7 @@
                   id="preview-email"
                   style="
                     font-size: 13px;
-                    color: var(--gray-500);
+                    color: var(--text-secondary);
                     margin-bottom: 12px;
                   "
                 >
@@ -414,62 +351,24 @@
               </div>
             </div>
 
-            <!-- Requirements -->
-            <div class="card">
-              <div class="card-body">
-                <div
-                  style="
-                    font-size: 13px;
-                    font-weight: 700;
-                    color: var(--gray-700);
-                    margin-bottom: 12px;
-                  "
-                >
-                  <i
-                    class="fa-solid fa-circle-info"
-                    style="color: var(--pink); margin-right: 6px"
-                  ></i
-                  >Password Requirements
-                </div>
-                <ul
-                  style="
-                    list-style: none;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 7px;
-                    font-size: 13px;
-                  "
-                >
-                  <li id="req-len" class="req-item">
-                    <i class="fa-solid fa-circle"></i> At least 8 characters
-                  </li>
-                  <li id="req-upper" class="req-item">
-                    <i class="fa-solid fa-circle"></i> One uppercase letter
-                  </li>
-                  <li id="req-lower" class="req-item">
-                    <i class="fa-solid fa-circle"></i> One lowercase letter
-                  </li>
-                  <li id="req-num" class="req-item">
-                    <i class="fa-solid fa-circle"></i> One number
-                  </li>
-                </ul>
-              </div>
-            </div>
+
 
             <!-- Notes -->
-            <div class="card" style="border-left: 3px solid var(--pink)">
+            <div class="card" style="border-left: 4px solid var(--brand-primary)">
               <div
                 class="card-body"
                 style="
                   font-size: 13px;
-                  color: var(--gray-600);
-                  line-height: 1.7;
+                  color: var(--text-secondary);
+                  line-height: 1.6;
+                  padding: 16px;
                 "
               >
-                <strong style="color: var(--pink-dark)">Note:</strong> New
+                <strong style="color: var(--text-title)">Note:</strong> New
                 accounts are automatically set to <strong>active</strong> and
                 <strong>verified</strong>. Midwife accounts require a BHC
-                assignment which can be updated later in Midwife Assignment.
+                assignment (one BHC only) which can be updated later in
+                <strong>Midwife Assignment</strong>.
               </div>
             </div>
           </div>
@@ -478,10 +377,10 @@
 
       <footer class="app-footer">
         <span
-          >&copy; 2026 InaAgapay — Maternal &amp; Child Health Information
+          >&copy; 2026 InaAgapay &mdash; Maternal &amp; Child Health Information
           System</span
         >
-        <span style="color: var(--pink-light)">|</span>
+        <span style="color: var(--border-primary)">|</span>
         <span>Admin Portal v2.0</span>
       </footer>
     </div>
@@ -489,8 +388,20 @@
     <div id="toast-container"></div>
 
     <style>
+      .create-account-layout {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 24px;
+        align-items: start;
+      }
+      @media (max-width: 992px) {
+        .create-account-layout {
+          grid-template-columns: 1fr;
+        }
+      }
       .type-radio {
         cursor: pointer;
+        flex: 1;
       }
       .type-radio input {
         display: none;
@@ -501,10 +412,10 @@
         align-items: center;
         gap: 6px;
         padding: 14px 24px;
-        border-radius: var(--radius);
-        border: 1.5px solid var(--gray-200);
-        background: var(--white);
-        color: var(--gray-600);
+        border-radius: var(--radius-lg);
+        border: 1.5px solid var(--border-primary);
+        background: var(--card-bg);
+        color: var(--text-secondary);
         font-size: 13px;
         font-weight: 600;
         transition: all 0.2s;
@@ -515,43 +426,43 @@
         font-size: 22px;
       }
       .type-radio input:checked + .type-radio-box {
-        border-color: var(--pink);
-        background: var(--pink-pale);
-        color: var(--pink-dark);
-        box-shadow: 0 0 0 3px rgba(233, 30, 140, 0.1);
+        border-color: var(--brand-primary);
+        background: var(--brand-secondary);
+        color: var(--text-title);
+        box-shadow: 0 0 0 3px rgba(255, 104, 165, 0.15);
       }
       .input-icon-wrap {
         position: relative;
       }
       .input-icon-wrap > i {
         position: absolute;
-        left: 12px;
+        left: 14px;
         top: 50%;
         transform: translateY(-50%);
-        color: var(--gray-400);
+        color: var(--text-secondary);
         font-size: 14px;
         pointer-events: none;
       }
       .input-icon-wrap .form-control {
-        padding-left: 36px;
+        padding-left: 40px;
       }
       .pwd-toggle-btn {
         position: absolute;
-        right: 10px;
+        right: 14px;
         top: 50%;
         transform: translateY(-50%);
         background: none;
         border: none;
         cursor: pointer;
-        color: var(--gray-400);
+        color: var(--text-secondary);
         font-size: 14px;
         padding: 2px;
       }
       .pwd-toggle-btn:hover {
-        color: var(--pink);
+        color: var(--brand-primary);
       }
       .req-item {
-        color: var(--gray-400);
+        color: var(--text-secondary);
         display: flex;
         align-items: center;
         gap: 8px;
@@ -628,7 +539,7 @@
           const c = document.getElementById("toast-container");
           const t = document.createElement("div");
           t.className = `toast ${type}`;
-          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span>`;
+          t.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span class="toast-text">${esc(msg)}</span><button class="toast-close" onclick="this.closest('.toast').remove()"><i class="fa-solid fa-xmark"></i></button>`;
           c.appendChild(t);
           setTimeout(() => {
             t.style.animation = "fadeOut .3s ease forwards";
@@ -640,19 +551,14 @@
         document.getElementById("reset-btn").addEventListener("click", () => {
           document.getElementById("create-form").reset();
           document.getElementById("form-alert").style.display = "none";
+          emailInput.classList.remove("error");
+          phoneInput.classList.remove("error");
+          emailErrorMsg.style.display = "none";
+          phoneErrorMsg.style.display = "none";
           // Restore BHC group (midwife is default after reset)
           bhcGroup.style.display = "";
           updatePreviewBadge("midwife");
           updatePreview();
-          // Reset strength meter
-          document.getElementById("strength-bar").style.width = "0";
-          document.getElementById("strength-bar").style.background =
-            "var(--gray-300)";
-          document.getElementById("strength-text").textContent = "";
-          document.getElementById("confirm-hint").style.display = "none";
-          ["req-len", "req-upper", "req-lower", "req-num"].forEach((id) =>
-            document.getElementById(id).classList.remove("met"),
-          );
         });
 
         /* ── Load BHC ── */
@@ -662,6 +568,7 @@
             .select("bhc_id, bhc_name")
             .order("bhc_name");
           const sel = document.getElementById("bhc_id");
+          sel.innerHTML = '<option value="">— Select Barangay Health Center —</option>';
           (data || []).forEach((b) => {
             const o = document.createElement("option");
             o.value = b.bhc_id;
@@ -675,7 +582,13 @@
         const bhcGroup = document.getElementById("bhc-group");
         document.querySelectorAll('input[name="account_type"]').forEach((r) => {
           r.addEventListener("change", () => {
-            bhcGroup.style.display = r.value === "midwife" ? "" : "none";
+            if (r.value === "midwife") {
+              bhcGroup.style.display = "";
+              document.getElementById("bhc_id").required = true;
+            } else {
+              bhcGroup.style.display = "none";
+              document.getElementById("bhc_id").required = false;
+            }
             updatePreviewBadge(r.value);
           });
         });
@@ -686,91 +599,235 @@
           b.className = `badge badge-${type}`;
         }
 
+        const emailInput = document.getElementById("email_address");
+        const phoneInput = document.getElementById("phone_number");
+        const emailErrorMsg = document.getElementById("email-error");
+        const phoneErrorMsg = document.getElementById("phone-error");
+
+        function validateEmail() {
+          const val = emailInput.value.trim();
+          const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i;
+          if (!val) {
+            emailInput.classList.add("error");
+            emailErrorMsg.textContent = "Email address is required.";
+            emailErrorMsg.style.display = "block";
+            return false;
+          } else if (!emailRegex.test(val)) {
+            emailInput.classList.add("error");
+            emailErrorMsg.textContent = "Please enter a valid Gmail address (e.g. user@gmail.com).";
+            emailErrorMsg.style.display = "block";
+            return false;
+          } else {
+            emailInput.classList.remove("error");
+            emailErrorMsg.style.display = "none";
+            return true;
+          }
+        }
+
+        function validatePhone() {
+          const val = phoneInput.value.trim();
+          if (!val) {
+            phoneInput.classList.remove("error");
+            phoneErrorMsg.style.display = "none";
+            return true;
+          } else if (!isValidPhilippineNumber(val)) {
+            phoneInput.classList.add("error");
+            phoneErrorMsg.textContent = "Please enter a valid Philippine phone number (e.g. 09123456789).";
+            phoneErrorMsg.style.display = "block";
+            return false;
+          } else {
+            phoneInput.classList.remove("error");
+            phoneErrorMsg.style.display = "none";
+            return true;
+          }
+        }
+
         /* ── Live preview ── */
         function updatePreview() {
           const fn = document.getElementById("first_name").value.trim();
           const ln = document.getElementById("last_name").value.trim();
-          const em = document.getElementById("email_address").value.trim();
+          const em = emailInput.value.trim();
           const initials = ((fn[0] ?? "") + (ln[0] ?? "")).toUpperCase() || "?";
           document.getElementById("preview-avatar").textContent = initials;
           document.getElementById("preview-name").textContent =
             [fn, ln].filter(Boolean).join(" ") || "New Account";
           document.getElementById("preview-email").textContent = em || "—";
         }
-        ["first_name", "last_name", "email_address"].forEach((id) =>
+        ["first_name", "last_name"].forEach((id) =>
           document.getElementById(id).addEventListener("input", updatePreview),
         );
+        emailInput.addEventListener("input", () => {
+          validateEmail();
+          updatePreview();
+        });
+        phoneInput.addEventListener("input", validatePhone);
         updatePreview();
 
-        /* ── Password strength ── */
-        document
-          .getElementById("password")
-          .addEventListener("input", function () {
-            const v = this.value;
-            const len = v.length >= 8;
-            const upper = /[A-Z]/.test(v);
-            const lower = /[a-z]/.test(v);
-            const num = /\d/.test(v);
-            setReq("req-len", len);
-            setReq("req-upper", upper);
-            setReq("req-lower", lower);
-            setReq("req-num", num);
-            const score = [len, upper, lower, num].filter(Boolean).length;
-            const bar = document.getElementById("strength-bar");
-            const txt = document.getElementById("strength-text");
-            const map = [
-              [0, "0%", "var(--gray-300)", ""],
-              [1, "25%", "var(--danger)", "Weak"],
-              [2, "50%", "var(--warning)", "Fair"],
-              [3, "75%", "var(--info)", "Good"],
-              [4, "100%", "var(--success)", "Strong"],
-            ];
-            const [, w, c, t] = map[score];
-            bar.style.width = w;
-            bar.style.background = c;
-            txt.textContent = t;
-            txt.style.color = c;
-          });
 
-        function setReq(id, met) {
-          const el = document.getElementById(id);
-          el.classList.toggle("met", met);
+
+        /* ── Security & Notification Helpers ── */
+        function generateSecurePassword() {
+          const length = 12;
+          const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*";
+          let pwd = "";
+          const cryptoObj = window.crypto || window.msCrypto;
+          if (cryptoObj && cryptoObj.getRandomValues) {
+            const values = new Uint32Array(length);
+            cryptoObj.getRandomValues(values);
+            for (let i = 0; i < length; i++) {
+              pwd += chars[values[i] % chars.length];
+            }
+          } else {
+            for (let i = 0; i < length; i++) {
+              pwd += chars[Math.floor(Math.random() * chars.length)];
+            }
+          }
+          return pwd;
         }
 
-        /* ── Password toggles ── */
-        function initPwdToggle(toggleId, inputId, eyeId) {
-          document.getElementById(toggleId).addEventListener("click", () => {
-            const inp = document.getElementById(inputId);
-            const eye = document.getElementById(eyeId);
-            inp.type = inp.type === "password" ? "text" : "password";
-            eye.className =
-              inp.type === "password"
-                ? "fa-solid fa-eye"
-                : "fa-solid fa-eye-slash";
-          });
+        function isValidPhilippineNumber(num) {
+          const cleaned = num.replace(/\D/g, "");
+          return /^(09|\+639|639)\d{9}$/.test(cleaned);
         }
-        initPwdToggle("pwd1-toggle", "password", "pwd1-eye");
-        initPwdToggle("pwd2-toggle", "confirm_password", "pwd2-eye");
 
-        /* ── Confirm match hint ── */
-        document
-          .getElementById("confirm_password")
-          .addEventListener("input", function () {
-            const pwd = document.getElementById("password").value;
-            const hint = document.getElementById("confirm-hint");
-            if (!this.value) {
-              hint.style.display = "none";
-              return;
+        function formatPhilippineNumber(num) {
+          const cleaned = num.replace(/\D/g, "");
+          if (cleaned.startsWith("09")) {
+            return `+63${cleaned.substring(1)}`;
+          } else if (cleaned.startsWith("639")) {
+            return `+${cleaned}`;
+          }
+          return `+63${cleaned}`;
+        }
+
+        async function sendCredentialsEmail(email, pwd, first, last, type) {
+          try {
+            const roleName = type === "midwife" ? "Midwife" : "Administrator";
+            const loginInstructions = type === "midwife" 
+              ? `<strong>To access your account:</strong>
+                <ol>
+                  <li>Open the INAAGAPAY mobile app</li>
+                  <li>Log in using your email <strong>(${email})</strong> and the temporary password above</li>
+                  <li>You will be prompted to create a new password</li>
+                  <li>Set a password that you will remember</li>
+                </ol>`
+              : `<strong>To access your account:</strong>
+                <ol>
+                  <li>Open the <a href="${window.location.origin}/index.html">INAAGAPAY Admin Web Portal</a></li>
+                  <li>Log in using your email <strong>(${email})</strong> and the temporary password above</li>
+                  <li>You will be prompted to change your temporary password</li>
+                  <li>Set a strong password that you will remember</li>
+                </ol>`;
+
+            const html = `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta charset="UTF-8">
+                <style>
+                  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f9f9f9; margin: 0; padding: 0; }
+                  .container { max-width: 600px; margin: 20px auto; padding: 0; }
+                  .header { background: linear-gradient(135deg, #FF68A5, #E6398D); padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                  .header h1 { color: white; margin: 0; font-size: 28px; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+                  .content { background: #ffffff; padding: 35px 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+                  .password-box { background: #f5f7fa; border: 1px dashed #FF68A5; padding: 20px; border-radius: 8px; text-align: center; margin: 25px 0; }
+                  .password { font-size: 26px; font-weight: bold; color: #FF68A5; letter-spacing: 2px; font-family: monospace; margin-top: 10px; }
+                  .button { background: #FF68A5; color: white; padding: 12px 28px; text-decoration: none; border-radius: 25px; display: inline-block; margin: 25px 0; font-weight: 600; box-shadow: 0 3px 6px rgba(255,104,165,0.3); }
+                  .footer { text-align: center; padding: 25px; font-size: 12px; color: #888; }
+                  .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 14px; margin: 25px 0; border-radius: 4px; font-size: 14px; }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <div class="header">
+                    <h1>🌸 Welcome to INAAGAPAY!</h1>
+                  </div>
+                  <div class="content">
+                    <h2 style="color: #333; font-size: 20px; margin-top: 0;">Hello ${first} ${last}!</h2>
+                    <p>An administrator has created a <strong>${roleName}</strong> account for you on the <strong>INAAGAPAY Maternal and Child Health Information System</strong>.</p>
+                    
+                    <div class="password-box">
+                      <p style="margin: 0; color: #555; font-size: 14px;">Your temporary login password is:</p>
+                      <div class="password">${pwd}</div>
+                    </div>
+                    
+                    <div class="warning">
+                      <strong>⚠️ Important Security Notice:</strong> This temporary password is only valid for your initial login. 
+                      You will be forced to change it and create your own personal password immediately after logging in.
+                    </div>
+                    
+                    ${loginInstructions}
+                    
+                    <p>If you have any questions or did not expect this, please contact the system administrator or your barangay health center.</p>
+                    
+                    <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
+                    <p style="font-size: 12px; color: #999; text-align: center; margin: 0;">This is an automated system message. Please do not reply directly to this email.</p>
+                  </div>
+                  <div class="footer">
+                    <p>© 2026 INAAGAPAY - Maternal & Child Health Information System</p>
+                  </div>
+                </div>
+              </body>
+              </html>
+            `;
+
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${SUPABASE_ANON}`
+              },
+              body: JSON.stringify({
+                email: email,
+                subject: "🔑 Welcome to INAAGAPAY - Your Temporary Login Credentials",
+                htmlContent: html
+              })
+            });
+            return response.ok;
+          } catch (e) {
+            console.error("Email sending failed:", e);
+            return false;
+          }
+        }
+
+        async function sendCredentialsSms(phone, pwd, type) {
+          try {
+            if (!phone) return false;
+            if (!isValidPhilippineNumber(phone)) {
+              console.error("Invalid Philippine phone number:", phone);
+              return false;
             }
-            hint.style.display = "block";
-            if (this.value === pwd) {
-              hint.textContent = "✓ Passwords match";
-              hint.style.color = "var(--success)";
-            } else {
-              hint.textContent = "✗ Passwords do not match";
-              hint.style.color = "var(--danger)";
+            const formatted = formatPhilippineNumber(phone);
+            const roleName = type === "midwife" ? "Midwife" : "Admin";
+            const message = `Welcome to INAAGAPAY! An administrator created a ${roleName} account for you. Your temporary password is: ${pwd}\n\nPlease change it on your first login.`;
+            
+            const params = new URLSearchParams();
+            params.append("apikey", "a011832dcab9b1b6520910c6dbb16028");
+            params.append("number", formatted);
+            params.append("message", message);
+            params.append("sendername", "AGAPAY");
+
+            const response = await fetch("https://api.semaphore.co/api/v4/messages", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json"
+              },
+              body: params.toString()
+            });
+
+            if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+            const data = await response.json();
+            if (Array.isArray(data) && data.length > 0) {
+              const firstMsg = data[0];
+              return firstMsg.status === "Pending" || firstMsg.status === "Sent" || firstMsg.message_id != null;
             }
-          });
+            return false;
+          } catch (e) {
+            console.error("SMS sending failed:", e);
+            return false;
+          }
+        }
 
         /* ── Submit ── */
         document
@@ -779,6 +836,8 @@
             e.preventDefault();
             const alertEl = document.getElementById("form-alert");
             alertEl.style.display = "none";
+            const deliveryAlert = document.getElementById("delivery-alert");
+            deliveryAlert.style.display = "none";
 
             const type = document.querySelector(
               'input[name="account_type"]:checked',
@@ -789,28 +848,24 @@
             const ext = document.getElementById("extension_name").value.trim();
             const email = document.getElementById("email_address").value.trim();
             const phone = document.getElementById("phone_number").value.trim();
-            const pwd = document.getElementById("password").value;
-            const cpwd = document.getElementById("confirm_password").value;
             const bhcId = document.getElementById("bhc_id").value;
 
             /* Validation */
-            if (!first || !last || !email || !pwd) {
-              return showAlert(
-                "First name, last name, email, and password are required.",
-              );
+            const isEmailValid = validateEmail();
+            const isPhoneValid = validatePhone();
+
+            if (!first || !last) {
+              return showAlert("First name and last name are required.");
             }
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-              return showAlert("Please enter a valid email address.");
+            if (!isEmailValid) {
+              return showAlert("Please enter a valid Gmail address (ending in @gmail.com).");
             }
-            if (pwd.length < 8) {
-              return showAlert("Password must be at least 8 characters.");
-            }
-            if (pwd !== cpwd) {
-              return showAlert("Passwords do not match.");
+            if (!isPhoneValid) {
+              return showAlert("Please enter a valid Philippine phone number (starts with 09 and is 11 digits).");
             }
             if (type === "midwife" && !bhcId) {
               return showAlert(
-                "Please select a Barangay Health Center for the midwife.",
+                "Please select a Barangay Health Center for the midwife. Midwives can only be assigned to ONE BHC.",
               );
             }
 
@@ -828,6 +883,9 @@
               if (existing && existing.length > 0) {
                 return showAlert("An account with this email already exists.");
               }
+
+              /* Auto-generate password */
+              const pwd = generateSecurePassword();
 
               /* Hash password */
               const bcrypt = dcodeIO.bcrypt;
@@ -847,18 +905,34 @@
                   phone_number: phone || null,
                   is_verified: true,
                   status: "active",
+                  is_temporary_password: true,
+                  created_by: "admin"
                 })
                 .select()
                 .single();
               if (acctErr) throw acctErr;
 
-              /* If midwife, insert into midwives */
+              /* If midwife, insert into midwives (ensures ONE BHC assignment) */
               if (type === "midwife") {
-                const { error: mErr } = await db.from("midwives").insert({
-                  account_id: newAcct.account_id,
-                  assigned_bhc_id: parseInt(bhcId),
-                });
-                if (mErr) throw mErr;
+                const { data: existingMidwife } = await db
+                  .from("midwives")
+                  .select("midwife_id")
+                  .eq("account_id", newAcct.account_id)
+                  .limit(1);
+                
+                if (existingMidwife && existingMidwife.length > 0) {
+                  const { error: mErr } = await db
+                    .from("midwives")
+                    .update({ assigned_bhc_id: parseInt(bhcId) })
+                    .eq("account_id", newAcct.account_id);
+                  if (mErr) throw mErr;
+                } else {
+                  const { error: mErr } = await db.from("midwives").insert({
+                    account_id: newAcct.account_id,
+                    assigned_bhc_id: parseInt(bhcId),
+                  });
+                  if (mErr) throw mErr;
+                }
               }
 
               /* Audit log */
@@ -866,31 +940,70 @@
                 account_id: session.account_id,
                 action: "create_account",
                 table_name: "accounts",
-                description: `Created ${type} account for ${first} ${last} (${email})`,
-                new_data: { email, account_type: type },
+                description: `Created ${type} account for ${first} ${last} (${email})${type === "midwife" ? " assigned to BHC ID: " + bhcId : ""}`,
+                new_data: { email, account_type: type, bhc_id: type === "midwife" ? bhcId : null },
               });
 
-              showToast(
-                `Account created successfully for ${first} ${last}!`,
-                "success",
-              );
+              /* Send Notifications */
+              let emailSent = false;
+              let smsSent = false;
+
+              // 1. Send Email
+              emailSent = await sendCredentialsEmail(email, pwd, first, last, type);
+              
+              // 2. Send SMS if phone exists and email failed or as secondary delivery
+              if (!emailSent && phone) {
+                smsSent = await sendCredentialsSms(phone, pwd, type);
+              }
+
+              // Reset the form details in preparation
               e.target.reset();
               updatePreview();
-              document.getElementById("strength-bar").style.width = "0";
-              document.getElementById("strength-text").textContent = "";
-              document.getElementById("confirm-hint").style.display = "none";
-              ["req-len", "req-upper", "req-lower", "req-num"].forEach((id) =>
-                document.getElementById(id).classList.remove("met"),
-              );
 
-              // Redirect after short delay
-              setTimeout(() => (window.location.href = "accounts.html"), 1800);
+              if (emailSent) {
+                showToast(`Account created successfully! Credentials sent to email.`, "success");
+                setTimeout(() => (window.location.href = "accounts.html"), 1800);
+              } else if (smsSent) {
+                showToast(`Account created successfully! Credentials sent via SMS.`, "success");
+                setTimeout(() => (window.location.href = "accounts.html"), 1800);
+              } else {
+                // Both failed - show persistent alert with password
+                deliveryAlert.style.display = "flex";
+                deliveryAlert.innerHTML = `
+                  <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                    <i class="fa-solid fa-triangle-exclamation" style="font-size: 16px; color: var(--error);"></i>
+                    <strong style="font-size: 14px; color: var(--text-title);">Notification Delivery Failed</strong>
+                  </div>
+                  <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--text-secondary);">
+                    The account was created successfully, but the temporary credentials could not be sent automatically via Email or SMS. 
+                    <br><span style="color: var(--error); font-weight: bold;">Please manually copy and share this temporary password with the user:</span>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px; background: rgba(0,0,0,0.05); padding: 10px 14px; border-radius: 6px; font-family: monospace; font-size: 16px; font-weight: bold; color: var(--text-title); width: fit-content; border: 1px dashed var(--border-primary);">
+                      <span>${pwd}</span>
+                      <button type="button" onclick="navigator.clipboard.writeText('${pwd}'); alert('Copied temporary password to clipboard!');" style="background: none; border: none; cursor: pointer; color: var(--brand-primary); padding: 2px 6px; font-size: 13px; font-family: sans-serif; display: flex; align-items: center; gap: 4px; font-weight: 600;">
+                        <i class="fa-solid fa-copy"></i> Copy
+                      </button>
+                    </div>
+                  </div>
+                `;
+                
+                // Hide submit button and show a "Done" button to redirect
+                btn.style.display = "none";
+                const doneBtn = document.createElement("button");
+                doneBtn.type = "button";
+                doneBtn.className = "btn btn-primary btn-sm";
+                doneBtn.id = "done-redirect-btn";
+                doneBtn.style.marginTop = "18px";
+                doneBtn.innerHTML = '<i class="fa-solid fa-check"></i> Done &amp; Back to Accounts';
+                doneBtn.onclick = () => { window.location.href = "accounts.html"; };
+                btn.parentNode.appendChild(doneBtn);
+              }
             } catch (err) {
               showAlert("Error creating account: " + err.message);
             } finally {
               btn.disabled = false;
-              btn.innerHTML =
-                '<i class="fa-solid fa-user-plus"></i> Create Account';
+              if (btn.style.display !== "none") {
+                btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Create Account';
+              }
             }
           });
 

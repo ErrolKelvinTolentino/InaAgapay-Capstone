@@ -1,4 +1,3 @@
-<!--backup.html-->
 <!doctype html>
 <html lang="en">
   <head>
@@ -7,8 +6,9 @@
     <title>Backup &amp; Restore — InaAgapay Admin</title>
     <link rel="icon" type="image/png" href="../images/logo_icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link
@@ -16,10 +16,63 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
     />
     <link rel="stylesheet" href="../styles/main.css" />
+    <style>
+      /* Custom checkbox styling for white checkmark */
+      .custom-checkbox {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border: 2px solid var(--border-primary);
+        border-radius: 4px;
+        background: white;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+      }
+      .custom-checkbox:hover {
+        border-color: var(--brand-primary);
+      }
+      .custom-checkbox:checked {
+        background: var(--brand-primary);
+        border-color: var(--brand-primary);
+      }
+      .custom-checkbox:checked::after {
+        content: "\f00c";
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        font-size: 11px;
+        color: white;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+      /* Adjust label to keep alignment */
+      .table-checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        cursor: pointer;
+        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+        border: 1.5px solid var(--border-primary);
+        background: var(--card-bg);
+        transition: all 0.15s;
+      }
+      .table-checkbox-label:hover {
+        background: var(--brand-secondary);
+        border-color: var(--brand-primary);
+      }
+    </style>
   </head>
   <body>
     <div class="app-layout">
-      <!-- ── Header ── -->
+      <!-- ── Header (updated: only one logo) ── -->
       <header class="app-header">
         <div class="header-brand">
           <button class="header-sidebar-toggle" id="sidebar-toggle">
@@ -29,11 +82,6 @@
             src="../images/logo_icon.png"
             alt="InaAgapay"
             class="header-logo"
-          />
-          <img
-            src="../images/logo_with_label.png"
-            alt="InaAgapay"
-            class="header-logo-label"
           />
         </div>
         <div class="header-right">
@@ -69,9 +117,13 @@
               ><i class="fa-solid fa-user-nurse"></i> Midwife Assignment</a
             >
           </li>
+        </ul>
+        <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Patient Management</span>
+        <ul class="sidebar-nav">
           <li>
-            <a href="reports.html"
-              ><i class="fa-solid fa-file-csv"></i> Reports</a
+            <a href="patient-records.html"
+              ><i class="fa-solid fa-folder-open"></i> Patient Records</a
             >
           </li>
         </ul>
@@ -101,7 +153,7 @@
       <main class="app-main">
         <div class="page-header">
           <div class="page-title-block">
-            <h1 class="page-title">Database Backup &amp; Restore</h1>
+            <h1 class="page-title">Backup &amp; Restore</h1>
             <p class="page-subtitle">
               Export data as JSON or import a previous backup
             </p>
@@ -130,20 +182,13 @@
           </div>
         </div>
 
-        <div
-          style="
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            align-items: start;
-          "
-        >
+        <div class="backup-restore-grid">
           <!-- ── Export (Backup) Panel ── -->
           <div class="card">
             <div
               class="card-header"
               style="
-                border-bottom: 1px solid var(--gray-100);
+                border-bottom: 1.5px solid var(--border-primary);
                 padding-bottom: 16px;
               "
             >
@@ -156,12 +201,8 @@
                     style="
                       width: 36px;
                       height: 36px;
-                      border-radius: var(--radius);
-                      background: linear-gradient(
-                        135deg,
-                        var(--pink),
-                        var(--pink-dark)
-                      );
+                      border-radius: var(--radius-sm);
+                      background: var(--brand-primary);
                       display: flex;
                       align-items: center;
                       justify-content: center;
@@ -177,9 +218,9 @@
                 </div>
               </div>
             </div>
-            <div class="card-body">
+            <div class="card-body" style="padding-top: 20px;">
               <div class="form-group">
-                <label class="form-label">Select Tables to Export</label>
+                <label class="form-label" style="font-weight: 600; margin-bottom: 10px;">Select Tables to Export</label>
                 <div
                   id="table-checkboxes"
                   style="
@@ -195,7 +236,7 @@
                 </div>
               </div>
 
-              <div style="display: flex; gap: 10px; margin-top: 4px">
+              <div style="display: flex; gap: 10px; margin-top: 14px">
                 <button class="btn btn-secondary btn-sm" id="select-all-btn">
                   <i class="fa-solid fa-check-double"></i> Select All
                 </button>
@@ -209,7 +250,7 @@
                   style="
                     font-size: 13px;
                     font-weight: 600;
-                    color: var(--gray-600);
+                    color: var(--text-secondary);
                     margin-bottom: 8px;
                   "
                   id="backup-progress-text"
@@ -218,7 +259,7 @@
                 </div>
                 <div
                   style="
-                    background: var(--gray-200);
+                    background: var(--border-primary);
                     border-radius: 4px;
                     height: 6px;
                     overflow: hidden;
@@ -230,8 +271,8 @@
                       height: 100%;
                       background: linear-gradient(
                         90deg,
-                        var(--pink),
-                        var(--pink-dark)
+                        var(--brand-primary),
+                        var(--brand-accent)
                       );
                       border-radius: 4px;
                       transition: width 0.3s;
@@ -244,7 +285,7 @@
               <button
                 class="btn btn-primary"
                 id="backup-btn"
-                style="margin-top: 20px; width: 100%"
+                style="margin-top: 20px; width: 100%; height: var(--btn-height-sm);"
               >
                 <i class="fa-solid fa-cloud-arrow-down"></i> Download Backup
               </button>
@@ -256,7 +297,7 @@
             <div
               class="card-header"
               style="
-                border-bottom: 1px solid var(--gray-100);
+                border-bottom: 1.5px solid var(--border-primary);
                 padding-bottom: 16px;
               "
             >
@@ -269,8 +310,8 @@
                     style="
                       width: 36px;
                       height: 36px;
-                      border-radius: var(--radius);
-                      background: linear-gradient(135deg, #f59e0b, #d97706);
+                      border-radius: var(--radius-sm);
+                      background: var(--warning);
                       display: flex;
                       align-items: center;
                       justify-content: center;
@@ -286,7 +327,7 @@
                 </div>
               </div>
             </div>
-            <div class="card-body">
+            <div class="card-body" style="padding-top: 20px;">
               <div class="alert alert-error" style="margin-bottom: 16px">
                 <i class="fa-solid fa-skull-crossbones"></i>
                 <div>
@@ -300,21 +341,14 @@
               <!-- Dropzone -->
               <div
                 id="dropzone"
-                style="
-                  border: 2px dashed var(--gray-300);
-                  border-radius: var(--radius-lg);
-                  padding: 36px 24px;
-                  text-align: center;
-                  cursor: pointer;
-                  transition: all 0.2s;
-                  background: var(--gray-50);
-                "
+                class="dropzone-container"
               >
                 <i
                   class="fa-solid fa-file-arrow-up"
                   style="
                     font-size: 36px;
-                    color: var(--gray-300);
+                    color: var(--brand-primary);
+                    opacity: 0.5;
                     margin-bottom: 12px;
                   "
                 ></i>
@@ -322,13 +356,13 @@
                   style="
                     font-size: 14px;
                     font-weight: 600;
-                    color: var(--gray-600);
+                    color: var(--text-primary);
                     margin-bottom: 4px;
                   "
                 >
                   Drop JSON backup file here
                 </p>
-                <p style="font-size: 12.5px; color: var(--gray-400)">
+                <p style="font-size: 12.5px; color: var(--text-secondary)">
                   or click to browse
                 </p>
                 <input
@@ -344,12 +378,13 @@
                   display: none;
                   margin-top: 14px;
                   padding: 12px 16px;
-                  background: var(--success-bg);
-                  border-radius: var(--radius);
+                  background: var(--success-10);
+                  border: 1px solid rgba(104, 203, 184, 0.3);
+                  border-radius: var(--radius-sm);
                   align-items: center;
                   gap: 10px;
                   font-size: 13.5px;
-                  color: #065f46;
+                  color: var(--success);
                   font-weight: 600;
                 "
               >
@@ -362,7 +397,7 @@
                     background: none;
                     border: none;
                     cursor: pointer;
-                    color: #065f46;
+                    color: var(--success);
                     font-size: 14px;
                   "
                 >
@@ -375,7 +410,7 @@
                   style="
                     font-size: 13px;
                     font-weight: 600;
-                    color: var(--gray-700);
+                    color: var(--text-primary);
                     margin-bottom: 8px;
                   "
                 >
@@ -395,7 +430,7 @@
                   style="
                     font-size: 13px;
                     font-weight: 600;
-                    color: var(--gray-600);
+                    color: var(--text-secondary);
                     margin-bottom: 8px;
                   "
                   id="restore-progress-text"
@@ -404,7 +439,7 @@
                 </div>
                 <div
                   style="
-                    background: var(--gray-200);
+                    background: var(--border-primary);
                     border-radius: 4px;
                     height: 6px;
                     overflow: hidden;
@@ -414,7 +449,7 @@
                     id="restore-bar"
                     style="
                       height: 100%;
-                      background: linear-gradient(90deg, #f59e0b, #d97706);
+                      background: linear-gradient(90deg, var(--warning), #E65100);
                       border-radius: 4px;
                       transition: width 0.3s;
                       width: 0%;
@@ -426,7 +461,7 @@
               <button
                 class="btn btn-danger"
                 id="restore-btn"
-                style="margin-top: 20px; width: 100%"
+                style="margin-top: 20px; width: 100%; height: var(--btn-height-sm);"
                 disabled
               >
                 <i class="fa-solid fa-rotate-right"></i> Restore Backup
@@ -441,7 +476,7 @@
             class="card-header"
             style="
               padding-bottom: 14px;
-              border-bottom: 1px solid var(--gray-100);
+              border-bottom: 1.5px solid var(--border-primary);
             "
           >
             <div>
@@ -468,10 +503,10 @@
                     style="
                       text-align: center;
                       padding: 32px;
-                      color: var(--gray-400);
+                      color: var(--text-secondary);
                     "
                   >
-                    Loading…
+                    <div class="spinner" style="margin: 0 auto;"></div>
                   </td>
                 </tr>
               </tbody>
@@ -481,16 +516,40 @@
       </main>
 
       <footer class="app-footer">
-        <span
-          >&copy; 2026 InaAgapay — Maternal &amp; Child Health Information
-          System</span
-        >
-        <span style="color: var(--pink-light)">|</span>
+        <span>&copy; 2026 InaAgapay &mdash; Maternal &amp; Child Health Information System</span>
+        <span style="color: var(--border-primary)">|</span>
         <span>Admin Portal v2.0</span>
       </footer>
     </div>
 
     <div id="toast-container"></div>
+
+    <style>
+      .backup-restore-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        align-items: start;
+      }
+      .dropzone-container {
+        border: 2.5px dashed var(--brand-primary-30);
+        border-radius: var(--radius-lg);
+        padding: 36px 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: var(--brand-secondary);
+      }
+      .dropzone-container:hover {
+        border-color: var(--brand-primary);
+        background: var(--bg-secondary);
+      }
+      @media (max-width: 768px) {
+        .backup-restore-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script>
@@ -596,20 +655,31 @@
           "audit_trail",
         ];
 
-        /* ── Render checkboxes ── */
+        /* ── Render custom checkboxes ── */
         const checksContainer = document.getElementById("table-checkboxes");
         TABLES.forEach((t) => {
           const lbl = document.createElement("label");
-          lbl.style.cssText =
-            "display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--gray-700);cursor:pointer;padding:7px 10px;border-radius:8px;border:1px solid var(--gray-200);background:var(--white);transition:all .15s;";
-          lbl.innerHTML = `<input type="checkbox" value="${t}" checked style="accent-color:var(--pink);width:14px;height:14px;"> ${t}`;
+          lbl.className = "table-checkbox-label";
+          
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.value = t;
+          checkbox.checked = true;
+          checkbox.className = "custom-checkbox";
+          
+          const span = document.createElement("span");
+          span.textContent = t;
+          
+          lbl.appendChild(checkbox);
+          lbl.appendChild(span);
+          
           lbl.addEventListener("mouseenter", () => {
-            lbl.style.background = "var(--pink-50)";
-            lbl.style.borderColor = "var(--pink-light)";
+            lbl.style.background = "var(--brand-secondary)";
+            lbl.style.borderColor = "var(--brand-primary)";
           });
           lbl.addEventListener("mouseleave", () => {
-            lbl.style.background = "var(--white)";
-            lbl.style.borderColor = "var(--gray-200)";
+            lbl.style.background = "var(--card-bg)";
+            lbl.style.borderColor = "var(--border-primary)";
           });
           checksContainer.appendChild(lbl);
         });
@@ -618,14 +688,14 @@
           .getElementById("select-all-btn")
           .addEventListener("click", () =>
             checksContainer
-              .querySelectorAll("input")
+              .querySelectorAll("input.custom-checkbox")
               .forEach((i) => (i.checked = true)),
           );
         document
           .getElementById("deselect-all-btn")
           .addEventListener("click", () =>
             checksContainer
-              .querySelectorAll("input")
+              .querySelectorAll("input.custom-checkbox")
               .forEach((i) => (i.checked = false)),
           );
 
@@ -634,7 +704,7 @@
           .getElementById("backup-btn")
           .addEventListener("click", async () => {
             const selected = [
-              ...checksContainer.querySelectorAll("input:checked"),
+              ...checksContainer.querySelectorAll("input.custom-checkbox:checked"),
             ].map((i) => i.value);
             if (selected.length === 0) {
               showToast("Please select at least one table.", "warning");
@@ -705,17 +775,17 @@
         dropzone.addEventListener("click", () => fileInput.click());
         dropzone.addEventListener("dragover", (e) => {
           e.preventDefault();
-          dropzone.style.borderColor = "var(--pink)";
-          dropzone.style.background = "var(--pink-50)";
+          dropzone.style.borderColor = "var(--brand-primary)";
+          dropzone.style.background = "var(--brand-secondary)";
         });
         dropzone.addEventListener("dragleave", () => {
-          dropzone.style.borderColor = "var(--gray-300)";
-          dropzone.style.background = "var(--gray-50)";
+          dropzone.style.borderColor = "var(--brand-primary-30)";
+          dropzone.style.background = "var(--brand-secondary)";
         });
         dropzone.addEventListener("drop", (e) => {
           e.preventDefault();
-          dropzone.style.borderColor = "var(--gray-300)";
-          dropzone.style.background = "var(--gray-50)";
+          dropzone.style.borderColor = "var(--brand-primary-30)";
+          dropzone.style.background = "var(--brand-secondary)";
           if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
         });
         fileInput.addEventListener("change", (e) => {
@@ -742,7 +812,7 @@
                 tableNames
                   .map(
                     (t) =>
-                      `<span style="background:var(--info-bg);color:#1D4ED8;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;">${esc(t)}</span>`,
+                      `<span class="badge badge-midwife" style="padding: 4px 10px; font-size: 11px; border-radius: 20px;">${esc(t)}</span>`,
                   )
                   .join("");
               document.getElementById("restore-preview").style.display =
@@ -843,7 +913,7 @@
           const tbody = document.getElementById("history-tbody");
           if (!data || data.length === 0) {
             tbody.innerHTML =
-              '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--gray-400);">No backup/restore history.</td></tr>';
+              '<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-secondary);">No backup/restore history.</div></tr>';
             return;
           }
           tbody.innerHTML = data
@@ -855,15 +925,15 @@
                 : "System";
               const isBackup = l.action === "database_backup";
               return `<tr>
-        <td style="font-size:12.5px;color:var(--gray-500);white-space:nowrap;">${fmtDT(l.action_timestamp)}</td>
-        <td style="font-weight:600;">${esc(who)}</td>
+        <td style="font-size:12.5px;color:var(--text-secondary);white-space:nowrap;">${fmtDT(l.action_timestamp)}</div>
+        <td style="font-weight:600;">${esc(who)}</div>
         <td>
           <span class="badge ${isBackup ? "badge-low" : "badge-medium"}">
             <i class="fa-solid ${isBackup ? "fa-download" : "fa-upload"}"></i>
             ${isBackup ? "Backup" : "Restore"}
           </span>
-        </td>
-        <td style="font-size:13px;color:var(--gray-600);">${esc(l.description || "—")}</td>
+        </div>
+        <td style="font-size:13px;color:var(--text-secondary);">${esc(l.description || "—")}</div>
       </tr>`;
             })
             .join("");

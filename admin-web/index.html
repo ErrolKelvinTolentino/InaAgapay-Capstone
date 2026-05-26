@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link
@@ -25,36 +25,31 @@
         padding: 0;
       }
       :root {
-        --pink: #e91e8c;
-        --pink-dark: #c2185b;
-        --pink-pale: #fce4ec;
-        --pink-light: #f8bbd9;
-        --white: #fff;
-        --gray-50: #f8fafc;
-        --gray-200: #e2e8f0;
-        --gray-400: #94a3b8;
-        --gray-700: #334155;
-        --gray-800: #1e293b;
+        --brand-primary: #FF68A5;
+        --brand-accent: #E6398D;
+        --brand-text: #C73578;
+        --bg-primary: #FAFAFA;
+        --bg-secondary: #FFF5F8;
+        --surface: #FFF9FC;
+        --text-primary: #2D2D2D;
+        --text-secondary: #8A8A8A;
+        --text-on-color: #FFFFFF;
+        --border-primary: #F0F0F0;
+        --error: #E57373;
+        --brand-primary-10: rgba(255, 104, 165, 0.10);
+        --brand-primary-40: rgba(255, 104, 165, 0.40);
+        --shadow-input: 0 6px 16px rgba(0, 0, 0, 0.06);
+        --shadow-btn: 0 4px 12px rgba(255, 104, 165, 0.4);
       }
       body {
-        font-family: "Poppins", "Segoe UI", sans-serif;
+        font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         min-height: 100vh;
-        background:
-          radial-gradient(
-            ellipse at 0% 0%,
-            rgba(233, 30, 140, 0.18) 0%,
-            transparent 50%
-          ),
-          radial-gradient(
-            ellipse at 100% 100%,
-            rgba(194, 24, 91, 0.14) 0%,
-            transparent 50%
-          ),
-          linear-gradient(135deg, #fff0f7 0%, #fff5fb 40%, #f8fafc 100%);
+        background: var(--bg-primary);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 24px;
+        -webkit-font-smoothing: antialiased;
       }
 
       .login-wrapper {
@@ -64,20 +59,14 @@
         min-height: 560px;
         border-radius: 24px;
         overflow: hidden;
-        box-shadow:
-          0 24px 80px rgba(233, 30, 140, 0.18),
-          0 8px 24px rgba(0, 0, 0, 0.07);
+        box-shadow: 0 10px 40px rgba(45, 45, 45, 0.10);
+        border: 1px solid var(--border-primary);
       }
 
       /* Left panel */
       .login-left {
         flex: 1;
-        background: linear-gradient(
-          145deg,
-          var(--pink) 0%,
-          var(--pink-dark) 60%,
-          #8c0046 100%
-        );
+        background: var(--bg-secondary);
         padding: 48px 40px;
         display: flex;
         flex-direction: column;
@@ -92,7 +81,7 @@
         right: -80px;
         width: 280px;
         height: 280px;
-        background: rgba(255, 255, 255, 0.08);
+        background: var(--brand-primary-10);
         border-radius: 50%;
       }
       .login-left::after {
@@ -102,7 +91,7 @@
         left: 40px;
         width: 200px;
         height: 200px;
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--brand-primary-10);
         border-radius: 50%;
       }
       .left-brand {
@@ -112,22 +101,21 @@
       .left-brand img {
         height: 44px;
         object-fit: contain;
-        filter: brightness(0) invert(1);
       }
       .left-content {
         position: relative;
         z-index: 1;
-        color: white;
       }
       .left-content h1 {
         font-size: 28px;
-        font-weight: 800;
+        font-weight: 700;
         line-height: 1.3;
         margin-bottom: 14px;
+        color: var(--brand-text);
       }
       .left-content p {
         font-size: 14px;
-        opacity: 0.82;
+        color: var(--text-secondary);
         line-height: 1.7;
         max-width: 280px;
       }
@@ -139,19 +127,22 @@
         flex-wrap: wrap;
       }
       .left-chip {
-        background: rgba(255, 255, 255, 0.15);
-        color: rgba(255, 255, 255, 0.9);
+        background: var(--brand-primary-10);
+        color: var(--brand-primary);
         font-size: 11.5px;
         font-weight: 600;
-        padding: 5px 14px;
+        padding: 6px 14px;
         border-radius: 20px;
         letter-spacing: 0.3px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
       }
 
       /* Right panel */
       .login-right {
         width: 420px;
-        background: var(--white);
+        background: var(--surface);
         padding: 48px 44px;
         display: flex;
         flex-direction: column;
@@ -170,12 +161,12 @@
       .login-form-header h2 {
         font-size: 22px;
         font-weight: 700;
-        color: var(--gray-800);
+        color: var(--brand-text);
         margin-bottom: 6px;
       }
       .login-form-header p {
-        font-size: 13.5px;
-        color: var(--gray-400);
+        font-size: 13px;
+        color: var(--text-secondary);
       }
 
       .form-group {
@@ -183,61 +174,79 @@
       }
       .form-label {
         display: block;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--gray-700);
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-secondary);
         margin-bottom: 7px;
       }
       .input-wrap {
         position: relative;
+        display: flex;
+        align-items: center;
       }
-      .input-wrap i {
+      .input-wrap i:first-child {
         position: absolute;
-        left: 13px;
+        left: 16px;
         top: 50%;
         transform: translateY(-50%);
-        color: var(--gray-400);
+        color: var(--brand-accent);
         font-size: 14px;
         pointer-events: none;
+        transition: color 0.2s;
+        z-index: 1;
       }
       .input-wrap input {
         width: 100%;
-        padding: 11px 14px 11px 38px;
+        height: 56px;
+        padding: 0 52px 0 42px;  /* right padding increased for toggle button */
         font-family: inherit;
-        font-size: 14px;
-        color: var(--gray-800);
-        background: var(--gray-50);
-        border: 1.5px solid var(--gray-200);
-        border-radius: 10px;
+        font-size: 16px;
+        color: var(--text-primary);
+        background: #FFFFFF;
+        border: 1.5px solid transparent;
+        border-radius: 28px;
         outline: none;
-        transition:
-          border-color 0.2s,
-          box-shadow 0.2s;
+        box-shadow: var(--shadow-input);
+        transition: all 0.2s ease;
+      }
+      .input-wrap input:hover {
+        border-color: var(--brand-primary-40);
       }
       .input-wrap input:focus {
-        border-color: var(--pink);
-        box-shadow: 0 0 0 3px rgba(233, 30, 140, 0.1);
-        background: var(--white);
+        border-color: var(--brand-primary);
+        box-shadow: var(--shadow-input), 0 0 0 3px var(--brand-primary-10);
       }
-      .input-wrap .pwd-toggle {
+      .pwd-toggle {
         position: absolute;
-        right: 12px;
+        right: 14px;
         top: 50%;
         transform: translateY(-50%);
-        color: var(--gray-400);
-        cursor: pointer;
-        font-size: 14px;
-        background: none;
+        background: transparent;
         border: none;
-        padding: 2px;
+        cursor: pointer;
+        font-size: 16px;
+        color: var(--brand-accent);
+        padding: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.2s;
+        z-index: 2;
+        border-radius: 50%;
+        width: 34px;
+        height: 34px;
       }
-      .input-wrap .pwd-toggle:hover {
-        color: var(--pink);
+      .pwd-toggle:hover {
+        opacity: 0.75;
+        background: var(--brand-primary-10);
+      }
+      .pwd-toggle:active {
+        transform: translateY(-50%) scale(0.95);
       }
 
       .form-error-msg {
-        font-size: 12.5px;
-        color: #dc2626;
+        font-size: 12px;
+        color: var(--error);
         margin-top: 5px;
         display: none;
         align-items: center;
@@ -249,21 +258,17 @@
 
       .btn-login {
         width: 100%;
-        padding: 12px;
+        height: 56px;
         border: none;
-        border-radius: 10px;
-        background: linear-gradient(
-          135deg,
-          var(--pink) 0%,
-          var(--pink-dark) 100%
-        );
-        color: white;
+        border-radius: 28px;
+        background: var(--brand-primary);
+        color: var(--text-on-color);
         font-family: inherit;
-        font-size: 14.5px;
-        font-weight: 700;
+        font-size: 16px;
+        font-weight: 600;
         cursor: pointer;
         margin-top: 8px;
-        box-shadow: 0 8px 24px rgba(233, 30, 140, 0.35);
+        box-shadow: var(--shadow-btn);
         transition: all 0.2s;
         display: flex;
         align-items: center;
@@ -271,12 +276,14 @@
         gap: 8px;
       }
       .btn-login:hover:not(:disabled) {
-        filter: brightness(1.07);
-        box-shadow: 0 12px 30px rgba(233, 30, 140, 0.45);
-        transform: translateY(-1px);
+        filter: brightness(1.06);
+        box-shadow: 0 6px 18px rgba(255, 104, 165, 0.5);
+      }
+      .btn-login:active:not(:disabled) {
+        transform: scale(0.97);
       }
       .btn-login:disabled {
-        opacity: 0.65;
+        opacity: 0.55;
         cursor: not-allowed;
         transform: none;
       }
@@ -284,22 +291,31 @@
       .login-footer-note {
         margin-top: 22px;
         font-size: 12px;
-        color: var(--gray-400);
+        color: var(--text-secondary);
         text-align: center;
         line-height: 1.6;
       }
 
       .alert-error {
-        background: #fee2e2;
-        border: 1px solid #fca5a5;
-        color: #991b1b;
-        border-radius: 10px;
-        padding: 11px 14px;
+        background: #FFFFFF;
+        border: 1px solid var(--border-primary);
+        color: var(--text-primary);
+        border-radius: 14px;
+        padding: 12px 16px;
         font-size: 13px;
         display: flex;
         align-items: center;
         gap: 10px;
         margin-bottom: 18px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+      }
+      .alert-error i {
+        color: var(--error);
+        font-size: 18px;
+        background: rgba(229, 115, 115, 0.12);
+        padding: 6px;
+        border-radius: 8px;
+        flex-shrink: 0;
       }
       .alert-error.hidden {
         display: none;
@@ -412,7 +428,7 @@
                 type="button"
                 class="pwd-toggle"
                 id="pwd-toggle"
-                aria-label="Toggle password"
+                aria-label="Toggle password visibility"
               >
                 <i class="fa-solid fa-eye" id="pwd-eye"></i>
               </button>
@@ -451,140 +467,156 @@
           try {
             const s = JSON.parse(existing);
             if (s && s.account_type === "admin") {
-              window.location.href = "pages/dashboard.html";
+              if (s.is_temporary_password === true) {
+                window.location.href = "pages/change-password.html";
+              } else {
+                window.location.href = "pages/dashboard.html";
+              }
             }
           } catch (_) {}
         }
 
-        // Toggle password visibility
-        document.getElementById("pwd-toggle").addEventListener("click", () => {
-          const inp = document.getElementById("password");
-          const eye = document.getElementById("pwd-eye");
-          if (inp.type === "password") {
-            inp.type = "text";
-            eye.className = "fa-solid fa-eye-slash";
-          } else {
-            inp.type = "password";
-            eye.className = "fa-solid fa-eye";
-          }
-        });
+        // Toggle password visibility with improved icon change
+        const toggleBtn = document.getElementById("pwd-toggle");
+        const passwordInput = document.getElementById("password");
+        const eyeIcon = document.getElementById("pwd-eye");
+
+        if (toggleBtn && passwordInput && eyeIcon) {
+          toggleBtn.addEventListener("click", (e) => {
+            e.preventDefault(); // prevent any accidental form action
+            const isPassword = passwordInput.type === "password";
+            if (isPassword) {
+              passwordInput.type = "text";
+              eyeIcon.className = "fa-solid fa-eye-slash";
+            } else {
+              passwordInput.type = "password";
+              eyeIcon.className = "fa-solid fa-eye";
+            }
+            // Slight accessibility: keep focus on input
+            passwordInput.focus();
+          });
+        }
 
         // Login form submit
-        document
-          .getElementById("login-form")
-          .addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const email = document.getElementById("email").value.trim();
-            const password = document.getElementById("password").value;
-            const btn = document.getElementById("login-btn");
-            const btnText = document.getElementById("login-btn-text");
-            const alert = document.getElementById("login-alert");
-            const alertMsg = document.getElementById("login-alert-msg");
+        const form = document.getElementById("login-form");
+        const loginBtn = document.getElementById("login-btn");
+        const btnTextSpan = document.getElementById("login-btn-text");
+        const alertBox = document.getElementById("login-alert");
+        const alertMsgSpan = document.getElementById("login-alert-msg");
 
-            if (!email || !password) {
-              showError("Please enter your email and password.");
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const email = document.getElementById("email").value.trim();
+          const password = document.getElementById("password").value;
+
+          if (!email || !password) {
+            showError("Please enter your email and password.");
+            return;
+          }
+
+          // Loading state
+          loginBtn.disabled = true;
+          btnTextSpan.innerHTML = '<div class="spinner"></div> Signing in…';
+          alertBox.classList.add("hidden");
+
+          try {
+            // Fetch admin account by email
+            const { data: accounts, error } = await db
+              .from("accounts")
+              .select(
+                "account_id, email_address, password_hash, account_type, first_name, middle_name, last_name, extension_name, phone_number, status, is_verified, is_temporary_password"
+              )
+              .eq("email_address", email)
+              .eq("account_type", "admin")
+              .limit(1);
+
+            if (error) throw error;
+
+            if (!accounts || accounts.length === 0) {
+              showError("No admin account found with that email.");
               return;
             }
 
-            // Loading state
-            btn.disabled = true;
-            btnText.innerHTML = '<div class="spinner"></div> Signing in…';
-            alert.classList.add("hidden");
+            const user = accounts[0];
 
-            try {
-              // Fetch admin account by email
-              const { data: accounts, error } = await db
-                .from("accounts")
-                .select(
-                  "account_id, email_address, password_hash, account_type, first_name, middle_name, last_name, extension_name, phone_number, status, is_verified",
-                )
-                .eq("email_address", email)
-                .eq("account_type", "admin")
-                .limit(1);
-
-              if (error) throw error;
-
-              if (!accounts || accounts.length === 0) {
-                showError("No admin account found with that email.");
-                return;
-              }
-
-              const user = accounts[0];
-
-              if (!user.is_verified) {
-                showError("Account is not verified. Contact system support.");
-                return;
-              }
-
-              if (user.status !== "active") {
-                showError(
-                  "Account is " + user.status + ". Contact system support.",
-                );
-                return;
-              }
-
-              // Verify password with bcryptjs
-              const bcrypt = dcodeIO.bcrypt;
-
-              const match = await bcrypt.compare(password, user.password_hash);
-              if (!match) {
-                showError("Incorrect password. Please try again.");
-                return;
-              }
-
-              // Save session first — do this before any non-critical async calls
-              const session = {
-                account_id: user.account_id,
-                account_type: user.account_type,
-                email_address: user.email_address,
-                first_name: user.first_name,
-                middle_name: user.middle_name,
-                last_name: user.last_name,
-                extension_name: user.extension_name,
-                logged_in_at: new Date().toISOString(),
-              };
-              localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-
-              // Non-critical: update last_login_at (don't block login if RLS denies)
-              db.from("accounts")
-                .update({ last_login_at: new Date().toISOString() })
-                .eq("account_id", user.account_id)
-                .then(({ error: e }) => {
-                  if (e) console.warn("last_login_at update:", e.message);
-                });
-
-              // Non-critical: log audit (don't block login if RLS denies)
-              db.from("audit_trail")
-                .insert({
-                  account_id: user.account_id,
-                  action: "login",
-                  description: "Admin logged in to admin portal",
-                  table_name: "accounts",
-                })
-                .then(({ error: e }) => {
-                  if (e) console.warn("Audit log:", e.message);
-                });
-
-              // Redirect to dashboard
-              window.location.href = "pages/dashboard.html";
-            } catch (err) {
-              console.error("Login error:", err);
-              showError(
-                err?.message
-                  ? "Error: " + err.message
-                  : "An error occurred. Please check your connection and try again.",
-              );
-            } finally {
-              btn.disabled = false;
-              btnText.textContent = "Sign In";
+            if (!user.is_verified) {
+              showError("Account is not verified. Contact system support.");
+              return;
             }
-          });
+
+            if (user.status !== "active") {
+              showError(
+                "Account is " + user.status + ". Contact system support."
+              );
+              return;
+            }
+
+            // Verify password with bcryptjs
+            const bcrypt = dcodeIO.bcrypt;
+            const match = await bcrypt.compare(password, user.password_hash);
+            if (!match) {
+              showError("Incorrect password. Please try again.");
+              return;
+            }
+
+            // Save session first — do this before any non-critical async calls
+            const session = {
+              account_id: user.account_id,
+              account_type: user.account_type,
+              email_address: user.email_address,
+              first_name: user.first_name,
+              middle_name: user.middle_name,
+              last_name: user.last_name,
+              extension_name: user.extension_name,
+              is_temporary_password: user.is_temporary_password === true,
+              logged_in_at: new Date().toISOString(),
+            };
+            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+            // Non-critical: update last_login_at (don't block login if RLS denies)
+            db.from("accounts")
+              .update({ last_login_at: new Date().toISOString() })
+              .eq("account_id", user.account_id)
+              .then(({ error: e }) => {
+                if (e) console.warn("last_login_at update:", e.message);
+              });
+
+            // Non-critical: log audit (don't block login if RLS denies)
+            db.from("audit_trail")
+              .insert({
+                account_id: user.account_id,
+                action: "login",
+                description: "Admin logged in to admin portal",
+                table_name: "accounts",
+              })
+              .then(({ error: e }) => {
+                if (e) console.warn("Audit log:", e.message);
+              });
+
+            // Redirect to dashboard or change password page
+            if (user.is_temporary_password === true) {
+              window.location.href = "pages/change-password.html";
+            } else {
+              window.location.href = "pages/dashboard.html";
+            }
+          } catch (err) {
+            console.error("Login error:", err);
+            showError(
+              err?.message
+                ? "Error: " + err.message
+                : "An error occurred. Please check your connection and try again."
+            );
+          } finally {
+            loginBtn.disabled = false;
+            btnTextSpan.textContent = "Sign In";
+          }
+        });
 
         function showError(msg) {
-          const alertEl = document.getElementById("login-alert");
-          const alertMsg = document.getElementById("login-alert-msg");
-          alertMsg.textContent = msg;
-          alertEl.classList.remove("hidden");
+          alertMsgSpan.textContent = msg;
+          alertBox.classList.remove("hidden");
+          // Scroll into view gently if needed
+          alertBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
       })();
     </script>
