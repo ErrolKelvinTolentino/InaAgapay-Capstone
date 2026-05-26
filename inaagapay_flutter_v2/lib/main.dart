@@ -97,33 +97,21 @@ class InaagapayApp extends StatefulWidget {
 }
 
 /// Call from anywhere to refresh the app theme after dark mode toggle.
-void refreshAppTheme() {
-  _InaagapayAppState._instance?._loadThemePreference();
-}
+void refreshAppTheme() {}
 
 class _InaagapayAppState extends State<InaagapayApp> {
   static _InaagapayAppState? _instance;
-
-  bool _isDarkMode = false;
-  bool _themeLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _instance = this;
-    _loadThemePreference();
   }
 
   @override
   void dispose() {
     if (_instance == this) _instance = null;
     super.dispose();
-  }
-
-  Future<void> _loadThemePreference() async {
-    final dark = await AuthStorage.isDarkMode();
-    if (kDebugMode) debugPrint('🎨 Theme preference loaded: isDark=$dark');
-    if (mounted) setState(() { _isDarkMode = dark; _themeLoaded = true; });
   }
 
   Future<Widget> _determineStartScreen() async {
@@ -251,18 +239,7 @@ class _InaagapayAppState extends State<InaagapayApp> {
               backgroundColor: Colors.white,
             ),
           ),
-          darkTheme: AppTheme.darkTheme.copyWith(
-            appBarTheme: const AppBarTheme(elevation: 0, centerTitle: true),
-            bottomNavigationBarTheme: BottomNavigationBarThemeData(
-              selectedItemColor: AppColors.darkBrandPrimary,
-              unselectedItemColor: Colors.grey.shade400,
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: AppColors.darkBgSecondary,
-            ),
-          ),
-          themeMode: _themeLoaded
-              ? (_isDarkMode ? ThemeMode.dark : ThemeMode.light)
-              : ThemeMode.light,
+          themeMode: ThemeMode.light,
           home: snapshot.data ?? const LoginScreen(),
           routes: {
             '/login': (context) => const LoginScreen(),

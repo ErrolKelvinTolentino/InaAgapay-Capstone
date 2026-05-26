@@ -89,6 +89,23 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
     return LanguageService.translate(english, filipino);
   }
 
+  String _tCategory(String cat) {
+    switch (cat) {
+      case 'Nutrisyon / Nutrition':
+        return _t('Nutrition', 'Nutrisyon');
+      case 'Prenatal Care / Pagpapasuri':
+        return _t('Prenatal Care', 'Pagpapasuri');
+      case 'Mga Babala / Danger Signs':
+        return _t('Danger Signs', 'Mga Babala');
+      case 'Pamamanas / Swelling':
+        return _t('Swelling', 'Pamamanas');
+      case 'Morning Sickness / Pagduduwal':
+        return _t('Morning Sickness', 'Pagduduwal');
+      default:
+        return cat;
+    }
+  }
+
   String get _onlyFirstName {
     if (widget.firstName.isEmpty) return '';
     return widget.firstName.trim().split(' ').first;
@@ -536,7 +553,7 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
     if (widget.hasPregnancy) {
       if (widget.week > 0) {
         greeting = _t(
-          "Hi $_onlyFirstName! I'm Ate Assistant, your digital midwife guide. You're currently in Week ${widget.week} of your pregnancy (${widget.trimester}). How can I help you today? 🌸",
+          "Hi $_onlyFirstName! I'm Ate Assistant, your digital midwife guide. You're currently in Week ${widget.week} of your pregnancy (${_tTrimester(widget.trimester)}). How can I help you today? 🌸",
           "Kumusta, $_onlyFirstName! Ako si Ate Assistant, ang iyong gabay sa pagbubuntis. Nasa Week ${widget.week} ka na ngayon (${_tTrimester(widget.trimester)}). Paano kita matutulungan ngayong araw? 🌸",
         );
       } else {
@@ -566,15 +583,31 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
 
   String _tTrimester(String trim) {
     if (trim.contains('First') || trim.contains('Unang')) {
-      return 'Unang Trimester';
+      return _t('First Trimester', 'Unang Trimester');
     }
     if (trim.contains('Second') || trim.contains('Ikalawang')) {
-      return 'Ikalawang Trimester';
+      return _t('Second Trimester', 'Ikalawang Trimester');
     }
     if (trim.contains('Third') || trim.contains('Ikatlong')) {
-      return 'Ikatlong Trimester';
+      return _t('Third Trimester', 'Ikatlong Trimester');
     }
     return trim;
+  }
+
+  String _tRiskLevel(String risk) {
+    switch (risk.toLowerCase().trim()) {
+      case 'low':
+      case 'mababa':
+        return _t('Low', 'Mababa');
+      case 'medium':
+      case 'katamtaman':
+        return _t('Medium', 'Katamtaman');
+      case 'high':
+      case 'mataas':
+        return _t('High', 'Mataas');
+      default:
+        return risk;
+    }
   }
 
   Future<void> _sendMessage(String text) async {
@@ -663,43 +696,75 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
         .where((c) => !_hiddenMedicalConditions.contains(c))
         .toList();
 
+    final isFilipino = LanguageService.isFilipino;
+
     final allergiesStr = visibleAllergies.isEmpty
-        ? 'Wala (o walang ibinahagi ang ina)'
+        ? (isFilipino ? 'Wala (o walang ibinahagi ang ina)' : 'None (or none shared by the mother)')
         : visibleAllergies.join(', ');
     final medicalConditionsStr = visibleConditions.isEmpty
-        ? 'Wala (o walang ibinahagi ang ina)'
+        ? (isFilipino ? 'Wala (o walang ibinahagi ang ina)' : 'None (or none shared by the mother)')
         : visibleConditions.join(', ');
 
     final includePregnancy = widget.hasPregnancy && !_hidePregnancyInfo;
 
-    final contextString = includePregnancy
-        ? "Pangalan ng Buntis: $_onlyFirstName\n"
-            "Linggo ng Pagbubuntis: Week ${widget.week} (${widget.trimester})\n"
-            "Risk Level: ${widget.riskLevel}\n"
-            "Mga Risk Factors: ${widget.riskFactors?.join(', ') ?? 'Wala'}\n"
-            "Mga Rekomendadong Aksyon: ${widget.suggestedActions?.join(', ') ?? 'Wala'}\n"
-            "Mga Aktibong Alerdye (Allergies) na ibinahagi: $allergiesStr\n"
-            "Mga Kasalukuyang Kondisyong Medikal (Medical Conditions) na ibinahagi: $medicalConditionsStr"
-        : "Pangalan ng Ina: $_onlyFirstName\n"
-            "Pregnancy Status: Walang aktibong pagbubuntis na rehistrado o tinago ng ina ang detalye.\n"
-            "Mga Aktibong Alerdye (Allergies) na ibinahagi: $allergiesStr\n"
-            "Mga Kasalukuyang Kondisyong Medikal (Medical Conditions) na ibinahagi: $medicalConditionsStr";
+    final contextString = isFilipino
+        ? (includePregnancy
+            ? "Pangalan ng Buntis: $_onlyFirstName\n"
+                "Linggo ng Pagbubuntis: Linggo ${widget.week} (${_tTrimester(widget.trimester)})\n"
+                "Antas ng Panganib: ${_tRiskLevel(widget.riskLevel)}\n"
+                "Mga Risk Factors: ${widget.riskFactors?.join(', ') ?? 'Wala'}\n"
+                "Mga Rekomendadong Aksyon: ${widget.suggestedActions?.join(', ') ?? 'Wala'}\n"
+                "Mga Aktibong Alerdye (Allergies) na ibinahagi: $allergiesStr\n"
+                "Mga Kasalukuyang Kondisyong Medikal (Medical Conditions) na ibinahagi: $medicalConditionsStr"
+            : "Pangalan ng Ina: $_onlyFirstName\n"
+                "Pregnancy Status: Walang aktibong pagbubuntis na rehistrado o tinago ng ina ang detalye.\n"
+                "Mga Aktibong Alerdye (Allergies) na ibinahagi: $allergiesStr\n"
+                "Mga Kasalukuyang Kondisyong Medikal (Medical Conditions) na ibinahagi: $medicalConditionsStr")
+        : (includePregnancy
+            ? "Mother's Name: $_onlyFirstName\n"
+                "Pregnancy Week: Week ${widget.week} (${_tTrimester(widget.trimester)})\n"
+                "Risk Level: ${_tRiskLevel(widget.riskLevel)}\n"
+                "Risk Factors: ${widget.riskFactors?.join(', ') ?? 'None'}\n"
+                "Suggested Actions: ${widget.suggestedActions?.join(', ') ?? 'None'}\n"
+                "Shared Active Allergies: $allergiesStr\n"
+                "Shared Active Medical Conditions: $medicalConditionsStr"
+            : "Mother's Name: $_onlyFirstName\n"
+                "Pregnancy Status: No active pregnancy registered or pregnancy details hidden by the mother.\n"
+                "Shared Active Allergies: $allergiesStr\n"
+                "Shared Active Medical Conditions: $medicalConditionsStr");
 
-    return "You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. "
-        "Write as if you are a trusted ate (older sister) sitting beside the mother, gently explaining things. "
-        "Celebrate good news warmly. When something needs attention, be honest but gentle and always offer practical next steps. "
-        "Use simple Filipino-context language (English/Tagalog/Taglish). Explain medical terms by what they mean for the mother and baby. "
-        "Give culturally relevant advice (e.g., local foods like malunggay, kangkong, dilis for nutrition). "
-        "Never be cold or clinical. Always end with encouragement.\n\n"
+    final disclaimerText = isFilipino
+        ? "Tandaan: Ang payo na ito ay gabay lamang at hindi kapalit ng pagkonsulta sa iyong midwife o doktor."
+        : "Remember: This advice is a guide only and not a substitute for consulting your midwife or doctor.";
+
+    final declineText = isFilipino
+        ? "Pasensya na, mama, ako ay ginawa lamang para sa mga usaping pagbubuntis at pangangalaga sa inyong baby..."
+        : "I am sorry, mama, I am only designed to assist with pregnancy, motherhood, and baby care topics...";
+
+    final personaPrompt = isFilipino
+        ? "You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. "
+            "Write as if you are a trusted ate (older sister) sitting beside the mother, gently explaining things. "
+            "Celebrate good news warmly. When something needs attention, be honest but gentle and always offer practical next steps. "
+            "Use simple Filipino-context language (English/Tagalog/Taglish). Explain medical terms by what they mean for the mother and baby. "
+            "Give culturally relevant advice (e.g., local foods like malunggay, kangkong, dilis for nutrition). "
+            "Never be cold or clinical. Always end with encouragement."
+        : "You are a caring, knowledgeable midwife assistant in the Philippines who genuinely cares about every mother and child. "
+            "Write as if you are a trusted ate (older sister) sitting beside the mother, gently explaining things. "
+            "Celebrate good news warmly. When something needs attention, be honest but gentle and always offer practical next steps. "
+            "Respond in warm, supportive, clear English. Explain medical terms by what they mean for the mother and baby. "
+            "Give culturally relevant advice (e.g., local foods like malunggay, kangkong, dilis for nutrition). "
+            "Never be cold or clinical. Always end with encouragement.";
+
+    return "$personaPrompt\n\n"
         "Here is the context about the mother you are talking to:\n"
         "$contextString\n\n"
         "Rules:\n"
         "1. Limit your responses to 2-3 brief paragraphs so they are easy to read on a mobile phone screen.\n"
         "2. STRICT LANGUAGE MATCHING: You must detect and mirror the language or dialect style the mother uses. If she asks in Tagalog, respond in warm, conversational Tagalog. If she asks in Taglish, respond in natural Taglish. If she asks in English, respond in clear English. Sound warm, natural, and never use rigid clinical translations.\n"
         "3. Every message you send MUST end with a caring tag and a soft disclaimer: "
-        "\"Tandaan: Ang payo na ito ay gabay lamang at hindi kapalit ng pagkonsulta sa iyong midwife o doktor.\"\n"
+        "\"$disclaimerText\"\n"
         "4. Address the mother by name ($_onlyFirstName) naturally occasionally.\n"
-        "5. CRITICAL: You are STRICTLY a maternal health, pregnancy, and baby care assistant. Do NOT write computer code, programming instructions, web scripts, or answer any questions unrelated to pregnancy, motherhood, maternal/infant nutrition, or parenting. If asked about programming, code, web projects, or other unrelated subjects, politely and warmly decline in Taglish (e.g., 'Pasensya na, mama, ako ay ginawa lamang para sa mga usaping pagbubuntis at pangangalaga sa inyong baby...').\n"
+        "5. CRITICAL: You are STRICTLY a maternal health, pregnancy, and baby care assistant. Do NOT write computer code, programming instructions, web scripts, or answer any questions unrelated to pregnancy, motherhood, maternal/infant nutrition, or parenting. If asked about programming, code, web projects, or other unrelated subjects, politely and warmly decline (e.g., '$declineText').\n"
         "6. CRITICAL SAFETY RULE: You must ALWAYS cross-reference the mother's list of active allergies and medical conditions when she asks about food, diet, nutrition, home remedies, medications, activities, or exercises. If she asks if she can eat or do something that matches or is related to her active allergies or medical conditions (e.g. asking to eat fish when allergic to fish, or do heavy tasks with high risk), you MUST strongly advise against it, state the reason clearly by referring to her allergy or condition, and provide safe, healthy local alternatives in your warm Filipino midwife ('Ate') persona.\n"
         "7. EMERGENCY HOTLINES: If the mother mentions or describes any pregnancy danger signs (such as vaginal bleeding, severe abdominal pain, high fever, blurred vision, severe headache, swelling/edema of face or hands, or sudden decrease in baby movement), or if she is experiencing a mental health crisis, you MUST suggest that she seek immediate medical help or contact emergency services. In these cases, append `[CALL_HOTLINE: <number>]` on a new line at the very end of your response, where `<number>` is:\n"
         "  - `911` for severe/life-threatening medical emergencies or general emergencies.\n"
@@ -726,8 +791,8 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
 
   Map<String, String> _splitMessageDisclaimer(String text) {
     final RegExp disclaimerRegex = RegExp(
-      r'((?:Tandaan|Disclaimer|Reminder|Patalastas):\s*Ang payo na ito ay gabay lamang at hindi kapalit ng pagkonsulta sa iyong midwife o doktor\.?|'
-      r'(?:Tandaan|Disclaimer|Reminder):\s*Ang payo na ito.*?(?:midwife o doktor|midwife or doctor)\.?)',
+      r'((?:Tandaan|Disclaimer|Reminder|Patalastas):\s*(?:Ang payo na ito ay gabay lamang at hindi kapalit ng pagkonsulta sa iyong midwife o doktor|This advice is a guide only and not a substitute for consulting your midwife or doctor)\.?|'
+      r'(?:Tandaan|Disclaimer|Reminder):\s*(?:Ang payo na ito|This advice).*?(?:midwife o doktor|midwife or doctor)\.?)',
       caseSensitive: false,
     );
 
@@ -1094,8 +1159,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child:
-                const Text('Burahin', style: TextStyle(color: AppColors.error)),
+            child: Text(
+              _t('Delete', 'Burahin'),
+              style: const TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -1214,8 +1281,10 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
                                   fontSize: 14),
                             ),
                             subtitle: Text(
-                              _t('Week ${widget.week}, ${widget.trimester}, Risk Level: ${widget.riskLevel}',
-                                  'Week ${widget.week}, ${widget.trimester}, Risk Level: ${widget.riskLevel}'),
+                              _t(
+                                'Week ${widget.week}, ${_tTrimester(widget.trimester)}, Risk Level: ${_tRiskLevel(widget.riskLevel)}',
+                                'Linggo ${widget.week}, ${_tTrimester(widget.trimester)}, Antas ng Panganib: ${_tRiskLevel(widget.riskLevel)}',
+                              ),
                               style: const TextStyle(
                                   fontSize: 12, color: AppColors.textSecondary),
                             ),
@@ -2511,7 +2580,7 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                faq.category,
+                _tCategory(faq.category),
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,

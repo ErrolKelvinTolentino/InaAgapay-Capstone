@@ -10,6 +10,8 @@ import '../../services/supabase_service.dart';
 import '../../widgets/headline.dart';
 import '../../widgets/main_button.dart';
 import '../../widgets/full_screen_image_viewer.dart';
+import '../../widgets/app_input_field.dart';
+import '../../widgets/app_dropdown_field.dart';
 import '../shared/record_detail_screen.dart';
 
 class RecordsScreen extends StatefulWidget {
@@ -41,6 +43,8 @@ class _RecordsScreenState extends State<RecordsScreen>
   final Set<String> _expandedLabInsightAspects = <String>{};
   StateSetter? _recordDetailsModalSetState;
 
+  late final TextEditingController _searchController;
+
   // Pagination — show 5 records at a time
   static const int _pageSize = 5;
   int _displayCount = _pageSize;
@@ -50,12 +54,14 @@ class _RecordsScreenState extends State<RecordsScreen>
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     _tabController = TabController(length: 1, vsync: this);
     _loadMotherData();
   }
 
   @override
   void dispose() {
+    _searchController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -68,17 +74,6 @@ class _RecordsScreenState extends State<RecordsScreen>
 
   String _noneRecorded() => _t('None recorded', 'Walang naitala');
 
-  String _recordTypeLabel(String type, [dynamic labTestType]) {
-    if (type == 'checkup') {
-      return _t('Prenatal Checkup', 'Prenatal Checkup');
-    }
-    if (type == 'ultrasound') {
-      return _t('Ultrasound', 'Ultrasound');
-    }
-    return _formatValue(labTestType) == '—'
-        ? _t('Lab Test', 'Lab Test')
-        : _formatValue(labTestType);
-  }
 
   void _refreshRecordDetailsUi() {
     final modalSetState = _recordDetailsModalSetState;
@@ -1182,93 +1177,70 @@ class _RecordsScreenState extends State<RecordsScreen>
           color: Colors.white,
           child: Column(
             children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.bgSecondary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                      _displayCount = _pageSize; // Reset on search change
-                    });
-                  },
-                  decoration: InputDecoration(
-                    hintText: _t('Search records...', 'Maghanap ng records...'),
-                    prefixIcon: const Icon(Icons.search,
-                        color: AppColors.textSecondary),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
+              AppInputField(
+                hintText: _t('Search records...', 'Maghanap ng records...'),
+                controller: _searchController,
+                leadingIcon: Icons.search,
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                    _displayCount = _pageSize; // Reset on search change
+                  });
+                },
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSecondary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _selectedFilter,
-                        isExpanded: true,
-                        underline: const SizedBox(),
-                        items: [
-                          DropdownMenuItem(
-                              value: 'all',
-                              child:
-                                  Text(_t('All Records', 'Lahat ng Records'))),
-                          DropdownMenuItem(
-                              value: 'checkup',
-                              child:
-                                  Text(_t('Checkups Only', 'Checkups Lang'))),
-                          DropdownMenuItem(
-                              value: 'ultrasound',
-                              child: Text(
-                                  _t('Ultrasounds Only', 'Ultrasounds Lang'))),
-                          DropdownMenuItem(
-                              value: 'labtest',
-                              child:
-                                  Text(_t('Lab Tests Only', 'Lab Tests Lang'))),
-                          DropdownMenuItem(
-                              value: 'maternal_vital',
-                              child: Text(
-                                  _t('Self-logged Vitals Only', 'Sariling Vitals Lang'))),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedFilter = value!;
-                            _displayCount = _pageSize; // Reset on filter change
-                          });
-                        },
-                      ),
+                    flex: 3,
+                    child: AppDropdownField<String>(
+                      hintText: _t('All Records', 'Lahat ng Records'),
+                      value: _selectedFilter,
+                      options: const ['all', 'checkup', 'ultrasound', 'labtest', 'maternal_vital'],
+                      displayStringForOption: (value) {
+                        switch (value) {
+                          case 'all':
+                            return _t('All Records', 'Lahat ng Records');
+                          case 'checkup':
+                            return _t('Checkups Only', 'Checkups Lang');
+                          case 'ultrasound':
+                            return _t('Ultrasounds Only', 'Ultrasounds Lang');
+                          case 'labtest':
+                            return _t('Lab Tests Only', 'Lab Tests Lang');
+                          case 'maternal_vital':
+                            return _t('Self-logged Vitals Only', 'Sariling Vitals Lang');
+                          default:
+                            return '';
+                        }
+                      },
+                      onSelected: (value) {
+                        setState(() {
+                          _selectedFilter = value;
+                          _displayCount = _pageSize; // Reset on filter change
+                        });
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: DropdownButton<String>(
+                  Expanded(
+                    flex: 2,
+                    child: AppDropdownField<String>(
+                      hintText: _t('Newest First', 'Pinakabago Muna'),
                       value: _sortOrder,
-                      underline: const SizedBox(),
-                      items: [
-                        DropdownMenuItem(
-                            value: 'desc',
-                            child: Text(_t('Newest First', 'Pinakabago Muna'))),
-                        DropdownMenuItem(
-                            value: 'asc',
-                            child: Text(_t('Oldest First', 'Pinakaluma Muna'))),
-                      ],
-                      onChanged: (value) {
+                      options: const ['desc', 'asc'],
+                      displayStringForOption: (value) {
+                        switch (value) {
+                          case 'desc':
+                            return _t('Newest First', 'Pinakabago Muna');
+                          case 'asc':
+                            return _t('Oldest First', 'Pinakaluma Muna');
+                          default:
+                            return '';
+                        }
+                      },
+                      onSelected: (value) {
                         setState(() {
-                          _sortOrder = value!;
+                          _sortOrder = value;
                         });
                       },
                     ),
@@ -1385,14 +1357,6 @@ class _RecordsScreenState extends State<RecordsScreen>
                       final isMaternalVital =
                           record['record_type'] == 'maternal_vital';
 
-                      // Type badge color and label
-                      final typeLabel = isCheckup
-                          ? _t('Checkup', 'Checkup')
-                          : isUltrasound
-                              ? _t('Ultrasound', 'Ultrasound')
-                              : isLabTest
-                                  ? _t('Lab Test', 'Lab Test')
-                                  : _t('Vitals', 'Mga Vital');
                       final typeColor = isCheckup
                           ? AppColors.brandPrimary
                           : isUltrasound
@@ -1401,154 +1365,135 @@ class _RecordsScreenState extends State<RecordsScreen>
                                   ? AppColors.warning
                                   : Colors.teal;
 
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        elevation: 1,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Icon
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: typeColor.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    isCheckup
-                                        ? Icons.medical_services
-                                        : isUltrasound
-                                            ? Icons.monitor_heart_outlined
-                                            : isLabTest
-                                                ? Icons.science
-                                                : Icons.monitor_weight_outlined,
-                                    color: typeColor,
-                                    size: 22,
-                                  ),
+                      final dateCreated = _formatDateTime(
+                          record['recorded_at'] ??
+                              record['created_at'] ??
+                              record['createdAt'] ??
+                              record['checkup_datetime']);
+
+                      final titleText = isCheckup
+                          ? _t('Prenatal Checkup', 'Prenatal Checkup')
+                          : isUltrasound
+                              ? _t('Ultrasound', 'Ultrasound')
+                              : isLabTest
+                                  ? (record['lab_test_type'] ?? _t('Lab Test', 'Lab Test'))
+                                  : _t('Self-logged Vitals', 'Sariling Vitals');
+
+                      final showConductDate = (isUltrasound || isLabTest) &&
+                          !_isSameDay(
+                            record['created_at'] ?? record['createdAt'],
+                            isUltrasound ? record['ultrasound_date'] : record['lab_test_date'],
+                          );
+
+                      final conductDateStr = showConductDate
+                          ? '${_t('Conducted on', 'Isinagawa noong')} ${_formatDate(isUltrasound ? record['ultrasound_date'] : record['lab_test_date'])}'
+                          : null;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Material(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.borderPrimary,
                                 ),
-                                const SizedBox(width: 12),
-                                // Content
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // Title row with type badge
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              isCheckup
-                                                  ? _t('Prenatal Checkup',
-                                                      'Prenatal Checkup')
-                                                  : isUltrasound
-                                                      ? _t('Ultrasound',
-                                                          'Ultrasound')
-                                                      : isLabTest
-                                                          ? (record['lab_test_type'] ??
-                                                              _t('Lab Test',
-                                                                  'Lab Test'))
-                                                          : _t('Self-logged Vitals',
-                                                              'Sariling Vitals'),
+                              ),
+                              child: IntrinsicHeight(
+                                child: Row(
+                                  children: [
+                                    // Left accent strip
+                                    Container(
+                                      width: 4,
+                                      decoration: BoxDecoration(
+                                        color: typeColor,
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(12),
+                                          bottomLeft: Radius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Icon
+                                    Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: typeColor.withValues(alpha: 0.10),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Icon(
+                                          isCheckup
+                                              ? Icons.medical_services_outlined
+                                              : isUltrasound
+                                                  ? Icons.monitor_heart_outlined
+                                                  : isLabTest
+                                                      ? Icons.science_outlined
+                                                      : Icons.monitor_weight_outlined,
+                                          color: typeColor,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Content
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              titleText,
                                               style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
                                                 fontSize: 14,
-                                              ),
-                                            ),
-                                          ),
-                                          // Type indicator badge
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: typeColor.withValues(
-                                                  alpha: 0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: Text(
-                                              typeLabel,
-                                              style: TextStyle(
-                                                fontSize: 10,
                                                 fontWeight: FontWeight.w600,
-                                                color: typeColor,
+                                                color: AppColors.textPrimary,
                                               ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      // Date row with icon
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.calendar_today,
-                                              size: 12,
-                                              color: AppColors.textSecondary),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            _formatDateTime(
-                                                record['recorded_at'] ??
-                                                    record['created_at'] ??
-                                                    record['createdAt'] ??
-                                                    record['checkup_datetime']),
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: AppColors.textSecondary,
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              dateCreated,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.textSecondary,
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                      if (isUltrasound || isLabTest) ...[
-                                        if (!_isSameDay(
-                                          record['created_at'] ??
-                                              record['createdAt'],
-                                          isUltrasound
-                                              ? record['ultrasound_date']
-                                              : record['lab_test_date'],
-                                        )) ...[
-                                          const SizedBox(height: 3),
-                                          Row(
-                                            children: [
-                                              const Icon(Icons.watch_later,
-                                                  size: 12,
-                                                  color:
-                                                      AppColors.textSecondary),
-                                              const SizedBox(width: 4),
+                                            if (conductDateStr != null) ...[
+                                              const SizedBox(height: 2),
                                               Text(
-                                                '${_t('Conducted on', 'Isinagawa noong')} ${_formatDate(isUltrasound ? record['ultrasound_date'] : record['lab_test_date'])}',
+                                                conductDateStr,
                                                 style: const TextStyle(
                                                   fontSize: 11,
-                                                  color:
-                                                      AppColors.textSecondary,
+                                                  color: AppColors.textSecondary,
                                                 ),
                                               ),
                                             ],
-                                          ),
-                                        ],
-                                      ],
-                                    ],
-                                  ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Chevron
+                                    const Padding(
+                                      padding: EdgeInsets.only(right: 12),
+                                      child: Icon(
+                                        Icons.chevron_right,
+                                        color: AppColors.textSecondary,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 4),
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 8),
-                                  child: Icon(
-                                    Icons.chevron_right,
-                                    color: AppColors.textSecondary,
-                                    size: 20,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                          onTap: () async {
+                            onTap: () async {
                             if (_isOpeningRecord) return;
                             setState(() => _isOpeningRecord = true);
                             bool hasClosedLoading = false;
@@ -1925,7 +1870,8 @@ class _RecordsScreenState extends State<RecordsScreen>
                             }
                           },
                         ),
-                      );
+                      ),
+                    );
                     },
                   ),
                 ),
