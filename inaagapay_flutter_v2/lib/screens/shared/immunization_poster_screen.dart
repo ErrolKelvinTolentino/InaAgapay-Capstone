@@ -792,6 +792,7 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
+        bool isSaving = false;
         return StatefulBuilder(
           builder: (context, setEditorState) {
             return Dialog(
@@ -823,7 +824,7 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, color: AppColors.textSecondary),
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: isSaving ? null : () => Navigator.pop(context),
                           constraints: const BoxConstraints(),
                           padding: EdgeInsets.zero,
                         ),
@@ -916,7 +917,7 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () => Navigator.pop(context),
+                            onPressed: isSaving ? null : () => Navigator.pop(context),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
@@ -933,24 +934,39 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: () async {
-                              if (columnVaccineIds.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(_translate('No vaccines currently mapped to this column.', 'Walang bakuna sa kolum na ito.')),
-                                    backgroundColor: AppColors.error,
-                                  ),
-                                );
-                                return;
-                              }
-                              Navigator.pop(context); // Close Editor
-                              await _saveScheduleDetails(
-                                date: selectedDate,
-                                originalDate: isEditing ? editingDate : null,
-                                notes: noteController.text,
-                                categoryVaccineIds: columnVaccineIds,
-                              );
-                            },
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    if (columnVaccineIds.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(_translate('No vaccines currently mapped to this column.', 'Walang bakuna sa kolum na ito.')),
+                                          backgroundColor: AppColors.error,
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    setEditorState(() {
+                                      isSaving = true;
+                                    });
+                                    try {
+                                      await _saveScheduleDetails(
+                                        date: selectedDate,
+                                        originalDate: isEditing ? editingDate : null,
+                                        notes: noteController.text,
+                                        categoryVaccineIds: columnVaccineIds,
+                                      );
+                                      if (context.mounted) {
+                                        Navigator.pop(context, true); // Close Editor
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        setEditorState(() {
+                                          isSaving = false;
+                                        });
+                                      }
+                                    }
+                                  },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.brandPrimary,
                               foregroundColor: Colors.white,
@@ -958,7 +974,16 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                             ),
-                            child: Text(_translate('Save', 'I-save'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                            child: isSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(_translate('Save', 'I-save'), style: const TextStyle(fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
@@ -1373,6 +1398,7 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
+        bool isSaving = false;
         return StatefulBuilder(
           builder: (context, setSubDialogState) {
             
@@ -1582,7 +1608,7 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, color: AppColors.textSecondary),
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: isSaving ? null : () => Navigator.pop(context),
                           constraints: const BoxConstraints(),
                           padding: EdgeInsets.zero,
                         ),
@@ -1779,7 +1805,7 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () => Navigator.pop(context),
+                            onPressed: isSaving ? null : () => Navigator.pop(context),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
@@ -1800,20 +1826,35 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: () async {
-                              if (validateInputs()) {
-                                Navigator.pop(context);
-                                await _saveColumn(
-                                  columnId: column?['column_id'] as int?,
-                                  title: titleController.text.trim(),
-                                  subtitle: subtitleController.text.trim(),
-                                  vaccineIds: selectedVaccineIds,
-                                );
-                              } else {
-                                // Trigger a visual update so errors show up
-                                setSubDialogState(() {});
-                              }
-                            },
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    if (validateInputs()) {
+                                      setSubDialogState(() {
+                                        isSaving = true;
+                                      });
+                                      try {
+                                        await _saveColumn(
+                                          columnId: column?['column_id'] as int?,
+                                          title: titleController.text.trim(),
+                                          subtitle: subtitleController.text.trim(),
+                                          vaccineIds: selectedVaccineIds,
+                                        );
+                                        if (context.mounted) {
+                                          Navigator.pop(context);
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          setSubDialogState(() {
+                                            isSaving = false;
+                                          });
+                                        }
+                                      }
+                                    } else {
+                                      // Trigger a visual update so errors show up
+                                      setSubDialogState(() {});
+                                    }
+                                  },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.brandPrimary,
                               foregroundColor: Colors.white,
@@ -1821,10 +1862,19 @@ class _ImmunizationPosterScreenState extends State<ImmunizationPosterScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                             ),
-                            child: Text(
-                              _translate('Save', 'I-save'),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
+                            child: isSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    _translate('Save', 'I-save'),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
                           ),
                         ),
                       ],
