@@ -768,33 +768,25 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
   }
 
   String _bmiStatus(double bmi) {
-    if (latestGrowth == null || childData == null) return 'Within Range';
+    if (latestGrowth == null || childData == null) return 'Within expected standard range';
     final sex = (childData!['sex'] as String?) ?? 'female';
     final ageWeeks = _ageInWeeks(DateTime.parse(latestGrowth!['created_at']));
     final zScore = GrowthCalculator.calculateBMIZScore(bmi, ageWeeks, sex);
 
-    if (zScore == null) return 'Within Range';
-    if (zScore < -2) return 'Below Range';
-    if (zScore < -1) return 'Slightly Below';
-    if (zScore <= 1) return 'Within Range';
-    if (zScore <= 2) return 'Slightly Above';
-    if (zScore <= 3) return 'Above Range';
-    return 'Far Above Range';
+    if (zScore == null) return 'Within expected standard range';
+    if (zScore < -1) return 'Slightly below standard range';
+    if (zScore <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
   }
 
   Color _bmiStatusColor(String status) {
     switch (status) {
-      case 'Below Range':
-        return AppColors.warning;
-      case 'Slightly Below':
-        return Colors.orange;
-      case 'Within Range':
-        return AppColors.success;
-      case 'Slightly Above':
-        return Colors.orange;
-      case 'Above Range':
-      case 'Far Above Range':
-        return AppColors.error;
+      case 'Slightly below standard range':
+        return Colors.orange; // Yellow/Orange
+      case 'Within expected standard range':
+        return AppColors.success; // Green
+      case 'Slightly above standard range':
+        return Colors.orange; // Yellow/Orange
       default:
         return AppColors.textSecondary;
     }
@@ -827,9 +819,9 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
                 style: TextStyle(fontSize: 13, height: 1.4),
               ),
               SizedBox(height: 8),
-              Text('• Within Range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
-              Text('• Slightly Below/Above (Orange): between 1 and 2 standard deviations.', style: TextStyle(fontSize: 13, color: AppColors.warning, fontWeight: FontWeight.w600)),
-              Text('• Below/Above Range (Red): more than 2 standard deviations (indicates wasting, stunting, or high deviation).', style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.w600)),
+              Text('• Within expected standard range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
+              Text('• Slightly below standard range (Yellow): less than -1 Z-score.', style: TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600)),
+              Text('• Slightly above standard range (Yellow): greater than +1 Z-score.', style: TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600)),
             ],
           ),
         ),

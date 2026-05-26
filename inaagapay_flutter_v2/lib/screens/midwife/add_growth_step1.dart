@@ -45,7 +45,7 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
   String _savingStatus = 'Saving growth record...';
 
   int _step = 0;
-  static const int _totalSteps = 2;
+  static const int _totalSteps = 1;
 
   String _aiOriginalEnglish = '';
   String _aiOriginalFilipino = '';
@@ -225,30 +225,18 @@ class _AddGrowthStep1State extends State<AddGrowthStep1> {
         debugPrint('Category: n/a (zScore is null)');
         return;
       }
-      if (zScore < -2) {
-        _bmiCategoryText = 'Below Range';
-        _bmiCategoryColor = AppColors.error;
-        debugPrint('Category: Below Range (zScore < -2)');
-      } else if (zScore < -1) {
-        _bmiCategoryText = 'Slightly Below';
+      if (zScore < -1) {
+        _bmiCategoryText = 'Slightly below standard range';
         _bmiCategoryColor = AppColors.warning;
-        debugPrint('Category: Slightly Below (-2 < zScore < -1)');
+        debugPrint('Category: Slightly below standard range (zScore < -1)');
       } else if (zScore <= 1) {
-        _bmiCategoryText = 'Within Range';
+        _bmiCategoryText = 'Within expected standard range';
         _bmiCategoryColor = AppColors.success;
-        debugPrint('Category: Within Range (-1 <= zScore <= 1)');
-      } else if (zScore <= 2) {
-        _bmiCategoryText = 'Slightly Above';
-        _bmiCategoryColor = AppColors.warning;
-        debugPrint('Category: Slightly Above (1 < zScore <= 2)');
-      } else if (zScore <= 3) {
-        _bmiCategoryText = 'Above Range';
-        _bmiCategoryColor = AppColors.error;
-        debugPrint('Category: Above Range (2 < zScore <= 3)');
+        debugPrint('Category: Within expected standard range (-1 <= zScore <= 1)');
       } else {
-        _bmiCategoryText = 'Far Above Range';
-        _bmiCategoryColor = AppColors.error;
-        debugPrint('Category: Far Above Range (zScore > 3)');
+        _bmiCategoryText = 'Slightly above standard range';
+        _bmiCategoryColor = AppColors.warning;
+        debugPrint('Category: Slightly above standard range (zScore > 1)');
       }
     });
   }
@@ -645,26 +633,46 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
       final childDetailsId = await _saveGrowthRecord();
 
       if (childDetailsId != null) {
-        final combinedText =
-            '## English\n${_aiEnglishCtrl.text.trim()}\n\n## Filipino\n${_aiFilipinoCtrl.text.trim()}';
+        final height = double.parse(_heightController.text);
+        final weight = double.parse(_weightController.text);
+        final bmi = double.parse(_bmiController.text);
+        final sex = _gender;
 
-        final wasEdited = _aiEnglishCtrl.text.trim() != _aiOriginalEnglish ||
-            _aiFilipinoCtrl.text.trim() != _aiOriginalFilipino;
+        final heightZ =
+            GrowthCalculator.calculateHeightZScore(height, _ageInWeeks, sex);
+        final weightZ =
+            GrowthCalculator.calculateWeightZScore(weight, _ageInWeeks, sex);
+        final bmiZ = GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, sex);
+
+        final bmiDesc = _describeZScore(bmiZ);
+        final weightDesc = _describeZScore(weightZ);
+        final heightDesc = _describeZScore(heightZ);
+
+        final bmiDescFil = _describeZScoreFilipino(bmiZ);
+        final weightDescFil = _describeZScoreFilipino(weightZ);
+        final heightDescFil = _describeZScoreFilipino(heightZ);
+
+        final englishText = 'Full WHO-Based Evaluation at Week $_ageInWeeks. The child\'s Weight is $weightDesc and BMI-for-Age is $bmiDesc. Height-for-Age is $heightDesc.';
+        final filipinoText = 'Buong Pagsusuri base sa WHO sa Ika-$_ageInWeeks na Linggo. Ang Timbang ng bata ay $weightDescFil at ang BMI ay $bmiDescFil. Ang Haba ay $heightDescFil.';
+        final combinedText = '## English\n$englishText\n\n## Filipino\n$filipinoText';
 
         final values = {
           'reference_table': 'child_details',
           'reference_id': childDetailsId,
           'response_type': 'growth_analysis',
           'response_category': 'growth',
-          'generated_by_ai': true,
-          'ai_model': 'groq',
-          'status': wasEdited ? 'edited' : 'generated',
+          'generated_by_ai': false,
+          'ai_model': 'none',
+          'status': 'generated',
           'response': combinedText,
           'updated_at': DateTime.now().toIso8601String(),
           'created_at': DateTime.now().toIso8601String(),
         };
 
         await Supabase.instance.client.from('ai_responses').insert(values);
+
+        // Fire-and-forget background AI analysis
+        _runBackgroundAiAnalysis(childDetailsId);
 
         setState(() => _isSaving = false);
 
@@ -678,6 +686,82 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
     } catch (e) {
       setState(() => _isSaving = false);
       _showErrorDialog('Unexpected error: $e');
+    }
+  }
+
+  String _describeZScore(double? zScore) {
+    if (zScore == null) return 'Within expected standard range';
+    if (zScore < -1) return 'Slightly below standard range';
+    if (zScore <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
+  }
+
+  String _describeZScoreFilipino(double? zScore) {
+    if (zScore == null) return 'naaayon sa inaasahang pamantayan';
+    if (zScore < -1) return 'medyo mababa sa pamantayan';
+    if (zScore <= 1) return 'naaayon sa inaasahang pamantayan';
+    return 'medyo mataas sa pamantayan';
+  }
+
+  void _runBackgroundAiAnalysis(int childDetailsId) async {
+    try {
+      final height = double.parse(_heightController.text);
+      final weight = double.parse(_weightController.text);
+      final bmi = double.parse(_bmiController.text);
+      final childName =
+          '${_childData?['first_name'] ?? ''} ${_childData?['last_name'] ?? ''}'
+              .trim();
+      final sex = _gender;
+
+      final heightZ =
+          GrowthCalculator.calculateHeightZScore(height, _ageInWeeks, sex);
+      final weightZ =
+          GrowthCalculator.calculateWeightZScore(weight, _ageInWeeks, sex);
+      final bmiZ = GrowthCalculator.calculateBMIZScore(bmi, _ageInWeeks, sex);
+
+      final tempNewRecord = {
+        'child_height': height,
+        'child_weight': weight,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+      final allRecords = [..._growthRecords, tempNewRecord];
+
+      final prompt = _buildGrowthAiPrompt(
+        childName: childName,
+        sex: sex,
+        ageWeeks: _ageInWeeks,
+        height: height,
+        weight: weight,
+        bmi: bmi,
+        heightZ: heightZ,
+        weightZ: weightZ,
+        bmiZ: bmiZ,
+        allGrowthRecords: allRecords,
+      );
+
+      final generated = await _groqService.generateTextInsight(
+        prompt: prompt,
+        systemPrompt: GroqService.childGrowthSystemPrompt,
+        temperature: 0.2,
+        maxOutputTokens: 2048,
+      );
+
+      final responseText = generated.trim();
+      if (responseText.isNotEmpty) {
+        await Supabase.instance.client
+            .from('ai_responses')
+            .update({
+              'response': responseText,
+              'generated_by_ai': true,
+              'ai_model': 'groq',
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('reference_table', 'child_details')
+            .eq('reference_id', childDetailsId)
+            .eq('response_type', 'growth_analysis');
+      }
+    } catch (e) {
+      debugPrint('Error in background growth AI analysis: $e');
     }
   }
 
@@ -737,9 +821,9 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                 style: TextStyle(fontSize: 13, height: 1.4),
               ),
               SizedBox(height: 8),
-              Text('• Within Range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
-              Text('• Slightly Below/Above (Orange): between 1 and 2 standard deviations.', style: TextStyle(fontSize: 13, color: AppColors.warning, fontWeight: FontWeight.w600)),
-              Text('• Below/Above Range (Red): more than 2 standard deviations (indicates wasting, stunting, or high deviation).', style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.w600)),
+              Text('• Within expected standard range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
+              Text('• Slightly below standard range (Yellow): less than -1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.warning, fontWeight: FontWeight.w600)),
+              Text('• Slightly above standard range (Yellow): greater than +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.warning, fontWeight: FontWeight.w600)),
             ],
           ),
         ),

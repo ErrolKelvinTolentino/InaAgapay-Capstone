@@ -424,28 +424,20 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
   String _bmiCategory(double bmi) {
     final zScore =
         GrowthCalculator.calculateBMIZScore(bmi, latestAgeWeeks, childSex);
-    if (zScore == null) return 'Within Range';
-    if (zScore < -2) return 'Below Range';
-    if (zScore < -1) return 'Slightly Below';
-    if (zScore <= 1) return 'Within Range';
-    if (zScore <= 2) return 'Slightly Above';
-    if (zScore <= 3) return 'Above Range';
-    return 'Far Above Range';
+    if (zScore == null) return 'Within expected standard range';
+    if (zScore < -1) return 'Slightly below standard range';
+    if (zScore <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
   }
 
   Color _bmiCategoryColor(String category) {
     switch (category) {
-      case 'Below Range':
-        return AppColors.error;
-      case 'Slightly Below':
-        return Colors.orange;
-      case 'Within Range':
-        return AppColors.success;
-      case 'Slightly Above':
-        return Colors.orange;
-      case 'Above Range':
-      case 'Far Above Range':
-        return AppColors.error;
+      case 'Slightly below standard range':
+        return Colors.orange; // Yellow/Orange
+      case 'Within expected standard range':
+        return AppColors.success; // Green
+      case 'Slightly above standard range':
+        return Colors.orange; // Yellow/Orange
       default:
         return AppColors.textSecondary;
     }
@@ -478,9 +470,9 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                 style: TextStyle(fontSize: 13, height: 1.4),
               ),
               SizedBox(height: 8),
-              Text('• Within Range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
-              Text('• Slightly Below/Above (Orange): between 1 and 2 standard deviations.', style: TextStyle(fontSize: 13, color: AppColors.warning, fontWeight: FontWeight.w600)),
-              Text('• Below/Above Range (Red): more than 2 standard deviations (indicates wasting, stunting, or high deviation).', style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.w600)),
+              Text('• Within expected standard range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
+              Text('• Slightly below standard range (Yellow): less than -1 Z-score.', style: TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600)),
+              Text('• Slightly above standard range (Yellow): greater than +1 Z-score.', style: TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -498,21 +490,15 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
     if (zscore == null || zscore.isNaN || zscore.isInfinite) {
       return 'Status unavailable';
     }
-    if (zscore < -5 || zscore > 5) {
-      return 'Outside the possible range for age and sex';
-    }
-    if (zscore < -2) return 'Below the expected range for age and sex';
-    if (zscore < -1) return 'Slightly below the expected range for age and sex';
-    if (zscore <= 1) return 'Within the expected range for age and sex';
-    if (zscore <= 2) return 'Slightly above the expected range for age and sex';
-    return 'Above the expected range for age and sex';
+    if (zscore < -1) return 'Slightly below standard range';
+    if (zscore <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
   }
 
   Color _zScoreColor(double? zScore) {
     if (zScore == null) return AppColors.textSecondary;
-    if (zScore < -2 || zScore > 2) return AppColors.error;
-    if (zScore < -1 || zScore > 1) return AppColors.warning;
-    return AppColors.success;
+    if (zScore < -1 || zScore > 1) return Colors.orange; // Yellow/Orange
+    return AppColors.success; // Green
   }
 
   // FIXED: Properly filter and validate chart values

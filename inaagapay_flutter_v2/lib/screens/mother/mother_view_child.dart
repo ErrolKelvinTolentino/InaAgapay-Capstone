@@ -464,11 +464,7 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
               ),
               const SizedBox(height: 12),
 
-              _buildGrowthCards(displayHeight, displayWeight),
-              const SizedBox(height: 12),
-              _buildBMICard(latestBMI, bmiStatus),
-              const SizedBox(height: 12),
-              _buildProfileAiCard(),
+              _buildGrowthAnalysisCard(),
 
               _buildSectionDivider(),
 
@@ -517,6 +513,16 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
             ],
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_mother_log_growth',
+        onPressed: _showAddGrowthBottomSheet,
+        backgroundColor: AppColors.brandPrimary,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        icon: const Icon(Icons.add),
+        label: Text(_t('Log Growth', 'Itala ang Paglaki')),
       ),
     );
   }
@@ -621,33 +627,25 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
   }
 
   String _bmiStatus(double bmi) {
-    if (latestGrowth == null || childData == null) return 'Within Range';
+    if (latestGrowth == null || childData == null) return 'Within expected standard range';
     final sex = (childData!['sex'] as String?) ?? 'female';
     final ageWeeks = _ageInWeeks(DateTime.parse(latestGrowth!['created_at']));
     final zScore = GrowthCalculator.calculateBMIZScore(bmi, ageWeeks, sex);
 
-    if (zScore == null) return 'Within Range';
-    if (zScore < -2) return 'Below Range';
-    if (zScore < -1) return 'Slightly Below';
-    if (zScore <= 1) return 'Within Range';
-    if (zScore <= 2) return 'Slightly Above';
-    if (zScore <= 3) return 'Above Range';
-    return 'Far Above Range';
+    if (zScore == null) return 'Within expected standard range';
+    if (zScore < -1) return 'Slightly below standard range';
+    if (zScore <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
   }
 
   Color _bmiStatusColor(String status) {
     switch (status) {
-      case 'Below Range':
-        return AppColors.error;
-      case 'Slightly Below':
-        return Colors.orange;
-      case 'Within Range':
-        return AppColors.success;
-      case 'Slightly Above':
-        return Colors.orange;
-      case 'Above Range':
-      case 'Far Above Range':
-        return AppColors.error;
+      case 'Slightly below standard range':
+        return Colors.orange; // Yellow/Orange
+      case 'Within expected standard range':
+        return AppColors.success; // Green
+      case 'Slightly above standard range':
+        return Colors.orange; // Yellow/Orange
       default:
         return AppColors.textSecondary;
     }
@@ -687,16 +685,16 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                _t('• Within Range (Green): between -1 and +1 Z-score.', '• Sapat/Normal (Green): nasa pagitan ng -1 at +1 Z-score.'),
+                _t('• Within expected standard range (Green): between -1 and +1 Z-score.', '• Naaayon sa inaasahang pamantayan (Green): nasa pagitan ng -1 at +1 Z-score.'),
                 style: const TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600),
               ),
               Text(
-                _t('• Slightly Below/Above (Orange): between 1 and 2 standard deviations.', '• Medyo Mababa/Mataas (Orange): lagpas ng 1 hanggang 2 standard deviation.'),
+                _t('• Slightly below standard range (Yellow): less than -1 Z-score.', '• Medyo mababa sa pamantayan (Yellow): mas mababa sa -1 Z-score.'),
                 style: const TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600),
               ),
               Text(
-                _t('• Below/Above Range (Red): more than 2 standard deviations.', '• Mababa/Mataas (Red): lagpas ng higit sa 2 standard deviation.'),
-                style: const TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.w600),
+                _t('• Slightly above standard range (Yellow): greater than +1 Z-score.', '• Medyo mataas sa pamantayan (Yellow): mas mataas sa +1 Z-score.'),
+                style: const TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -832,13 +830,476 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     );
   }
 
-  Widget _buildProfileAiCard() {
-    return AiAnalyticsCard(
-      isLoading: aiLoading,
-      text: aiAnalysis ??
-          aiError ??
-          'AI growth insight will appear here once the latest height and weight records are available.',
+  Widget _buildGrowthAnalysisCard() {
+    if (latestGrowth == null || childData == null) return const SizedBox.shrink();
+
+    final latestBMI = _getLatestBMI();
+    final latestHeight = (latestGrowth!['child_height'] as num?)?.toDouble() ?? 0.0;
+    final latestWeight = (latestGrowth!['child_weight'] as num?)?.toDouble() ?? 0.0;
+    final latestAgeWeeks = _ageInWeeks(DateTime.parse(latestGrowth!['created_at']));
+    final childSex = (childData!['sex'] as String?) ?? 'female';
+
+    final status = latestBMI != null ? _bmiStatus(latestBMI) : 'Within expected standard range';
+    final bmiColor = _bmiStatusColor(status);
+
+    // Height & Weight Z-Scores for Grid List (color-free)
+    final heightZ = GrowthCalculator.calculateHeightZScore(latestHeight, latestAgeWeeks, childSex);
+    final weightZ = GrowthCalculator.calculateWeightZScore(latestWeight, latestAgeWeeks, childSex);
+
+    final heightLabel = heightZ == null ? _t('Within expected range', 'Naaayon sa inaasahan') : (heightZ < -1 ? _t('Slightly Below', 'Medyo Mababa') : (heightZ <= 1 ? _t('Within expected range', 'Naaayon sa inaasahan') : _t('Slightly Above', 'Medyo Mataas')));
+    final weightLabel = weightZ == null ? _t('Within expected range', 'Naaayon sa inaasahan') : (weightZ < -1 ? _t('Slightly Below', 'Medyo Mababa') : (weightZ <= 1 ? _t('Within expected range', 'Naaayon sa inaasahan') : _t('Slightly Above', 'Medyo Mataas')));
+
+    // Try to find if the ai_response indicates mother logged it
+    final isLoggedByMother = aiAnalysisCategory == 'growth_mother';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.child_care_outlined,
+                  color: AppColors.brandPrimary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _t('Child Growth Analysis', 'Pagsusuri sa Paglaki'),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              if (isLoggedByMother)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.all(Radius.circular(6)),
+                  ),
+                  child: Text(
+                    _t('Self-logged', 'Sariling Tala'),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFB45309),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Badges Row
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: bmiColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: bmiColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  _t(status, status),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: bmiColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Detail rows
+          _growthInfoRow(_t('Current Weight', 'Timbang'), '${latestWeight.toStringAsFixed(1)} kg ($weightLabel)'),
+          _growthInfoRow(_t('Current Length', 'Haba'), '${latestHeight.toStringAsFixed(1)} cm ($heightLabel)'),
+          _growthInfoRow(_t('Current BMI', 'BMI'), '${latestBMI?.toStringAsFixed(1) ?? 'N/A'} kg/m²'),
+          _growthInfoRow(_t('Age in Weeks', 'Edad (Linggo)'), _t('$latestAgeWeeks weeks old', '$latestAgeWeeks linggo gulang')),
+
+          const SizedBox(height: 14),
+
+          // Advisory message box (loads background AI generated text)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: aiLoading
+                ? const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandPrimary),
+                    ),
+                  )
+                : Text(
+                    aiAnalysis ?? _t('No growth analysis available yet.', 'Wala pang pagsusuri sa paglaki na magagamit.'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+          ),
+
+          const SizedBox(height: 12),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text(
+                _t('Clinical Disclaimer & References', 'Mga Disclaimer at Sanggunian'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.brandPrimary,
+                ),
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    _t(
+                      'This analysis is based on the WHO Child Growth Standards (0-13 weeks). Z-scores represent standard deviations from the median of healthy children. Self-logged entries should be verified on calibrated scales at the Barangay Health Center (BHC) for formal assessment.',
+                      'Ang pagsusuring ito ay batay sa WHO Child Growth Standards (0-13 linggo). Ang Z-score ay kumakatawan sa standard deviation mula sa median ng mga malulusog na bata. Ang mga sariling naitalang sukat ay dapat ma-verify sa Barangay Health Center (BHC) gamit ang calibrated na timbangan.'
+                    ),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade500,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Widget _growthInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? aiAnalysisCategory;
+
+  void _showAddGrowthBottomSheet() {
+    final formKey = GlobalKey<FormState>();
+    final heightCtrl = TextEditingController();
+    final weightCtrl = TextEditingController();
+    bool isSavingLocal = false;
+    final childSex = (childData?['sex'] as String?) ?? 'female';
+    final latestAgeWeeks = birthData != null && birthData!['birthdate'] != null
+        ? _ageInWeeks(DateTime.now())
+        : 0;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setStateSheet) {
+            return Container(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _t('Log Growth Measurements', 'Itala ang Sukat ng Paglaki'),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _t(
+                        'Self-recorded growth entries will update your progress history instantly.',
+                        'Ang sariling talang paglaki ay mag-a-update ng iyong progreso agad-agad.',
+                      ),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      _t('Height (cm)', 'Taas (cm)'),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: heightCtrl,
+                      decoration: InputDecoration(
+                        hintText: _t('e.g. 58.5', 'hal. 58.5'),
+                        prefixIcon: const Icon(Icons.height),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (val) {
+                        if (val == null || val.isEmpty) return _t('Please enter height', 'Pakilagay ang taas');
+                        final numVal = double.tryParse(val);
+                        if (numVal == null || numVal <= 0) return _t('Please enter a valid height', 'Pakilagay ang tamang taas');
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _t('Weight (kg)', 'Timbang (kg)'),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: weightCtrl,
+                      decoration: InputDecoration(
+                        hintText: _t('e.g. 5.4', 'hal. 5.4'),
+                        prefixIcon: const Icon(Icons.monitor_weight_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (val) {
+                        if (val == null || val.isEmpty) return _t('Please enter weight', 'Pakilagay ang timbang');
+                        final numVal = double.tryParse(val);
+                        if (numVal == null || numVal <= 0) return _t('Please enter a valid weight', 'Pakilagay ang tamang timbang');
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isSavingLocal
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+                                setStateSheet(() => isSavingLocal = true);
+
+                                try {
+                                  final height = double.parse(heightCtrl.text);
+                                  final weight = double.parse(weightCtrl.text);
+                                  final bmi = weight / ((height / 100) * (height / 100));
+
+                                  // Insert into child_details
+                                  final insertResult = await Supabase.instance.client
+                                      .from('child_details')
+                                      .insert({
+                                    'child_id': widget.childId,
+                                    'child_height': height,
+                                    'child_weight': weight,
+                                    'created_at': DateTime.now().toIso8601String(),
+                                  }).select('child_details_id').single();
+
+                                  final childDetailsId = insertResult['child_details_id'] as int;
+
+                                  // Calculate local WHO classifications
+                                  final heightZ = GrowthCalculator.calculateHeightZScore(height, latestAgeWeeks, childSex);
+                                  final weightZ = GrowthCalculator.calculateWeightZScore(weight, latestAgeWeeks, childSex);
+                                  final bmiZ = GrowthCalculator.calculateBMIZScore(bmi, latestAgeWeeks, childSex);
+
+                                  final bmiDesc = _describeZScoreLocal(bmiZ);
+                                  final weightDesc = _describeZScoreLocal(weightZ);
+                                  final heightDesc = _describeZScoreLocal(heightZ);
+
+                                  final bmiDescFil = _describeZScoreFilipinoLocal(bmiZ);
+                                  final weightDescFil = _describeZScoreFilipinoLocal(weightZ);
+                                  final heightDescFil = _describeZScoreFilipinoLocal(heightZ);
+
+                                  final englishText = 'Full WHO-Based Evaluation at Week $latestAgeWeeks. The child\'s Weight is $weightDesc and BMI-for-Age is $bmiDesc. Height-for-Age is $heightDesc.';
+                                  final filipinoText = 'Buong Pagsusuri base sa WHO sa Ika-$latestAgeWeeks na Linggo. Ang Timbang ng bata ay $weightDescFil at ang BMI ay $bmiDescFil. Ang Haba ay $heightDescFil.';
+                                  final combinedText = '## English\n$englishText\n\n## Filipino\n$filipinoText';
+
+                                  // Insert into ai_responses
+                                  await Supabase.instance.client.from('ai_responses').insert({
+                                    'reference_table': 'child_details',
+                                    'reference_id': childDetailsId,
+                                    'response_type': 'growth_analysis',
+                                    'response_category': 'growth_mother',
+                                    'generated_by_ai': false,
+                                    'ai_model': 'none',
+                                    'status': 'generated',
+                                    'response': combinedText,
+                                    'updated_at': DateTime.now().toIso8601String(),
+                                    'created_at': DateTime.now().toIso8601String(),
+                                  });
+
+                                  // Asynchronous background AI summary generation
+                                  _runBackgroundAiAnalysis(childDetailsId, height, weight, bmi);
+
+                                  Navigator.pop(ctx);
+                                  // Refresh profile data
+                                  fetchProfile();
+                                } catch (e) {
+                                  setStateSheet(() => isSavingLocal = false);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+                                  );
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                          elevation: 0,
+                        ),
+                        child: isSavingLocal
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : Text(_t('Save Measurements', 'I-save ang mga Sukat'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _describeZScoreLocal(double? zScore) {
+    if (zScore == null) return 'Within expected standard range';
+    if (zScore < -1) return 'Slightly below standard range';
+    if (zScore <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
+  }
+
+  String _describeZScoreFilipinoLocal(double? zScore) {
+    if (zScore == null) return 'naaayon sa inaasahang pamantayan';
+    if (zScore < -1) return 'medyo mababa sa pamantayan';
+    if (zScore <= 1) return 'naaayon sa inaasahang pamantayan';
+    return 'medyo mataas sa pamantayan';
+  }
+
+  void _runBackgroundAiAnalysis(int childDetailsId, double height, double weight, double bmi) async {
+    try {
+      final childName = widget.childName;
+      final sex = (childData?['sex'] as String?) ?? 'female';
+      final latestAgeWeeks = birthData != null && birthData!['birthdate'] != null
+          ? _ageInWeeks(DateTime.now())
+          : 0;
+
+      final heightZ = GrowthCalculator.calculateHeightZScore(height, latestAgeWeeks, sex);
+      final weightZ = GrowthCalculator.calculateWeightZScore(weight, latestAgeWeeks, sex);
+      final bmiZ = GrowthCalculator.calculateBMIZScore(bmi, latestAgeWeeks, sex);
+
+      final prompt = _buildGrowthAiPrompt(
+        childName: childName,
+        sex: sex,
+        ageWeeks: latestAgeWeeks,
+        height: height,
+        weight: weight,
+        bmi: bmi,
+        heightZ: heightZ,
+        weightZ: weightZ,
+        bmiZ: bmiZ,
+      );
+
+      final generated = await GroqService().generateTextInsight(
+        prompt: prompt,
+        systemPrompt: GroqService.childGrowthSystemPrompt,
+        temperature: 0.2,
+        maxOutputTokens: 2048,
+      );
+
+      final responseText = generated.trim();
+      if (responseText.isNotEmpty) {
+        await Supabase.instance.client
+            .from('ai_responses')
+            .update({
+              'response': responseText,
+              'generated_by_ai': true,
+              'ai_model': 'groq',
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('reference_table', 'child_details')
+            .eq('reference_id', childDetailsId)
+            .eq('response_type', 'growth_analysis');
+      }
+    } catch (e) {
+      debugPrint('Error in background growth AI analysis: $e');
+    }
   }
 
   Future<void> _loadProfileAiInsight(int latestRecordId) async {
@@ -851,23 +1312,27 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     try {
       final saved = await Supabase.instance.client
           .from('ai_responses')
-          .select('response')
+          .select('response, response_category')
           .eq('reference_table', 'child_details')
           .eq('reference_id', latestRecordId)
           .eq('response_type', 'growth_analysis')
           .maybeSingle();
 
-      if (saved != null &&
-          saved['response'] != null &&
-          saved['response'].toString().trim().isNotEmpty) {
-        final savedText = saved['response'].toString().trim();
-        final lower = savedText.toLowerCase();
-        final isOldOrSingleLang = !lower.contains('english') ||
-            !(lower.contains('filipino') || lower.contains('tagalog'));
-        if (isOldOrSingleLang) {
-          await _generateAndSaveProfileAiInsight(latestRecordId);
+      if (saved != null) {
+        aiAnalysisCategory = saved['response_category'];
+        if (saved['response'] != null &&
+            saved['response'].toString().trim().isNotEmpty) {
+          final savedText = saved['response'].toString().trim();
+          final lower = savedText.toLowerCase();
+          final isOldOrSingleLang = !lower.contains('english') ||
+              !(lower.contains('filipino') || lower.contains('tagalog'));
+          if (isOldOrSingleLang) {
+            await _generateAndSaveProfileAiInsight(latestRecordId);
+          } else {
+            aiAnalysis = savedText;
+          }
         } else {
-          aiAnalysis = savedText;
+          await _generateAndSaveProfileAiInsight(latestRecordId);
         }
       } else {
         await _generateAndSaveProfileAiInsight(latestRecordId);
@@ -943,7 +1408,7 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
         'reference_table': 'child_details',
         'reference_id': latestRecordId,
         'response_type': 'growth_analysis',
-        'response_category': 'growth',
+        'response_category': aiAnalysisCategory ?? 'growth',
         'generated_by_ai': true,
         'ai_model': 'groq',
         'status': 'generated',
