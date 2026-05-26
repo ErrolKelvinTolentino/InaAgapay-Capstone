@@ -21,7 +21,12 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
   DateTime _selectedDay = DateTime.now();
   late Future<List<Map<String, dynamic>>> _schedulesFuture;
   int? _midwifeId;
+  int? _assignedBhcId;
   bool _isLoading = true;
+  // Dates that have immunization schedules (for calendar markers)
+  final Set<String> _immunizationDates = {};
+  final Set<String> _prenatalDates = {};
+  final Set<String> _checkupDates = {};
 
   @override
   void initState() {
@@ -35,15 +40,17 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
       if (accountId != null) {
         final response = await Supabase.instance.client
             .from('midwives')
-            .select('midwife_id')
+            .select('midwife_id, assigned_bhc_id')
             .eq('account_id', accountId)
             .maybeSingle();
 
         if (response != null && response['midwife_id'] != null) {
+          _midwifeId = response['midwife_id'] as int;
+          _assignedBhcId = response['assigned_bhc_id'] as int?;
           setState(() {
-            _midwifeId = response['midwife_id'] as int;
             _isLoading = false;
           });
+          await _loadAllEventDates();
           _refreshSchedules();
         } else {
           setState(() {
@@ -61,6 +68,72 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  /// Load all calendar event dates for the BHC/Midwife for this year (for calendar markers)
+  Future<void> _loadAllEventDates() async {
+    if (_midwifeId == null) return;
+    try {
+      final now = DateTime.now();
+      final startOfYear = '${now.year}-01-01';
+      final endOfYear = '${now.year}-12-31';
+
+      // 1. Fetch immunization dates
+      if (_assignedBhcId != null) {
+        final resImm = await Supabase.instance.client
+            .from('immunization_schedule')
+            .select('schedule_date')
+            .eq('bhc_id', _assignedBhcId!)
+            .gte('schedule_date', startOfYear)
+            .lte('schedule_date', endOfYear);
+
+        final datesImm = (resImm as List)
+            .map((r) => r['schedule_date']?.toString() ?? '')
+            .where((d) => d.isNotEmpty)
+            .toSet();
+
+        _immunizationDates.clear();
+        _immunizationDates.addAll(datesImm);
+      }
+
+      // 2. Fetch prenatal checkups next scheduled dates
+      final resPrenatal = await Supabase.instance.client
+          .from('prenatal_checkups')
+          .select('next_schedule')
+          .eq('midwife_id', _midwifeId!)
+          .gte('next_schedule', startOfYear)
+          .lte('next_schedule', endOfYear);
+
+      final datesPrenatal = (resPrenatal as List)
+          .map((r) => r['next_schedule']?.toString() ?? '')
+          .where((d) => d.isNotEmpty)
+          .toSet();
+
+      _prenatalDates.clear();
+      _prenatalDates.addAll(datesPrenatal);
+
+      // 3. Fetch checkup schedules (for mothers/children assigned)
+      final resCheckup = await Supabase.instance.client
+          .from('checkup_schedule')
+          .select('scheduled_date')
+          .eq('status', 'scheduled')
+          .gte('scheduled_date', startOfYear)
+          .lte('scheduled_date', endOfYear);
+
+      final datesCheckup = (resCheckup as List)
+          .map((r) => r['scheduled_date']?.toString() ?? '')
+          .where((d) => d.isNotEmpty)
+          .toSet();
+
+      _checkupDates.clear();
+      _checkupDates.addAll(datesCheckup);
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('Error loading event dates: $e');
     }
   }
 
@@ -151,6 +224,50 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
         });
       }
 
+      // Fetch immunization schedules for the BHC on this date
+      if (_assignedBhcId != null) {
+        try {
+          final immunizationResponse = await Supabase.instance.client
+              .from('immunization_schedule')
+              .select('''
+                immunization_schedule_id,
+                schedule_date,
+                notes,
+                vaccine:vaccine_id (
+                  vaccine_name,
+                  target_recipients
+                )
+              ''')
+              .eq('bhc_id', _assignedBhcId!)
+              .eq('schedule_date', formattedDate);
+
+          if ((immunizationResponse as List).isNotEmpty) {
+            final vaccineNames = immunizationResponse
+                .map((r) => (r['vaccine'] as Map<String, dynamic>?)?['vaccine_name']?.toString() ?? '')
+                .where((n) => n.isNotEmpty)
+                .toSet()
+                .toList();
+
+            final firstNote = immunizationResponse
+                .map((r) => r['notes']?.toString())
+                .where((n) => n != null && n.isNotEmpty)
+                .firstOrNull;
+
+            schedules.add({
+              'time': 'All Day',
+              'mother_name': 'Barangay Vaccine Day',
+              'type': 'Immunization Schedule',
+              'status': 'upcoming',
+              'notes': firstNote,
+              'vaccines': vaccineNames,
+              'icon': Icons.vaccines,
+            });
+          }
+        } catch (e) {
+          debugPrint('Error loading immunization schedules for date: $e');
+        }
+      }
+
       // Sort by time (All Day events go to bottom)
       schedules.sort((a, b) {
         final timeA = a['time'] as String;
@@ -187,6 +304,7 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
       case 'prenatal checkup':
         return Icons.pregnant_woman;
       case 'vaccination':
+      case 'immunization schedule':
         return Icons.vaccines;
       case 'scheduled checkup':
         return Icons.calendar_today;
@@ -198,6 +316,7 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
   }
 
   void _refreshSchedules() {
+    _loadAllEventDates();
     setState(() {
       _schedulesFuture = fetchSchedulesForDate(_selectedDay);
     });
@@ -274,6 +393,73 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                /// 📢 BARANGAY VACCINE SCHEDULE LINK CARD
+                GestureDetector(
+                  onTap: () => Navigator.pushNamed(context, '/immunization-poster'),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8, top: 4),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.15)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.brandPrimary.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.campaign_rounded,
+                            color: AppColors.brandPrimary,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '📢 Barangay Vaccine Schedule (Tarpaulin Posting)',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.brandText,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'View and customize the yearly immunization calendar for mothers.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                  height: 1.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 16,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
                 /// 📅 CALENDAR SECTION
                 Container(
                   margin: const EdgeInsets.symmetric(vertical: 8),
@@ -301,6 +487,51 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                         _refreshSchedules();
                       });
                     },
+                    // Show schedule markers on calendar days
+                    eventLoader: (day) {
+                      final dateKey = DateFormat('yyyy-MM-dd').format(day);
+                      final List<String> events = [];
+                      if (_immunizationDates.contains(dateKey)) {
+                        events.add('immunization');
+                      }
+                      if (_prenatalDates.contains(dateKey)) {
+                        events.add('prenatal');
+                      }
+                      if (_checkupDates.contains(dateKey)) {
+                        events.add('checkup');
+                      }
+                      return events;
+                    },
+                    calendarBuilders: CalendarBuilders(
+                      markerBuilder: (context, day, events) {
+                        if (events.isEmpty) return const SizedBox.shrink();
+                        return Positioned(
+                          bottom: 2,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: events.map((event) {
+                              Color color;
+                              if (event == 'immunization') {
+                                color = const Color(0xFF00796B); // Teal
+                              } else if (event == 'prenatal') {
+                                color = AppColors.brandPrimary; // Pink
+                              } else {
+                                color = Colors.blue.shade700; // Blue
+                              }
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        );
+                      },
+                    ),
                     calendarStyle: CalendarStyle(
                       todayDecoration: BoxDecoration(
                         color: AppColors.brandPrimary.withValues(alpha: 0.2),
@@ -324,6 +555,7 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                         color: AppColors.brandPrimary,
                         fontWeight: FontWeight.bold,
                       ),
+                      markersMaxCount: 1,
                     ),
                     headerStyle: HeaderStyle(
                       formatButtonVisible: false,
@@ -353,6 +585,28 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
+                  ),
+                ),
+
+                /// ℹ️ CALENDAR LEGEND
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildLegendItem(
+                        color: const Color(0xFF00796B),
+                        label: 'Immunization Day',
+                      ),
+                      _buildLegendItem(
+                        color: AppColors.brandPrimary,
+                        label: 'Prenatal Checkup',
+                      ),
+                      _buildLegendItem(
+                        color: Colors.blue.shade700,
+                        label: 'Scheduled Checkup',
+                      ),
+                    ],
                   ),
                 ),
 
@@ -513,6 +767,16 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
                       itemBuilder: (context, index) {
                         final schedule = schedules[index];
 
+                        if (schedule['type'] == 'Immunization Schedule') {
+                          return ImmunizationDayCard(
+                            time: schedule['time'] as String,
+                            title: schedule['mother_name'] as String,
+                            notes: schedule['notes'] as String?,
+                            vaccines: List<String>.from(schedule['vaccines'] ?? []),
+                            status: schedule['status'] as String,
+                          );
+                        }
+
                         return ScheduleCard(
                           time: schedule['time'] as String,
                           motherName: schedule['mother_name'] as String,
@@ -555,6 +819,31 @@ class _MidwifeSchedulesScreenState extends State<MidwifeSchedulesScreen> {
       ),
     );
   }
+
+  Widget _buildLegendItem({required Color color, required String label}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// 🧩 SCHEDULE CARD WIDGET
@@ -582,6 +871,7 @@ class ScheduleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showTime = time.isNotEmpty && time.toLowerCase() != 'all day';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -599,32 +889,33 @@ class ScheduleCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           /// 🕐 TIME INDICATOR
-          SizedBox(
-            width: 70,
-            child: Column(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    time,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.brandPrimary,
+          if (showTime) ...[
+            SizedBox(
+              width: 70,
+              child: Column(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    textAlign: TextAlign.center,
+                    child: Text(
+                      time,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brandPrimary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-
-          const SizedBox(width: 16),
+            const SizedBox(width: 16),
+          ],
 
           /// 📝 SCHEDULE DETAILS
           Expanded(
@@ -741,6 +1032,197 @@ class ScheduleCard extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ImmunizationDayCard extends StatelessWidget {
+  final String time;
+  final String title;
+  final String? notes;
+  final List<String> vaccines;
+  final String status;
+  final Color accentColor = const Color(0xFF00796B);
+
+  const ImmunizationDayCard({
+    super.key,
+    required this.time,
+    required this.title,
+    this.notes,
+    required this.vaccines,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final showTime = time.isNotEmpty && time.toLowerCase() != 'all day';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: accentColor.withAlpha(50),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withAlpha(15),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          /// 🕐 TIME INDICATOR (Teal theme)
+          if (showTime) ...[
+            SizedBox(
+              width: 70,
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: accentColor.withAlpha(25),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      time,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: accentColor,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+
+          /// 📝 CARD DETAILS
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    /// 👤 BHC TITLE
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+
+                    /// 🏷️ STATUS BADGE (Teal)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: accentColor.withAlpha(25),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: accentColor.withAlpha(70)),
+                      ),
+                      child: Text(
+                        status.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: accentColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+
+                /// 📋 TYPE AND ICON
+                Row(
+                  children: [
+                    Icon(
+                      Icons.vaccines,
+                      size: 16,
+                      color: accentColor,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Immunization Day',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: accentColor,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                /// 💊 VACCINES PILL CHIPS
+                if (vaccines.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: vaccines.map((vacName) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.teal.shade100),
+                        ),
+                        child: Text(
+                          vacName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.teal.shade800,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                /// 📝 NOTES (IF ANY)
+                if (notes != null && notes!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Text(
+                      notes!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                        height: 1.3,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                 ],

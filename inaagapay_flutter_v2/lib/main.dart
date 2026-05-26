@@ -34,6 +34,7 @@ import 'screens/midwife/midwife_children_screen.dart';
 import 'screens/midwife/midwife_schedules_screen.dart';
 import 'screens/midwife/midwife_add_mother_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/shared/immunization_poster_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -274,6 +275,7 @@ class _InaagapayAppState extends State<InaagapayApp> {
             '/midwife-children': (context) => const MidwifeChildrenScreen(),
             '/midwife-schedules': (context) => const MidwifeSchedulesScreen(),
             '/midwife-add-mother': (context) => const MidwifeAddMotherScreen(),
+            '/immunization-poster': (context) => const ImmunizationPosterScreen(),
           },
           onGenerateRoute: (settings) {
             if (settings.name == '/ultrasound-analyzer') {
