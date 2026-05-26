@@ -17,6 +17,7 @@ import 'mother_children_screen.dart';
 import 'records_screen.dart';
 import 'mother_self_profile_page.dart';
 import 'notifications_screen.dart';
+import 'help_support_screen.dart';
 import '../../widgets/main_button.dart';
 
 class MotherDashboardShell extends StatefulWidget {
@@ -403,15 +404,10 @@ class _MotherDashboardShellState extends State<MotherDashboardShell> {
                       label: LanguageService.translate('Help', 'Tulong'),
                       onTap: () {
                         entry.remove();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              LanguageService.translate(
-                                'Help module is currently under development.',
-                                'Ang Help module ay kasalukuyang ginagawa pa.',
-                              ),
-                            ),
-                            backgroundColor: AppColors.brandPrimary,
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HelpSupportScreen(),
                           ),
                         );
                       },
