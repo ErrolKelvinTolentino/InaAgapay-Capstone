@@ -104,7 +104,7 @@ class _MotherDashboardState extends State<MotherDashboard> {
     40: {'fruit': 'Watermelon', 'image': 'watermelon.png'},
   };
 
-  static const Map<int, String> _weeklyTips = {
+  static const Map<int, String> _weeklyTipsEn = {
     4: 'Start taking folic acid if you haven\'t already — it helps your baby\'s brain and spine develop.',
     5: 'Morning sickness may start. Eat small, frequent meals and keep crackers by your bed.',
     6: 'Stay hydrated, mama! Aim for at least 8 glasses of water a day.',
@@ -142,6 +142,46 @@ class _MotherDashboardState extends State<MotherDashboard> {
     38: 'Stay close to home and keep your phone charged — baby could come soon!',
     39: 'You\'re almost there, mama! Try to rest as much as possible. Your body knows what to do.',
     40: 'Your due date is here! Remember — babies come on their own time. Trust the process, mama.',
+  };
+
+  static const Map<int, String> _weeklyTipsTl = {
+    4: 'Simulan ang pag-inom ng folic acid kung hindi pa — nakatutulong ito sa pagbuo ng utak at spine ng iyong baby.',
+    5: 'Maaaring magsimula ang morning sickness. Kumain ng maliliit at madalas na bahagi, at magtabi ng biskwit sa tabi ng higaan.',
+    6: 'Uminom ng sapat na tubig, mama! Sikaping uminom ng hindi bababa sa 8 basong tubig bawat araw.',
+    7: 'Tumitibok na ang puso ng iyong baby ngayon. Magpahinga kapag kailangan — nagtatrabaho ng husto ang iyong katawan.',
+    8: 'Iwasan ang hilaw o hindi gaanong lutong pagkain. Mas sensitibo ang iyong immune system habang buntis.',
+    9: 'Magsimula ng pregnancy journal! Ang pagsulat ng iyong nararamdaman ay makatutulong sa magandang paglalakbay na ito.',
+    10: 'Magpa-schedule na ng iyong unang prenatal checkup kung hindi pa nagagawa. Ang maagang pangangalaga ay nangangahulugan ng mas malusog na pagbubuntis.',
+    11: 'Ang banayad na paglalakad ay makababawas sa pagduduwal at makapagpapabuti ng iyong mood. Kahit 15 minuto lang ay malaking tulong na.',
+    12: 'Malapat ka nang matapos sa unang trimester! Malaki ang nababawas sa panganib ng pagkalaglag pagkatapos ng linggong ito.',
+    13: 'Maaaring magbalik na ang iyong lakas sa lalong madaling panahon. I-enjoy ang ikalawang trimester — maraming nanay ang nakararamdam ng pinakamainam na lagay rito!',
+    14: 'Nakagagawa na ng mga facial expression ang iyong baby. Kausapin ang iyong maliit — naririnig ka na nila.',
+    15: 'Kumain ng mga pagkaing mayaman sa iron tulad ng madahong gulay at karne para suportahan ang iyong dumadaming blood supply.',
+    16: 'Maaari ka nang makaramdam ng mahihinang sipa o flutters — iyan ang mga unang galaw ng iyong baby!',
+    17: 'Mag-stretch nang dahan-dahan bago matulog para maiwasan ang leg cramps. Makatutulong din ang saging na mayaman sa magnesium.',
+    18: 'Ang baby mo ay kasinglaki na ng sili ngayon. Pag-isipan ang paggawa ng baby registry!',
+    19: 'Matulog sa iyong kaliwang bahagi kung maaari — nagpapabuti ito ng daloy ng dugo patungo sa iyong baby.',
+    20: 'Nasa kalagitnaan ka na! Ipagdiwang ang milestone na ito. Mahusay ang ginagawa mo, mama.',
+    21: 'Nalalasahan na ng iyong baby ang iyong kinakain sa pamamagitan ng amniotic fluid. Kumain ng iba\'t ibang masusustansyang pagkain!',
+    22: 'Magsanay ng malalalim na paghinga. Makatutulong ito sa iyo sa oras ng panganganak at magpapababa ng stress ngayon.',
+    23: 'Naririnig ng iyong baby ang mga tunog sa labas ng sinapupunan. Patugtugan ng musika o basahan sila ng mga kuwento.',
+    24: 'Manatiling aktibo gamit ang mga ehersisyong low-impact tulad ng paglangoy o prenatal yoga.',
+    25: 'Simulan nang pag-isipan ang iyong birth plan. Kausapin ang iyong midwife tungkol sa iyong mga kagustuhan.',
+    26: 'Idinidilat na ng iyong baby ang kanyang mga mata! Ipatuloy ang pag-inom ng iyong mga prenatal vitamin.',
+    27: 'Papalapit na ang ikatlong trimester! Siguraduhing nakakukuha ka ng sapat na calcium para sa mga buto ng baby.',
+    28: 'Maligayang pagdating sa ikatlong trimester! Ang iyong baby ay nagsasanay na sa paghinga.',
+    29: 'Mag-impake na ng hospital bag — hindi kailanman masyadong maaga para maging handa.',
+    30: 'Ang Kegel exercises ay nagpapalakas ng pelvic floor para sa panganganak. Subukang gawin ito araw-araw.',
+    31: 'Magpahinga na nakataas ang mga paa kung may pamamanas. Normal ito ngunit sabihin sa iyong midwife kung ito ay biglaan.',
+    32: 'Mabilis nang nagkakalaman ang iyong baby ngayon. Kumain ng pagkaing mayaman sa protina para sa kanyang paglaki.',
+    33: 'Magsanay ng mga relaxation technique. Ang kalmadong nanay ay tumutulong sa baby na makaramdam ng ligtas.',
+    34: 'Bilangin ang mga sipa ng iyong baby — dapat makaramdam ng hindi bababa sa 10 galaw sa loob ng 2 oras.',
+    35: 'Ihanda ang iyong tahanan para sa baby. Ang nesting instincts ay natural at malusog!',
+    36: 'Malapit nang maging full-term ang iyong baby. Ipatuloy ang pagdalo sa iyong mga prenatal checkup.',
+    37: 'Nasa head-down position na ang baby sa karamihan ng pagkakataon. Kausapin ang iyong midwife tungkol sa delivery plan.',
+    38: 'Manatiling malapit sa bahay at laging naka-charge ang telepono — maaaring dumating na ang baby anumang oras!',
+    39: 'Malapit na, mama! Subukang magpahinga hangga\'t maaari. Alam ng iyong katawan ang dapat gawin.',
+    40: 'Dumating na ang iyong takdang araw! Tandaan — lumalabas ang baby sa sarili nilang oras. Magtiwala sa proseso, mama.',
   };
 
   int _parseInt(dynamic value, [int fallback = 0]) {
@@ -2243,8 +2283,10 @@ class _MotherDashboardState extends State<MotherDashboard> {
   }
 
   Widget _buildWeeklyTipCard() {
-    final tip = _weeklyTips[_week];
-    if (tip == null) return const SizedBox.shrink();
+    final tipEn = _weeklyTipsEn[_week];
+    final tipTl = _weeklyTipsTl[_week];
+    if (tipEn == null || tipTl == null) return const SizedBox.shrink();
+    final tip = _t(tipEn, tipTl);
 
     return Container(
       width: double.infinity,
