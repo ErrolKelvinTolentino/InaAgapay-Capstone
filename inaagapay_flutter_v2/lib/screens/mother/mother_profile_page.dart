@@ -1,6 +1,7 @@
 // lib/screens/mother/mother_profile_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
@@ -5577,6 +5578,22 @@ class _MotherProfilePageState extends State<MotherProfilePage>
   // ══════════════════════════════════════════════════════════════════════════
 
   Widget _buildHistoryTab(List pastPregnancies) {
+    // ── DEBUG: inspect what data the History tab receives ──
+    if (kDebugMode) {
+      print('═══ HISTORY TAB DEBUG ═══');
+      print('pastPregnancies count: ${pastPregnancies.length}');
+      for (int i = 0; i < pastPregnancies.length; i++) {
+        final pp = pastPregnancies[i] as Map;
+        print('  [$i] pregnancy_id=${pp['pregnancy_id']}, status=${pp['status']}');
+        print('       outcomes=${pp['outcomes']}');
+        print('       outcome=${pp['outcome']}, outcome_date=${pp['outcome_date']}');
+        print('       delivery=${pp['delivery']}');
+        print('       checkups count=${(pp['checkups'] as List?)?.length ?? 0}');
+      }
+      print('═════════════════════════');
+    }
+    // ── END DEBUG ──
+
     if (pastPregnancies.isEmpty) {
       return Center(
         child: Padding(
@@ -5634,15 +5651,35 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                     ]
                   : <Map<String, dynamic>>[];
 
-          final primaryOutcomeStr = normalizedOutcomes.isNotEmpty
-              ? normalizedOutcomes
-                  .map((o) => _formatOutcome(o['outcome'] as String?))
-                  .join(', ')
-              : '-';
+          // ── Build a meaningful title ──
+          // When outcomes exist, show them (e.g. "Live Birth").
+          // Otherwise, build a label from the pregnancy dates.
+          final String primaryOutcomeStr;
+          if (normalizedOutcomes.isNotEmpty) {
+            primaryOutcomeStr = normalizedOutcomes
+                .map((o) => _formatOutcome(o['outcome'] as String?))
+                .join(', ');
+          } else {
+            final lmpStr = _formatDate(p['last_menstrual_period']);
+            if (lmpStr != '-') {
+              primaryOutcomeStr = 'Past Pregnancy (LMP: $lmpStr)';
+            } else {
+              primaryOutcomeStr = 'Past Pregnancy #${index + 1}';
+            }
+          }
 
-          final primaryOutcomeDate = normalizedOutcomes.isNotEmpty
-              ? _formatDate(normalizedOutcomes.first['outcome_date'] as String?)
-              : '-';
+          // ── Build a meaningful subtitle ──
+          // Prefer outcome date → ended_at → status
+          final String subtitleText;
+          if (normalizedOutcomes.isNotEmpty) {
+            final outcomeDate = _formatDate(
+                normalizedOutcomes.first['outcome_date'] as String?);
+            subtitleText = 'Ended: $outcomeDate';
+          } else if (p['ended_at'] != null) {
+            subtitleText = 'Ended: ${_formatDate(p['ended_at'])}';
+          } else {
+            subtitleText = 'Status: ${(p['status'] as String? ?? 'ended').replaceAll('_', ' ')}';  
+          }
 
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
@@ -5650,11 +5687,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
             decoration: BoxDecoration(
               color: AppColors.cardColorOf(context),
               borderRadius: BorderRadius.circular(16),
-              border: Border(
-                left: const BorderSide(color: AppColors.brandPrimary, width: 4),
-                top: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
-                right: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
-                bottom: BorderSide(color: AppColors.brandPrimary.withValues(alpha: 0.08), width: 1),
+              border: Border.all(
+                color: AppColors.brandPrimary.withValues(alpha: 0.12),
+                width: 1,
               ),
               boxShadow: [
                 BoxShadow(
@@ -5664,7 +5699,22 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ),
               ],
             ),
-            child: Theme(
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  // Left accent stripe
+                  Container(
+                    width: 4,
+                    decoration: const BoxDecoration(
+                      color: AppColors.brandPrimary,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(15),
+                        bottomLeft: Radius.circular(15),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Theme(
               data: Theme.of(context).copyWith(
                 dividerColor: Colors.transparent,
                 splashColor: AppColors.brandPrimary.withValues(alpha: 0.05),
@@ -5690,7 +5740,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                   ),
                 ),
                 subtitle: Text(
-                  'Ended: $primaryOutcomeDate',
+                  subtitleText,
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
@@ -5895,6 +5945,10 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 ],
               ),
             ),
+                  ), // end Expanded
+                ],
+              ), // end Row
+            ), // end IntrinsicHeight
           );
         },
       ),
