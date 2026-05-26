@@ -132,8 +132,8 @@ class _AppDropdownFieldState<T extends Object> extends State<AppDropdownField<T>
                     final isSelected = widget.value == option;
                     return InkWell(
                       onTap: () {
-                        widget.onSelected(option);
                         _closeDropdown();
+                        widget.onSelected(option);
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

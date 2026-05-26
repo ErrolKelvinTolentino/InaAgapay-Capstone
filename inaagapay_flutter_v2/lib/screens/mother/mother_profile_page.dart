@@ -82,6 +82,8 @@ const List<String> _relationshipOptions = [
   'Other',
 ];
 
+enum _GestationMethod { lmp, edd, aog }
+
 class MotherProfilePage extends StatefulWidget {
   final int motherId;
   final bool readOnly;
@@ -2640,6 +2642,12 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
     final placeControllers =
         List.generate(fetalCount, (_) => TextEditingController());
+    final outcomeDateControllers = List.generate(
+      fetalCount,
+      (i) => TextEditingController(
+        text: DateFormat('MMMM d, yyyy').format(outcomeDates[i]),
+      ),
+    );
 
     // Helper: compute gestational age from LMP to earliest outcome date
     double? computeGestAge(List<DateTime> dates) {
@@ -2660,9 +2668,9 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
             return Container(
               height: MediaQuery.of(context).size.height * 0.85,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              decoration: BoxDecoration(
+                color: AppColors.cardColorOf(context),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
                 children: [
@@ -2701,13 +2709,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               ),
                               const SizedBox(width: 12),
                               const Expanded(
-                                child: Text(
-                                  'Conclude Pregnancy',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
+                                  child: Headline(text: 'Conclude Pregnancy')),
                               IconButton(
                                 icon: const Icon(Icons.close),
                                 onPressed: () => Navigator.pop(ctx),
@@ -2768,45 +2770,58 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               ),
 
                             // Outcome dropdown
-                            Container(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: AppColors.bgSecondary,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: DropdownButtonFormField<String>(
-                                initialValue: outcomes[i],
-                                decoration: const InputDecoration(
-                                  labelText: 'Outcome',
-                                  border: InputBorder.none,
-                                ),
-                                items: const [
-                                  DropdownMenuItem(
-                                      value: 'live_birth',
-                                      child: Text('Live Birth')),
-                                  DropdownMenuItem(
-                                      value: 'stillbirth',
-                                      child: Text('Stillbirth')),
-                                  DropdownMenuItem(
-                                      value: 'miscarriage',
-                                      child: Text('Miscarriage')),
-                                  DropdownMenuItem(
-                                      value: 'abortion',
-                                      child: Text('Abortion')),
-                                  DropdownMenuItem(
-                                      value: 'ectopic', child: Text('Ectopic')),
-                                ],
-                                onChanged: (v) => setModal(
-                                    () => outcomes[i] = v ?? outcomes[i]),
-                              ),
+                            AppDropdownField<String>(
+                              hintText: 'Outcome',
+                              leadingIcon: Icons.pregnant_woman_outlined,
+                              value: outcomes[i],
+                              options: const [
+                                'live_birth',
+                                'stillbirth',
+                                'miscarriage',
+                                'abortion',
+                                'ectopic'
+                              ],
+                              displayStringForOption: (val) {
+                                switch (val) {
+                                  case 'live_birth':
+                                    return 'Live Birth';
+                                  case 'stillbirth':
+                                    return 'Stillbirth';
+                                  case 'miscarriage':
+                                    return 'Miscarriage';
+                                  case 'abortion':
+                                    return 'Abortion';
+                                  case 'ectopic':
+                                    return 'Ectopic';
+                                  default:
+                                    return 'Live Birth';
+                                }
+                              },
+                              onSelected: (val) {
+                                setModal(() {
+                                  outcomes[i] = val;
+                                  if (val == 'live_birth' || val == 'stillbirth') {
+                                    deliveryDates[i] = outcomeDates[i];
+                                  } else {
+                                    deliveryDates[i] = null;
+                                    placesOfDelivery[i] = null;
+                                    deliveryMethods[i] = null;
+                                    placeControllers[i].clear();
+                                  }
+                                });
+                              },
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 16),
 
                             // Outcome date picker
-                            InkWell(
+                            AppInputField(
+                              hintText: 'Outcome Date',
+                              controller: outcomeDateControllers[i],
+                              isRequired: true,
+                              leadingIcon: Icons.calendar_today_outlined,
+                              readOnly: true,
                               onTap: () async {
-                                final picked = await showDatePicker(
+                                final picked = await _showBrandedDatePicker(
                                   context: ctx,
                                   initialDate: outcomeDates[i],
                                   firstDate: lmpDate ?? DateTime(1900),
@@ -2815,6 +2830,8 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                 if (picked != null) {
                                   setModal(() {
                                     outcomeDates[i] = picked;
+                                    outcomeDateControllers[i].text =
+                                        DateFormat('MMMM d, yyyy').format(picked);
                                     if (outcomes[i] == 'live_birth' ||
                                         outcomes[i] == 'stillbirth') {
                                       deliveryDates[i] = picked;
@@ -2822,92 +2839,42 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                                   });
                                 }
                               },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 16),
-                                decoration: BoxDecoration(
-                                  color: AppColors.bgSecondary,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.calendar_today,
-                                        size: 20,
-                                        color: AppColors.textSecondary),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text('Outcome Date',
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color:
-                                                      AppColors.textSecondary)),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            DateFormat('MMMM d, yyyy')
-                                                .format(outcomeDates[i]),
-                                            style: const TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w500),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const Icon(Icons.arrow_drop_down,
-                                        color: AppColors.textSecondary),
-                                  ],
-                                ),
-                              ),
                             ),
 
                             // Delivery fields (only for live_birth / stillbirth)
                             if (outcomes[i] == 'live_birth' ||
                                 outcomes[i] == 'stillbirth') ...[
-                              const SizedBox(height: 12),
-                              TextField(
+                              const SizedBox(height: 16),
+                              AppInputField(
+                                hintText: 'Place of Delivery',
                                 controller: placeControllers[i],
-                                decoration: InputDecoration(
-                                  labelText: 'Place of Delivery',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  filled: true,
-                                  fillColor: AppColors.bgSecondary,
-                                ),
+                                leadingIcon: Icons.local_hospital_outlined,
+                                isRequired: true,
                                 onChanged: (v) => placesOfDelivery[i] = v,
                               ),
-                              const SizedBox(height: 12),
-                              Container(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                                decoration: BoxDecoration(
-                                  color: AppColors.bgSecondary,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: deliveryMethods[i],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Delivery Method',
-                                    border: InputBorder.none,
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(
-                                        value: 'NSD',
-                                        child: Text(
-                                            'Normal Spontaneous Delivery')),
-                                    DropdownMenuItem(
-                                        value: 'CS',
-                                        child: Text('Cesarean Section')),
-                                    DropdownMenuItem(
-                                        value: 'Instrumental',
-                                        child: Text('Instrumental')),
-                                  ],
-                                  onChanged: (v) =>
-                                      setModal(() => deliveryMethods[i] = v),
-                                ),
+                              const SizedBox(height: 16),
+                              AppDropdownField<String>(
+                                hintText: 'Delivery Method',
+                                leadingIcon: Icons.healing_outlined,
+                                value: deliveryMethods[i],
+                                options: const ['NSD', 'CS', 'Instrumental'],
+                                displayStringForOption: (val) {
+                                  switch (val) {
+                                    case 'NSD':
+                                      return 'Normal Spontaneous Delivery';
+                                    case 'CS':
+                                      return 'Cesarean Section';
+                                    case 'Instrumental':
+                                      return 'Instrumental';
+                                    default:
+                                      return 'Normal Spontaneous Delivery';
+                                  }
+                                },
+                                onSelected: (val) {
+                                  setModal(() {
+                                    deliveryMethods[i] = val;
+                                  });
+                                },
                               ),
                             ],
                             const SizedBox(height: 20),
@@ -2921,7 +2888,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: AppColors.bgSecondary,
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(28),
                               border:
                                   Border.all(color: AppColors.borderPrimary),
                             ),
@@ -2993,6 +2960,16 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                               for (int i = 0; i < fetalCount; i++) {
                                 if (outcomes[i] == 'live_birth' ||
                                     outcomes[i] == 'stillbirth') {
+                                  if (placesOfDelivery[i] == null ||
+                                      placesOfDelivery[i]!.trim().isEmpty) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(SnackBar(
+                                      content: Text(
+                                          'Please enter place of delivery for Fetus ${i + 1}'),
+                                    ));
+                                    return;
+                                  }
                                   if (deliveryMethods[i] == null) {
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context)
@@ -3077,156 +3054,461 @@ class _MotherProfilePageState extends State<MotherProfilePage>
     for (final pc in placeControllers) {
       pc.dispose();
     }
+    for (final oc in outcomeDateControllers) {
+      oc.dispose();
+    }
   }
 
-  Future<void> _startNewPregnancyDialog() async {
-    DateTime? lmp;
-    DateTime? edd;
+  Future<void> _startNewPregnancyDialog([List? pastPregnancies]) async {
+    // ── Pre-emptive Postpartum Recovery Window Validation ──
+    const minGapDays = 42;
+    if (pastPregnancies != null && pastPregnancies.isNotEmpty) {
+      DateTime? latestOutcomeDate;
+      for (final past in pastPregnancies) {
+        final outcomesList = past['outcomes'] as List?;
+        if (outcomesList != null && outcomesList.isNotEmpty) {
+          for (final o in outcomesList) {
+            final oDate = DateTime.tryParse(o['outcome_date'] ?? '');
+            if (oDate != null && (latestOutcomeDate == null || oDate.isAfter(latestOutcomeDate))) {
+              latestOutcomeDate = oDate;
+            }
+          }
+        }
+        
+        // Fallback to ended_at or expected_date_of_delivery
+        if (latestOutcomeDate == null) {
+          final endedAtStr = past['ended_at'] ?? past['expected_date_of_delivery'];
+          final endedDate = DateTime.tryParse(endedAtStr ?? '');
+          if (endedDate != null && (latestOutcomeDate == null || endedDate.isAfter(latestOutcomeDate))) {
+            latestOutcomeDate = endedDate;
+          }
+        }
+      }
 
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) => Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const PageTitle(
-                  title: 'Start New Pregnancy',
-                  leadingIcon: Icons.pregnant_woman,
-                ),
-                const SizedBox(height: 20),
-                InkWell(
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: ctx,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) {
-                      setDialog(() {
-                        lmp = picked;
-                        edd = picked.add(const Duration(days: 280));
-                      });
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.calendar_today,
-                            color: AppColors.brandPrimary),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Last Menstrual Period',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary)),
-                              const SizedBox(height: 4),
-                              Text(
-                                lmp == null
-                                    ? 'Select date'
-                                    : DateFormat('MMMM d, yyyy').format(lmp!),
-                                style: const TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w500),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (lmp != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSecondary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.event_available,
-                            color: AppColors.brandPrimary),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Estimated Due Date',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary)),
-                              const SizedBox(height: 4),
-                              Text(
-                                DateFormat('MMMM d, yyyy').format(edd!),
-                                style: const TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w500),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Row(
+      if (latestOutcomeDate != null) {
+        final gap = DateTime.now().difference(latestOutcomeDate).inDays;
+        if (gap >= 0 && gap < minGapDays) {
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            builder: (ctx) => Dialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28)),
+              backgroundColor: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: SecondaryButton(
-                        label: 'Cancel',
-                        onPressed: () => Navigator.pop(ctx),
-                        showIcons: false,
-                      ),
+                    const PageTitle(
+                      title: 'Postpartum Recovery',
+                      leadingIcon: Icons.warning_amber_rounded,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Cannot start a new pregnancy yet.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'The mother\'s previous pregnancy concluded on '
+                      '${DateFormat('MMMM d, yyyy').format(latestOutcomeDate!)} '
+                      '(only $gap days ago).\n\n'
+                      'To protect maternal health, a minimum recovery period of '
+                      '42 days (6 weeks) is clinically required.',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
                       child: MainButton(
-                        label: 'Start',
-                        onPressed: lmp == null
-                            ? null
-                            : () async {
-                                final success = await MotherProfileService
-                                    .startNewPregnancy(
-                                  widget.motherId,
-                                  lmp!,
-                                  edd!,
-                                );
-                                if (!mounted) return;
-                                if (success) {
-                                  Navigator.pop(ctx);
-                                  ScaffoldMessenger.of(context)
-                                      .showSnackBar(const SnackBar(
-                                    content: Text('New pregnancy started'),
-                                  ));
-                                  _refresh();
-                                }
-                              },
+                        label: 'Understood',
+                        onPressed: () => Navigator.pop(ctx),
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+          return; // Stop here! Do not open the Start New Pregnancy dialog!
+        }
+      }
+    }
+
+    _GestationMethod gestationMethod = _GestationMethod.lmp;
+    DateTime? lmp;
+    DateTime? edd;
+    final lmpCtrl = TextEditingController();
+    final eddCtrl = TextEditingController();
+    final aogWeeksCtrl = TextEditingController();
+    final aogDaysCtrl = TextEditingController();
+
+    String? gestationError;
+    String? weeksError;
+    String? daysError;
+
+    await showDialog(
+      context: context,
+      builder: (modalCtx) => StatefulBuilder(
+        builder: (dialogCtx, setDialog) {
+          // Helper validations
+          String? validateLmp(DateTime date) {
+            final now = DateTime.now();
+            final twoWeeksAgo = now.subtract(const Duration(days: 2 * 7));
+            if (date.isAfter(twoWeeksAgo)) {
+              return 'LMP must be at least 2 weeks ago.';
+            }
+            final daysSinceLmp = now.difference(date).inDays;
+            if (daysSinceLmp > 42 * 7) {
+              return 'LMP is more than 42 weeks ago. Please verify the date.';
+            }
+            
+            // Spacing check (42 days)
+            const minGapDays = 42;
+            if (pastPregnancies != null && pastPregnancies.isNotEmpty) {
+              for (final past in pastPregnancies) {
+                final outcomesList = past['outcomes'] as List?;
+                DateTime? latestOutcomeDate;
+                if (outcomesList != null && outcomesList.isNotEmpty) {
+                  for (final o in outcomesList) {
+                    final oDate = DateTime.tryParse(o['outcome_date'] ?? '');
+                    if (oDate != null && (latestOutcomeDate == null || oDate.isAfter(latestOutcomeDate))) {
+                      latestOutcomeDate = oDate;
+                    }
+                  }
+                }
+                if (latestOutcomeDate == null) {
+                  final endedAtStr = past['ended_at'] ?? past['expected_date_of_delivery'];
+                  latestOutcomeDate = DateTime.tryParse(endedAtStr ?? '');
+                }
+                if (latestOutcomeDate != null) {
+                  final gap = date.difference(latestOutcomeDate).inDays;
+                  if (gap >= 0 && gap < minGapDays) {
+                    return 'Pregnancy interval too short ($gap days). Minimum interval is 42 days (6 weeks) after a previous pregnancy.';
+                  }
+                }
+              }
+            }
+            return null;
+          }
+
+          String? validateEdd(DateTime date) {
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            final eddDate = DateTime(date.year, date.month, date.day);
+            if (eddDate.isBefore(today)) {
+              return 'EDD cannot be in the past.';
+            }
+            final maxEdd = today.add(const Duration(days: 43 * 7));
+            if (eddDate.isAfter(maxEdd)) {
+              return 'EDD cannot be more than 43 weeks from today.';
+            }
+            return null;
+          }
+
+          void updateFromLmp(DateTime date) {
+            lmp = date;
+            edd = date.add(const Duration(days: 280));
+            lmpCtrl.text = DateFormat('MMMM d, yyyy').format(date);
+            eddCtrl.text = DateFormat('MMMM d, yyyy').format(edd!);
+            gestationError = validateLmp(date);
+
+            final days = DateTime.now().difference(date).inDays;
+            if (days >= 0) {
+              aogWeeksCtrl.text = (days ~/ 7).toString();
+              aogDaysCtrl.text = (days % 7).toString();
+            } else {
+              aogWeeksCtrl.clear();
+              aogDaysCtrl.clear();
+            }
+            weeksError = null;
+            daysError = null;
+          }
+
+          void updateFromEdd(DateTime date) {
+            edd = date;
+            lmp = date.subtract(const Duration(days: 280));
+            eddCtrl.text = DateFormat('MMMM d, yyyy').format(date);
+            lmpCtrl.text = DateFormat('MMMM d, yyyy').format(lmp!);
+            gestationError = validateEdd(date) ?? validateLmp(lmp!);
+
+            final days = DateTime.now().difference(lmp!).inDays;
+            if (days >= 0) {
+              aogWeeksCtrl.text = (days ~/ 7).toString();
+              aogDaysCtrl.text = (days % 7).toString();
+            } else {
+              aogWeeksCtrl.clear();
+              aogDaysCtrl.clear();
+            }
+            weeksError = null;
+            daysError = null;
+          }
+
+          void updateFromAog() {
+            final wStr = aogWeeksCtrl.text.trim();
+            final dStr = aogDaysCtrl.text.trim();
+
+            if (wStr.isEmpty && dStr.isEmpty) {
+              lmp = null;
+              edd = null;
+              lmpCtrl.clear();
+              eddCtrl.clear();
+              weeksError = null;
+              daysError = null;
+              gestationError = null;
+              return;
+            }
+
+            final w = int.tryParse(wStr);
+            final d = int.tryParse(dStr);
+
+            String? wErr;
+            String? dErr;
+
+            if (w == null && wStr.isNotEmpty) {
+              wErr = 'Enter a valid number';
+            } else if (w != null && (w < 2 || w > 42)) {
+              wErr = 'Must be 2-42';
+            }
+
+            if (d == null && dStr.isNotEmpty) {
+              dErr = 'Enter a valid number';
+            } else if (d != null && (d < 0 || d > 6)) {
+              dErr = 'Must be 0-6';
+            }
+
+            weeksError = wErr;
+            daysError = dErr;
+            gestationError = (wErr != null || dErr != null) ? 'Invalid AOG weeks or days' : null;
+
+            if (wErr == null && dErr == null && w != null && d != null) {
+              final date = DateTime.now().subtract(Duration(days: w * 7 + d));
+              lmp = date;
+              edd = date.add(const Duration(days: 280));
+              lmpCtrl.text = DateFormat('MMMM d, yyyy').format(date);
+              eddCtrl.text = DateFormat('MMMM d, yyyy').format(edd!);
+              gestationError = validateLmp(date);
+            }
+          }
+
+          return Dialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const PageTitle(
+                    title: 'Start New Pregnancy',
+                    leadingIcon: Icons.pregnant_woman,
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // Gestational Method Selector
+                  AppDropdownField<_GestationMethod>(
+                    hintText: 'Calculation Method',
+                    leadingIcon: Icons.calculate_outlined,
+                    value: gestationMethod,
+                    options: const [
+                      _GestationMethod.lmp,
+                      _GestationMethod.edd,
+                      _GestationMethod.aog
+                    ],
+                    displayStringForOption: (val) {
+                      switch (val) {
+                        case _GestationMethod.lmp:
+                          return 'Last Menstrual Period (LMP)';
+                        case _GestationMethod.edd:
+                          return 'Estimated Delivery Date (EDD)';
+                        case _GestationMethod.aog:
+                          return 'Age of Gestation (AOG)';
+                      }
+                    },
+                    onSelected: (val) {
+                      setDialog(() {
+                        gestationMethod = val;
+                        lmp = null;
+                        edd = null;
+                        lmpCtrl.clear();
+                        eddCtrl.clear();
+                        aogWeeksCtrl.clear();
+                        aogDaysCtrl.clear();
+                        gestationError = null;
+                        weeksError = null;
+                        daysError = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Gestation Method Fields
+                  if (gestationMethod == _GestationMethod.lmp) ...[
+                    AppInputField(
+                      hintText: 'Last Menstrual Period',
+                      controller: lmpCtrl,
+                      isRequired: true,
+                      leadingIcon: Icons.calendar_today_outlined,
+                      readOnly: true,
+                      errorText: gestationError,
+                      onTap: () async {
+                        final picked = await _showBrandedDatePicker(
+                          context: modalCtx,
+                          initialDate: DateTime.now().subtract(const Duration(days: 14)),
+                          firstDate: DateTime.now().subtract(const Duration(days: 42 * 7)),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setDialog(() => updateFromLmp(picked));
+                        }
+                      },
+                    ),
+                    if (edd != null && gestationError == null) ...[
+                      const SizedBox(height: 16),
+                      AppInputField(
+                        hintText: 'Estimated Due Date',
+                        controller: eddCtrl,
+                        leadingIcon: Icons.event_available_outlined,
+                        readOnly: true,
+                      ),
+                    ],
+                  ] else if (gestationMethod == _GestationMethod.edd) ...[
+                    AppInputField(
+                      hintText: 'Estimated Due Date',
+                      controller: eddCtrl,
+                      isRequired: true,
+                      leadingIcon: Icons.event_available_outlined,
+                      readOnly: true,
+                      errorText: gestationError,
+                      onTap: () async {
+                        final picked = await _showBrandedDatePicker(
+                          context: modalCtx,
+                          initialDate: DateTime.now().add(const Duration(days: 266)),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 43 * 7)),
+                        );
+                        if (picked != null) {
+                          setDialog(() => updateFromEdd(picked));
+                        }
+                      },
+                    ),
+                    if (lmp != null && gestationError == null) ...[
+                      const SizedBox(height: 16),
+                      AppInputField(
+                        hintText: 'Last Menstrual Period',
+                        controller: lmpCtrl,
+                        leadingIcon: Icons.calendar_today_outlined,
+                        readOnly: true,
+                      ),
+                    ],
+                  ] else if (gestationMethod == _GestationMethod.aog) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppInputField(
+                            hintText: 'AOG Weeks',
+                            controller: aogWeeksCtrl,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            errorText: weeksError,
+                            onChanged: (v) {
+                              setDialog(() => updateFromAog());
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: AppInputField(
+                            hintText: 'AOG Days',
+                            controller: aogDaysCtrl,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            errorText: daysError,
+                            onChanged: (v) {
+                              setDialog(() => updateFromAog());
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (lmp != null && edd != null && gestationError == null) ...[
+                      const SizedBox(height: 16),
+                      AppInputField(
+                        hintText: 'Last Menstrual Period',
+                        controller: lmpCtrl,
+                        leadingIcon: Icons.calendar_today_outlined,
+                        readOnly: true,
+                      ),
+                      const SizedBox(height: 16),
+                      AppInputField(
+                        hintText: 'Estimated Due Date',
+                        controller: eddCtrl,
+                        leadingIcon: Icons.event_available_outlined,
+                        readOnly: true,
+                      ),
+                    ],
+                  ],
+
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SecondaryButton(
+                          label: 'Cancel',
+                          onPressed: () => Navigator.pop(modalCtx),
+                          showIcons: false,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: MainButton(
+                          label: 'Start',
+                          onPressed: (lmp == null || gestationError != null)
+                              ? null
+                              : () async {
+                                  final success = await MotherProfileService
+                                      .startNewPregnancy(
+                                    widget.motherId,
+                                    lmp!,
+                                    edd!,
+                                  );
+                                  if (!mounted) return;
+                                  if (success) {
+                                    Navigator.pop(modalCtx);
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(const SnackBar(
+                                      content: Text('New pregnancy started'),
+                                    ));
+                                    _refresh();
+                                  }
+                                },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
+    lmpCtrl.dispose();
+    eddCtrl.dispose();
+    aogWeeksCtrl.dispose();
+    aogDaysCtrl.dispose();
   }
 
   // ── Editable profile controllers ────────────────────────────────────────
@@ -5473,7 +5755,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
                 const SizedBox(height: 24),
                 MainButton(
                     label: 'Start New Pregnancy',
-                    onPressed: _startNewPregnancyDialog),
+                    onPressed: () => _startNewPregnancyDialog(profile['past_pregnancies'] as List?)),
               ],
             ],
           ),
