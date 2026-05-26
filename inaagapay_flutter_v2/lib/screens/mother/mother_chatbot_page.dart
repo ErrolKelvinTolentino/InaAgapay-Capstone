@@ -2307,8 +2307,13 @@ class _MotherChatbotPageState extends State<MotherChatbotPage>
         _currentlyReadingMessageId = messageId;
       });
 
-      // Play directly from memory — no file system needed
-      await _audioPlayer.play(BytesSource(Uint8List.fromList(wavBytes)));
+      // Write bytes to a temporary file to guarantee compatibility across all Android devices/emulators
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/temp_tts_$messageId.wav');
+      await tempFile.writeAsBytes(wavBytes, flush: true);
+
+      // Play from the temporary file source
+      await _audioPlayer.play(DeviceFileSource(tempFile.path));
     } catch (e) {
       debugPrint('[MotherChatbotPage] Groq TTS error: $e');
       if (mounted) {

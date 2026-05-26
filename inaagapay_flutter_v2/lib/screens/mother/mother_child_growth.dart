@@ -5,12 +5,30 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../theme/app_colors.dart';
-import '../../widgets/secondary_header.dart';
-import '../../widgets/tab_button.dart';
-import '../../widgets/hero_card.dart';
-import '../../services/language_service.dart';
 import '../../services/growth_calculator.dart';
+import '../../services/growth_reference_data.dart';
+import '../../services/language_service.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/chart_card.dart';
+import '../../widgets/secondary_header.dart';
+import '../../widgets/hero_card.dart';
+
+/// Data class representing a reference curve for growth charts
+class ReferenceCurve {
+  final String label;
+  final List<FlSpot> spots;
+  final Color color;
+  final double strokeWidth;
+  final List<int>? dashArray;
+
+  ReferenceCurve({
+    required this.label,
+    required this.spots,
+    required this.color,
+    required this.strokeWidth,
+    this.dashArray,
+  });
+}
 
 class MotherChildGrowthPage extends StatefulWidget {
   final VoidCallback onBack;
@@ -33,76 +51,146 @@ class MotherChildGrowthPage extends StatefulWidget {
 }
 
 class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
-  int _currentIndex = 0; // 0: BMI, 1: Height, 2: Weight
-  bool _loading = true;
-  String? _errorMessage;
-  
-  Map<String, dynamic>? _childProfile;
-  DateTime? _birthdate;
-  List<Map<String, dynamic>> _records = [];
+  bool loading = true;
+  int activeTab = 0;
+  List<Map<String, dynamic>> records = [];
+  Map<String, dynamic>? childData;
+  DateTime? birthdate;
+
+  // Computed properties for latest measurements
+  Map<String, dynamic>? get latestRecord =>
+      records.isNotEmpty ? records.last : null;
+
+  double get latestHeight =>
+      (latestRecord?['child_height'] as num?)?.toDouble() ?? 0;
+
+  double get latestWeight =>
+      (latestRecord?['child_weight'] as num?)?.toDouble() ?? 0;
+
+  double get latestBMI => _calculateBMI(latestHeight, latestWeight);
+
+  int get latestAgeWeeks => latestRecord != null
+      ? _ageInWeeks(DateTime.parse(latestRecord!['created_at']))
+      : 0;
+
+  String get childSex => (childData?['sex'] as String?) ?? widget.childGender.toLowerCase();
 
   @override
   void initState() {
     super.initState();
-    _fetchGrowthHistory();
+    fetchGrowthRecords();
   }
 
-  Future<void> _fetchGrowthHistory() async {
+  Future<void> fetchGrowthRecords() async {
     setState(() {
-      _loading = true;
-      _errorMessage = null;
+      loading = true;
     });
 
     try {
-      // 1. Fetch child profile
-      final childRes = await Supabase.instance.client
-          .from('children')
-          .select('*')
-          .eq('child_id', widget.childId)
-          .single();
-
-      _childProfile = childRes;
-
-      // 2. Fetch birth details
-      final birthRes = await Supabase.instance.client
-          .from('birth_details')
-          .select('birthdate')
-          .eq('child_id', widget.childId)
-          .maybeSingle();
-
-      if (birthRes?['birthdate'] != null) {
-        _birthdate = DateTime.parse(birthRes!['birthdate'].toString());
-      }
-
-      // 3. Fetch detailed measurements
-      final recordsRes = await Supabase.instance.client
-          .from('child_details')
-          .select('*')
-          .eq('child_id', widget.childId)
-          .order('created_at', ascending: true);
-
-      _records = List<Map<String, dynamic>>.from(recordsRes);
-
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      await Future.wait([
+        _fetchChildData(),
+        _fetchBirthDetails(),
+        _fetchGrowthRecords(),
+      ]);
     } catch (e) {
+      debugPrint('Error loading growth records: $e');
+    } finally {
       if (mounted) {
-        setState(() {
-          _errorMessage = e.toString();
-          _loading = false;
-        });
+        setState(() => loading = false);
       }
     }
   }
 
-  String _t(String english, String filipino) {
-    return LanguageService.translate(english, filipino);
+  Future<void> _fetchChildData() async {
+    final response = await Supabase.instance.client
+        .from('children')
+        .select('child_id, first_name, last_name, sex')
+        .eq('child_id', widget.childId)
+        .single();
+    childData = response;
   }
 
-  int _ageInWeeksForDate(DateTime date) {
-    if (_birthdate == null) return 0;
-    final difference = date.difference(_birthdate!);
+  Future<void> _fetchBirthDetails() async {
+    final response = await Supabase.instance.client
+        .from('birth_details')
+        .select('birthdate')
+        .eq('child_id', widget.childId)
+        .maybeSingle();
+
+    if (response != null && response['birthdate'] != null) {
+      birthdate = DateTime.parse(response['birthdate']);
+    }
+  }
+
+  Future<void> _fetchGrowthRecords() async {
+    final response = await Supabase.instance.client
+        .from('child_details')
+        .select('*')
+        .eq('child_id', widget.childId)
+        .order('created_at', ascending: true);
+
+    records = List<Map<String, dynamic>>.from(response);
+  }
+
+  String getChildName() {
+    if (childData == null) return widget.childName;
+    final firstName = childData!['first_name'] ?? '';
+    final lastName = childData!['last_name'] ?? '';
+    return '$firstName $lastName'.trim();
+  }
+
+  String calculateAge() {
+    if (birthdate == null) return widget.childAge;
+
+    final now = DateTime.now();
+    int years = now.year - birthdate!.year;
+    int months = now.month - birthdate!.month;
+    int days = now.day - birthdate!.day;
+
+    if (days < 0) {
+      months -= 1;
+      final prevMonthDate = DateTime(now.year, now.month, 0);
+      days += prevMonthDate.day;
+    }
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+
+    if (years > 0) {
+      final monthPart = months > 0 ? ', $months month${months != 1 ? 's' : ''}' : '';
+      return '$years year${years != 1 ? 's' : ''}$monthPart old';
+    } else if (months > 0) {
+      final weeks = days ~/ 7;
+      final weekPart = weeks > 0 ? ', $weeks week${weeks != 1 ? 's' : ''}' : '';
+      return '$months month${months != 1 ? 's' : ''}$weekPart old';
+    } else {
+      if (days >= 7) {
+        final weeks = days ~/ 7;
+        final remainingDays = days % 7;
+        final dayPart = remainingDays > 0 ? ', $remainingDays day${remainingDays != 1 ? 's' : ''}' : '';
+        return '$weeks week${weeks != 1 ? 's' : ''}$dayPart old';
+      } else if (days > 0) {
+        return '$days day${days != 1 ? 's' : ''} old';
+      } else {
+        return 'Newborn';
+      }
+    }
+  }
+
+  String formatDate(String? date) {
+    if (date == null || date.isEmpty) return 'No date';
+    try {
+      final parsed = DateTime.parse(date);
+      return DateFormat('MMM d, yyyy').format(parsed);
+    } catch (_) {
+      return date;
+    }
+  }
+
+  int _ageInWeeks(DateTime recordDate) {
+    if (birthdate == null) return 0;
+    final difference = recordDate.difference(birthdate!);
     return (difference.inDays / 7).round();
   }
 
@@ -112,95 +200,376 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
     return weightKg / (heightM * heightM);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final sex = _childProfile?['sex']?.toString().toLowerCase() ?? 'female';
+  String _bmiCategory(double bmi) {
+    final zScore =
+        GrowthCalculator.calculateBMIZScore(bmi, latestAgeWeeks, childSex);
+    if (zScore == null) return 'Within expected standard range';
+    if (zScore < -1) return 'Slightly below standard range';
+    if (zScore <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
+  }
 
-    return ValueListenableBuilder<AppLanguage>(
-      valueListenable: LanguageService.selectedLanguage,
-      builder: (context, _, __) {
-        return Scaffold(
-          backgroundColor: AppColors.bgPrimary,
-          appBar: PreferredSize(
-            preferredSize: const Size.fromHeight(64),
-            child: SecondaryHeader(
-              title: _t('Growth Analytics', 'Pagsusuri sa Paglaki'),
-              onBack: widget.onBack,
-            ),
+  Color _bmiCategoryColor(String category) {
+    switch (category) {
+      case 'Slightly below standard range':
+        return Colors.orange; // Yellow/Orange
+      case 'Within expected standard range':
+        return AppColors.success; // Green
+      case 'Slightly above standard range':
+        return Colors.orange; // Yellow/Orange
+      default:
+        return AppColors.textSecondary;
+    }
+  }
+
+  void _showReferenceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.info_outline, color: AppColors.brandPrimary),
+            SizedBox(width: 8),
+            Text('Growth Reference'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                'Our growth indicators are based on the World Health Organization (WHO) Child Growth Standards.',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, height: 1.4),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Z-scores compare a child\'s measurements (BMI-for-age, weight-for-age, height-for-age) to expected values for healthy growth:',
+                style: TextStyle(fontSize: 13, height: 1.4),
+              ),
+              SizedBox(height: 8),
+              Text('• Within expected standard range (Green): between -1 and +1 Z-score.', style: TextStyle(fontSize: 13, color: AppColors.success, fontWeight: FontWeight.w600)),
+              Text('• Slightly below standard range (Yellow): less than -1 Z-score.', style: TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600)),
+              Text('• Slightly above standard range (Yellow): greater than +1 Z-score.', style: TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600)),
+            ],
           ),
-          body: RefreshIndicator(
-            onRefresh: _fetchGrowthHistory,
-            color: AppColors.brandPrimary,
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.brandPrimary))
-                : _errorMessage != null
-                    ? _buildErrorView()
-                    : _records.isEmpty
-                        ? _buildEmptyView()
-                        : Column(
-                            children: [
-                              const SizedBox(height: 12),
-                              // 3 Tabs
-                              SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    TabButton(
-                                      label: _t('BMI-for-Age', 'BMI sa Edad'),
-                                      isActive: _currentIndex == 0,
-                                      onTap: () => setState(() => _currentIndex = 0),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TabButton(
-                                      label: _t('Height-for-Age', 'Haba sa Edad'),
-                                      isActive: _currentIndex == 1,
-                                      onTap: () => setState(() => _currentIndex = 1),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TabButton(
-                                      label: _t('Weight-for-Age', 'Timbang sa Edad'),
-                                      isActive: _currentIndex == 2,
-                                      onTap: () => setState(() => _currentIndex = 2),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Expanded(
-                                child: IndexedStack(
-                                  index: _currentIndex,
-                                  children: [
-                                    _buildTabContent(metric: 'bmi', sex: sex),
-                                    _buildTabContent(metric: 'height', sex: sex),
-                                    _buildTabContent(metric: 'weight', sex: sex),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: AppColors.brandPrimary, fontWeight: FontWeight.bold)),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Widget _buildErrorView() {
+  String _describeZScore(double? zscore) {
+    if (zscore == null || zscore.isNaN || zscore.isInfinite) {
+      return 'Status unavailable';
+    }
+    if (zscore < -1) return 'Slightly below standard range';
+    if (zscore <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
+  }
+
+  Color _zScoreColor(double? zScore) {
+    if (zScore == null) return AppColors.textSecondary;
+    if (zScore < -1 || zScore > 1) return Colors.orange; // Yellow/Orange
+    return AppColors.success; // Green
+  }
+
+  List<double> _getChartValues(String metric) {
+    final List<double> values = [];
+
+    for (final record in records) {
+      double value;
+      switch (metric) {
+        case 'height':
+          value = (record['child_height'] as num?)?.toDouble() ?? 0;
+          break;
+        case 'weight':
+          value = (record['child_weight'] as num?)?.toDouble() ?? 0;
+          break;
+        case 'bmi':
+          final h = (record['child_height'] as num?)?.toDouble() ?? 0;
+          final w = (record['child_weight'] as num?)?.toDouble() ?? 0;
+          if (h <= 0 || w <= 0) {
+            continue;
+          }
+          value = _calculateBMI(h, w);
+          if (value <= 0 || value.isNaN || value.isInfinite) {
+            continue;
+          }
+          break;
+        default:
+          continue;
+      }
+
+      if (value > 0) {
+        values.add(value);
+      }
+    }
+
+    return values;
+  }
+
+  List<String> _getChartLabels(String metric) {
+    final labels = <String>[];
+    final weekCount = <String, int>{};
+
+    for (final record in records) {
+      double value;
+      switch (metric) {
+        case 'height':
+          value = (record['child_height'] as num?)?.toDouble() ?? 0;
+          break;
+        case 'weight':
+          value = (record['child_weight'] as num?)?.toDouble() ?? 0;
+          break;
+        case 'bmi':
+          final h = (record['child_height'] as num?)?.toDouble() ?? 0;
+          final w = (record['child_weight'] as num?)?.toDouble() ?? 0;
+          if (h <= 0 || w <= 0) {
+            continue;
+          }
+          value = _calculateBMI(h, w);
+          if (value <= 0 || value.isNaN || value.isInfinite) {
+            continue;
+          }
+          break;
+        default:
+          continue;
+      }
+
+      if (value <= 0) continue;
+
+      final recordDate = DateTime.parse(record['created_at']);
+      final weeks = _ageInWeeks(recordDate);
+      final baseLabel = 'W$weeks';
+      final count = (weekCount[baseLabel] ?? 0) + 1;
+      weekCount[baseLabel] = count;
+
+      if (count == 1) {
+        labels.add(baseLabel);
+      } else {
+        labels.add(DateFormat('M/d').format(recordDate));
+      }
+    }
+
+    return labels;
+  }
+
+  List<ReferenceCurve> _buildWhoCurves(
+    String metric,
+    String sex,
+    List<Map<String, dynamic>> validRecords,
+  ) {
+    final isBoy = sex.toLowerCase() == 'male';
+
+    List<Map<String, dynamic>> weeklyData;
+    List<Map<String, dynamic>>? monthlyData;
+
+    if (metric == 'weight') {
+      weeklyData = isBoy
+          ? GrowthReferenceData.weightBoysData
+          : GrowthReferenceData.weightGirlsData;
+      monthlyData = isBoy
+          ? GrowthReferenceData.weightBoysMonthlyData
+          : GrowthReferenceData.weightGirlsMonthlyData;
+    } else {
+      weeklyData = isBoy
+          ? GrowthReferenceData.heightBoysData
+          : GrowthReferenceData.heightGirlsData;
+      monthlyData = null;
+    }
+
+    final medianSpots = <FlSpot>[];
+    final sd2negSpots = <FlSpot>[];
+    final sd2posSpots = <FlSpot>[];
+    final sd3negSpots = <FlSpot>[];
+    final sd3posSpots = <FlSpot>[];
+
+    for (int i = 0; i < validRecords.length; i++) {
+      final record = validRecords[i];
+      final recordDate = DateTime.parse(record['created_at']);
+      final ageWeeks = _ageInWeeks(recordDate);
+
+      Map<String, dynamic>? refEntry;
+
+      if (ageWeeks <= 13) {
+        refEntry = weeklyData.cast<Map<String, dynamic>?>().firstWhere(
+              (e) => e!['week'] == ageWeeks,
+              orElse: () => null,
+            );
+      } else if (monthlyData != null) {
+        final ageMonths = (ageWeeks / 4.345).round();
+        refEntry = monthlyData.cast<Map<String, dynamic>?>().firstWhere(
+              (e) => e!['month'] == ageMonths,
+              orElse: () => null,
+            );
+      }
+
+      if (refEntry == null) continue;
+
+      final x = i.toDouble();
+      medianSpots.add(FlSpot(x, (refEntry['sd0'] as num).toDouble()));
+      sd2negSpots.add(FlSpot(x, (refEntry['sd2neg'] as num).toDouble()));
+      sd2posSpots.add(FlSpot(x, (refEntry['sd2'] as num).toDouble()));
+      sd3negSpots.add(FlSpot(x, (refEntry['sd3neg'] as num).toDouble()));
+      sd3posSpots.add(FlSpot(x, (refEntry['sd3'] as num).toDouble()));
+    }
+
+    final curves = <ReferenceCurve>[];
+
+    if (medianSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: 'Median',
+        spots: medianSpots,
+        color: Colors.green.withValues(alpha: 0.4),
+        strokeWidth: 1.2,
+      ));
+    }
+    if (sd2negSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: '-2 SD',
+        spots: sd2negSpots,
+        color: Colors.orange.withValues(alpha: 0.4),
+        strokeWidth: 1.0,
+        dashArray: [6, 4],
+      ));
+    }
+    if (sd2posSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: '+2 SD',
+        spots: sd2posSpots,
+        color: Colors.orange.withValues(alpha: 0.4),
+        strokeWidth: 1.0,
+        dashArray: [6, 4],
+      ));
+    }
+    if (sd3negSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: '-3 SD',
+        spots: sd3negSpots,
+        color: Colors.red.withValues(alpha: 0.3),
+        strokeWidth: 1.0,
+        dashArray: [4, 4],
+      ));
+    }
+    if (sd3posSpots.length >= 2) {
+      curves.add(ReferenceCurve(
+        label: '+3 SD',
+        spots: sd3posSpots,
+        color: Colors.red.withValues(alpha: 0.3),
+        strokeWidth: 1.0,
+        dashArray: [4, 4],
+      ));
+    }
+
+    return curves;
+  }
+
+  List<Map<String, dynamic>> _getValidRecords(String metric) {
+    final valid = <Map<String, dynamic>>[];
+    for (final record in records) {
+      switch (metric) {
+        case 'height':
+          final v = (record['child_height'] as num?)?.toDouble() ?? 0;
+          if (v > 0) valid.add(record);
+          break;
+        case 'weight':
+          final v = (record['child_weight'] as num?)?.toDouble() ?? 0;
+          if (v > 0) valid.add(record);
+          break;
+        default:
+          break;
+      }
+    }
+    return valid;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final heightZ = GrowthCalculator.calculateHeightZScore(
+        latestHeight, latestAgeWeeks, childSex);
+    final weightZ = GrowthCalculator.calculateWeightZScore(
+        latestWeight, latestAgeWeeks, childSex);
+    final bmiZ = GrowthCalculator.calculateBMIZScore(
+        latestBMI, latestAgeWeeks, childSex);
+
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: SecondaryHeader(
+          title: LanguageService.translate('Growth Analytics', 'Pagsusuri sa Paglaki'),
+          onBack: widget.onBack,
+        ),
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: fetchGrowthRecords,
+          color: AppColors.brandPrimary,
+          child: loading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.brandPrimary,
+                  ),
+                )
+              : AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: records.isEmpty
+                      ? _buildEmptyState()
+                      : _buildContent(
+                          heightZ: heightZ,
+                          weightZ: weightZ,
+                          bmiZ: bmiZ,
+                        ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-            const SizedBox(height: 16),
-            Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _fetchGrowthHistory,
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandPrimary),
-              child: Text(_t('Retry', 'Subukan Muli')),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.child_care,
+                size: 64,
+                color: AppColors.brandPrimary.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Growth Records Yet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Growth measurements for ${getChildName()} will appear here once recorded.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
             ),
           ],
         ),
@@ -208,452 +577,774 @@ class _MotherChildGrowthPageState extends State<MotherChildGrowthPage> {
     );
   }
 
-  Widget _buildEmptyView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildContent({
+    required double? heightZ,
+    required double? weightZ,
+    required double? bmiZ,
+  }) {
+    final heightValues = _getChartValues('height');
+    final heightLabels = _getChartLabels('height');
+    final weightValues = _getChartValues('weight');
+    final weightLabels = _getChartLabels('weight');
+    final bmiValues = _getChartValues('bmi');
+    final bmiLabels = _getChartLabels('bmi');
+
+    final weightWhoCurves = weightValues.length >= 2
+        ? _buildWhoCurves('weight', childSex, _getValidRecords('weight'))
+        : <ReferenceCurve>[];
+
+    final heightWhoCurves = heightValues.length >= 2
+        ? _buildWhoCurves('height', childSex, _getValidRecords('height'))
+        : <ReferenceCurve>[];
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      children: [
+        HeroCard(
+          image: null,
+          title: getChildName(),
+          subtitle: calculateAge(),
+          sex: childSex,
+          showWeekBadge: false,
+          showHeartRow: false,
+        ),
+        const SizedBox(height: 14),
+        _buildTabBar(),
+        const SizedBox(height: 14),
+        _buildMetricCard(
+          label: 'BMI',
+          value: latestBMI > 0 ? latestBMI.toStringAsFixed(1) : 'n/a',
+          zScore: bmiZ,
+          bmiValue: latestBMI > 0 ? latestBMI : null,
+          icon: Icons.straighten,
+          color: AppColors.brandText,
+          show: activeTab == 0,
+        ),
+        _buildMetricCard(
+          label: 'Weight',
+          value: latestWeight > 0
+              ? '${latestWeight.toStringAsFixed(1)} kg'
+              : 'n/a',
+          zScore: weightZ,
+          icon: Icons.monitor_weight,
+          color: AppColors.brandAccent,
+          show: activeTab == 1,
+        ),
+        _buildMetricCard(
+          label: 'Height',
+          value: latestHeight > 0
+              ? '${latestHeight.toStringAsFixed(1)} cm'
+              : 'n/a',
+          zScore: heightZ,
+          icon: Icons.height,
+          color: AppColors.brandPrimary,
+          show: activeTab == 2,
+        ),
+        if (activeTab == 0 &&
+            bmiValues.length >= 2 &&
+            bmiLabels.length >= 2 &&
+            bmiValues.length == bmiLabels.length)
+          ChartCard(
+            title: 'BMI History',
+            lineColor: AppColors.brandPrimary,
+            values: bmiValues,
+            labels: bmiLabels,
+            unit: 'kg/m²',
+            startingLabel: 'First',
+            startingValue: bmiValues.first.toStringAsFixed(1),
+            latestLabel: 'Latest',
+            latestValue: latestBMI > 0 ? latestBMI.toStringAsFixed(1) : 'n/a',
+            insightText: 'BMI trend indicates body composition changes.',
+          ),
+        if (activeTab == 0 && bmiValues.length < 2)
+          _buildInsufficientDataMessage('BMI'),
+
+        if (activeTab == 1 &&
+            weightValues.length >= 2 &&
+            weightLabels.length >= 2 &&
+            weightValues.length == weightLabels.length)
+          ChartCard(
+            title: 'Weight History',
+            lineColor: AppColors.brandAccent,
+            values: weightValues,
+            labels: weightLabels,
+            unit: 'kg',
+            referenceCurves: weightWhoCurves,
+            startingLabel: 'First',
+            startingValue: '${weightValues.first.toStringAsFixed(1)} kg',
+            latestLabel: 'Latest',
+            latestValue: '${latestWeight.toStringAsFixed(1)} kg',
+            insightText:
+                'Weight tracking provides insight into nutritional status.',
+          ),
+        if (activeTab == 1 && weightValues.length < 2)
+          _buildInsufficientDataMessage('Weight'),
+
+        if (activeTab == 2 &&
+            heightValues.length >= 2 &&
+            heightLabels.length >= 2 &&
+            heightValues.length == heightLabels.length)
+          ChartCard(
+            title: 'Height History',
+            lineColor: AppColors.brandPrimary,
+            values: heightValues,
+            labels: heightLabels,
+            unit: 'cm',
+            referenceCurves: heightWhoCurves,
+            startingLabel: 'First',
+            startingValue: '${heightValues.first.toStringAsFixed(1)} cm',
+            latestLabel: 'Latest',
+            latestValue: '${latestHeight.toStringAsFixed(1)} cm',
+            insightText:
+                'Weekly height measurements showing growth pattern over time.',
+          ),
+        if (activeTab == 2 && heightValues.length < 2)
+          _buildInsufficientDataMessage('Height'),
+        const SizedBox(height: 20),
+        _buildCustomInsightCard(
+          heightZ: heightZ,
+          weightZ: weightZ,
+          bmiZ: bmiZ,
+        ),
+        const SizedBox(height: 24),
+        _buildHistorySection(),
+      ],
+    );
+  }
+
+  Widget _buildTabBar() {
+    final tabs = ['BMI', 'Weight', 'Height'];
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: List.generate(tabs.length, (index) {
+          final isActive = activeTab == index;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => activeTab = index),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: isActive ? AppColors.brandPrimary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color:
+                                AppColors.brandPrimary.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: Text(
+                    tabs[index],
+                    style: TextStyle(
+                      color: isActive ? Colors.white : AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildMetricCard({
+    required String label,
+    required String value,
+    required double? zScore,
+    double? bmiValue,
+    required IconData icon,
+    required Color color,
+    required bool show,
+  }) {
+    if (!show) return const SizedBox.shrink();
+
+    final zScoreDesc = _describeZScore(zScore);
+    final bmiCategory =
+        label == 'BMI' && bmiValue != null ? _bmiCategory(bmiValue) : null;
+    final bmiCategoryColor =
+        bmiCategory != null ? _bmiCategoryColor(bmiCategory) : null;
+
+    return AnimatedOpacity(
+      opacity: show ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 200),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '$label Summary',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                if (label == 'BMI') ...[
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: _showReferenceDialog,
+                    child: const Icon(
+                      Icons.help_outline_rounded,
+                      color: AppColors.textSecondary,
+                      size: 16,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.5,
+              ),
+            ),
+            if (bmiCategory != null) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: bmiCategoryColor!.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    bmiCategory,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: bmiCategoryColor,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            if (label != 'BMI') ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _zScoreColor(zScore).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        zScoreDesc,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: _zScoreColor(zScore),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Text(
+              'This is a guide, not a diagnosis. Mild differences may be normal.',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInsufficientDataMessage(String metric) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Row(
         children: [
-          const Icon(Icons.bar_chart_outlined, size: 64, color: AppColors.textSecondary),
-          const SizedBox(height: 16),
-          Text(_t('No Records Found', 'Walang Datos na Nahanap'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(_t('Growth history will appear here once registered.', 'Ang kasaysayan ng paglaki ay lalabas dito kapag may naitala na.')),
+          Icon(Icons.info_outline,
+              color: AppColors.textSecondary.withValues(alpha: 0.6), size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Not enough data for $metric chart (need at least 2 measurements)',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTabContent({required String metric, required String sex}) {
-    // 1. Prepare actual spots
-    final List<FlSpot> actualSpots = [];
-    final Map<int, double> recordMap = {};
+  Widget _buildCustomInsightCard({
+    required double? heightZ,
+    required double? weightZ,
+    required double? bmiZ,
+  }) {
+    final isFilipino = LanguageService.isFilipino;
+    String displayText = '';
 
-    for (final record in _records) {
-      final date = DateTime.parse(record['created_at'].toString());
-      final ageWeeks = _ageInWeeksForDate(date);
-      
-      double val = 0.0;
-      if (metric == 'height') {
-        val = (record['child_height'] as num?)?.toDouble() ?? 0.0;
-      } else if (metric == 'weight') {
-        val = (record['child_weight'] as num?)?.toDouble() ?? 0.0;
+    if (activeTab == 0) {
+      final z = bmiZ;
+      if (z == null || z.isNaN || z.isInfinite) {
+        displayText = isFilipino
+            ? 'Hindi sapat ang datos para sa pagsusuri ng BMI.'
+            : 'Insufficient data for BMI analysis.';
+      } else if (z < -1) {
+        displayText = isFilipino
+            ? 'Ang BMI ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ibig sabihin, medyo mababa ang timbang niya kumpara sa kaniyang tangkad, na karaniwang nangyayari kapag napaka-aktibo ng bata o mabilis na tumatangkad.'
+            : "Your child's BMI is slightly below the standard range for their age. This means their weight is relatively low compared to their height, which is common during active phases or rapid growth spurts.";
+      } else if (z <= 1) {
+        displayText = isFilipino
+            ? 'Ang BMI ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Nagpapakita ito ng malusog at balanseng ugnayan sa pagitan ng kaniyang tangkad at timbang habang patuloy siyang lumalaki.'
+            : "Your child's BMI is within the expected standard range for their age. This indicates a healthy, balanced relationship between their height and weight as they continue to grow.";
       } else {
-        // BMI
-        final h = (record['child_height'] as num?)?.toDouble() ?? 0.0;
-        final w = (record['child_weight'] as num?)?.toDouble() ?? 0.0;
-        val = _calculateBMI(h, w);
+        displayText = isFilipino
+            ? 'Ang BMI ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ibig sabihin, medyo mas mabigat siya kumpara sa kaniyang tangkad, na maaaring bahagi ng kaniyang normal na paglaki o hubog ng katawan.'
+            : "Your child's BMI is slightly above the standard range for their age. This means their weight is a bit higher relative to their height, which can be a temporary phase or natural body build variation.";
       }
-
-      if (val > 0) {
-        actualSpots.add(FlSpot(ageWeeks.toDouble(), val));
-        recordMap[ageWeeks] = val;
+    } else if (activeTab == 1) {
+      final z = weightZ;
+      if (z == null || z.isNaN || z.isInfinite) {
+        displayText = isFilipino
+            ? 'Hindi sapat ang datos para sa pagsusuri ng timbang.'
+            : 'Insufficient data for weight analysis.';
+      } else if (z < -1) {
+        displayText = isFilipino
+            ? 'Ang timbang ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ipinapakita nito na medyo mas magaan siya kaysa sa karaniwan, na maaaring dahil sa kaniyang pagiging aktibo o mabilis na paglaki.'
+            : "Your child's weight is slightly below the standard range for their age. This suggests they are a bit lighter than average, which can happen if they are highly active or during a growth spurt.";
+      } else if (z <= 1) {
+        displayText = isFilipino
+            ? 'Ang timbang ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Isang magandang senyales ito na sapat ang kaniyang nutrisyon at patuloy siyang lumalaki nang malusog.'
+            : "Your child's weight is within the expected standard range for their age. This is a wonderful sign that they are receiving good nourishment and gaining weight steadily.";
+      } else {
+        displayText = isFilipino
+            ? 'Ang timbang ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ipinapakita nito na medyo mas mabigat siya kaysa sa karaniwan, na maaaring dahil sa kaniyang natural na pangangatawan.'
+            : "Your child's weight is slightly above the standard range for their age. This indicates they are a bit heavier than average for their age, which can be due to their natural body frame.";
+      }
+    } else {
+      final z = heightZ;
+      if (z == null || z.isNaN || z.isInfinite) {
+        displayText = isFilipino
+            ? 'Hindi sapat ang datos para sa pagsusuri ng tangkad.'
+            : 'Insufficient data for height analysis.';
+      } else if (z < -1) {
+        displayText = isFilipino
+            ? 'Ang tangkad ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ibig sabihin, medyo mas mababa siya kaysa sa karaniwan, na madalas ay dulot ng henetika o sariling takbo ng kaniyang paglaki.'
+            : "Your child's height is slightly below the standard range for their age. This means they are a bit shorter than average, which is often influenced by genetics or individual growth timing.";
+      } else if (z <= 1) {
+        displayText = isFilipino
+            ? 'Ang tangkad ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Ipinapakita nito na maganda at tuloy-tuloy ang kaniyang pagtangkad sa malusog na pamamaraan.'
+            : "Your child's height is within the expected standard range for their age. This shows they are stretching up and growing beautifully at a steady, healthy pace.";
+      } else {
+        displayText = isFilipino
+            ? 'Ang tangkad ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ibig sabihin, mas matangkad siya kaysa sa karaniwan, na nagpapakita ng magandang paglaki ng kaniyang mga buto at katawan.'
+            : "Your child's height is slightly above the standard range for their age. This indicates they are taller than average for their age, showing active bone development and growth.";
       }
     }
 
-    actualSpots.sort((a, b) => a.x.compareTo(b.x));
+    final activeColor = activeTab == 0
+        ? AppColors.brandText
+        : activeTab == 1
+            ? AppColors.brandAccent
+            : AppColors.brandPrimary;
 
-    // 2. Fetch WHO standard curves
-    final List<FlSpot> medianSpots = [];
-    final List<FlSpot> minSpots = []; // -1 SD
-    final List<FlSpot> maxSpots = []; // +1 SD
+    final headerText = activeTab == 0
+        ? (isFilipino ? 'PAGSURI NG BMI' : 'BMI INSIGHT')
+        : activeTab == 1
+            ? (isFilipino ? 'PAGSURI NG TIMBANG' : 'WEIGHT INSIGHT')
+            : (isFilipino ? 'PAGSURI NG TANGKAD' : 'HEIGHT INSIGHT');
 
-    // Plot WHO standards for weeks 0 to 13 dynamically
-    for (int w = 0; w <= 13; w++) {
-      Map<String, dynamic>? ref;
-      if (metric == 'height') {
-        ref = GrowthCalculator.getHeightData(w, sex);
-      } else if (metric == 'weight') {
-        ref = GrowthCalculator.getWeightData(w, sex);
-      } else {
-        ref = GrowthCalculator.getBMIData(w, sex);
-      }
-
-      if (ref != null) {
-        final x = w.toDouble();
-        medianSpots.add(FlSpot(x, (ref['sd0'] as num).toDouble()));
-        minSpots.add(FlSpot(x, (ref['sd1neg'] as num).toDouble()));
-        maxSpots.add(FlSpot(x, (ref['sd1'] as num).toDouble()));
-      }
-    }
-
-    final double startWeek = actualSpots.isNotEmpty ? actualSpots.first.x : 0.0;
-    final double endWeek = actualSpots.isNotEmpty ? actualSpots.last.x.clamp(8, 13) : 13.0;
-
-    final allSpots = [...actualSpots, ...medianSpots, ...minSpots, ...maxSpots];
-    final double minY = allSpots.isEmpty ? 0 : allSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b) * 0.9;
-    final double maxY = allSpots.isEmpty ? 50 : allSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b) * 1.1;
-
-    final String unit = metric == 'height' ? 'cm' : (metric == 'weight' ? 'kg' : 'kg/m²');
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: activeColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: activeColor.withValues(alpha: 0.15),
+          width: 1.2,
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          HeroCard(
-            image: null,
-            title: widget.childName,
-            subtitle: widget.childAge,
-            sex: widget.childGender,
-            showWeekBadge: false,
-            showHeartRow: false,
-          ),
-          const SizedBox(height: 16),
-
-          // Growth Chart Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: activeColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-              ],
-              border: Border.all(color: Colors.grey.shade100),
+                child: Icon(
+                  activeTab == 0
+                      ? Icons.straighten
+                      : activeTab == 1
+                          ? Icons.monitor_weight
+                          : Icons.height,
+                  color: activeColor,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                headerText,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: activeColor,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            displayText,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textPrimary,
+              height: 1.45,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistorySection() {
+    final historyRecords = records.reversed.toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.history,
+                color: AppColors.brandPrimary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Growth History',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${records.length} record${records.length != 1 ? 's' : ''}',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (historyRecords.isEmpty)
+          const Center(
+            child: Text(
+              'No growth measurements available yet.',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          )
+        else
+          ...historyRecords.map((record) {
+            final height = (record['child_height'] as num?)?.toDouble() ?? 0;
+            final weight = (record['child_weight'] as num?)?.toDouble() ?? 0;
+            final date = record['created_at']?.toString() ?? '';
+            final weeks = _ageInWeeks(DateTime.parse(date));
+            final isLatest = record == records.last;
+            final bmi = _calculateBMI(height, weight);
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildHistoryRecordCard(
+                height: height,
+                weight: weight,
+                bmi: bmi,
+                date: formatDate(date),
+                weekNumber: weeks,
+                isLatest: isLatest,
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildHistoryRecordCard({
+    required double height,
+    required double weight,
+    required double bmi,
+    required String date,
+    required int weekNumber,
+    required bool isLatest,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: isLatest
+            ? Border.all(
+                color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                width: 1.5,
+              )
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _t('${metric.toUpperCase()} Growth Trend', 'Progreso ng ${metric.toUpperCase()}'),
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      date,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          color: AppColors.brandPrimary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(_t('Actual', 'Sukat'), style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                        const SizedBox(width: 10),
-                        Container(
-                          width: 10,
-                          height: 10,
-                          color: Colors.grey.shade300,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(_t('Normal Range', 'Normal'), style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                      ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'Week $weekNumber',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 200,
-                  child: LineChart(
-                    LineChartData(
-                      minX: startWeek,
-                      maxX: endWeek,
-                      minY: minY,
-                      maxY: maxY,
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        getDrawingHorizontalLine: (value) => FlLine(
-                          color: Colors.grey.shade100,
-                          strokeWidth: 1,
-                        ),
-                      ),
-                      titlesData: FlTitlesData(
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 38,
-                            getTitlesWidget: (val, meta) => Text(
-                              '${val.toStringAsFixed(0)} $unit',
-                              style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
-                            ),
-                          ),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 22,
-                            getTitlesWidget: (val, meta) => Text(
-                              'W${val.toStringAsFixed(0)}',
-                              style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
-                            ),
-                          ),
-                        ),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      lineBarsData: [
-                        // Shaded Range (-1 to +1 SD) dynamically represented by boundary lines
-                        LineChartBarData(
-                          spots: minSpots,
-                          isCurved: true,
-                          color: Colors.grey.shade300,
-                          barWidth: 1.5,
-                          dotData: const FlDotData(show: false),
-                        ),
-                        LineChartBarData(
-                          spots: maxSpots,
-                          isCurved: true,
-                          color: Colors.grey.shade300,
-                          barWidth: 1.5,
-                          dotData: const FlDotData(show: false),
-                        ),
-                        // Median standard
-                        LineChartBarData(
-                          spots: medianSpots,
-                          isCurved: true,
-                          color: Colors.grey.shade400,
-                          barWidth: 1,
-                          dashArray: [5, 5],
-                          dotData: const FlDotData(show: false),
-                        ),
-                        // Child actual trajectory
-                        if (actualSpots.isNotEmpty)
-                          LineChartBarData(
-                            spots: actualSpots,
-                            isCurved: true,
-                            color: AppColors.brandPrimary,
-                            barWidth: 3,
-                            dotData: const FlDotData(show: true),
-                            belowBarData: BarAreaData(show: false),
-                          ),
-                      ],
+              ),
+              if (isLatest)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Latest',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brandPrimary,
                     ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (activeTab == 0) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMeasurementItem(
+                    'Height',
+                    '${height.toStringAsFixed(1)} cm',
+                    Icons.height,
+                    AppColors.brandPrimary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildMeasurementItem(
+                    'Weight',
+                    '${weight.toStringAsFixed(1)} kg',
+                    Icons.monitor_weight,
+                    AppColors.brandAccent,
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // Interpretation Card
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.brandText.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.brandText.withValues(alpha: 0.15),
+                  width: 1,
                 ),
-              ],
-              border: Border.all(color: Colors.grey.shade100),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.info_outline_rounded, color: AppColors.brandPrimary, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      _t('Clinical Interpretation', 'Interpretasyon sa Sukat'),
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.straighten, size: 18, color: AppColors.brandText),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Calculated BMI',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brandText,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _getLocalInterpretation(metric, sex),
-                  style: const TextStyle(fontSize: 13, height: 1.4, color: AppColors.textSecondary),
-                ),
-              ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    bmi > 0 ? bmi.toStringAsFixed(1) : 'n/a',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // Measurement History Table Card
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-              border: Border.all(color: Colors.grey.shade100),
+          ] else if (activeTab == 1) ...[
+            _buildMeasurementItem(
+              'Weight',
+              '${weight.toStringAsFixed(1)} kg',
+              Icons.monitor_weight,
+              AppColors.brandAccent,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _t('Measurement History', 'Kasaysayan ng mga Sukat'),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                ),
-                const SizedBox(height: 14),
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _records.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
-                  itemBuilder: (context, idx) {
-                    final record = _records[_records.length - 1 - idx]; // Show latest first
-                    final date = DateTime.parse(record['created_at'].toString());
-                    final ageWeeks = _ageInWeeksForDate(date);
-                    
-                    double val = 0.0;
-                    if (metric == 'height') {
-                      val = (record['child_height'] as num?)?.toDouble() ?? 0.0;
-                    } else if (metric == 'weight') {
-                      val = (record['child_weight'] as num?)?.toDouble() ?? 0.0;
-                    } else {
-                      final h = (record['child_height'] as num?)?.toDouble() ?? 0.0;
-                      final w = (record['child_weight'] as num?)?.toDouble() ?? 0.0;
-                      val = _calculateBMI(h, w);
-                    }
-
-                    // Compute classification
-                    String badgeLabel = 'Expected';
-                    Color badgeColor = AppColors.success;
-                    
-                    if (metric == 'height') {
-                      final z = GrowthCalculator.calculateHeightZScore(val, ageWeeks, sex);
-                      if (z != null) {
-                        if (z < -1) {
-                          badgeLabel = 'Below Standard';
-                          badgeColor = Colors.orange;
-                        } else if (z > 1) {
-                          badgeLabel = 'Above Standard';
-                          badgeColor = Colors.orange;
-                        }
-                      }
-                    } else if (metric == 'weight') {
-                      final z = GrowthCalculator.calculateWeightZScore(val, ageWeeks, sex);
-                      if (z != null) {
-                        if (z < -1) {
-                          badgeLabel = 'Below Standard';
-                          badgeColor = Colors.orange;
-                        } else if (z > 1) {
-                          badgeLabel = 'Above Standard';
-                          badgeColor = Colors.orange;
-                        }
-                      }
-                    } else {
-                      final z = GrowthCalculator.calculateBMIZScore(val, ageWeeks, sex);
-                      if (z != null) {
-                        if (z < -1) {
-                          badgeLabel = 'Below Standard';
-                          badgeColor = Colors.orange;
-                        } else if (z > 1) {
-                          badgeLabel = 'Above Standard';
-                          badgeColor = Colors.orange;
-                        }
-                      }
-                    }
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                DateFormat('MMMM d, yyyy').format(date),
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _t('Week $ageWeeks old', 'Ika-$ageWeeks linggo gulang'),
-                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              Text(
-                                '${val.toStringAsFixed(1)} $unit',
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                              ),
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: badgeColor.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  _t(badgeLabel, badgeLabel),
-                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: badgeColor),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ],
+          ] else if (activeTab == 2) ...[
+            _buildMeasurementItem(
+              'Height',
+              '${height.toStringAsFixed(1)} cm',
+              Icons.height,
+              AppColors.brandPrimary,
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  String _getLocalInterpretation(String metric, String sex) {
-    if (_records.isEmpty) return 'No growth records found.';
-    
-    final latestRecord = _records.last;
-    final date = DateTime.parse(latestRecord['created_at'].toString());
-    final ageWeeks = _ageInWeeksForDate(date);
-    
-    final double height = (latestRecord['child_height'] as num?)?.toDouble() ?? 0.0;
-    final double weight = (latestRecord['child_weight'] as num?)?.toDouble() ?? 0.0;
-    final double bmi = _calculateBMI(height, weight);
-
-    if (metric == 'height') {
-      final z = GrowthCalculator.calculateHeightZScore(height, ageWeeks, sex);
-      if (z == null) return 'Height interpretation unavailable.';
-      if (z < -1) {
-        return 'The child\'s length is slightly below the standard range for their age. Ensure adequate breastfeeding or formula intake and track height again next week.';
-      } else if (z <= 1) {
-        return 'The child\'s length is within the expected WHO standard range for their age. They are growing steadily!';
-      } else {
-        return 'The child\'s length is slightly above the standard range for their age, indicating a tall healthy stature.';
-      }
-    } else if (metric == 'weight') {
-      final z = GrowthCalculator.calculateWeightZScore(weight, ageWeeks, sex);
-      if (z == null) return 'Weight interpretation unavailable.';
-      if (z < -1) {
-        return 'The child\'s weight is slightly below the expected WHO standards. Check their feeding frequency and confirm they are feeding properly.';
-      } else if (z <= 1) {
-        return 'The child\'s weight is perfectly within the expected WHO standard range for their age. Great job caring for them!';
-      } else {
-        return 'The child\'s weight is slightly above the expected standard range. Normal variations exist, continue healthy active play and monitoring.';
-      }
-    } else {
-      // BMI
-      final z = GrowthCalculator.calculateBMIZScore(bmi, ageWeeks, sex);
-      if (z == null) return 'BMI interpretation unavailable.';
-      if (z < -1) {
-        final wZ = GrowthCalculator.calculateWeightZScore(weight, ageWeeks, sex);
-        final hZ = GrowthCalculator.calculateHeightZScore(height, ageWeeks, sex);
-        if (wZ != null && wZ >= -1 && hZ != null && hZ <= 1) {
-          return 'Although weight and length are individually normal, the weight is on the lower side relative to height, resulting in a slightly below standard BMI.';
-        }
-        return 'The child\'s BMI-for-Age is slightly below standard expected WHO ranges, which indicates they are lean. Continue nourishing and monitoring.';
-      } else if (z <= 1) {
-        return 'The child\'s weight is perfectly proportioned to their height, resulting in a completely healthy expected standard BMI.';
-      } else {
-        return 'The child\'s BMI is slightly above standard limits. This means they are slightly heavier relative to their length. Track their active minutes and balanced diet.';
-      }
-    }
+  Widget _buildMeasurementItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.3,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
