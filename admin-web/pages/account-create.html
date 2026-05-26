@@ -226,10 +226,11 @@
                         class="form-control"
                         type="email"
                         id="email_address"
-                        placeholder="example@email.com"
+                        placeholder="example@gmail.com"
                         required
                       />
                     </div>
+                    <span class="form-error" id="email-error" style="display: none;"></span>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="phone_number"
@@ -244,6 +245,7 @@
                         placeholder="09XX-XXX-XXXX"
                       />
                     </div>
+                    <span class="form-error" id="phone-error" style="display: none;"></span>
                   </div>
                 </div>
 
@@ -549,11 +551,14 @@
         document.getElementById("reset-btn").addEventListener("click", () => {
           document.getElementById("create-form").reset();
           document.getElementById("form-alert").style.display = "none";
+          emailInput.classList.remove("error");
+          phoneInput.classList.remove("error");
+          emailErrorMsg.style.display = "none";
+          phoneErrorMsg.style.display = "none";
           // Restore BHC group (midwife is default after reset)
           bhcGroup.style.display = "";
           updatePreviewBadge("midwife");
           updatePreview();
-
         });
 
         /* ── Load BHC ── */
@@ -594,20 +599,68 @@
           b.className = `badge badge-${type}`;
         }
 
+        const emailInput = document.getElementById("email_address");
+        const phoneInput = document.getElementById("phone_number");
+        const emailErrorMsg = document.getElementById("email-error");
+        const phoneErrorMsg = document.getElementById("phone-error");
+
+        function validateEmail() {
+          const val = emailInput.value.trim();
+          const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i;
+          if (!val) {
+            emailInput.classList.add("error");
+            emailErrorMsg.textContent = "Email address is required.";
+            emailErrorMsg.style.display = "block";
+            return false;
+          } else if (!emailRegex.test(val)) {
+            emailInput.classList.add("error");
+            emailErrorMsg.textContent = "Please enter a valid Gmail address (e.g. user@gmail.com).";
+            emailErrorMsg.style.display = "block";
+            return false;
+          } else {
+            emailInput.classList.remove("error");
+            emailErrorMsg.style.display = "none";
+            return true;
+          }
+        }
+
+        function validatePhone() {
+          const val = phoneInput.value.trim();
+          if (!val) {
+            phoneInput.classList.remove("error");
+            phoneErrorMsg.style.display = "none";
+            return true;
+          } else if (!isValidPhilippineNumber(val)) {
+            phoneInput.classList.add("error");
+            phoneErrorMsg.textContent = "Please enter a valid Philippine phone number (e.g. 09123456789).";
+            phoneErrorMsg.style.display = "block";
+            return false;
+          } else {
+            phoneInput.classList.remove("error");
+            phoneErrorMsg.style.display = "none";
+            return true;
+          }
+        }
+
         /* ── Live preview ── */
         function updatePreview() {
           const fn = document.getElementById("first_name").value.trim();
           const ln = document.getElementById("last_name").value.trim();
-          const em = document.getElementById("email_address").value.trim();
+          const em = emailInput.value.trim();
           const initials = ((fn[0] ?? "") + (ln[0] ?? "")).toUpperCase() || "?";
           document.getElementById("preview-avatar").textContent = initials;
           document.getElementById("preview-name").textContent =
             [fn, ln].filter(Boolean).join(" ") || "New Account";
           document.getElementById("preview-email").textContent = em || "—";
         }
-        ["first_name", "last_name", "email_address"].forEach((id) =>
+        ["first_name", "last_name"].forEach((id) =>
           document.getElementById(id).addEventListener("input", updatePreview),
         );
+        emailInput.addEventListener("input", () => {
+          validateEmail();
+          updatePreview();
+        });
+        phoneInput.addEventListener("input", validatePhone);
         updatePreview();
 
 
@@ -798,13 +851,17 @@
             const bhcId = document.getElementById("bhc_id").value;
 
             /* Validation */
-            if (!first || !last || !email) {
-              return showAlert(
-                "First name, last name, and email are required.",
-              );
+            const isEmailValid = validateEmail();
+            const isPhoneValid = validatePhone();
+
+            if (!first || !last) {
+              return showAlert("First name and last name are required.");
             }
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-              return showAlert("Please enter a valid email address.");
+            if (!isEmailValid) {
+              return showAlert("Please enter a valid Gmail address (ending in @gmail.com).");
+            }
+            if (!isPhoneValid) {
+              return showAlert("Please enter a valid Philippine phone number (starts with 09 and is 11 digits).");
             }
             if (type === "midwife" && !bhcId) {
               return showAlert(
