@@ -496,10 +496,12 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
                       ]
                     : immunizations.map((imm) {
                         final vaccine = imm['vaccine'] as Map<String, dynamic>?;
+                        final doseNum = vaccine?['dose_number'];
                         return RecordItem(
                           leadingIcon: Icons.vaccines,
                           label: vaccine?['vaccine_name'] ??
                               _t('Unknown Vaccine', 'Hindi Kilalang Bakuna'),
+                          subLabel: doseNum != null ? '${_t('Dose', 'Dose')} $doseNum' : null,
                           value: formatDate(imm['vaccination_date']),
                           trailingWidget: StatusIndicator(
                             status: StatusIndicatorType.onTime,

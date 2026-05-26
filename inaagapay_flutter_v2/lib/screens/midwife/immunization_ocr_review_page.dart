@@ -209,20 +209,27 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
     return null;
   }
 
-  bool get _isFormValid {
+  String? get _validationError {
     final selectedItems = _reviewItems.where((item) => item.isSelected).toList();
-    if (selectedItems.isEmpty) return false;
+    if (selectedItems.isEmpty) return null;
 
+    final Set<int> seenVaccineIds = {};
     for (final item in selectedItems) {
       if (item.matchedVaccineId == null || item.vaccinationDate == null) {
-        return false;
+        return 'Make sure all selected vaccines have a valid match and date.';
       }
       if (widget.childBirthdate != null && item.vaccinationDate!.isBefore(widget.childBirthdate!)) {
-        return false;
+        return "Vaccination date cannot be before the child's birthdate.";
       }
+      if (seenVaccineIds.contains(item.matchedVaccineId!)) {
+        return 'Duplicate vaccine matches selected. You can only record a vaccine once.';
+      }
+      seenVaccineIds.add(item.matchedVaccineId!);
     }
-    return true;
+    return null;
   }
+
+  bool get _isFormValid => _validationError == null;
 
   Future<void> _saveRecords() async {
     final selectedItems = _reviewItems.where((item) => item.isSelected).toList();
@@ -244,8 +251,11 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
         });
       }
 
-      // Perform bulk insert
-      await client.from('immunization_record').insert(recordsToInsert);
+      // Perform bulk upsert to handle overlapping records that were already taken but confirmed to overwrite
+      await client.from('immunization_record').upsert(
+            recordsToInsert,
+            onConflict: 'child_id,vaccine_id',
+          );
 
       // Trigger automated vaccine SMS in the background
       try {
@@ -514,12 +524,12 @@ class _ImmunizationOcrReviewPageState extends State<ImmunizationOcrReviewPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (!_isFormValid && selectedCount > 0)
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 12),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
                             child: Center(
                               child: Text(
-                                'Make sure all selected vaccines have a valid match and date.',
-                                style: TextStyle(
+                                _validationError ?? 'Make sure all selected vaccines have a valid match and date.',
+                                style: const TextStyle(
                                   fontSize: 11,
                                   color: AppColors.error,
                                   fontWeight: FontWeight.bold,
