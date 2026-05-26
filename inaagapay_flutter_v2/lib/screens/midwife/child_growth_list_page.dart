@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/growth_calculator.dart';
 import '../../services/growth_reference_data.dart';
 import '../../services/groq_service.dart';
+import '../../services/language_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ai_analytics_card.dart';
 import '../../widgets/chart_card.dart';
@@ -262,58 +263,29 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
     }).join('\n');
 
     return '''
-You are a warm, caring assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
+You are a warm, caring midwife assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
 Your tone must be gentle, comforting, and encouraging. Use simple, non-clinical language.
-Do not use cold/technical terms (avoid z-scores, percentiles, or medical jargon). Focus on what the measurements mean for everyday care and reassuring the parent.
+Do NOT use diagnostic terms or medical jargon (avoid terms like underweight, overweight, obesity, diagnosis, or clinical standard deviation).
+Write EXACTLY 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight about how the child is growing based on their measurements. Focus on what the measurements mean for reassuring the parent.
 Refer to the child by their first name or as "your little one" ("iyong munting anak" in Filipino) to make it personal and comforting.
-Provide the response in both English and Filipino. Only one language will be shown at a time.
-Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
 
-Child: $childName
-Sex: ${sex.toLowerCase()}
-Current age: $ageWeeks weeks
-
-Latest measurements:
-Height: ${height.toStringAsFixed(1)} cm
-Weight: ${weight.toStringAsFixed(1)} kg
-
-Recent growth:
-$recordsSummary
+Provide the response in both English and Filipino.
+Use the exact output format below. Do not add extra sections, titles, bullet points, or tables.
 
 Output format:
 
 ## English
-## How Your Little One is Growing
-- A warm, personal summary celebrating the child's growth or gently noting concerns with practical advice.
-
-### Current Measurements
-- Length: ${height.toStringAsFixed(1)} cm
-- Weight: ${weight.toStringAsFixed(1)} kg
-
-### What This Means for You
-- Explain in simple terms what these numbers mean. Compare to expected healthy ranges in a friendly way.
-- If on track: celebrate! If not: be gentle, explain why it matters, and give food/care tips.
-
-### Tips from Your Ate
-- Practical, culturally relevant advice (local foods, feeding tips, play activities)
-- End with encouragement
+[Write exactly 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight here]
 
 ## Filipino
-## Kamusta ang Paglaki ng Iyong Munting Anak
-- Mainit at personal na buod — ipagdiwang ang paglaki o banayad na payo kung may concern.
+[Write exactly 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight in Tagalog here]
 
-### Kasalukuyang Sukat
-- Haba: ${height.toStringAsFixed(1)} cm
-- Timbang: ${weight.toStringAsFixed(1)} kg
-
-### Ano ang Ibig Sabihin Nito Para Sa Iyo
-- Ipaliwanag sa simpleng salita. Kung maayos: magdiwang! Kung hindi: maging banayad at magbigay ng payo tungkol sa pagkain at pangangalaga.
-
-### Payo mula sa Iyong Ate
-- Praktikal na payo (pagkain tulad ng malunggay, kalabasa, itlog, pag-aalaga, laro)
-- Tapusin ng pagpapalakas ng loob
-
-Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for daily care and follow-up.
+Child: $childName
+Sex: ${sex.toLowerCase()}
+Current age: $ageWeeks weeks
+Latest measurements: Length: ${height.toStringAsFixed(1)} cm, Weight: ${weight.toStringAsFixed(1)} kg, BMI: ${bmi.toStringAsFixed(1)}
+Recent growth:
+$recordsSummary
 ''';
   }
 
@@ -943,10 +915,7 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
         if (activeTab == 2 && heightValues.length < 2)
           _buildInsufficientDataMessage('Height'),
         const SizedBox(height: 20),
-        AiAnalyticsCard(
-          isLoading: aiLoading,
-          text: aiAnalysis ?? 'Generating AI growth analysis...',
-        ),
+        _buildAiInsightCard(),
         const SizedBox(height: 24),
         _buildHistorySection(),
       ],
@@ -1103,28 +1072,30 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
                 ),
               ),
             ],
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _zScoreColor(zScore).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      zScoreDesc,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _zScoreColor(zScore),
-                        fontWeight: FontWeight.w600,
+            if (label != 'BMI') ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _zScoreColor(zScore).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        zScoreDesc,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: _zScoreColor(zScore),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 10),
             Text(
               'This is a guide, not a diagnosis. Mild differences may be normal.',
@@ -1163,6 +1134,106 @@ Use calm, supportive wording. Keep it simple and easy to understand. Do not use 
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiInsightCard() {
+    if (aiAnalysis == null && !aiLoading) return const SizedBox.shrink();
+
+    final fullText = aiAnalysis ?? '';
+    final isFilipino = LanguageService.isFilipino;
+
+    // Parse out English/Filipino sections
+    final normalized = fullText.replaceAll('\r\n', '\n');
+    final englishRegex = RegExp(
+      r'(?:^|\n)(?:#+\s*|\*+|\[)?English(?:#+\s*|\*+|\])?:?\s*?\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?(?:Filipino|Tagalog)(?:#+\s*|\*+|\[)?:?|$)',
+      caseSensitive: false,
+    );
+    final filipinoRegex = RegExp(
+      r'(?:^|\n)(?:#+\s*|\*+|\[)?(?:Filipino|Tagalog)(?:#+\s*|\*+|\[)?:?\s*?\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?English(?:#+\s*|\*+|\[)?:?|$)',
+      caseSensitive: false,
+    );
+
+    final englishMatch = englishRegex.firstMatch(normalized);
+    final filipinoMatch = filipinoRegex.firstMatch(normalized);
+
+    final englishText = englishMatch?.group(1)?.trim();
+    final filipinoText = filipinoMatch?.group(1)?.trim();
+
+    final displayText = isFilipino 
+        ? (filipinoText ?? englishText ?? normalized.trim())
+        : (englishText ?? filipinoText ?? normalized.trim());
+
+    if (displayText.isEmpty && !aiLoading) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.brandPrimary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.15),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: AppColors.brandPrimary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                isFilipino ? 'GABAY NA PANANAW SA PAGLAKI' : 'AI GROWTH INSIGHT',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.brandPrimary,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (aiLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppColors.brandPrimary,
+                  ),
+                ),
+              ),
+            )
+          else
+            Text(
+              displayText,
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+                height: 1.45,
+              ),
+            ),
         ],
       ),
     );

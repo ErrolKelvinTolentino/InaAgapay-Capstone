@@ -601,10 +601,6 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
               ),
               const SizedBox(height: 12),
 
-              _buildGrowthCards(displayHeight, displayWeight),
-              const SizedBox(height: 12),
-              _buildBMICard(latestBMI, bmiStatus),
-              const SizedBox(height: 12),
               _buildProfileAiCard(),
 
               _buildSectionDivider(),
@@ -957,12 +953,203 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
   }
 
   Widget _buildProfileAiCard() {
-    return AiAnalyticsCard(
-      isLoading: aiLoading,
-      text: aiAnalysis ??
-          aiError ??
-          'AI growth insight will appear here once the latest height and weight records are available.',
+    if (latestGrowth == null) return const SizedBox.shrink();
+
+    final latestBMI = _getLatestBMI();
+    final latestHeight = (latestGrowth!['child_height'] as num?)?.toDouble() ?? 0.0;
+    final latestWeight = (latestGrowth!['child_weight'] as num?)?.toDouble() ?? 0.0;
+    final latestAgeWeeks = _ageInWeeks(DateTime.parse(latestGrowth!['created_at']));
+    final sex = (childData!['sex'] as String?) ?? 'female';
+    final childSex = sex.toLowerCase();
+
+    final status = latestBMI != null ? _bmiStatus(latestBMI) : 'Within expected standard range';
+    final bmiColor = _bmiStatusColor(status);
+
+    final heightZ = GrowthCalculator.calculateHeightZScore(latestHeight, latestAgeWeeks, childSex);
+    final weightZ = GrowthCalculator.calculateWeightZScore(latestWeight, latestAgeWeeks, childSex);
+
+    final heightLabel = heightZ == null ? 'Within expected range' : (heightZ < -1 ? 'Slightly Below' : (heightZ <= 1 ? 'Within expected range' : 'Slightly Above'));
+    final weightLabel = weightZ == null ? 'Within expected range' : (weightZ < -1 ? 'Slightly Below' : (weightZ <= 1 ? 'Within expected range' : 'Slightly Above'));
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChildGrowthListPage(childId: widget.childId),
+          ),
+        ).then((_) => fetchProfile());
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.trending_up_rounded,
+                    color: AppColors.brandPrimary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Growth Statistics (Click to View Chart)',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            // Badges Row
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: bmiColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: bmiColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Detail rows
+            _growthInfoRow('Current Weight', '${latestWeight.toStringAsFixed(1)} kg ($weightLabel)'),
+            _growthInfoRow('Current Length', '${latestHeight.toStringAsFixed(1)} cm ($heightLabel)'),
+            _growthInfoRow('Current BMI', '${latestBMI?.toStringAsFixed(1) ?? 'N/A'} kg/m²'),
+            _growthInfoRow('Age in Weeks', '$latestAgeWeeks weeks old'),
+
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            
+            // Dynamic interpretation text matching add growth record wording
+            Text(
+              _getBmiExplanationForDash(latestBMI, latestWeight, latestHeight, latestAgeWeeks, childSex, status),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: bmiColor,
+                height: 1.4,
+              ),
+            ),
+            
+            const SizedBox(height: 12),
+            const Align(
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'View History & Charts',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brandPrimary,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.brandPrimary),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _growthInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getBmiExplanationForDash(double? bmi, double weight, double height, int ageWeeks, String sex, String status) {
+    if (bmi == null) return '';
+    final heightZ = GrowthCalculator.calculateHeightZScore(height, ageWeeks, sex);
+    final weightZ = GrowthCalculator.calculateWeightZScore(weight, ageWeeks, sex);
+
+    if (status == 'Slightly below standard range') {
+      if (weightZ != null && weightZ < -1 && heightZ != null && heightZ > 1) {
+        return 'Both the child\'s weight is slightly below expected range and height is slightly above expected range, contributing to the lower BMI.';
+      }
+      if (weightZ != null && weightZ < -1) {
+        return 'The child\'s weight is slightly below the standard range for their age, contributing to the lower BMI.';
+      }
+      if (heightZ != null && heightZ > 1) {
+        return 'The child\'s height is slightly above the standard range for their age, which contributes to a lower BMI relative to their frame.';
+      }
+      if (weightZ != null && weightZ >= -1 && heightZ != null && heightZ <= 1) {
+        return 'Although the child\'s height and weight are both individually within expected ranges, the weight is on the lower side relative to their height, resulting in a slightly lower BMI.';
+      }
+      return 'The child\'s weight is lower than typical for their height at this age, resulting in a lower BMI.';
+    } else if (status == 'Slightly above standard range') {
+      if (weightZ != null && weightZ > 1 && heightZ != null && heightZ < -1) {
+        return 'Both the child\'s weight is slightly above expected range and height is slightly below expected range, contributing to the higher BMI.';
+      }
+      if (weightZ != null && weightZ > 1) {
+        return 'The child\'s weight is slightly above the standard range for their age, contributing to the higher BMI.';
+      }
+      if (heightZ != null && heightZ < -1) {
+        return 'The child\'s height is slightly below the standard range for their age, which contributes to a higher BMI relative to their frame.';
+      }
+      if (weightZ != null && weightZ <= 1 && heightZ != null && heightZ >= -1) {
+        return 'Although the child\'s height and weight are both individually within expected ranges, the weight is on the higher side relative to their height, resulting in a slightly higher BMI.';
+      }
+      return 'The child\'s weight is higher than typical for their height at this age, resulting in a higher BMI.';
+    } else {
+      return 'The child\'s height and weight are both within the expected standard range for this age, resulting in a healthy BMI.';
+    }
   }
 
   Future<void> _loadProfileAiInsight(int latestRecordId) async {

@@ -7,7 +7,6 @@ import '../../widgets/secondary_header.dart';
 import '../../widgets/hero_card.dart';
 import '../../widgets/records_display_card.dart';
 import '../../widgets/status_indicator.dart';
-import '../../widgets/ai_analytics_card.dart';
 import '../../services/groq_service.dart';
 import '../../services/growth_calculator.dart';
 import '../../services/language_service.dart';
@@ -842,171 +841,183 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     final status = latestBMI != null ? _bmiStatus(latestBMI) : 'Within expected standard range';
     final bmiColor = _bmiStatusColor(status);
 
-    // Height & Weight Z-Scores for Grid List (color-free)
     final heightZ = GrowthCalculator.calculateHeightZScore(latestHeight, latestAgeWeeks, childSex);
     final weightZ = GrowthCalculator.calculateWeightZScore(latestWeight, latestAgeWeeks, childSex);
 
     final heightLabel = heightZ == null ? _t('Within expected range', 'Naaayon sa inaasahan') : (heightZ < -1 ? _t('Slightly Below', 'Medyo Mababa') : (heightZ <= 1 ? _t('Within expected range', 'Naaayon sa inaasahan') : _t('Slightly Above', 'Medyo Mataas')));
     final weightLabel = weightZ == null ? _t('Within expected range', 'Naaayon sa inaasahan') : (weightZ < -1 ? _t('Slightly Below', 'Medyo Mababa') : (weightZ <= 1 ? _t('Within expected range', 'Naaayon sa inaasahan') : _t('Slightly Above', 'Medyo Mataas')));
 
-    // Try to find if the ai_response indicates mother logged it
     final isLoggedByMother = aiAnalysisCategory == 'growth_mother';
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.brandPrimary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.child_care_outlined,
-                  color: AppColors.brandPrimary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _t('Child Growth Analysis', 'Pagsusuri sa Paglaki'),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              if (isLoggedByMother)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.all(Radius.circular(6)),
-                  ),
-                  child: Text(
-                    _t('Self-logged', 'Sariling Tala'),
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFB45309),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Badges Row
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: bmiColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: bmiColor.withValues(alpha: 0.4)),
-                ),
-                child: Text(
-                  _t(status, status),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: bmiColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Detail rows
-          _growthInfoRow(_t('Current Weight', 'Timbang'), '${latestWeight.toStringAsFixed(1)} kg ($weightLabel)'),
-          _growthInfoRow(_t('Current Length', 'Haba'), '${latestHeight.toStringAsFixed(1)} cm ($heightLabel)'),
-          _growthInfoRow(_t('Current BMI', 'BMI'), '${latestBMI?.toStringAsFixed(1) ?? 'N/A'} kg/m²'),
-          _growthInfoRow(_t('Age in Weeks', 'Edad (Linggo)'), _t('$latestAgeWeeks weeks old', '$latestAgeWeeks linggo gulang')),
-
-          const SizedBox(height: 14),
-
-          // Advisory message box (loads background AI generated text)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade200),
+    return GestureDetector(
+      onTap: widget.onViewGrowth,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
-            child: aiLoading
-                ? const Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandPrimary),
-                    ),
-                  )
-                : Text(
-                    aiAnalysis ?? _t('No growth analysis available yet.', 'Wala pang pagsusuri sa paglaki na magagamit.'),
+          ],
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.trending_up_rounded,
+                    color: AppColors.brandPrimary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _t('Growth Statistics (Click to View Chart)', 'Statistika ng Paglaki (I-click para Makita ang Tsart)'),
                     style: const TextStyle(
-                      fontSize: 12,
-                      height: 1.5,
-                      color: AppColors.textSecondary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-          ),
-
-          const SizedBox(height: 12),
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: Text(
-                _t('Clinical Disclaimer & References', 'Mga Disclaimer at Sanggunian'),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.brandPrimary,
                 ),
-              ),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    _t(
-                      'This analysis is based on the WHO Child Growth Standards (0-13 weeks). Z-scores represent standard deviations from the median of healthy children. Self-logged entries should be verified on calibrated scales at the Barangay Health Center (BHC) for formal assessment.',
-                      'Ang pagsusuring ito ay batay sa WHO Child Growth Standards (0-13 linggo). Ang Z-score ay kumakatawan sa standard deviation mula sa median ng mga malulusog na bata. Ang mga sariling naitalang sukat ay dapat ma-verify sa Barangay Health Center (BHC) gamit ang calibrated na timbangan.'
+                if (isLoggedByMother)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.all(Radius.circular(6)),
                     ),
+                    child: Text(
+                      _t('Self-logged', 'Sariling Tala'),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFB45309),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            // Badges Row
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: bmiColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _t(status, status),
                     style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade500,
-                      height: 1.4,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: bmiColor,
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+
+            // Detail rows
+            _growthInfoRow(_t('Current Weight', 'Timbang'), '${latestWeight.toStringAsFixed(1)} kg ($weightLabel)'),
+            _growthInfoRow(_t('Current Length', 'Haba'), '${latestHeight.toStringAsFixed(1)} cm ($heightLabel)'),
+            _growthInfoRow(_t('Current BMI', 'BMI'), '${latestBMI?.toStringAsFixed(1) ?? 'N/A'} kg/m²'),
+            _growthInfoRow(_t('Age in Weeks', 'Edad (Linggo)'), _t('$latestAgeWeeks weeks old', '$latestAgeWeeks linggo gulang')),
+
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            
+            // Dynamic interpretation text matching add growth record wording
+            Text(
+              _getBmiExplanationForDash(latestBMI, latestWeight, latestHeight, latestAgeWeeks, childSex, status),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: bmiColor,
+                height: 1.4,
+              ),
+            ),
+            
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _t('View History & Charts', 'Tingnan ang Kasaysayan at Tsart'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brandPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.brandPrimary),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  String _getBmiExplanationForDash(double? bmi, double weight, double height, int ageWeeks, String sex, String status) {
+    if (bmi == null) return '';
+    final heightZ = GrowthCalculator.calculateHeightZScore(height, ageWeeks, sex);
+    final weightZ = GrowthCalculator.calculateWeightZScore(weight, ageWeeks, sex);
+
+    if (status == 'Slightly below standard range') {
+      if (weightZ != null && weightZ < -1 && heightZ != null && heightZ > 1) {
+        return 'Both the child\'s weight is slightly below expected range and height is slightly above expected range, contributing to the lower BMI.';
+      }
+      if (weightZ != null && weightZ < -1) {
+        return 'The child\'s weight is slightly below the standard range for their age, contributing to the lower BMI.';
+      }
+      if (heightZ != null && heightZ > 1) {
+        return 'The child\'s height is slightly above the standard range for their age, which contributes to a lower BMI relative to their frame.';
+      }
+      if (weightZ != null && weightZ >= -1 && heightZ != null && heightZ <= 1) {
+        return 'Although the child\'s height and weight are both individually within expected ranges, the weight is on the lower side relative to their height, resulting in a slightly lower BMI.';
+      }
+      return 'The child\'s weight is lower than typical for their height at this age, resulting in a lower BMI.';
+    } else if (status == 'Slightly above standard range') {
+      if (weightZ != null && weightZ > 1 && heightZ != null && heightZ < -1) {
+        return 'Both the child\'s weight is slightly above expected range and height is slightly below expected range, contributing to the higher BMI.';
+      }
+      if (weightZ != null && weightZ > 1) {
+        return 'The child\'s weight is slightly above the standard range for their age, contributing to the higher BMI.';
+      }
+      if (heightZ != null && heightZ < -1) {
+        return 'The child\'s height is slightly below the standard range for their age, which contributes to a higher BMI relative to their frame.';
+      }
+      if (weightZ != null && weightZ <= 1 && heightZ != null && heightZ >= -1) {
+        return 'Although the child\'s height and weight are both individually within expected ranges, the weight is on the higher side relative to their height, resulting in a slightly higher BMI.';
+      }
+      return 'The child\'s weight is higher than typical for their height at this age, resulting in a higher BMI.';
+    } else {
+      return 'The child\'s height and weight are both within the expected standard range for this age, resulting in a healthy BMI.';
+    }
   }
 
   Widget _growthInfoRow(String label, String value) {
@@ -1450,55 +1461,29 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     }).join('\n');
 
     return '''
-You are a warm, caring assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
+You are a warm, caring midwife assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
 Your tone must be gentle, comforting, and encouraging. Use simple, non-clinical language.
-Do not use cold/technical terms (avoid z-scores, percentiles, or medical jargon). Focus on what the measurements mean for everyday care and reassuring the parent.
+Do NOT use diagnostic terms or medical jargon (avoid terms like underweight, overweight, obesity, diagnosis, or clinical standard deviation).
+Write EXACTLY 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight about how the child is growing based on their measurements. Focus on what the measurements mean for reassuring the parent.
 Refer to the child by their first name or as "your little one" ("iyong munting anak" in Filipino) to make it personal and comforting.
-Provide the response in both English and Filipino. Only one language will be shown at a time.
-Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
 
-Child: $childName
-Sex: ${sex.toLowerCase()}
-Current age: $ageWeeks weeks
-
-Latest measurements:
-Height: ${height.toStringAsFixed(1)} cm
-Weight: ${weight.toStringAsFixed(1)} kg
-
-Recent growth:
-$recordsSummary
+Provide the response in both English and Filipino.
+Use the exact output format below. Do not add extra sections, titles, bullet points, or tables.
 
 Output format:
 
 ## English
-## Baby Growth Summary
-- A short, gentle, and comforting explanation of how the child is growing.
-
-### Current Measurements
-- Length: ${height.toStringAsFixed(1)} cm
-- Weight: ${weight.toStringAsFixed(1)} kg
-
-### What This Means
-- Simple, reassuring explanation of the numbers. Compare to expected healthy ranges in a friendly way.
-
-### Helpful Note
-- Reassuring tip or encouragement for the parents.
+[Write exactly 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight here]
 
 ## Filipino
-## Buod ng Paglaki ng Bata
-- Maikling, banayad, at nakapapawing-pagod na paliwanag kung paano lumalago ang bata.
+[Write exactly 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight in Tagalog here]
 
-### Kasalukuyang Sukat
-- Haba: ${height.toStringAsFixed(1)} cm
-- Timbang: ${weight.toStringAsFixed(1)} kg
-
-### Ano ang Kahulugan Nito
-- Simpleng paliwanag na nagbibigay-linaw at nagpapakalma sa magulang tungkol sa timbang at haba ng bata.
-
-### Paalala
-- Banayad na paalala at suporta mula sa isang mapagkalingang ate o midwife.
-
-Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for everyday care and follow-up.
+Child: $childName
+Sex: ${sex.toLowerCase()}
+Current age: $ageWeeks weeks
+Latest measurements: Length: ${height.toStringAsFixed(1)} cm, Weight: ${weight.toStringAsFixed(1)} kg, BMI: ${bmi.toStringAsFixed(1)}
+Recent growth:
+$recordsSummary
 ''';
   }
 
