@@ -16,6 +16,8 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
     />
     <link rel="stylesheet" href="../styles/main.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.6.0/jspdf.plugin.autotable.min.js"></script>
   </head>
   <body>
     <div class="app-layout">
@@ -67,7 +69,7 @@
             <p class="page-subtitle">See everything that happened in your system</p>
           </div>
           <div class="page-actions" style="display: flex; gap: 8px;">
-            <button class="btn btn-primary btn-sm" id="export-btn"><i class="fa-solid fa-file-csv"></i> Download Report</button>
+            <button class="btn btn-primary btn-sm" id="export-btn"><i class="fa-solid fa-file-pdf"></i> Download PDF Report</button>
             <button class="btn btn-secondary btn-sm" id="refresh-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
             <button class="btn btn-primary btn-sm" id="analyze-activity-btn">
               <i class="fa-solid fa-microchip"></i> Analyze Activity
@@ -483,22 +485,74 @@
 
         document.getElementById('export-btn')?.addEventListener('click',()=>{
           if(!filtered.length) return;
-          const headers = ["Date & Time","User","Role","What Happened","Type","Description"];
-          const rows = filtered.map(l=>[
+          
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4: 297mm x 210mm
+          
+          const headers = ["Date & Time", "User", "Role", "What Happened", "Type", "Description"];
+          const bodyData = filtered.map(l=>[
             fmtDT(l.action_timestamp),
-            l.accounts?[l.accounts.first_name,l.accounts.last_name].filter(Boolean).join(' '):'System',
-            l.accounts?.account_type==='admin'?'Admin':l.accounts?.account_type==='midwife'?'Midwife':'Mother'||'',
+            l.accounts ? [l.accounts.first_name, l.accounts.last_name].filter(Boolean).join(' ') : 'System',
+            l.accounts ? (l.accounts.account_type === 'admin' ? 'Admin' : l.accounts.account_type === 'midwife' ? 'Midwife' : 'Mother') : 'System',
             getHumanReadableActionName(l.action),
             getActionCategory(l.action),
-            (getHumanReadableDescription(l)||'').replace(/"/g,'""')
-          ].map(v=>`"${v}"`).join(','));
-          const csv = [headers.join(','), ...rows].join('\n');
-          const blob = new Blob([csv],{type:'text/csv'});
-          const a=document.createElement('a');
-          a.href=URL.createObjectURL(blob);
-          a.download=`audit_${new Date().toISOString().slice(0,10)}.csv`;
-          a.click();
-          URL.revokeObjectURL(a.href);
+            getHumanReadableDescription(l) || '—'
+          ]);
+          
+          doc.autoTable({
+            head: [headers],
+            body: bodyData,
+            startY: 32,
+            margin: { top: 25, bottom: 15, left: 14, right: 14 },
+            theme: 'striped',
+            headStyles: { fillColor: [255, 104, 165], textColor: [255, 255, 255], fontStyle: 'bold' },
+            styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica' },
+            columnStyles: {
+              0: { cellWidth: 42 }, // Date & Time
+              1: { cellWidth: 35 }, // User
+              2: { cellWidth: 20 }, // Role
+              3: { cellWidth: 35 }, // What Happened
+              4: { cellWidth: 22 }, // Type
+              5: { cellWidth: 'auto' } // Description
+            }
+          });
+          
+          const totalPages = doc.internal.getNumberOfPages();
+          for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            
+            // Header bar
+            doc.setFillColor(255, 104, 165);
+            doc.rect(0, 0, doc.internal.pageSize.width, 18, 'F');
+            
+            // Header Text
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.text('INAAGAPAY: MATERNAL & CHILD HEALTH SYSTEM', 14, 12);
+            
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text('SYSTEM AUDIT TRAIL REPORT', doc.internal.pageSize.width - 14, 12, { align: 'right' });
+            
+            // First Page metadata
+            if (i === 1) {
+              doc.setTextColor(50, 50, 50);
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(10);
+              doc.text(`Total Records: ${filtered.length}`, 14, 26);
+              doc.setFont('helvetica', 'normal');
+              doc.text(`Filters Applied: ${document.getElementById('search-input').value.trim() ? 'Search="' + document.getElementById('search-input').value.trim() + '"' : 'None'} | Action="${document.getElementById('filter-action').value || 'All'}"`, doc.internal.pageSize.width - 14, 26, { align: 'right' });
+            }
+            
+            // Footer
+            doc.setFontSize(8);
+            doc.setTextColor(128, 128, 128);
+            doc.text(`Generated by Admin: ${session.first_name} ${session.last_name} | Date: ${new Date().toLocaleString('en-PH')}`, 14, doc.internal.pageSize.height - 8);
+            doc.text(`Page ${i} of ${totalPages}`, doc.internal.pageSize.width - 14, doc.internal.pageSize.height - 8, { align: 'right' });
+          }
+          
+          doc.save(`audit_report_${new Date().toISOString().slice(0,10)}.pdf`);
         });
 
         document.getElementById('refresh-btn')?.addEventListener('click',loadAudit);

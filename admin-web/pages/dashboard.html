@@ -17,6 +17,8 @@
     />
     <link rel="stylesheet" href="../styles/main.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.6.0/jspdf.plugin.autotable.min.js"></script>
     <style>
       /* Additional audit table enhancements */
       .badge {
@@ -85,10 +87,15 @@
       <!-- ── Main ─────────────────────────────────── -->
       <main class="app-main">
         <!-- Welcome Banner -->
-        <div class="banner" id="welcome-banner">
+        <div class="banner" id="welcome-banner" style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
           <div class="banner-content">
             <div class="banner-title" id="banner-title">Good morning, Admin 👋</div>
             <div class="banner-subtitle">Here's what's happening with InaAgapay today — <span id="banner-date"></span></div>
+          </div>
+          <div>
+            <button class="btn btn-primary btn-sm" id="export-pdf-btn" style="background: white; color: var(--brand-primary); border: 1.5px solid transparent; box-shadow: var(--shadow-btn-primary);">
+              <i class="fa-solid fa-file-pdf"></i> Download PDF Report
+            </button>
           </div>
         </div>
 
@@ -172,6 +179,8 @@
         const SESSION_KEY = "inaagapay_admin_session";
         const session = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } })();
         if (!session || session.account_type !== "admin") { window.location.href = "../index.html"; return; }
+
+        let cachedAuditLogs = [];
 
         // Helper functions
         function escapeHtml(str) { const div = document.createElement("div"); div.textContent = str ?? ""; return div.innerHTML; }
@@ -313,6 +322,7 @@
               .order("action_timestamp", { ascending: false })
               .limit(15);
             if (error) throw error;
+            cachedAuditLogs = data || [];
             const tbody = document.getElementById("recent-audit-body");
             if (!data || data.length === 0) {
               tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--text-secondary);"><i class="fa-regular fa-clock"></i> No activity recorded yet.</td></tr>`;
@@ -417,6 +427,127 @@
             window.showAIAnalysis('Risk Assessment', analysis);
           } catch (err) { showToast('Risk scan failed: ' + err.message, 'error'); }
           finally { btn.disabled = false; btn.innerHTML = original; }
+        });
+
+        // ---------- PDF Export Handler ----------
+        document.getElementById('export-pdf-btn')?.addEventListener('click', () => {
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4: 297mm x 210mm
+          
+          // Print report subtitle and initial page layout details
+          doc.setTextColor(50, 50, 50);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.text('1. System Statistics Summary', 14, 28);
+          
+          // Draw stats table
+          const statsHeaders = ["Metric", "Count"];
+          const statsRows = [
+            ["Active Mothers", document.getElementById("stat-mothers").textContent || "0"],
+            ["Active Midwives", document.getElementById("stat-midwives").textContent || "0"],
+            ["Registered Children", document.getElementById("stat-children").textContent || "0"],
+            ["Ongoing Pregnancies", document.getElementById("stat-pregnancies").textContent || "0"],
+            ["Barangay Health Centers", document.getElementById("stat-bhc").textContent || "0"]
+          ];
+          
+          doc.autoTable({
+            head: [statsHeaders],
+            body: statsRows,
+            startY: 32,
+            margin: { left: 14, right: 14 },
+            theme: 'grid',
+            headStyles: { fillColor: [240, 240, 240], textColor: [50, 50, 50], fontStyle: 'bold' },
+            styles: { fontSize: 8.5, cellPadding: 2.5, font: 'helvetica' },
+            columnStyles: {
+              0: { cellWidth: 80, fontStyle: 'bold' },
+              1: { cellWidth: 40 }
+            }
+          });
+          
+          let lastY = doc.previousAutoTable.finalY + 10;
+          
+          // AI Insights
+          const insightsBody = document.getElementById("ai-insights-body");
+          const hasInsights = insightsBody && !insightsBody.querySelector(".empty-state");
+          
+          if (hasInsights) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.text('2. AI System Insights & Recommendations', 14, lastY);
+            
+            let text = insightsBody.innerText || insightsBody.textContent;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            
+            const splitText = doc.splitTextToSize(text.trim(), doc.internal.pageSize.width - 28);
+            doc.text(splitText, 14, lastY + 5);
+            
+            lastY = lastY + 5 + (splitText.length * 4) + 10;
+          }
+          
+          if (lastY > 165) {
+            doc.addPage();
+            lastY = 26;
+          }
+          
+          // Recent Activities
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.text('3. Recent Activities (Latest Audit Logs)', 14, lastY);
+          
+          const activityHeaders = ["Date & Time", "User", "Action", "Category", "Description"];
+          const activityRows = cachedAuditLogs.map(l => [
+            formatTimestamp(l.action_timestamp),
+            l.account_id ? (accountNameCache.get(l.account_id) || 'Unknown') : 'System',
+            getHumanReadableActionName(l.action),
+            getActionCategory(l.action),
+            l.description || '—'
+          ]);
+          
+          doc.autoTable({
+            head: [activityHeaders],
+            body: activityRows,
+            startY: lastY + 4,
+            margin: { left: 14, right: 14, bottom: 15 },
+            theme: 'striped',
+            headStyles: { fillColor: [255, 104, 165], textColor: [255, 255, 255], fontStyle: 'bold' },
+            styles: { fontSize: 8, cellPadding: 2.5, font: 'helvetica' },
+            columnStyles: {
+              0: { cellWidth: 42 }, // Date & Time
+              1: { cellWidth: 35 }, // User
+              2: { cellWidth: 35 }, // Action
+              3: { cellWidth: 22 }, // Category
+              4: { cellWidth: 'auto' } // Description
+            }
+          });
+          
+          // Header / Footer Overlay
+          const totalPages = doc.internal.getNumberOfPages();
+          for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            
+            // Header bar
+            doc.setFillColor(255, 104, 165);
+            doc.rect(0, 0, doc.internal.pageSize.width, 18, 'F');
+            
+            // Header Text
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.text('INAAGAPAY: MATERNAL & CHILD HEALTH SYSTEM', 14, 12);
+            
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text('SYSTEM STATUS REPORT', doc.internal.pageSize.width - 14, 12, { align: 'right' });
+            
+            // Footer
+            doc.setFontSize(8);
+            doc.setTextColor(128, 128, 128);
+            doc.text(`Generated by Admin: ${session.first_name} ${session.last_name} | Date: ${new Date().toLocaleString('en-PH')}`, 14, doc.internal.pageSize.height - 8);
+            doc.text(`Page ${i} of ${totalPages}`, doc.internal.pageSize.width - 14, doc.internal.pageSize.height - 8, { align: 'right' });
+          }
+          
+          doc.save(`system_dashboard_report_${new Date().toISOString().slice(0,10)}.pdf`);
         });
 
         // Initialize

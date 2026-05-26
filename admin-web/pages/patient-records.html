@@ -16,6 +16,8 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
     />
     <link rel="stylesheet" href="../styles/main.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.6.0/jspdf.plugin.autotable.min.js"></script>
   </head>
   <body>
     <div class="app-layout">
@@ -73,7 +75,10 @@
             <h1 class="page-title">Patient Records</h1>
             <p class="page-subtitle">View and manage all patient medical records</p>
           </div>
-          <div class="page-actions">
+          <div class="page-actions" style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn btn-primary btn-sm" id="export-pdf-btn">
+              <i class="fa-solid fa-file-pdf"></i> Download PDF Report
+            </button>
             <span id="total-badge" class="badge badge-admin">— records</span>
           </div>
         </div>
@@ -1168,6 +1173,217 @@
         document.getElementById("detail-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("show"); });
         document.getElementById("image-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("show"); });
         document.getElementById("image-options-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("show"); });
+
+        // ---------- PDF Export Handler ----------
+        document.getElementById('export-pdf-btn')?.addEventListener('click', () => {
+          const activeTabBtn = document.querySelector('.tab-btn-modern.active');
+          if (!activeTabBtn) return;
+          const activeTab = activeTabBtn.dataset.tab;
+          
+          let reportTitle = "";
+          let headers = [];
+          let bodyData = [];
+          let filtersDescription = "";
+          
+          if (activeTab === 'mothers') {
+            if (!cachedMothers || cachedMothers.length === 0) return;
+            reportTitle = "PATIENT RECORDS: MOTHERS REPORT";
+            headers = ["Mother Name", "Email", "Barangay", "Assigned BHC", "Birthdate", "Age", "Status"];
+            
+            const search = document.getElementById("search-mothers")?.value.toLowerCase() || "";
+            const bhcFilter = document.getElementById("filter-bhc-mothers")?.value || "";
+            filtersDescription = `Search: "${search || 'None'}" | BHC Filter: "${bhcFilter ? bhcFilter : 'All'}"`;
+            
+            const filtered = cachedMothers.filter(m => {
+              const name = [m.accounts?.first_name, m.accounts?.last_name].filter(Boolean).join(" ").toLowerCase();
+              if (search && !(name.includes(search) || (m.accounts?.email_address||"").toLowerCase().includes(search) || (m.barangay||"").toLowerCase().includes(search))) return false;
+              if (bhcFilter && m.assigned_bhc_id != bhcFilter) return false;
+              return true;
+            });
+            
+            bodyData = filtered.map(m => [
+              [m.accounts?.first_name, m.accounts?.last_name].filter(Boolean).join(" ") || "—",
+              m.accounts?.email_address || "—",
+              m.barangay || "—",
+              m.bhc?.bhc_name || "—",
+              fmtDate(m.birthdate),
+              computeAge(m.birthdate) || "—",
+              m.status || "active"
+            ]);
+          }
+          else if (activeTab === 'pregnancies') {
+            if (!cachedPregnancies || cachedPregnancies.length === 0) return;
+            reportTitle = "PATIENT RECORDS: PREGNANCIES REPORT";
+            headers = ["Mother Name", "LMP", "EDD", "Risk Level", "Fetal Count", "Status"];
+            
+            const search = document.getElementById("search-pregnancies")?.value.toLowerCase() || "";
+            const riskFilter = document.getElementById("filter-risk")?.value || "";
+            const statusFilter = document.getElementById("filter-pregnancy-status")?.value || "";
+            filtersDescription = `Search: "${search || 'None'}" | Risk: "${riskFilter || 'All'}" | Status: "${statusFilter || 'All'}"`;
+            
+            const filtered = cachedPregnancies.filter(p => {
+              const motherName = [p.mothers?.accounts?.first_name, p.mothers?.accounts?.last_name].filter(Boolean).join(" ").toLowerCase();
+              if (search && !motherName.includes(search)) return false;
+              if (riskFilter && p.pregnancy_risk_level !== riskFilter) return false;
+              if (statusFilter && p.status !== statusFilter) return false;
+              return true;
+            });
+            
+            bodyData = filtered.map(p => [
+              [p.mothers?.accounts?.first_name, p.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—",
+              fmtDate(p.last_menstrual_period),
+              fmtDate(p.expected_date_of_delivery),
+              p.pregnancy_risk_level ? p.pregnancy_risk_level.toUpperCase() : "—",
+              p.fetal_count || 1,
+              p.status || "—"
+            ]);
+          }
+          else if (activeTab === 'checkups') {
+            if (!cachedCheckups || cachedCheckups.length === 0) return;
+            reportTitle = "PATIENT RECORDS: PRENATAL CHECKUPS REPORT";
+            headers = ["Mother Name", "Checkup Date", "AOG", "Weight", "BP", "FHB", "Edema", "Next Schedule"];
+            
+            const search = document.getElementById("search-checkups")?.value.toLowerCase() || "";
+            filtersDescription = `Search: "${search || 'None'}"`;
+            
+            const filtered = cachedCheckups.filter(c => {
+              const motherName = [c.pregnancies?.mothers?.accounts?.first_name, c.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ").toLowerCase();
+              return !search || motherName.includes(search);
+            });
+            
+            bodyData = filtered.map(c => [
+              [c.pregnancies?.mothers?.accounts?.first_name, c.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—",
+              fmtDateTime(c.checkup_datetime),
+              c.age_of_gestation ? `${c.age_of_gestation} wks` : "—",
+              c.checkup_weight ? `${c.checkup_weight} kg` : "—",
+              `${c.blood_pressure_systolic || "—"}/${c.blood_pressure_diastolic || "—"}`,
+              c.fetal_heart_beat ? `${c.fetal_heart_beat} bpm` : "—",
+              c.edema || "none",
+              fmtDate(c.next_schedule)
+            ]);
+          }
+          else if (activeTab === 'ultrasounds') {
+            if (!cachedUltrasounds || cachedUltrasounds.length === 0) return;
+            reportTitle = "PATIENT RECORDS: ULTRASOUNDS REPORT";
+            headers = ["Mother Name", "Ultrasound Date", "Location", "Health Worker", "Remarks"];
+            
+            const search = document.getElementById("search-ultrasounds")?.value.toLowerCase() || "";
+            filtersDescription = `Search: "${search || 'None'}"`;
+            
+            const filtered = cachedUltrasounds.filter(u => {
+              const motherName = [u.pregnancies?.mothers?.accounts?.first_name, u.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ").toLowerCase();
+              return !search || motherName.includes(search);
+            });
+            
+            bodyData = filtered.map(u => [
+              [u.pregnancies?.mothers?.accounts?.first_name, u.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—",
+              fmtDate(u.ultrasound_date),
+              u.ultrasound_location || "—",
+              u.health_worker_name || "—",
+              u.remarks || "—"
+            ]);
+          }
+          else if (activeTab === 'labtests') {
+            if (!cachedLabTests || cachedLabTests.length === 0) return;
+            reportTitle = "PATIENT RECORDS: LABORATORY TESTS REPORT";
+            headers = ["Mother Name", "Test Type", "Test Date", "Location", "Health Worker", "Remarks"];
+            
+            const search = document.getElementById("search-labtests")?.value.toLowerCase() || "";
+            filtersDescription = `Search: "${search || 'None'}"`;
+            
+            const filtered = cachedLabTests.filter(l => {
+              const motherName = [l.pregnancies?.mothers?.accounts?.first_name, l.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ").toLowerCase();
+              return !search || motherName.includes(search);
+            });
+            
+            bodyData = filtered.map(l => [
+              [l.pregnancies?.mothers?.accounts?.first_name, l.pregnancies?.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—",
+              l.lab_test_type || "—",
+              fmtDate(l.lab_test_date),
+              l.lab_test_location || "—",
+              l.health_worker_name || "—",
+              l.remarks || "—"
+            ]);
+          }
+          else if (activeTab === 'children') {
+            if (!cachedChildren || cachedChildren.length === 0) return;
+            reportTitle = "PATIENT RECORDS: CHILDREN REPORT";
+            headers = ["Child Name", "Mother Name", "Sex", "Birthdate", "Birth Weight", "Birth Place"];
+            
+            const search = document.getElementById("search-children")?.value.toLowerCase() || "";
+            filtersDescription = `Search: "${search || 'None'}"`;
+            
+            const filtered = cachedChildren.filter(c => {
+              const childName = [c.first_name, c.last_name].filter(Boolean).join(" ").toLowerCase();
+              const motherName = [c.mothers?.accounts?.first_name, c.mothers?.accounts?.last_name].filter(Boolean).join(" ").toLowerCase();
+              return !search || childName.includes(search) || motherName.includes(search);
+            });
+            
+            bodyData = filtered.map(c => [
+              [c.first_name, c.last_name].filter(Boolean).join(" ") || "—",
+              [c.mothers?.accounts?.first_name, c.mothers?.accounts?.last_name].filter(Boolean).join(" ") || "—",
+              c.sex || "—",
+              fmtDate(c.birth_details?.birthdate),
+              c.birth_details?.birth_weight ? `${c.birth_details.birth_weight} kg` : "—",
+              c.birth_details?.birthplace_city_municipality || "—"
+            ]);
+          }
+          
+          if (bodyData.length === 0) {
+            showToast("No data matches current filters to export.", "warning");
+            return;
+          }
+          
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4
+          
+          doc.autoTable({
+            head: [headers],
+            body: bodyData,
+            startY: 32,
+            margin: { top: 25, bottom: 15, left: 14, right: 14 },
+            theme: 'striped',
+            headStyles: { fillColor: [255, 104, 165], textColor: [255, 255, 255], fontStyle: 'bold' },
+            styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica' }
+          });
+          
+          const totalPages = doc.internal.getNumberOfPages();
+          for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            
+            // Header bar
+            doc.setFillColor(255, 104, 165);
+            doc.rect(0, 0, doc.internal.pageSize.width, 18, 'F');
+            
+            // Header Text
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.text('INAAGAPAY: MATERNAL & CHILD HEALTH SYSTEM', 14, 12);
+            
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(reportTitle, doc.internal.pageSize.width - 14, 12, { align: 'right' });
+            
+            // First Page metadata
+            if (i === 1) {
+              doc.setTextColor(50, 50, 50);
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(10);
+              doc.text(`Total Records: ${bodyData.length}`, 14, 26);
+              doc.setFont('helvetica', 'normal');
+              doc.text(`Filters: ${filtersDescription}`, doc.internal.pageSize.width - 14, 26, { align: 'right' });
+            }
+            
+            // Footer
+            doc.setFontSize(8);
+            doc.setTextColor(128, 128, 128);
+            doc.text(`Generated by Admin: ${session.first_name} ${session.last_name} | Date: ${new Date().toLocaleString('en-PH')}`, 14, doc.internal.pageSize.height - 8);
+            doc.text(`Page ${i} of ${totalPages}`, doc.internal.pageSize.width - 14, doc.internal.pageSize.height - 8, { align: 'right' });
+          }
+          
+          doc.save(`${activeTab}_report_${new Date().toISOString().slice(0,10)}.pdf`);
+        });
 
         // ---------- Start ----------
         preloadAllData();
