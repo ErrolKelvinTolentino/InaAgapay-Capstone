@@ -17,39 +17,4 @@ class AppTheme {
       onError: AppColors.textOnColor,
     ),
   );
-
-  // 🌙 DARK THEME
-  static ThemeData darkTheme = ThemeData(
-    useMaterial3: true,
-    fontFamily: 'DM Sans',
-    scaffoldBackgroundColor: AppColors.darkBgPrimary,
-    colorScheme: ColorScheme.dark(
-      primary: AppColors.darkBrandPrimary,
-      onPrimary: AppColors.textOnColor,
-      secondary: AppColors.darkBrandAccent,
-      onSecondary: AppColors.textOnColor,
-      surface: AppColors.darkBgSecondary,
-      onSurface: AppColors.darkTextPrimary,
-      error: AppColors.error,
-      onError: AppColors.textOnColor,
-    ),
-    textTheme: TextTheme(
-      bodyMedium: TextStyle(color: AppColors.darkTextPrimary),
-      bodySmall: TextStyle(color: AppColors.darkTextSecondary),
-      titleLarge: TextStyle(
-        color: AppColors.darkTextPrimary,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-    cardTheme: CardThemeData(
-      color: AppColors.darkBgSecondary,
-      elevation: 1,
-    ),
-    dividerColor: AppColors.darkBorderPrimary,
-    appBarTheme: AppBarTheme(
-      backgroundColor: AppColors.darkBgPrimary,
-      foregroundColor: AppColors.darkTextPrimary,
-      elevation: 0,
-    ),
-  );
 }
