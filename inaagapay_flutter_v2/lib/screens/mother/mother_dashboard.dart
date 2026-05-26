@@ -319,8 +319,8 @@ class _MotherDashboardState extends State<MotherDashboard> {
           _eddDate = edd;
           _dueDate = DateFormat('MMMM d, yyyy').format(edd);
 
-          final int daysLeft = edd.difference(now).inDays;
-          _weeksLeft = daysLeft > 0 ? daysLeft ~/ 7 : 0;
+          _weeksLeft = _week > 0 ? 40 - _week : 0;
+          if (_weeksLeft < 0) _weeksLeft = 0;
 
           if (_week <= 13) {
             _trimester = 'First Trimester';

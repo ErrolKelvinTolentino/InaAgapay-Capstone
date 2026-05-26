@@ -4450,8 +4450,7 @@ class _MotherProfilePageState extends State<MotherProfilePage>
 
     final gestWeeks =
         lmp != null ? (now.difference(lmp).inDays / 7).floor() : null;
-    final weeksToGo =
-        edd != null ? (edd.difference(now).inDays / 7).ceil() : null;
+    final weeksToGo = gestWeeks != null ? 40 - gestWeeks : null;
 
     String trimester = '--';
     Color trimesterColor = AppColors.brandPrimary;
