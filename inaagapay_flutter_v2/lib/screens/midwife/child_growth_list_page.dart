@@ -55,6 +55,8 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
   List<Map<String, dynamic>> records = [];
   Map<String, dynamic>? childData;
   DateTime? birthdate;
+  double? birthWeight;
+  double? birthHeight;
 
   bool _showAiInFilipino = false;
 
@@ -92,15 +94,14 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
     });
 
     try {
-      await Future.wait([
-        _fetchChildData(),
-        _fetchBirthDetails(),
-        _fetchGrowthRecords(),
-      ]);
+      await _fetchChildData();
+      await _fetchBirthDetails();
+      await _fetchGrowthRecords();
 
-      if (records.isNotEmpty && birthdate != null) {
-        final latest = latestRecord;
-        final latestId = (latest?['child_details_id'] as int?) ?? 0;
+      final realRecords = records.where((r) => r['child_details_id'] != -1).toList();
+      if (realRecords.isNotEmpty && birthdate != null) {
+        final latestReal = realRecords.last;
+        final latestId = (latestReal['child_details_id'] as int?) ?? 0;
 
         if (latestId > 0) {
           final saved = await _fetchSavedGrowthAnalysis(latestId);
@@ -167,12 +168,16 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
   Future<void> _fetchBirthDetails() async {
     final response = await Supabase.instance.client
         .from('birth_details')
-        .select('birthdate')
+        .select('birthdate, birth_weight, birth_length')
         .eq('child_id', widget.childId)
         .maybeSingle();
 
-    if (response != null && response['birthdate'] != null) {
-      birthdate = DateTime.parse(response['birthdate']);
+    if (response != null) {
+      if (response['birthdate'] != null) {
+        birthdate = DateTime.parse(response['birthdate']);
+      }
+      birthWeight = (response['birth_weight'] as num?)?.toDouble();
+      birthHeight = (response['birth_length'] as num?)?.toDouble();
     }
   }
 
@@ -184,6 +189,17 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
         .order('created_at', ascending: true);
 
     records = List<Map<String, dynamic>>.from(response);
+
+    if (birthdate != null && birthWeight != null && birthWeight! > 0 && birthHeight != null && birthHeight! > 0) {
+      final birthRecord = {
+        'child_details_id': -1, // Synthetic ID for chart purposes
+        'child_id': widget.childId,
+        'child_height': birthHeight,
+        'child_weight': birthWeight,
+        'created_at': birthdate!.toIso8601String(),
+      };
+      records.insert(0, birthRecord);
+    }
   }
 
   Future<Map<String, dynamic>?> _fetchSavedGrowthAnalysis(
@@ -279,6 +295,11 @@ Refer to the child by their first name or as "your little one" ("iyong munting a
 Provide the response in both English and Filipino.
 Use the exact output format below. Do not add extra sections, titles, bullet points, or tables.
 
+Please carefully note the status indicators: "Within expected standard range", "Slightly above standard range", or "Slightly below standard range".
+- If the BMI or weight is slightly above the standard range, reassure the parent warmly (e.g. noting the child looks extra cuddly and strong, and encouraging healthy active play).
+- If the BMI or weight is slightly below the standard range, offer gentle encouragement (e.g. noting they are growing at their own sweet pace, and suggesting plenty of sleep and nourishment).
+- If everything is within expected range, celebrate their steady growth beautifully.
+
 Output format:
 
 ## English
@@ -290,10 +311,17 @@ Output format:
 Child: $childName
 Sex: ${sex.toLowerCase()}
 Current age: $ageWeeks weeks
-Latest measurements: Length: ${height.toStringAsFixed(1)} cm, Weight: ${weight.toStringAsFixed(1)} kg, BMI: ${bmi.toStringAsFixed(1)}
+Latest measurements: Length: ${height.toStringAsFixed(1)} cm (${_getZStatus(heightZ)}), Weight: ${weight.toStringAsFixed(1)} kg (${_getZStatus(weightZ)}), BMI: ${bmi.toStringAsFixed(1)} kg/m² (${_getZStatus(bmiZ)})
 Recent growth:
 $recordsSummary
 ''';
+  }
+
+  String _getZStatus(double? z) {
+    if (z == null || z.isNaN || z.isInfinite) return 'Within expected standard range';
+    if (z < -1) return 'Slightly below standard range';
+    if (z <= 1) return 'Within expected standard range';
+    return 'Slightly above standard range';
   }
 
   Future<void> _saveAIResponse(String responseText, int childDetailsId) async {
@@ -1358,6 +1386,32 @@ $recordsSummary
                       letterSpacing: 0.8,
                     ),
                   ),
+                  if (hasAi) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: activeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_awesome, size: 10, color: activeColor),
+                          const SizedBox(width: 3),
+                          Text(
+                            'AI',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: activeColor,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
               // Render the language toggle buttons if AI analysis is present
@@ -1373,15 +1427,38 @@ $recordsSummary
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            displayText,
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textPrimary,
-              height: 1.45,
+          if (aiLoading)
+            Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: activeColor,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  isFilipino ? 'Ginagawa ang AI insight...' : 'Generating AI insight...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            )
+          else
+            Text(
+              displayText,
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+                height: 1.45,
+              ),
             ),
-          ),
         ],
       ),
     );

@@ -2,6 +2,7 @@
 
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
+import 'growth_reference_data.dart';
 
 class GrowthCalculator {
   // Weight data for girls (WHO standards) - Weeks 0-13
@@ -1183,79 +1184,262 @@ class GrowthCalculator {
     }
   }
 
-  // Calculate Z-score for weight using LMS method
-  static double? calculateWeightZScore(double weight, int week, String gender) {
-    final data = getWeightData(week, gender);
-    if (data == null) {
-      if (kDebugMode) {
-        debugPrint(
-            '⚠️ Cannot calculate weight Z-score for week $week, gender $gender without reference data.');
-      }
-      return null;
-    }
+  static const Map<int, List<double>> _boysHeightKeyPoints = {
+    0: [44.2, 46.1, 48.0, 49.9, 51.8, 53.7, 55.6],
+    3: [55.3, 57.3, 59.4, 61.4, 63.4, 65.5, 67.5],
+    6: [61.2, 63.3, 65.5, 67.6, 69.8, 71.9, 74.0],
+    9: [65.2, 67.5, 69.7, 72.0, 74.2, 76.5, 78.7],
+    12: [68.6, 71.0, 73.4, 75.7, 78.1, 80.5, 82.9],
+    18: [75.0, 77.4, 79.9, 82.3, 84.8, 87.3, 89.8],
+    24: [81.0, 83.2, 85.5, 87.8, 90.1, 92.4, 94.7],
+    36: [88.7, 91.2, 93.6, 96.1, 98.6, 101.1, 103.5],
+    48: [95.4, 98.0, 100.7, 103.3, 106.0, 108.6, 111.3],
+    60: [101.6, 104.4, 107.2, 110.0, 112.8, 115.6, 118.4],
+  };
 
-    final l = data['l'] as double;
-    final m = data['m'] as double;
-    final s = data['s'] as double;
+  static const Map<int, List<double>> _girlsHeightKeyPoints = {
+    0: [43.6, 45.4, 47.3, 49.1, 51.0, 52.9, 54.7],
+    3: [53.5, 55.6, 57.7, 59.8, 61.9, 64.0, 66.1],
+    6: [59.3, 61.4, 63.5, 65.7, 67.8, 69.9, 72.0],
+    9: [63.2, 65.5, 67.8, 70.1, 72.4, 74.7, 77.0],
+    12: [66.5, 68.9, 71.4, 74.0, 76.5, 79.0, 81.5],
+    18: [72.8, 75.4, 78.0, 80.7, 83.3, 86.0, 88.6],
+    24: [79.3, 81.7, 84.1, 86.4, 88.7, 91.1, 93.5],
+    36: [87.4, 89.9, 92.5, 95.1, 97.7, 100.3, 102.9],
+    48: [94.1, 97.0, 99.8, 102.7, 105.5, 108.4, 111.2],
+    60: [100.7, 103.6, 106.5, 109.4, 112.3, 115.2, 118.1],
+  };
 
-    if (l == 0) {
-      return (math.log(weight / m)) / s;
+  static const Map<int, List<double>> _boysBmiKeyPoints = {
+    0: [10.1, 11.1, 12.2, 13.3, 14.6, 16.1, 17.7],
+    3: [12.2, 13.3, 14.6, 16.0, 17.5, 19.2, 21.0],
+    6: [13.1, 14.3, 15.5, 16.9, 18.4, 20.0, 21.8],
+    9: [13.1, 14.2, 15.4, 16.8, 18.3, 19.9, 21.7],
+    12: [12.9, 14.0, 15.2, 16.5, 18.0, 19.6, 21.4],
+    18: [12.5, 13.5, 14.7, 16.0, 17.4, 19.0, 20.8],
+    24: [12.1, 13.1, 14.2, 15.4, 16.8, 18.3, 20.0],
+    36: [11.8, 12.7, 13.7, 14.9, 16.2, 17.7, 19.4],
+    48: [11.5, 12.4, 13.3, 14.4, 15.7, 17.2, 18.9],
+    60: [11.2, 12.1, 13.0, 14.1, 15.3, 16.8, 18.5],
+  };
+
+  static const Map<int, List<double>> _girlsBmiKeyPoints = {
+    0: [10.1, 11.1, 12.2, 13.3, 14.6, 16.1, 17.7],
+    3: [12.0, 13.2, 14.4, 15.8, 17.3, 18.9, 20.7],
+    6: [12.7, 13.9, 15.1, 16.5, 18.0, 19.6, 21.4],
+    9: [12.7, 13.8, 15.0, 16.4, 17.9, 19.5, 21.3],
+    12: [12.4, 13.5, 14.7, 16.0, 17.5, 19.1, 20.9],
+    18: [12.0, 13.0, 14.1, 15.4, 16.8, 18.4, 20.2],
+    24: [11.6, 12.6, 13.7, 14.9, 16.3, 17.8, 19.6],
+    36: [11.3, 12.2, 13.2, 14.4, 15.7, 17.2, 19.0],
+    48: [11.0, 11.8, 12.8, 13.9, 15.2, 16.7, 18.4],
+    60: [10.7, 11.5, 12.5, 13.6, 14.8, 16.3, 18.0],
+  };
+
+  static Map<String, dynamic> _getInterpolatedSDBoundaries(int month, String metric, String gender) {
+    final isBoy = gender.toLowerCase() != 'female';
+    
+    // Select the key points
+    final Map<int, List<double>> keyPoints;
+    if (metric == 'height') {
+      keyPoints = isBoy ? _boysHeightKeyPoints : _girlsHeightKeyPoints;
     } else {
-      return (math.pow(weight / m, l) - 1) / (l * s);
+      keyPoints = isBoy ? _boysBmiKeyPoints : _girlsBmiKeyPoints;
     }
+
+    if (month <= 0) {
+      return _listToMap(month, keyPoints[0]!);
+    }
+    if (month >= 60) {
+      return _listToMap(month, keyPoints[60]!);
+    }
+
+    // Find the lower and upper key months
+    final sortedKeys = keyPoints.keys.toList()..sort();
+    int lowerKey = 0;
+    int upperKey = 60;
+    for (int i = 0; i < sortedKeys.length - 1; i++) {
+      if (month >= sortedKeys[i] && month <= sortedKeys[i + 1]) {
+        lowerKey = sortedKeys[i];
+        upperKey = sortedKeys[i + 1];
+        break;
+      }
+    }
+
+    final lowerVals = keyPoints[lowerKey]!;
+    final upperVals = keyPoints[upperKey]!;
+    final t = (month - lowerKey) / (upperKey - lowerKey);
+
+    final interpolated = List<double>.generate(7, (idx) {
+      return lowerVals[idx] + t * (upperVals[idx] - lowerVals[idx]);
+    });
+
+    return _listToMap(month, interpolated);
   }
 
-  // Calculate Z-score for height using LMS method
-  static double? calculateHeightZScore(double height, int week, String gender) {
-    final data = getHeightData(week, gender);
-    if (data == null) {
-      if (kDebugMode) {
-        debugPrint(
-            '⚠️ Cannot calculate height Z-score for week $week, gender $gender without reference data.');
-      }
-      return null;
-    }
-
-    final l = data['l'] as double;
-    final m = data['m'] as double;
-    final s = data['s'] as double;
-
-    if (l == 0) {
-      return (math.log(height / m)) / s;
-    } else {
-      return (math.pow(height / m, l) - 1) / (l * s);
-    }
+  static Map<String, dynamic> _listToMap(int month, List<double> vals) {
+    return {
+      'month': month,
+      'sd3neg': vals[0],
+      'sd2neg': vals[1],
+      'sd1neg': vals[2],
+      'sd0': vals[3],
+      'sd1': vals[4],
+      'sd2': vals[5],
+      'sd3': vals[6],
+    };
   }
 
-  // Calculate Z-score for BMI using LMS method with better error handling
-  static double? calculateBMIZScore(double bmi, int week, String gender) {
-    final data = getBMIData(week, gender);
-    if (data == null) {
-      debugPrint('⚠️ No BMI data for week $week, gender $gender');
-      return null;
-    }
+  static double _calculateZScoreFromSDBoundaries(double value, Map<String, dynamic> entry) {
+    final sd3neg = (entry['sd3neg'] as num).toDouble();
+    final sd2neg = (entry['sd2neg'] as num).toDouble();
+    final sd1neg = (entry['sd1neg'] as num).toDouble();
+    final sd0 = (entry['sd0'] as num).toDouble();
+    final sd1 = (entry['sd1'] as num).toDouble();
+    final sd2 = (entry['sd2'] as num).toDouble();
+    final sd3 = (entry['sd3'] as num).toDouble();
 
-    final l = data['l'] as double;
-    final m = data['m'] as double;
-    final s = data['s'] as double;
-
-    debugPrint(
-        '📊 BMI Reference Data: L=$l, M=$m, S=$s, Week=$week, Gender=$gender');
-    debugPrint('📊 Input BMI: $bmi');
-
-    double zScore;
-    try {
-      if (l == 0) {
-        zScore = (math.log(bmi / m)) / s;
+    if (value < sd0) {
+      if (value >= sd1neg) {
+        return -1.0 + (value - sd1neg) / (sd0 - sd1neg);
+      } else if (value >= sd2neg) {
+        return -2.0 + (value - sd2neg) / (sd1neg - sd2neg);
+      } else if (value >= sd3neg) {
+        return -3.0 + (value - sd3neg) / (sd2neg - sd3neg);
       } else {
-        final powValue = math.pow(bmi / m, l);
-        zScore = (powValue - 1) / (l * s);
+        return -3.0 - (sd3neg - value) / (sd2neg - sd3neg);
       }
-      debugPrint('📊 Calculated Z-Score: $zScore');
-      return zScore;
-    } catch (e) {
-      debugPrint('❌ Error calculating BMI Z-score: $e');
-      return null;
+    } else {
+      if (value <= sd1) {
+        return (value - sd0) / (sd1 - sd0);
+      } else if (value <= sd2) {
+        return 1.0 + (value - sd1) / (sd2 - sd1);
+      } else if (value <= sd3) {
+        return 2.0 + (value - sd2) / (sd3 - sd2);
+      } else {
+        return 3.0 + (value - sd3) / (sd3 - sd2);
+      }
+    }
+  }
+
+  // Calculate Z-score for weight using LMS method (weekly) or SD interpolation (monthly)
+  static double? calculateWeightZScore(double weight, int week, String gender) {
+    if (week <= 13) {
+      final data = getWeightData(week, gender);
+      if (data == null) {
+        if (kDebugMode) {
+          debugPrint(
+              '⚠️ Cannot calculate weight Z-score for week $week, gender $gender without reference data.');
+        }
+        return null;
+      }
+
+      final l = data['l'] as double;
+      final m = data['m'] as double;
+      final s = data['s'] as double;
+
+      if (l == 0) {
+        return (math.log(weight / m)) / s;
+      } else {
+        return (math.pow(weight / m, l) - 1) / (l * s);
+      }
+    } else {
+      // Monthly reference data (weeks > 13)
+      final month = (week / 4.345).round();
+      final monthlyList = gender.toLowerCase() == 'female'
+          ? GrowthReferenceData.weightGirlsMonthlyData
+          : GrowthReferenceData.weightBoysMonthlyData;
+      
+      try {
+        final entry = monthlyList.firstWhere(
+          (e) => e['month'] == month,
+          orElse: () => monthlyList.last, // Fallback to last month if > 60 months
+        );
+        return _calculateZScoreFromSDBoundaries(weight, entry);
+      } catch (e) {
+        debugPrint('❌ Error calculating weight monthly Z-score: $e');
+        return null;
+      }
+    }
+  }
+
+  // Calculate Z-score for height using LMS method (weekly) or SD interpolation (monthly)
+  static double? calculateHeightZScore(double height, int week, String gender) {
+    if (week <= 13) {
+      final data = getHeightData(week, gender);
+      if (data == null) {
+        if (kDebugMode) {
+          debugPrint(
+              '⚠️ Cannot calculate height Z-score for week $week, gender $gender without reference data.');
+        }
+        return null;
+      }
+
+      final l = data['l'] as double;
+      final m = data['m'] as double;
+      final s = data['s'] as double;
+
+      if (l == 0) {
+        return (math.log(height / m)) / s;
+      } else {
+        return (math.pow(height / m, l) - 1) / (l * s);
+      }
+    } else {
+      // Monthly reference data (weeks > 13)
+      final month = (week / 4.345).round();
+      try {
+        final entry = _getInterpolatedSDBoundaries(month, 'height', gender);
+        return _calculateZScoreFromSDBoundaries(height, entry);
+      } catch (e) {
+        debugPrint('❌ Error calculating height monthly Z-score: $e');
+        return null;
+      }
+    }
+  }
+
+  // Calculate Z-score for BMI using LMS method (weekly) or SD interpolation (monthly)
+  static double? calculateBMIZScore(double bmi, int week, String gender) {
+    if (week <= 13) {
+      final data = getBMIData(week, gender);
+      if (data == null) {
+        debugPrint('⚠️ No BMI data for week $week, gender $gender');
+        return null;
+      }
+
+      final l = data['l'] as double;
+      final m = data['m'] as double;
+      final s = data['s'] as double;
+
+      debugPrint(
+          '📊 BMI Reference Data: L=$l, M=$m, S=$s, Week=$week, Gender=$gender');
+      debugPrint('📊 Input BMI: $bmi');
+
+      double zScore;
+      try {
+        if (l == 0) {
+          zScore = (math.log(bmi / m)) / s;
+        } else {
+          final powValue = math.pow(bmi / m, l);
+          zScore = (powValue - 1) / (l * s);
+        }
+        debugPrint('📊 Calculated Z-Score: $zScore');
+        return zScore;
+      } catch (e) {
+        debugPrint('❌ Error calculating BMI Z-score: $e');
+        return null;
+      }
+    } else {
+      // Monthly reference data (weeks > 13)
+      final month = (week / 4.345).round();
+      try {
+        final entry = _getInterpolatedSDBoundaries(month, 'bmi', gender);
+        final zScore = _calculateZScoreFromSDBoundaries(bmi, entry);
+        debugPrint('📊 Calculated Monthly BMI Z-Score: $zScore');
+        return zScore;
+      } catch (e) {
+        debugPrint('❌ Error calculating monthly BMI Z-score: $e');
+        return null;
+      }
     }
   }
 }

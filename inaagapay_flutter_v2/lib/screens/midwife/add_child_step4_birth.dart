@@ -10,6 +10,7 @@ import '../../widgets/dialog_box.dart';
 import '../../widgets/app_input_field.dart';
 import 'add_child_step3_child.dart';
 import 'child_profile_page.dart';
+import 'add_growth_step1.dart';
 import '../../services/ph_address_service.dart' as ph_addr;
 
 class AddChildStep4Birth extends StatefulWidget {
@@ -396,13 +397,15 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
   bool get isFormValid {
     final birthdateValid = birthdateCtrl.text.isNotEmpty;
-    final birthWeightValid = birthWeightCtrl.text.isNotEmpty &&
-        double.tryParse(birthWeightCtrl.text) != null;
-    final birthLengthValid = birthLengthCtrl.text.isNotEmpty &&
-        double.tryParse(birthLengthCtrl.text) != null;
     final provinceValid = provinceCtrl.text.trim().isNotEmpty;
     final cityValid = cityCtrl.text.trim().isNotEmpty;
     final birthplaceValid = birthplaceCtrl.text.trim().isNotEmpty;
+
+    // Optional birth weight and length (if provided, they must be valid numbers)
+    final weightText = birthWeightCtrl.text.trim();
+    final lengthText = birthLengthCtrl.text.trim();
+    final birthWeightValid = weightText.isEmpty || double.tryParse(weightText) != null;
+    final birthLengthValid = lengthText.isEmpty || double.tryParse(lengthText) != null;
 
     return birthdateValid &&
         birthWeightValid &&
@@ -498,8 +501,10 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
 
       final childId = childResponse['child_id'] as int;
 
-      final birthWeight = double.parse(birthWeightCtrl.text);
-      final birthLength = double.parse(birthLengthCtrl.text);
+      final weightText = birthWeightCtrl.text.trim();
+      final lengthText = birthLengthCtrl.text.trim();
+      final birthWeight = weightText.isNotEmpty ? double.tryParse(weightText) : null;
+      final birthLength = lengthText.isNotEmpty ? double.tryParse(lengthText) : null;
 
       await Supabase.instance.client.from('birth_details').insert({
         'child_id': childId,
@@ -512,12 +517,8 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      await Supabase.instance.client.from('child_details').insert({
-        'child_id': childId,
-        'child_height': birthLength,
-        'child_weight': birthWeight,
-        'created_at': DateTime.now().toIso8601String(),
-      });
+      // REMOVED duplicate child_details insertion to avoid double-logging birth measurements in different weeks.
+      // The synthetic W0 record prepending logic in list pages will handle displaying birth details at Week 0.
 
       if (!mounted) return;
 
@@ -549,14 +550,21 @@ class _AddChildStep4BirthState extends State<AddChildStep4Birth> {
         },
       );
 
-      // After dialog closes, navigate to the child profile page
+      // After dialog closes, navigate to AddGrowthStep1 first on top of ChildProfilePage
       if (mounted) {
-        // Pop all add-child screens and push the child profile
+        // Pop all add-child wizard screens and place ChildProfilePage as the new base screen
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) => ChildProfilePage(childId: childId),
           ),
           (route) => route.isFirst,
+        );
+
+        // Immediately push the AddGrowthStep1 screen on top so the midwife can log the first growth record right away
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AddGrowthStep1(childId: childId),
+          ),
         );
       }
     } catch (e) {
