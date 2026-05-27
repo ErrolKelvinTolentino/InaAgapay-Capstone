@@ -1177,23 +1177,30 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
     try {
       final saved = await Supabase.instance.client
           .from('ai_responses')
-          .select('response')
+          .select('response, generated_by_ai')
           .eq('reference_table', 'child_details')
           .eq('reference_id', latestRecordId)
           .eq('response_type', 'growth_analysis')
           .maybeSingle();
 
-      if (saved != null &&
-          saved['response'] != null &&
-          saved['response'].toString().trim().isNotEmpty) {
-        final savedText = saved['response'].toString().trim();
-        final lower = savedText.toLowerCase();
-        final isOldOrSingleLang = !lower.contains('english') ||
-            !(lower.contains('filipino') || lower.contains('tagalog'));
-        if (isOldOrSingleLang) {
-          await _generateAndSaveProfileAiInsight(latestRecordId);
+      if (saved != null) {
+        final isGeneratedByAi = saved['generated_by_ai'] == true;
+        if (saved['response'] != null &&
+            saved['response'].toString().trim().isNotEmpty) {
+          final savedText = saved['response'].toString().trim();
+          final lower = savedText.toLowerCase();
+          final isOldOrSingleLang = !lower.contains('english') ||
+              !(lower.contains('filipino') || lower.contains('tagalog'));
+          final isBulletFormat = savedText.contains('## Baby Growth Summary') ||
+              savedText.contains('Buod ng Paglaki ng Bata');
+
+          if (!isGeneratedByAi || isOldOrSingleLang || isBulletFormat) {
+            await _generateAndSaveProfileAiInsight(latestRecordId);
+          } else {
+            aiAnalysis = savedText;
+          }
         } else {
-          aiAnalysis = savedText;
+          await _generateAndSaveProfileAiInsight(latestRecordId);
         }
       } else {
         await _generateAndSaveProfileAiInsight(latestRecordId);
@@ -1310,56 +1317,46 @@ class _ChildProfilePageState extends State<ChildProfilePage> {
       return '- Week $weeks: ${heightVal.toStringAsFixed(1)} cm, ${weightVal.toStringAsFixed(1)} kg, BMI ${bmiVal.toStringAsFixed(1)}';
     }).join('\n');
 
+    String getStatus(double? z) {
+      if (z == null || z.isNaN || z.isInfinite) return 'Within expected standard range';
+      if (z < -1) return 'Slightly below standard range';
+      if (z <= 1) return 'Within expected standard range';
+      return 'Slightly above standard range';
+    }
+
+    final heightStatus = getStatus(heightZ);
+    final weightStatus = getStatus(weightZ);
+    final bmiStatus = getStatus(bmiZ);
+
     return '''
-You are a warm, caring assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
+You are a warm, caring midwife assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
 Your tone must be gentle, comforting, and encouraging. Use simple, non-clinical language.
-Do not use cold/technical terms (avoid z-scores, percentiles, or medical jargon). Focus on what the measurements mean for everyday care and reassuring the parent.
+Do NOT use diagnostic terms or medical jargon (avoid terms like underweight, overweight, obesity, diagnosis, or clinical standard deviation).
+Write EXACTLY 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight about how the child is growing based on their measurements. Focus on what the measurements mean for reassuring the parent.
 Refer to the child by their first name or as "your little one" ("iyong munting anak" in Filipino) to make it personal and comforting.
-Provide the response in both English and Filipino. Only one language will be shown at a time.
-Use the exact output format below with markdown headings and bullet points only. Do not add extra sections or tables.
 
-Child: $childName
-Sex: ${sex.toLowerCase()}
-Current age: $ageWeeks weeks
+Provide the response in both English and Filipino.
+Use the exact output format below. Do not add extra sections, titles, bullet points, or tables.
 
-Latest measurements:
-Height: ${height.toStringAsFixed(1)} cm
-Weight: ${weight.toStringAsFixed(1)} kg
-
-Recent growth:
-$recordsSummary
+Please carefully note the status indicators: "Within expected standard range", "Slightly above standard range", or "Slightly below standard range". 
+- If the BMI or weight is slightly above the standard range, reassure the parent warmly (e.g. noting the child looks extra cuddly and strong, and encouraging healthy active play).
+- If the BMI or weight is slightly below the standard range, offer gentle encouragement (e.g. noting they are growing at their own sweet pace, and suggesting plenty of sleep and nourishment).
+- If everything is within expected range, celebrate their steady growth beautifully.
 
 Output format:
 
 ## English
-## Baby Growth Summary
-- A short, gentle, and comforting explanation of how the child is growing.
-
-### Current Measurements
-- Length: ${height.toStringAsFixed(1)} cm
-- Weight: ${weight.toStringAsFixed(1)} kg
-
-### What This Means
-- Simple, reassuring explanation of the numbers. Compare to expected healthy ranges in a friendly way.
-
-### Helpful Note
-- Reassuring tip or encouragement for the parents.
+[Write exactly 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight here]
 
 ## Filipino
-## Buod ng Paglaki ng Bata
-- Maikling, banayad, at nakapapawing-pagod na paliwanag kung paano lumalago ang bata.
+[Write exactly 1 to 2 sentences of friendly, warm, non-diagnostic AI growth insight in Tagalog here]
 
-### Kasalukuyang Sukat
-- Haba: ${height.toStringAsFixed(1)} cm
-- Timbang: ${weight.toStringAsFixed(1)} kg
-
-### Ano ang Kahulugan Nito
-- Simpleng paliwanag na nagbibigay-linaw at nagpapakalma sa magulang tungkol sa timbang at haba ng bata.
-
-### Paalala
-- Banayad na paalala at suporta mula sa isang mapagkalingang ate o midwife.
-
-Use calm, supportive wording. Keep it simple and easy to understand. Do not use technical terms such as z-scores, percentiles, or clinical indicators. Avoid alarm and focus on what the measurements mean for everyday care and follow-up.
+Child: $childName
+Sex: ${sex.toLowerCase()}
+Current age: $ageWeeks weeks
+Latest measurements: Length: ${height.toStringAsFixed(1)} cm ($heightStatus), Weight: ${weight.toStringAsFixed(1)} kg ($weightStatus), BMI: ${bmi.toStringAsFixed(1)} kg/m² ($bmiStatus)
+Recent growth:
+$recordsSummary
 ''';
   }
 

@@ -56,6 +56,8 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
   Map<String, dynamic>? childData;
   DateTime? birthdate;
 
+  bool _showAiInFilipino = false;
+
   final GroqService _groqService = GroqService();
 
   // Computed properties for latest measurements
@@ -79,6 +81,7 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
   @override
   void initState() {
     super.initState();
+    _showAiInFilipino = LanguageService.isFilipino;
     fetchGrowthRecords();
   }
 
@@ -105,10 +108,14 @@ class _ChildGrowthListPageState extends State<ChildGrowthListPage> {
               saved['response'] != null &&
               saved['response'].toString().isNotEmpty) {
             final savedText = saved['response'].toString().trim();
+            final isGeneratedByAi = saved['generated_by_ai'] == true;
             final lower = savedText.toLowerCase();
             final isOldOrSingleLang = !lower.contains('english') ||
                 !(lower.contains('filipino') || lower.contains('tagalog'));
-            if (isOldOrSingleLang) {
+            final isBulletFormat = savedText.contains('## Baby Growth Summary') ||
+                savedText.contains('Buod ng Paglaki ng Bata');
+
+            if (!isGeneratedByAi || isOldOrSingleLang || isBulletFormat) {
               await _generateAndSaveAIAnalysis(latestId);
             } else {
               aiAnalysis = savedText;
@@ -323,6 +330,76 @@ $recordsSummary
     } catch (e) {
       debugPrint('Error saving AI response: $e');
     }
+  }
+
+  String _getAiTextForLanguage(String? fullText) {
+    if (fullText == null || fullText.trim().isEmpty) return '';
+    final normalized = fullText.replaceAll('\r\n', '\n');
+
+    final englishMatch = RegExp(
+      r'(?:===|##)\s*English\s*(?:===)?\s*([\s\S]*?)(?=(?:===|##)\s*Filipino\s*(?:===)?|$)',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+    
+    final filipinoMatch = RegExp(
+      r'(?:===|##)\s*Filipino\s*(?:===)?\s*([\s\S]*?)(?=(?:===|##)\s*English\s*(?:===)?|$)',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+
+    final englishText = englishMatch?.group(1)?.trim();
+    final filipinoText = filipinoMatch?.group(1)?.trim();
+
+    // If no language sections found, return full text
+    if (englishText == null && filipinoText == null) return fullText;
+
+    if (_showAiInFilipino) {
+      return filipinoText ?? englishText ?? fullText;
+    }
+    return englishText ?? filipinoText ?? fullText;
+  }
+
+  String _getSectionForTab(String langText, int tabIndex) {
+    final normalized = langText.replaceAll('\r\n', '\n');
+    final sectionHeader = tabIndex == 0 ? 'BMI' : tabIndex == 1 ? 'Weight' : 'Height';
+
+    final regex = RegExp(
+      r'(?:^|\n)(?:#+\s*|\*+|\[)?' + RegExp.escape(sectionHeader) + r'(?:#+\s*|\*+|\])?:?\s*\n([\s\S]*?)(?=(?:^|\n)(?:#+\s*|\*+|\[)?(?:BMI|Weight|Height)(?:#+\s*|\*+|\])?:?|$)',
+      caseSensitive: false,
+    );
+
+    final match = regex.firstMatch(normalized);
+    if (match != null) {
+      return match.group(1)?.trim() ?? '';
+    }
+
+    return langText.trim();
+  }
+
+  Widget _buildToggleBtn(String label, bool selected, Color activeColor) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showAiInFilipino = label == 'Filipino';
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? activeColor.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: selected ? activeColor : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
   }
 
   String getChildName() {
@@ -1149,70 +1226,8 @@ $recordsSummary
     required double? bmiZ,
   }) {
     final isFilipino = LanguageService.isFilipino;
-    String displayText = '';
-
-    if (activeTab == 0) {
-      // BMI
-      final z = bmiZ;
-      if (z == null || z.isNaN || z.isInfinite) {
-        displayText = isFilipino
-            ? 'Hindi sapat ang datos para sa pagsusuri ng BMI.'
-            : 'Insufficient data for BMI analysis.';
-      } else if (z < -1) {
-        displayText = isFilipino
-            ? 'Ang BMI ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ibig sabihin, medyo mababa ang timbang niya kumpara sa kaniyang tangkad, na karaniwang nangyayari kapag napaka-aktibo ng bata o mabilis na tumatangkad.'
-            : "Your child's BMI is slightly below the standard range for their age. This means their weight is relatively low compared to their height, which is common during active phases or rapid growth spurts.";
-      } else if (z <= 1) {
-        displayText = isFilipino
-            ? 'Ang BMI ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Nagpapakita ito ng malusog at balanseng ugnayan sa pagitan ng kaniyang tangkad at timbang habang patuloy siyang lumalaki.'
-            : "Your child's BMI is within the expected standard range for their age. This indicates a healthy, balanced relationship between their height and weight as they continue to grow.";
-      } else {
-        displayText = isFilipino
-            ? 'Ang BMI ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ibig sabihin, medyo mas mabigat siya kumpara sa kaniyang tangkad, na maaaring bahagi ng kaniyang normal na paglaki o hubog ng katawan.'
-            : "Your child's BMI is slightly above the standard range for their age. This means their weight is a bit higher relative to their height, which can be a temporary phase or natural body build variation.";
-      }
-    } else if (activeTab == 1) {
-      // Weight
-      final z = weightZ;
-      if (z == null || z.isNaN || z.isInfinite) {
-        displayText = isFilipino
-            ? 'Hindi sapat ang datos para sa pagsusuri ng timbang.'
-            : 'Insufficient data for weight analysis.';
-      } else if (z < -1) {
-        displayText = isFilipino
-            ? 'Ang timbang ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ipinapakita nito na medyo mas magaan siya kaysa sa karaniwan, na maaaring dahil sa kaniyang pagiging aktibo o mabilis na paglaki.'
-            : "Your child's weight is slightly below the standard range for their age. This suggests they are a bit lighter than average, which can happen if they are highly active or during a growth spurt.";
-      } else if (z <= 1) {
-        displayText = isFilipino
-            ? 'Ang timbang ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Isang magandang senyales ito na sapat ang kaniyang nutrisyon at patuloy siyang lumalaki nang malusog.'
-            : "Your child's weight is within the expected standard range for their age. This is a wonderful sign that they are receiving good nourishment and gaining weight steadily.";
-      } else {
-        displayText = isFilipino
-            ? 'Ang timbang ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ipinapakita nito na medyo mas mabigat siya kaysa sa karaniwan, na maaaring dahil sa kaniyang natural na pangangatawan.'
-            : "Your child's weight is slightly above the standard range for their age. This indicates they are a bit heavier than average for their age, which can be due to their natural body frame.";
-      }
-    } else {
-      // Height
-      final z = heightZ;
-      if (z == null || z.isNaN || z.isInfinite) {
-        displayText = isFilipino
-            ? 'Hindi sapat ang datos para sa pagsusuri ng tangkad.'
-            : 'Insufficient data for height analysis.';
-      } else if (z < -1) {
-        displayText = isFilipino
-            ? 'Ang tangkad ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ibig sabihin, medyo mas mababa siya kaysa sa karaniwan, na madalas ay dulot ng henetika o sariling takbo ng kaniyang paglaki.'
-            : "Your child's height is slightly below the standard range for their age. This means they are a bit shorter than average, which is often influenced by genetics or individual growth timing.";
-      } else if (z <= 1) {
-        displayText = isFilipino
-            ? 'Ang tangkad ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Ipinapakita nito na maganda at tuloy-tuloy ang kaniyang pagtangkad sa malusog na pamamaraan.'
-            : "Your child's height is within the expected standard range for their age. This shows they are stretching up and growing beautifully at a steady, healthy pace.";
-      } else {
-        displayText = isFilipino
-            ? 'Ang tangkad ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ibig sabihin, mas matangkad siya kaysa sa karaniwan, na nagpapakita ng magandang paglaki ng kaniyang mga buto at katawan.'
-            : "Your child's height is slightly above the standard range for their age. This indicates they are taller than average for their age, showing active bone development and growth.";
-      }
-    }
-
+    
+    // Choose styling color based on tab
     final activeColor = activeTab == 0
         ? AppColors.brandText
         : activeTab == 1
@@ -1224,6 +1239,78 @@ $recordsSummary
         : activeTab == 1
             ? (isFilipino ? 'PAGSURI NG TIMBANG' : 'WEIGHT INSIGHT')
             : (isFilipino ? 'PAGSURI NG TANGKAD' : 'HEIGHT INSIGHT');
+
+    // Get the display text: if AI analysis is loaded and valid, use it; otherwise fall back to local rule-based text
+    String displayText = '';
+    bool hasAi = aiAnalysis != null && aiAnalysis!.trim().isNotEmpty;
+    
+    if (hasAi) {
+      final langText = _getAiTextForLanguage(aiAnalysis);
+      displayText = _getSectionForTab(langText, activeTab);
+    } else {
+      // Fallback local calculations
+      if (activeTab == 0) {
+        // BMI
+        final z = bmiZ;
+        if (z == null || z.isNaN || z.isInfinite) {
+          displayText = isFilipino
+              ? 'Hindi sapat ang datos para sa pagsusuri ng BMI.'
+              : 'Insufficient data for BMI analysis.';
+        } else if (z < -1) {
+          displayText = isFilipino
+              ? 'Ang BMI ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ibig sabihin, medyo mababa ang timbang niya kumpara sa kaniyang tangkad, na karaniwang nangyayari kapag napaka-aktibo ng bata o mabilis na tumatangkad.'
+              : "Your child's BMI is slightly below the standard range for their age. This means their weight is relatively low compared to their height, which is common during active phases or rapid growth spurts.";
+        } else if (z <= 1) {
+          displayText = isFilipino
+              ? 'Ang BMI ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Nagpapakita ito ng malusog at balanseng ugnayan sa pagitan ng kaniyang tangkad at timbang habang patuloy siyang lumalaki.'
+              : "Your child's BMI is within the expected standard range for their age. This indicates a healthy, balanced relationship between their height and weight as they continue to grow.";
+        } else {
+          displayText = isFilipino
+              ? 'Ang BMI ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ibig sabihin, medyo mas mabigat siya kumpara sa kaniyang tangkad, na maaaring bahagi ng kaniyang normal na paglaki o hubog ng katawan.'
+              : "Your child's BMI is slightly above the standard range for their age. This means their weight is a bit higher relative to their height, which can be a temporary phase or natural body build variation.";
+        }
+      } else if (activeTab == 1) {
+        // Weight
+        final z = weightZ;
+        if (z == null || z.isNaN || z.isInfinite) {
+          displayText = isFilipino
+              ? 'Hindi sapat ang datos para sa pagsusuri ng timbang.'
+              : 'Insufficient data for weight analysis.';
+        } else if (z < -1) {
+          displayText = isFilipino
+              ? 'Ang timbang ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ipinapakita nito na medyo mas magaan siya kaysa sa karaniwan, na maaaring dahil sa kaniyang pagiging aktibo o mabilis na paglaki.'
+              : "Your child's weight is slightly below the standard range for their age. This suggests they are a bit lighter than average, which can happen if they are highly active or during a growth spurt.";
+        } else if (z <= 1) {
+          displayText = isFilipino
+              ? 'Ang timbang ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Isang magandang senyales ito na sapat ang kaniyang nutrisyon at patuloy siyang lumalaki nang malusog.'
+              : "Your child's weight is within the expected standard range for their age. This is a wonderful sign that they are receiving good nourishment and gaining weight steadily.";
+        } else {
+          displayText = isFilipino
+              ? 'Ang timbang ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ipinapakita nito na medyo mas mabigat siya kaysa sa karaniwan, na maaaring dahil sa kaniyang natural na pangangatawan.'
+              : "Your child's weight is slightly above the standard range for their age. This indicates they are a bit heavier than average for their age, which can be due to their natural body frame.";
+        }
+      } else {
+        // Height
+        final z = heightZ;
+        if (z == null || z.isNaN || z.isInfinite) {
+          displayText = isFilipino
+              ? 'Hindi sapat ang datos para sa pagsusuri ng tangkad.'
+              : 'Insufficient data for height analysis.';
+        } else if (z < -1) {
+          displayText = isFilipino
+              ? 'Ang tangkad ng iyong anak ay bahagyang mas mababa sa standard range para sa kaniyang edad. Ibig sabihin, medyo mas mababa siya kaysa sa karaniwan, na madalas ay dulot ng henetika o sariling takbo ng kaniyang paglaki.'
+              : "Your child's height is slightly below the standard range for their age. This means they are a bit shorter than average, which is often influenced by genetics or individual growth timing.";
+        } else if (z <= 1) {
+          displayText = isFilipino
+              ? 'Ang tangkad ng iyong anak ay nasa loob ng inaasahang standard range para sa kaniyang edad. Ipinapakita nito na maganda at tuloy-tuloy ang kaniyang pagtangkad sa malusog na pamamaraan.'
+              : "Your child's height is within the expected standard range for their age. This shows they are stretching up and growing beautifully at a steady, healthy pace.";
+        } else {
+          displayText = isFilipino
+              ? 'Ang tangkad ng iyong anak ay bahagyang mas mataas sa standard range para sa kaniyang edad. Ibig sabihin, mas matangkad siya kaysa sa karaniwan, na nagpapakita ng magandang paglaki ng kaniyang mga buto at katawan.'
+              : "Your child's height is slightly above the standard range for their age. This indicates they are taller than average for their age, showing active bone development and growth.";
+        }
+      }
+    }
 
     return Container(
       width: double.infinity,
@@ -1241,33 +1328,48 @@ $recordsSummary
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: activeColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  activeTab == 0
-                      ? Icons.straighten
-                      : activeTab == 1
-                          ? Icons.monitor_weight
-                          : Icons.height,
-                  color: activeColor,
-                  size: 18,
-                ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: activeColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      activeTab == 0
+                          ? Icons.straighten
+                          : activeTab == 1
+                              ? Icons.monitor_weight
+                              : Icons.height,
+                      color: activeColor,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    headerText,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: activeColor,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Text(
-                headerText,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: activeColor,
-                  letterSpacing: 0.8,
+              // Render the language toggle buttons if AI analysis is present
+              if (hasAi)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildToggleBtn('English', !_showAiInFilipino, activeColor),
+                    const SizedBox(width: 4),
+                    _buildToggleBtn('Filipino', _showAiInFilipino, activeColor),
+                  ],
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),

@@ -513,16 +513,6 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_mother_log_growth',
-        onPressed: _showAddGrowthBottomSheet,
-        backgroundColor: AppColors.brandPrimary,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        icon: const Icon(Icons.add),
-        label: Text(_t('Log Growth', 'Itala ang Paglaki')),
-      ),
     );
   }
 
@@ -1344,7 +1334,7 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
     try {
       final saved = await Supabase.instance.client
           .from('ai_responses')
-          .select('response, response_category')
+          .select('response, response_category, generated_by_ai')
           .eq('reference_table', 'child_details')
           .eq('reference_id', latestRecordId)
           .eq('response_type', 'growth_analysis')
@@ -1352,13 +1342,17 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
 
       if (saved != null) {
         aiAnalysisCategory = saved['response_category'];
+        final isGeneratedByAi = saved['generated_by_ai'] == true;
         if (saved['response'] != null &&
             saved['response'].toString().trim().isNotEmpty) {
           final savedText = saved['response'].toString().trim();
           final lower = savedText.toLowerCase();
           final isOldOrSingleLang = !lower.contains('english') ||
               !(lower.contains('filipino') || lower.contains('tagalog'));
-          if (isOldOrSingleLang) {
+          final isBulletFormat = savedText.contains('## Baby Growth Summary') ||
+              savedText.contains('Buod ng Paglaki ng Bata');
+          
+          if (!isGeneratedByAi || isOldOrSingleLang || isBulletFormat) {
             await _generateAndSaveProfileAiInsight(latestRecordId);
           } else {
             aiAnalysis = savedText;
@@ -1481,6 +1475,17 @@ class _MotherViewChildPageState extends State<MotherViewChildPage> {
       return '- Week $weeks: ${heightVal.toStringAsFixed(1)} cm, ${weightVal.toStringAsFixed(1)} kg, BMI ${bmiVal.toStringAsFixed(1)}';
     }).join('\n');
 
+    String getStatus(double? z) {
+      if (z == null || z.isNaN || z.isInfinite) return 'Within expected standard range';
+      if (z < -1) return 'Slightly below standard range';
+      if (z <= 1) return 'Within expected standard range';
+      return 'Slightly above standard range';
+    }
+
+    final heightStatus = getStatus(heightZ);
+    final weightStatus = getStatus(weightZ);
+    final bmiStatus = getStatus(bmiZ);
+
     return '''
 You are a warm, caring midwife assistant (like a loving ate or trusted midwife in a local health center) writing a short, gentle growth update for a parent.
 Your tone must be gentle, comforting, and encouraging. Use simple, non-clinical language.
@@ -1490,6 +1495,11 @@ Refer to the child by their first name or as "your little one" ("iyong munting a
 
 Provide the response in both English and Filipino.
 Use the exact output format below. Do not add extra sections, titles, bullet points, or tables.
+
+Please carefully note the status indicators: "Within expected standard range", "Slightly above standard range", or "Slightly below standard range". 
+- If the BMI or weight is slightly above the standard range, reassure the parent warmly (e.g. noting the child looks extra cuddly and strong, and encouraging healthy active play).
+- If the BMI or weight is slightly below the standard range, offer gentle encouragement (e.g. noting they are growing at their own sweet pace, and suggesting plenty of sleep and nourishment).
+- If everything is within expected range, celebrate their steady growth beautifully.
 
 Output format:
 
@@ -1502,7 +1512,7 @@ Output format:
 Child: $childName
 Sex: ${sex.toLowerCase()}
 Current age: $ageWeeks weeks
-Latest measurements: Length: ${height.toStringAsFixed(1)} cm, Weight: ${weight.toStringAsFixed(1)} kg, BMI: ${bmi.toStringAsFixed(1)}
+Latest measurements: Length: ${height.toStringAsFixed(1)} cm ($heightStatus), Weight: ${weight.toStringAsFixed(1)} kg ($weightStatus), BMI: ${bmi.toStringAsFixed(1)} kg/m² ($bmiStatus)
 Recent growth:
 $recordsSummary
 ''';
