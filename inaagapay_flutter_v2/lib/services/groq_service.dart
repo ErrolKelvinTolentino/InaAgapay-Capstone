@@ -24,11 +24,12 @@ class GroqService {
       'CRITICAL GROWTH TRANSLATION RULES:\n'
       '- You must provide the response in both English and Filipino/Tagalog translations.\n'
       '- Your response must use the exact format requested in the prompt, featuring the headers "## English" and "## Filipino" respectively.\n'
-      '- Under "## English", write the entire summary and sections in English.\n'
-      '- Under "## Filipino", write the entire summary and sections in warm, comforting, and simple conversational Filipino/Tagalog.\n'
+      '- Under "## English", write exactly one sentence of warm reassurance.\n'
+      '- Under "## Filipino", write exactly one sentence of warm reassurance in simple conversational Tagalog/Filipino.\n'
       '- Use simple, everyday, colloquial Tagalog (mild Taglish is fine) as spoken in typical Filipino homes. Avoid deep, formal, poetic, or archaic words.\n'
       '- Do not write English under the Filipino section, and do not write Filipino under the English section.\n'
-      '- Tone must be simple, gentle, comforting, and encouraging. Never be cold or clinical. Do not use medical jargon or z-scores.';
+      '- Tone must be simple, gentle, comforting, and encouraging. Never be cold or clinical. Do not use medical jargon or z-scores.\n'
+      '- Keep the insight extremely concise, direct, and reassuring. Do NOT give medical, dietary, lifestyle, or play suggestions (avoid suggestions like active play, sleep, feeding, or exercises).';
 
   static const String _sttModelPrimary = 'whisper-large-v3-turbo';
   static const String _sttModelFallback = 'whisper-large-v3';
