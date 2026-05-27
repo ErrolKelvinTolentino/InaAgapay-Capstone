@@ -1026,6 +1026,7 @@ $recordsSummary
           weightZ: weightZ,
           bmiZ: bmiZ,
         ),
+        _buildDisclaimerAndReferences(),
         const SizedBox(height: 24),
         _buildHistorySection(),
       ],
@@ -1242,6 +1243,67 @@ $recordsSummary
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDisclaimerAndReferences() {
+    final isFilipino = LanguageService.isFilipino;
+
+    final disclaimerText = isFilipino
+        ? 'Paalala: Ang AI-assisted growth insight na ito ay gabay lamang para sa pagsubaybay at hindi pamalit sa propesyonal na konsultasyong medikal.'
+        : 'Note: This AI-assisted growth insight is intended only for monitoring support and does not replace professional medical consultation.';
+    final referenceText = isFilipino
+        ? 'Sanggunian: Batay sa World Health Organization (WHO) Child Growth Standards.'
+        : 'Reference: Based on the World Health Organization (WHO) Child Growth Standards.';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.borderPrimary,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            color: AppColors.textSecondary,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  disclaimerText,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  referenceText,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
