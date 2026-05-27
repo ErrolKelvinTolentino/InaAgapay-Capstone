@@ -4168,25 +4168,27 @@ IMPORTANT: Your response must consist ONLY of the two sections labeled with "===
                               ),
                             )
                           else
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: _editableRiskLevel == 'high'
-                                    ? AppColors.error.withValues(alpha: 0.1)
-                                    : AppColors.success.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                _editableRiskLevel == 'high'
-                                    ? 'Requires Closer Monitoring'
-                                    : 'Within Expected Monitoring Range',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
                                   color: _editableRiskLevel == 'high'
-                                      ? AppColors.error
-                                      : AppColors.success,
+                                      ? AppColors.error.withValues(alpha: 0.1)
+                                      : AppColors.success.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  _editableRiskLevel == 'high'
+                                      ? 'Requires Closer Monitoring'
+                                      : 'Within Expected Monitoring Range',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _editableRiskLevel == 'high'
+                                        ? AppColors.error
+                                        : AppColors.success,
+                                  ),
                                 ),
                               ),
                             ),

@@ -2723,13 +2723,14 @@ class _MidwifeAddMotherScreenState extends State<MidwifeAddMotherScreen> {
                                       const Icon(Icons.people_outline,
                                           color: Colors.grey),
                                       const SizedBox(width: 12),
-                                      const Text(
-                                        'Number of Fetuses',
-                                        style: TextStyle(
-                                            fontSize: 15,
-                                            color: AppColors.brandText),
+                                      const Expanded(
+                                        child: Text(
+                                          'Number of Fetuses',
+                                          style: TextStyle(
+                                              fontSize: 15,
+                                              color: AppColors.brandText),
+                                        ),
                                       ),
-                                      const Spacer(),
                                       IconButton(
                                         icon: const Icon(
                                             Icons.remove_circle_outline,
