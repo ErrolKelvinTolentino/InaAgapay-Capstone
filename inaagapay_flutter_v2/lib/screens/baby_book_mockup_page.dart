@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/baby_memory.dart';
 import '../services/asset_pdf_download_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/baby_memory_photo.dart';
 import '../widgets/main_header.dart';
+import 'baby_book_memory_gallery_page.dart';
 
 String _t(String english, String _) => english;
 
@@ -31,6 +37,23 @@ class _BabyBookMockupPageState extends State<BabyBookMockupPage> {
 
   String? _downloadingPdf;
   final List<bool> _milestones = <bool>[true, true, true, false];
+  final ImagePicker _imagePicker = ImagePicker();
+  final List<BabyMemory> _memories = <BabyMemory>[
+    BabyMemory(
+      id: 'sample-crawling',
+      title: 'First time crawling! ✨',
+      caption: 'From the play mat to Mama—you were so fast!',
+      date: DateTime(2026, 7, 18),
+      assetPath: 'assets/images/baby.png',
+    ),
+    BabyMemory(
+      id: 'sample-cuddle',
+      title: 'Safe in Mama’s arms',
+      caption: 'A quiet cuddle that made the whole day feel warm.',
+      date: DateTime(2026, 7, 20),
+      assetPath: 'assets/images/mother_baby_hero.png',
+    ),
+  ];
 
   int get _completedMilestones =>
       _milestones.where((isComplete) => isComplete).length;
@@ -131,6 +154,150 @@ class _BabyBookMockupPageState extends State<BabyBookMockupPage> {
     );
   }
 
+  Future<void> _addMemory() async {
+    try {
+      final selectedPhoto = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 88,
+        maxWidth: 1800,
+      );
+      if (selectedPhoto == null) return;
+
+      final imageBytes = await selectedPhoto.readAsBytes();
+      if (!mounted) return;
+
+      final titleController = TextEditingController(text: 'A beautiful memory');
+      final captionController = TextEditingController();
+      final details = await showDialog<_MemoryDetails>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: const Text(
+              'Add this memory',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.memory(
+                      imageBytes,
+                      width: double.infinity,
+                      height: 130,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: titleController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Memory title',
+                      hintText: 'First smile, family day…',
+                      prefixIcon: Icon(Icons.favorite_outline_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: captionController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Short story',
+                      hintText: 'What made this moment special?',
+                      alignLabelWithHint: true,
+                      prefixIcon: Icon(Icons.notes_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(
+                    _MemoryDetails(
+                      title: titleController.text.trim().isEmpty
+                          ? 'A beautiful memory'
+                          : titleController.text.trim(),
+                      caption: captionController.text.trim().isEmpty
+                          ? 'A special moment in Baby’s growing story.'
+                          : captionController.text.trim(),
+                    ),
+                  );
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brandPrimary,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                label: const Text('Save memory'),
+              ),
+            ],
+          );
+        },
+      );
+      titleController.dispose();
+      captionController.dispose();
+
+      if (details == null || !mounted) return;
+      setState(() {
+        _memories.insert(
+          0,
+          BabyMemory(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            title: details.title,
+            caption: details.caption,
+            date: DateTime.now(),
+            imageBytes: imageBytes,
+          ),
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Photo added to the Memory Gallery.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The photo could not be added. Please try again.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openMemoryGallery() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BabyBookMemoryGalleryPage(
+          memories: _memories,
+          onAddMemory: _addMemory,
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -192,8 +359,9 @@ class _BabyBookMockupPageState extends State<BabyBookMockupPage> {
                       const SizedBox(height: 30),
                       _MemoryCard(
                         key: _memoriesKey,
-                        onAddMemory: () =>
-                            _showMockupMessage('Add a memory', ''),
+                        memories: _memories,
+                        onAddMemory: _addMemory,
+                        onOpenGallery: _openMemoryGallery,
                       ),
                       const SizedBox(height: 34),
                       _BabyCareGuideBook(key: _guideKey),
@@ -228,6 +396,13 @@ class _BabyBookMockupPageState extends State<BabyBookMockupPage> {
       ),
     );
   }
+}
+
+class _MemoryDetails {
+  final String title;
+  final String caption;
+
+  const _MemoryDetails({required this.title, required this.caption});
 }
 
 class _BabyCoverCard extends StatelessWidget {
@@ -936,21 +1111,84 @@ class _MilestoneRow extends StatelessWidget {
   }
 }
 
-class _MemoryCard extends StatelessWidget {
-  final VoidCallback onAddMemory;
+class _MemoryCard extends StatefulWidget {
+  final List<BabyMemory> memories;
+  final Future<void> Function() onAddMemory;
+  final VoidCallback onOpenGallery;
 
-  const _MemoryCard({super.key, required this.onAddMemory});
+  const _MemoryCard({
+    super.key,
+    required this.memories,
+    required this.onAddMemory,
+    required this.onOpenGallery,
+  });
+
+  @override
+  State<_MemoryCard> createState() => _MemoryCardState();
+}
+
+class _MemoryCardState extends State<_MemoryCard> {
+  Timer? _slideTimer;
+  int _currentIndex = 0;
+  bool _isPlaying = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleSlideshow();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MemoryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_currentIndex >= widget.memories.length) _currentIndex = 0;
+    _scheduleSlideshow();
+  }
+
+  @override
+  void dispose() {
+    _slideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleSlideshow() {
+    _slideTimer?.cancel();
+    if (!_isPlaying || widget.memories.length < 2) return;
+    _slideTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || widget.memories.length < 2) return;
+      setState(() {
+        _currentIndex = (_currentIndex + 1) % widget.memories.length;
+      });
+    });
+  }
+
+  void _toggleSlideshow() {
+    setState(() => _isPlaying = !_isPlaying);
+    _scheduleSlideshow();
+  }
+
+  void _showAdjacentMemory(int direction) {
+    if (widget.memories.length < 2) return;
+    setState(() {
+      _currentIndex = (_currentIndex + direction + widget.memories.length) %
+          widget.memories.length;
+    });
+    _scheduleSlideshow();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final hasMemories = widget.memories.isNotEmpty;
+    final memory = hasMemories ? widget.memories[_currentIndex] : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionHeading(
-          eyebrow: _t('PRECIOUS MEMORIES', 'MAHALAGANG ALAALA'),
-          title: _t('Our favorite moment', 'Paborito naming sandali'),
-          actionLabel: _t('Add', 'Magdagdag'),
-          onAction: onAddMemory,
+          eyebrow: 'PRECIOUS MEMORIES',
+          title: 'Our favorite moment',
+          actionLabel: 'Add photo',
+          onAction: widget.onAddMemory,
         ),
         const SizedBox(height: 12),
         Container(
@@ -967,135 +1205,286 @@ class _MemoryCard extends StatelessWidget {
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 180,
-                width: double.infinity,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFFFFF0F6), Color(0xFFFFE4EF)],
-                  ),
-                  borderRadius: BorderRadius.circular(19),
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Positioned(
-                      left: 28,
-                      top: 22,
-                      child: Icon(
-                        Icons.auto_awesome,
-                        color: AppColors.brandPrimary.withValues(alpha: 0.34),
-                        size: 28,
-                      ),
-                    ),
-                    Positioned(
-                      right: 28,
-                      bottom: 24,
-                      child: Icon(
-                        Icons.favorite,
-                        color: AppColors.brandPrimary.withValues(alpha: 0.28),
-                        size: 32,
-                      ),
-                    ),
-                    Image.asset(
-                      'assets/images/baby.png',
-                      height: 160,
-                      fit: BoxFit.contain,
-                    ),
-                    Positioned(
-                      top: 12,
-                      right: 12,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.90),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.camera_alt_rounded,
-                              size: 13,
-                              color: AppColors.brandText,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _t('PHOTO PLACEHOLDER', 'LAGAYAN NG LARAWAN'),
-                              style: const TextStyle(
-                                color: AppColors.brandText,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 15, 4, 3),
-                child: Row(
+          child: hasMemories
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    Container(
+                      height: 190,
+                      width: double.infinity,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFFFF0F6), Color(0xFFFFE4EF)],
+                        ),
+                        borderRadius: BorderRadius.circular(19),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
                         children: [
-                          Text(
-                            _t(
-                              'First time crawling! ✨',
-                              'Unang beses na gumapang! ✨',
-                            ),
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 600),
+                            switchInCurve: Curves.easeOut,
+                            switchOutCurve: Curves.easeIn,
+                            child: BabyMemoryPhoto(
+                              key: ValueKey<String>(memory!.id),
+                              memory: memory,
+                              fit: memory.assetPath == 'assets/images/baby.png'
+                                  ? BoxFit.contain
+                                  : BoxFit.cover,
                             ),
                           ),
-                          const SizedBox(height: 5),
-                          Text(
-                            _t(
-                              'From the play mat to Mama—you were so fast!',
-                              'Mula sa banig hanggang kay Mama—ang bilis mo, anak!',
+                          Positioned(
+                            left: 10,
+                            top: 0,
+                            bottom: 0,
+                            child: _MemoryArrowButton(
+                              tooltip: 'Previous memory',
+                              icon: Icons.chevron_left_rounded,
+                              onTap: widget.memories.length < 2
+                                  ? null
+                                  : () => _showAdjacentMemory(-1),
                             ),
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 11,
-                              height: 1.4,
+                          ),
+                          Positioned(
+                            right: 10,
+                            top: 0,
+                            bottom: 0,
+                            child: _MemoryArrowButton(
+                              tooltip: 'Next memory',
+                              icon: Icons.chevron_right_rounded,
+                              onTap: widget.memories.length < 2
+                                  ? null
+                                  : () => _showAdjacentMemory(1),
+                            ),
+                          ),
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: Material(
+                              color: Colors.white.withValues(alpha: 0.92),
+                              borderRadius: BorderRadius.circular(20),
+                              child: InkWell(
+                                onTap: widget.memories.length < 2
+                                    ? null
+                                    : _toggleSlideshow,
+                                borderRadius: BorderRadius.circular(20),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 7,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _isPlaying
+                                            ? Icons.pause_rounded
+                                            : Icons.play_arrow_rounded,
+                                        size: 14,
+                                        color: AppColors.brandText,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'SLIDESHOW ${_currentIndex + 1}/${widget.memories.length}',
+                                        style: const TextStyle(
+                                          color: AppColors.brandText,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.35,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 10,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(
+                                widget.memories.length,
+                                (index) => AnimatedContainer(
+                                  duration: const Duration(milliseconds: 250),
+                                  width: index == _currentIndex ? 15 : 6,
+                                  height: 6,
+                                  margin:
+                                      const EdgeInsets.symmetric(horizontal: 3),
+                                  decoration: BoxDecoration(
+                                    color: index == _currentIndex
+                                        ? AppColors.brandPrimary
+                                        : Colors.white.withValues(alpha: 0.82),
+                                    borderRadius: BorderRadius.circular(10),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x22000000),
+                                        blurRadius: 3,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      _t('JUL 18', 'HUL 18'),
-                      style: const TextStyle(
-                        color: AppColors.brandText,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 15, 4, 3),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              child: Column(
+                                key: ValueKey<String>('copy-${memory.id}'),
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    memory.title,
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    memory.caption,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 11,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            memory.shortDate,
+                            style: const TextStyle(
+                              color: AppColors.brandText,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 9),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('view-memory-gallery'),
+                        onPressed: widget.onOpenGallery,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.brandText,
+                          side: const BorderSide(color: Color(0xFFFFC7DD)),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        icon:
+                            const Icon(Icons.photo_library_outlined, size: 18),
+                        label: Text(
+                          'View gallery • ${widget.memories.length} photos',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ),
                   ],
-                ),
-              ),
-            ],
-          ),
+                )
+              : _EmptyMemoryCard(onAddMemory: widget.onAddMemory),
         ),
       ],
+    );
+  }
+}
+
+class _MemoryArrowButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _MemoryArrowButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onTap,
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.88),
+          foregroundColor: AppColors.brandText,
+          disabledForegroundColor: AppColors.textSecondary,
+          minimumSize: const Size(36, 36),
+        ),
+        icon: Icon(icon, size: 22),
+      ),
+    );
+  }
+}
+
+class _EmptyMemoryCard extends StatelessWidget {
+  final Future<void> Function() onAddMemory;
+
+  const _EmptyMemoryCard({required this.onAddMemory});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(
+              Icons.add_photo_alternate_outlined,
+              color: AppColors.brandPrimary,
+              size: 44,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Add Baby’s first memory',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onAddMemory,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.add_a_photo_rounded),
+              label: const Text('Choose photo'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1107,6 +1496,7 @@ class _BabyCareGuideBook extends StatefulWidget {
     _GuidePageData(
       number: 1,
       icon: Icons.auto_stories_rounded,
+      imagePath: 'assets/images/baby_guide_page_1.png',
       title: 'How to use this baby book',
       paragraphs: [
         'Keep this Baby Book where every caregiver can find it. Read it together, write down your baby’s growth, vaccines, checkups and special moments, and bring it to every visit so you can discuss each entry with a doctor, nurse, midwife or barangay health worker.',
@@ -1118,6 +1508,7 @@ class _BabyCareGuideBook extends StatefulWidget {
     _GuidePageData(
       number: 2,
       icon: Icons.child_friendly_rounded,
+      imagePath: 'assets/images/baby_guide_page_2.png',
       title: 'Baby’s first days',
       paragraphs: [
         'After birth, keep baby warm with immediate skin-to-skin contact when possible and begin breastfeeding early. Colostrum is baby’s important first milk. The DOH guide also recommends delaying the first bath for about 24 hours while keeping baby clean, warm and close.',
@@ -1129,6 +1520,7 @@ class _BabyCareGuideBook extends StatefulWidget {
     _GuidePageData(
       number: 3,
       icon: Icons.restaurant_rounded,
+      imagePath: 'assets/images/baby_guide_page_3.png',
       title: 'Feeding through the first year',
       paragraphs: [
         'From birth through six months, give only breast milk—no other food or water—unless a qualified health professional gives different advice for your baby. Feed responsively by noticing early hunger and fullness cues. If feeding is painful or difficult, ask the health center for support.',
@@ -1140,6 +1532,7 @@ class _BabyCareGuideBook extends StatefulWidget {
     _GuidePageData(
       number: 4,
       icon: Icons.health_and_safety_rounded,
+      imagePath: 'assets/images/baby_guide_page_4.png',
       title: 'Make every space safer',
       paragraphs: [
         'A baby needs an attentive adult nearby. For sleep, place baby on a safe, firm sleep surface and keep pillows, loose blankets and soft objects away. Prevent falls, and keep hot liquids, medicines, cleaning products, matches, plastic bags, cords and small choking hazards locked away or out of reach.',
@@ -1151,6 +1544,7 @@ class _BabyCareGuideBook extends StatefulWidget {
     _GuidePageData(
       number: 5,
       icon: Icons.soap_rounded,
+      imagePath: 'assets/images/baby_guide_page_5.png',
       title: 'Clean hands, food and surroundings',
       paragraphs: [
         'Wash hands with soap and safe water for at least 20 seconds before preparing food or feeding baby, and after using the toilet or changing a diaper. Let hands air-dry or use a clean towel. Dispose of stool safely, clean reusable diaper materials carefully and wash the child’s hands too.',
@@ -1162,6 +1556,7 @@ class _BabyCareGuideBook extends StatefulWidget {
     _GuidePageData(
       number: 6,
       icon: Icons.show_chart_rounded,
+      imagePath: 'assets/images/baby_guide_page_6.png',
       title: 'Follow growth and development',
       paragraphs: [
         'Record weight and length during checkups and review the growth chart with a health worker. Development includes movement, hand skills, self-help, language, thinking, and social-emotional skills. The examples in this book are guides, not strict deadlines, because every child develops at an individual pace.',
@@ -1173,6 +1568,7 @@ class _BabyCareGuideBook extends StatefulWidget {
     _GuidePageData(
       number: 7,
       icon: Icons.medical_services_rounded,
+      imagePath: 'assets/images/baby_guide_page_7.png',
       title: 'Checkups, vaccines and warning signs',
       paragraphs: [
         'The DOH booklet lists routine visits for the newborn period, 3–5 days, and months 1, 2, 4, 6, 9 and 12; then months 15, 18, 24 and 30, followed by annual visits from ages 3 to 10. Bring this book each time and ask the health worker to update growth, findings, vaccines and the return date.',
@@ -1184,6 +1580,7 @@ class _BabyCareGuideBook extends StatefulWidget {
     _GuidePageData(
       number: 8,
       icon: Icons.diversity_1_rounded,
+      imagePath: 'assets/images/baby_guide_page_8.png',
       title: 'Care is a team effort',
       paragraphs: [
         'Caring for a child takes a village. List the relatives, friends, neighbors and community workers who can offer practical or emotional support. Share the baby’s routines and important instructions with trusted caregivers, and encourage them to record useful observations in the same place.',
@@ -1418,6 +1815,7 @@ class _GuidePageNavigation extends StatelessWidget {
 class _GuidePageData {
   final int number;
   final IconData icon;
+  final String imagePath;
   final String title;
   final List<String> paragraphs;
   final String source;
@@ -1426,6 +1824,7 @@ class _GuidePageData {
   const _GuidePageData({
     required this.number,
     required this.icon,
+    required this.imagePath,
     required this.title,
     required this.paragraphs,
     required this.source,
@@ -1529,6 +1928,28 @@ class _GuidePaperPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 13),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: AspectRatio(
+                        aspectRatio: 2,
+                        child: Image.asset(
+                          data.imagePath,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: data.accent.withValues(alpha: 0.08),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                data.icon,
+                                color: data.accent,
+                                size: 40,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
                     for (var index = 0;
                         index < data.paragraphs.length;
                         index++) ...[

@@ -71,6 +71,44 @@ void main() {
     expect(find.text('Download PDF'), findsNWidgets(2));
   });
 
+  testWidgets('favorite moment slideshow rotates through gallery memories',
+      (tester) async {
+    await tester.pumpWidget(const InaagapayApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('First time crawling! ✨'), findsOneWidget);
+    expect(find.text('SLIDESHOW 1/2'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Safe in Mama’s arms'), findsOneWidget);
+    expect(find.text('SLIDESHOW 2/2'), findsOneWidget);
+  });
+
+  testWidgets('opens the dedicated memory gallery and photo viewer',
+      (tester) async {
+    await tester.pumpWidget(const InaagapayApp());
+    await tester.pumpAndSettle();
+
+    final galleryButton = find.byKey(const ValueKey('view-memory-gallery'));
+    await tester.ensureVisible(galleryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(galleryButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('MEMORY GALLERY'), findsOneWidget);
+    expect(find.text('2 memories • Tap a photo to view it'), findsOneWidget);
+    expect(find.byKey(const ValueKey('gallery-add-photo')), findsOneWidget);
+
+    await tester.tap(find.text('First time crawling! ✨'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 of 2'), findsOneWidget);
+    expect(find.text('From the play mat to Mama—you were so fast!'),
+        findsOneWidget);
+  });
+
   testWidgets('bundles both downloadable official PDFs', (tester) async {
     await tester.pumpWidget(const InaagapayApp());
     await tester.pumpAndSettle();
@@ -89,6 +127,18 @@ void main() {
     final heroArtwork =
         await rootBundle.load('assets/images/mother_baby_hero.png');
     expect(heroArtwork.lengthInBytes, greaterThan(0));
+  });
+
+  testWidgets('bundles a visual illustration for every guide page',
+      (tester) async {
+    await tester.pumpWidget(const InaagapayApp());
+    await tester.pumpAndSettle();
+
+    for (var page = 1; page <= 8; page++) {
+      final artwork =
+          await rootBundle.load('assets/images/baby_guide_page_$page.png');
+      expect(artwork.lengthInBytes, greaterThan(0));
+    }
   });
 
   testWidgets('renders the complete page without overflow on a compact phone',
